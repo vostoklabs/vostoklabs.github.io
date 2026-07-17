@@ -36,6 +36,10 @@
    1. GLOBAL LAYOUT
    ========================================================================== */
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 /* Full-page wrapper: flex column so the footer sticks to the bottom. */
 .hub-page {
   display: flex;
@@ -414,6 +418,7 @@
   border: 1px solid var(--line);
   border-radius: var(--hub-card-radius);
   transition: border-color var(--hub-ease);
+  height: 100%;
 }
 
 .hub-pricing__card:hover {
