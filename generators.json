@@ -2,20 +2,52 @@
   "$comment": "Registry of every tool. The hub renders its cards from this and CI builds from this. route: 'mw' (scad listing on MakerWorld) | 'app' (own-site app) | 'both'. external: true = lives outside this monorepo.",
   "generators": [
     {
-      "id": "box",
-      "name": "Parametric Box",
+      "id": "large-box",
+      "name": "Large Customizable Box",
       "route": "mw",
       "status": "live",
-      "mwUrl": "TODO_MW_LISTING_URL",
-      "blurb": "Customizable box — size, walls, lid."
+      "mwUrl": "https://makerworld.com/en/models/2300059",
+      "blurb": "Large customizable print-in-place box. No hinges/screws required."
     },
     {
-      "id": "washer",
-      "name": "Washer Generator",
+      "id": "rugged-box",
+      "name": "Customizable Rugged Box",
       "route": "mw",
       "status": "live",
-      "mwUrl": "TODO_MW_LISTING_URL",
-      "blurb": "Washers in any dimension you need."
+      "mwUrl": "https://makerworld.com/en/models/1642041",
+      "blurb": "Super customizable rugged box. Modify dimensions, hinges, and latches."
+    },
+    {
+      "id": "washer-spacer",
+      "name": "Washer & Spacer Generator",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/1669724",
+      "blurb": "Customizable washer and spacer generator. Set ID, OD, and thickness."
+    },
+    {
+      "id": "headphone-hook",
+      "name": "Desk Headphone Hook",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/2483947",
+      "blurb": "Adjustable desk headphone hook. Parametric to fit any desk thickness."
+    },
+    {
+      "id": "edge-mount-dock",
+      "name": "Edge Mount Device Dock",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/1684531",
+      "blurb": "Customizable edge mount dock for devices. Fits Kindles, phones, and tablets."
+    },
+    {
+      "id": "powerstrip-holder",
+      "name": "Screw-On Power Strip Holder",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/1732918",
+      "blurb": "Customizable screw-on power strip holder. Mount strip securely under desks."
     },
     {
       "id": "clicker",
@@ -23,7 +55,7 @@
       "route": "app",
       "status": "live",
       "external": true,
-      "appUrl": "TODO_CLICKER_URL",
+      "appUrl": "https://vostoklabs.github.io/Clicker-Generator/",
       "blurb": "Turn any image into a satisfying clicker."
     },
     {
@@ -36,5 +68,30 @@
       "blurb": "Custom keycaps with icons, logos, or letters."
     }
   ],
-  "sellerTools": []
+  "sellerTools": [
+    {
+      "id": "profit-calc",
+      "name": "Profit Calculator",
+      "status": "coming-soon",
+      "blurb": "3D print pricing — material, time, margin, all in one."
+    },
+    {
+      "id": "photo-render",
+      "name": "Product Photo Tool",
+      "status": "coming-soon",
+      "blurb": "Upload your model, get store-ready product shots."
+    },
+    {
+      "id": "listing-copy",
+      "name": "Listing Copy Helper",
+      "status": "coming-soon",
+      "blurb": "Generate Etsy & MakerWorld titles, tags, and descriptions."
+    },
+    {
+      "id": "review-qr",
+      "name": "Review QR Cards",
+      "status": "coming-soon",
+      "blurb": "\"Scan to leave a review\" cards to include with shipments."
+    }
+  ]
 }

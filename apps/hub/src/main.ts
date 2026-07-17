@@ -123,7 +123,6 @@ function buildSellerTools(): HTMLElement {
         { id: 'profit-calc', name: 'Profit Calculator', status: 'coming-soon' as const, blurb: '3D print pricing — material, time, margin, all in one.' },
         { id: 'photo-render', name: 'Product Photo Tool', status: 'coming-soon' as const, blurb: 'Upload your model, get store-ready product shots.' },
         { id: 'listing-copy', name: 'Listing Copy Helper', status: 'coming-soon' as const, blurb: 'Generate Etsy & MakerWorld titles, tags, and descriptions.' },
-        { id: 'care-cards', name: 'Care Card Generator', status: 'coming-soon' as const, blurb: 'Printable care and instruction cards for your orders.' },
         { id: 'review-qr', name: 'Review QR Cards', status: 'coming-soon' as const, blurb: '"Scan to leave a review" cards to include with shipments.' },
       ];
 
