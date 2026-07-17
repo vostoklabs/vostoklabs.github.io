@@ -34,7 +34,7 @@ function cardThumb(gen: Generator | SellerTool): HTMLElement {
   // Try to load the thumbnail image. If the generator provides one, use it;
   // otherwise show a styled placeholder with the tool's initial.
   const img = document.createElement('img');
-  img.src = `./thumbs/${gen.id}.webp`;
+  img.src = `./thumbs/${gen.id}.png`;
   img.alt = gen.name;
   img.loading = 'lazy';
   img.onerror = () => {
