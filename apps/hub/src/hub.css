@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Vostok Labs Hub — Landing Page Styles
+   Vostok Labs Hub - Landing Page Styles
    ==========================================================================
    All classes prefixed `hub-` to avoid collision with the `vl-` namespace
    from @vostok/ui-kit. Relies on tokens.css (--bg, --panel, --panel-2,
@@ -58,7 +58,7 @@
 
 
 /* ==========================================================================
-   2. HEADER / NAV — sticky top bar
+   2. HEADER / NAV - sticky top bar
    ========================================================================== */
 
 .hub-nav {
@@ -124,7 +124,7 @@
   background: var(--panel-2);
 }
 
-/* License CTA in the nav — reuses the red topbar-btn style. */
+/* License CTA in the nav - reuses the red topbar-btn style. */
 .hub-nav__cta {
   display: inline-flex;
   align-items: center;
@@ -148,7 +148,7 @@
 
 
 /* ==========================================================================
-   3. HERO — large heading + subtext + CTAs
+   3. HERO - large heading + subtext + CTAs
    ========================================================================== */
 
 .hub-hero {
@@ -282,7 +282,7 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
-/* Thumbnail area — 16:10 aspect ratio with gradient overlay. */
+/* Thumbnail area - 16:10 aspect ratio with gradient overlay. */
 .hub-card__thumb {
   position: relative;
   aspect-ratio: 16 / 10;
@@ -352,7 +352,7 @@
 
 
 /* ==========================================================================
-   6. STATUS BADGE — small pill
+   6. STATUS BADGE - small pill
    ========================================================================== */
 
 .hub-badge {
@@ -486,18 +486,17 @@
   color: var(--muted);
 }
 
-.hub-pricing__features li::before {
-  content: '✓';
+.hub-pricing__features li svg {
   flex-shrink: 0;
   color: var(--accent-2);
-  font-weight: 700;
+  margin-top: 3px;
 }
 
-.hub-pricing__card--featured .hub-pricing__features li::before {
+.hub-pricing__card--featured .hub-pricing__features li svg {
   color: var(--red);
 }
 
-/* CTA button inside pricing card — uses vl-btn classes via HTML,
+/* CTA button inside pricing card - uses vl-btn classes via HTML,
    but the featured card gets a red variant. */
 .hub-pricing__cta {
   margin-top: auto;
@@ -526,28 +525,43 @@
 
 .hub-footer__inner {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  text-align: center;
   gap: var(--space-4);
-  flex-wrap: wrap;
 }
 
-.hub-footer__links {
+/* Prominent support banner styling */
+.hub-footer__support {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+  max-width: 680px;
+  margin: 0 auto;
 }
 
-.hub-footer__link {
+.hub-footer__support-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.3px;
+  margin: 0 0 var(--space-2);
+  color: var(--text);
+}
+
+.hub-footer__support-desc {
   color: var(--muted);
   font-size: 14px;
-  text-decoration: none;
-  transition: color var(--hub-ease);
+  line-height: 1.5;
+  margin: 0 0 var(--space-4);
 }
 
-.hub-footer__link:hover {
-  color: var(--accent);
+/* Divider line */
+.hub-footer__divider {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 0;
 }
 
 .hub-footer__copy {
@@ -561,14 +575,14 @@
    9. RESPONSIVE BREAKPOINTS
    ========================================================================== */
 
-/* ---- Tablet: ≤ 900px — cards go 2-col ---- */
+/* ---- Tablet: <= 900px - cards go 2-col ---- */
 @media (max-width: 900px) {
   .hub-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-/* ---- Mobile: ≤ 600px — single column, larger touch targets ---- */
+/* ---- Mobile: <= 600px - single column, larger touch targets ---- */
 @media (max-width: 600px) {
   :root {
     --hub-gutter: var(--space-3);    /* tighter 12px side padding */

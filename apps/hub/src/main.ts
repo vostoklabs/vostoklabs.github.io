@@ -65,7 +65,7 @@ function buildHero(): HTMLElement {
 
   const sub = el('p', {
     className: 'hub-hero__sub',
-    text: 'Parametric model generators for makers and sellers. Customize, download, print — no account needed.',
+    text: 'Parametric model generators for makers and sellers. Customize, download, print. No account needed.',
   });
 
   const actions = el('div', { className: 'hub-hero__actions' }, [
@@ -120,7 +120,7 @@ function buildSellerTools(): HTMLElement {
   const tools = registry.sellerTools.length > 0
     ? registry.sellerTools
     : [
-        { id: 'profit-calc', name: 'Profit Calculator', status: 'coming-soon' as const, blurb: '3D print pricing — material, time, margin, all in one.' },
+        { id: 'profit-calc', name: 'Profit Calculator', status: 'coming-soon' as const, blurb: '3D print pricing: material, time, margin, all in one.' },
         { id: 'photo-render', name: 'Product Photo Tool', status: 'coming-soon' as const, blurb: 'Upload your model, get store-ready product shots.' },
         { id: 'listing-copy', name: 'Listing Copy Helper', status: 'coming-soon' as const, blurb: 'Generate Etsy & MakerWorld titles, tags, and descriptions.' },
         { id: 'review-qr', name: 'Review QR Cards', status: 'coming-soon' as const, blurb: '"Scan to leave a review" cards to include with shipments.' },
@@ -140,7 +140,7 @@ function buildSellerTools(): HTMLElement {
         el('h2', { className: 'hub-section__title', text: 'Seller Tools' }),
         el('p', {
           className: 'hub-section__desc',
-          text: 'Free utilities to help you run your 3D printing business — pricing, photos, listings, and more.',
+          text: 'Free utilities to help you run your 3D printing business: pricing, photos, listings, and more.',
         }),
       ]),
       grid,
@@ -161,7 +161,7 @@ function buildLicensing(): HTMLElement {
   const s = BRAND.pricing.subscription;
   const l = BRAND.pricing.lifetime;
 
-  const subCard = el('div', { className: 'hub-pricing__card' }, [
+  const subCard = el('div', { className: 'hub-pricing__card hub-pricing__card--featured' }, [
     el('span', { className: 'hub-pricing__label', text: 'Subscription' }),
     el('div', { className: 'hub-pricing__price', text: `${fmt(s.month)}/mo` }),
     el('p', { className: 'hub-pricing__desc', text: `Or ${fmt(s.quarter)}/quarter · ${fmt(s.year)}/year` }),
@@ -173,12 +173,12 @@ function buildLicensing(): HTMLElement {
     ]),
     el('a', {
       className: 'vl-btn vl-btn--primary vl-btn--block',
-      text: 'Get Subscription →',
+      text: 'Get Commercial License →',
       attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
     }),
   ]);
 
-  const lifeCard = el('div', { className: 'hub-pricing__card hub-pricing__card--featured' }, [
+  const lifeCard = el('div', { className: 'hub-pricing__card' }, [
     el('span', { className: 'hub-pricing__label', text: 'Lifetime License' }),
     el('div', { className: 'hub-pricing__price', text: `From ${fmt(l.one)}` }),
     el('p', { className: 'hub-pricing__desc', text: `${fmt(l.one)} / 1 design · ${fmt(l.three)} / 3 · ${fmt(l.twelve)} / 12` }),
@@ -186,10 +186,10 @@ function buildLicensing(): HTMLElement {
       pricingFeature('One-time payment, yours forever'),
       pricingFeature('Pick any generator or specific design'),
       pricingFeature('Sell prints with no recurring fees'),
-      pricingFeature('Flexible scope — set at purchase'),
+      pricingFeature('Flexible scope, set at purchase'),
     ]),
     el('a', {
-      className: 'vl-btn vl-btn--primary vl-btn--block',
+      className: 'vl-btn vl-btn--secondary vl-btn--block',
       text: 'Get in Touch →',
       attrs: { href: BRAND.urls.kofi, target: '_blank', rel: 'noopener noreferrer' },
     }),
@@ -197,9 +197,8 @@ function buildLicensing(): HTMLElement {
 
   const freeLine = el('p', { className: 'hub-pricing__free' });
   freeLine.append(
-    '🎉 ',
-    el('strong', { text: 'Personal use is always free.' }),
-    ' Download and print as many as you like. Commercial licenses are only needed if you sell your prints.',
+    el('strong', { text: 'Personal use is free.' }),
+    ' You can download and print as many models as you like. A commercial license is only required if you sell the physical prints.',
   );
 
   return el('section', {
@@ -226,14 +225,26 @@ function buildLicensing(): HTMLElement {
 function buildFooter(): HTMLElement {
   const year = new Date().getFullYear();
 
-  const links = supportLinks();
+  const supportBanner = el('div', { className: 'hub-footer__support' }, [
+    el('h3', { className: 'hub-footer__support-title', text: 'Support the Project' }),
+    el('p', {
+      className: 'hub-footer__support-desc',
+      text: 'Vostok Labs provides free parametric models for the maker community. If you find these tools useful, please consider supporting the project by donating on Ko-fi or boosting our models on MakerWorld.',
+    }),
+    supportLinks(),
+  ]);
+
   const copy = el('p', {
     className: 'hub-footer__copy',
     text: `© ${year} Vostok Labs. Free for personal use (CC BY-NC-ND 4.0).`,
   });
 
   return el('footer', { className: 'hub-footer' }, [
-    el('div', { className: 'hub-footer__inner hub-container' }, [links, copy]),
+    el('div', { className: 'hub-footer__inner hub-container' }, [
+      supportBanner,
+      el('hr', { className: 'hub-footer__divider' }),
+      copy,
+    ]),
   ]);
 }
 
