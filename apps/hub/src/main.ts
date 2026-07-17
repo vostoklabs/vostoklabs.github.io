@@ -181,7 +181,7 @@ function buildLicensing(): HTMLElement {
   const lifeCard = el('div', { className: 'hub-pricing__card' }, [
     el('span', { className: 'hub-pricing__label', text: 'Lifetime License' }),
     el('div', { className: 'hub-pricing__price', text: `From ${fmt(l.one)}` }),
-    el('p', { className: 'hub-pricing__desc', text: `${fmt(l.one)} / 1 design · ${fmt(l.three)} / 3 · ${fmt(l.twelve)} / 12` }),
+    el('p', { className: 'hub-pricing__desc', text: `${fmt(l.one)} / 1 design · ${fmt(l.three)} / 3 designs · ${fmt(l.twelve)} / 12 designs` }),
     el('ul', { className: 'hub-pricing__features' }, [
       pricingFeature('One-time payment, yours forever'),
       pricingFeature('Pick any generator or specific design'),
@@ -190,7 +190,7 @@ function buildLicensing(): HTMLElement {
     ]),
     el('a', {
       className: 'vl-btn vl-btn--secondary vl-btn--block hub-pricing__cta',
-      text: 'Get in Touch →',
+      text: 'Get License →',
       attrs: { href: BRAND.urls.kofi, target: '_blank', rel: 'noopener noreferrer' },
     }),
   ]);
