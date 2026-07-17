@@ -39,7 +39,7 @@
   --error-text: #ff6b6b;
 
   /* Type. Body = system stack at the clicker's 17.5px base.
-     Display face: Chakra Petch (OFL) — confirmed by Ian, bundled locally in ./fonts
+     Display face: Chakra Petch (OFL), confirmed by Ian, bundled locally in ./fonts
      (see fonts.css; never a CDN). System fallback kept for the font-display swap window.
      Mono is the utility face for tokens, specs, and numeric readouts. */
   --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;

@@ -2,6 +2,24 @@
   "$comment": "Registry of every tool. The hub renders its cards from this and CI builds from this. route: 'mw' (scad listing on MakerWorld) | 'app' (own-site app) | 'both'. external: true = lives outside this monorepo.",
   "generators": [
     {
+      "id": "clicker",
+      "name": "Image to Clicker",
+      "route": "app",
+      "status": "live",
+      "external": true,
+      "appUrl": "https://vostoklabs.github.io/Clicker-Generator/",
+      "blurb": "Turn any image into a satisfying clicker."
+    },
+    {
+      "id": "keycap",
+      "name": "Keycap Legend Generator",
+      "route": "app",
+      "status": "live",
+      "external": true,
+      "appUrl": "https://vostoklabs.github.io/SVG-keycap-generator/",
+      "blurb": "Custom keycaps with icons, logos, or letters."
+    },
+    {
       "id": "large-box",
       "name": "Large Customizable Box",
       "route": "mw",
@@ -48,24 +66,6 @@
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/1732918",
       "blurb": "Customizable screw-on power strip holder. Mount strip securely under desks."
-    },
-    {
-      "id": "clicker",
-      "name": "Image to Clicker",
-      "route": "app",
-      "status": "live",
-      "external": true,
-      "appUrl": "https://vostoklabs.github.io/Clicker-Generator/",
-      "blurb": "Turn any image into a satisfying clicker."
-    },
-    {
-      "id": "keycap",
-      "name": "Keycap Legend Generator",
-      "route": "app",
-      "status": "live",
-      "external": true,
-      "appUrl": "https://vostoklabs.github.io/SVG-keycap-generator/",
-      "blurb": "Custom keycaps with icons, logos, or letters."
     }
   ],
   "sellerTools": [
@@ -73,7 +73,7 @@
       "id": "profit-calc",
       "name": "Profit Calculator",
       "status": "coming-soon",
-      "blurb": "3D print pricing — material, time, margin, all in one."
+      "blurb": "3D print pricing: material, time, margin, all in one."
     },
     {
       "id": "photo-render",

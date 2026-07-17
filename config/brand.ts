@@ -1,5 +1,5 @@
 // Single source of truth for every Vostok Labs URL, price, and license string.
-// Rule: NOTHING in any app hardcodes these — always import from @vostok/brand.
+// Rule: NOTHING in any app hardcodes these - always import from @vostok/brand.
 // A price or link change is one edit here.
 
 export const BRAND = {
