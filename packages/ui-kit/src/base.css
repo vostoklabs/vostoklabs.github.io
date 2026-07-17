@@ -1,0 +1,103 @@
+/* Base primitives, ported from the clicker's shipped CSS. All classes vl- prefixed.
+   Sidebar sections are FLAT with hairline separators, never boxed cards. */
+
+/* Section = the real sidebar pattern: border-top hairline, vertical padding, no box. */
+.vl-section { border-top: 1px solid var(--line); padding: 22px 0; }
+.vl-section:first-of-type { border-top: none; padding-top: 4px; }
+
+/* Uppercase section label (clicker .label). */
+.vl-label {
+  display: block;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.vl-hint { color: var(--muted); font-size: 14px; line-height: 1.4; margin: 0; }
+.vl-hint a, .vl-link {
+  color: var(--accent);
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.vl-hint a:hover, .vl-link:hover { text-decoration: underline; }
+
+/* Buttons, clicker's exact treatments. */
+.vl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  padding: 10px 15px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.vl-btn:hover { border-color: var(--accent); }
+.vl-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.vl-btn svg { flex: 0 0 auto; }
+
+.vl-btn--primary {
+  border: none;
+  border-radius: var(--radius-btn-primary);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  padding: 11px 16px;
+}
+.vl-btn--primary:hover { filter: brightness(1.07); border: none; }
+.vl-btn--primary:disabled { filter: none; }
+
+.vl-btn--secondary {
+  background: transparent;
+  border-radius: var(--radius-btn-primary);
+  font-weight: 600;
+}
+.vl-btn--secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Ghost: quiet, no fill, for low-emphasis actions (theme toggle, etc.). */
+.vl-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.vl-btn--ghost:hover { background: var(--panel-2); border-color: var(--line); color: var(--text); }
+
+/* Icon-only square button (history bars, steppers, compact toolbars). */
+.vl-btn--icon { padding: 0; width: 38px; height: 38px; }
+.vl-btn--icon svg { width: 18px; height: 18px; }
+
+/* Full-width action (the app's big Export button). */
+.vl-btn--block { width: 100%; padding: 14px; font-size: var(--fs-base); }
+
+/* Horizontal action cluster: wraps, even gaps, buttons keep their intrinsic
+   width. This is the container that keeps sibling buttons the same height. */
+.vl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+.vl-btn-row { display: flex; gap: 10px; }
+.vl-btn-row .vl-btn { flex: 1; }
+
+/* Keyboard focus ring. */
+.vl-btn:focus-visible,
+.vl-link:focus-visible,
+.vl-tab:focus-visible,
+.vl-topbar-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* Comfortable touch targets on phones. */
+@media (pointer: coarse) {
+  .vl-btn, .vl-tab, .vl-topbar-btn { min-height: 44px; }
+}

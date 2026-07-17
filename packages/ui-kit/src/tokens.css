@@ -1,0 +1,79 @@
+/* Vostok Labs design tokens, extracted 1:1 from the shipped Clicker Generator
+   (src/style.css) so every new app looks like the existing ones.
+   Dark is the default; light via <html data-theme="light"> (same as the clicker). */
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f3f4f6;
+  --panel: #ffffff;
+  --panel-2: #edf0f5;
+  --line: #d1d5db;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --accent-2: #10b981;
+}
+
+:root[data-theme='dark'],
+:root:not([data-theme='light']) {
+  color-scheme: dark;
+  --bg: #15171c;
+  --panel: #1d2027;
+  --panel-2: #252932;
+  --line: #2f3440;
+  --text: #e6e9ef;
+  --muted: #9aa3b2;
+  --accent: #5b9dff;
+  --accent-text: #08122a;
+  --accent-2: #36c08a;
+}
+
+:root {
+  /* Brand action colors (theme-independent, same as the clicker topbar/license UI) */
+  --red: #ef4444;
+  --red-hover: #dc2626;
+  --green: #16a34a;
+  --green-hover: #15803d;
+  --warn: #fbbf24;
+  --error-text: #ff6b6b;
+
+  /* Type. Body = system stack at the clicker's 17.5px base.
+     Display face: Chakra Petch (OFL) — confirmed by Ian, bundled locally in ./fonts
+     (see fonts.css; never a CDN). System fallback kept for the font-display swap window.
+     Mono is the utility face for tokens, specs, and numeric readouts. */
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Chakra Petch', var(--font-body);
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
+  --fs-base: 17.5px;
+  --fs-body: var(--fs-base);
+
+  /* Spacing scale (4px base) used for layout rhythm across apps. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 20px;
+  --space-5: 32px;
+  --space-6: 48px;
+
+  /* Radii ladder (matches the app: buttons 10, primary 11, fields 9, chips 8,
+     red license box 14, modals/cards 18-20, pills 999).
+     s/m/l are convenience aliases for layout chrome. */
+  --radius-chip: 8px;
+  --radius-field: 9px;
+  --radius-btn: 10px;
+  --radius-btn-primary: 11px;
+  --radius-box: 14px;
+  --radius-modal: 20px;
+  --radius-pill: 999px;
+  --radius-s: 8px;
+  --radius-m: 14px;
+  --radius-l: 20px;
+
+  /* Shadows (from the app's modals/toasts) */
+  --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --shadow-toast: 0 16px 40px rgba(0, 0, 0, 0.45);
+
+  /* Focus ring (single source so every control matches). */
+  --ring: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}

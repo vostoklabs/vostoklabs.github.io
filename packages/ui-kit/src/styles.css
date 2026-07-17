@@ -1,0 +1,5 @@
+/* @vostok/ui-kit, import this once per app: import '@vostok/ui-kit/styles.css' */
+@import './fonts.css';
+@import './tokens.css';
+@import './base.css';
+@import './components.css';

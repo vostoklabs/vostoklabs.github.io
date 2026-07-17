@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+Thumbs.db
+
+# Claude / AI agent config (skills, local settings) — not part of the shipped project
+.claude/
+
+# External reference clone (unlicensed upstream — reference only, re-clone if missing):
+# git clone --depth 1 https://github.com/nelsonjchen/unofficial-makerworld-parametric-model-maker-openscad-docs vendor/pmm-docs
+vendor/pmm-docs/
