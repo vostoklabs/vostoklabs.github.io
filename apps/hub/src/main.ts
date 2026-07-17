@@ -46,10 +46,10 @@ function buildNav(): HTMLElement {
     el('a', { className: 'hub-nav__link', text: 'Licensing', attrs: { href: '#licensing' } }),
   ]);
 
-  const cta = el('button', {
+  const cta = el('a', {
     className: 'hub-nav__cta',
     text: 'Get Commercial License',
-    on: { click: () => openCommercialModal() },
+    attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
   });
 
   const inner = el('div', { className: 'hub-nav__inner hub-container' }, [logoLink, links, cta]);
@@ -172,7 +172,7 @@ function buildLicensing(): HTMLElement {
       pricingFeature('Cancel anytime'),
     ]),
     el('a', {
-      className: 'vl-btn vl-btn--primary vl-btn--block',
+      className: 'vl-btn vl-btn--primary vl-btn--block hub-pricing__cta',
       text: 'Get Commercial License →',
       attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
     }),
@@ -189,7 +189,7 @@ function buildLicensing(): HTMLElement {
       pricingFeature('Flexible scope, set at purchase'),
     ]),
     el('a', {
-      className: 'vl-btn vl-btn--secondary vl-btn--block',
+      className: 'vl-btn vl-btn--secondary vl-btn--block hub-pricing__cta',
       text: 'Get in Touch →',
       attrs: { href: BRAND.urls.kofi, target: '_blank', rel: 'noopener noreferrer' },
     }),
@@ -226,7 +226,7 @@ function buildFooter(): HTMLElement {
   const year = new Date().getFullYear();
 
   const supportBanner = el('div', { className: 'hub-footer__support' }, [
-    el('h3', { className: 'hub-footer__support-title', text: 'Support the Project' }),
+    el('h3', { className: 'hub-footer__support-title', text: 'Support the Designer' }),
     el('p', {
       className: 'hub-footer__support-desc',
       text: 'Vostok Labs provides free parametric models for the maker community. If you find these tools useful, please consider supporting the project by donating on Ko-fi or boosting our models on MakerWorld.',
