@@ -1,0 +1,40 @@
+{
+  "$comment": "Registry of every tool. The hub renders its cards from this and CI builds from this. route: 'mw' (scad listing on MakerWorld) | 'app' (own-site app) | 'both'. external: true = lives outside this monorepo.",
+  "generators": [
+    {
+      "id": "box",
+      "name": "Parametric Box",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "TODO_MW_LISTING_URL",
+      "blurb": "Customizable box — size, walls, lid."
+    },
+    {
+      "id": "washer",
+      "name": "Washer Generator",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "TODO_MW_LISTING_URL",
+      "blurb": "Washers in any dimension you need."
+    },
+    {
+      "id": "clicker",
+      "name": "Image to Clicker",
+      "route": "app",
+      "status": "live",
+      "external": true,
+      "appUrl": "TODO_CLICKER_URL",
+      "blurb": "Turn any image into a satisfying clicker."
+    },
+    {
+      "id": "keycap",
+      "name": "Keycap Legend Generator",
+      "route": "app",
+      "status": "live",
+      "external": true,
+      "appUrl": "https://vostoklabs.github.io/SVG-keycap-generator/",
+      "blurb": "Custom keycaps with icons, logos, or letters."
+    }
+  ],
+  "sellerTools": []
+}

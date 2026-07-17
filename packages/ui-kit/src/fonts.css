@@ -1,0 +1,26 @@
+/* Chakra Petch (OFL), the Vostok Labs display face. Bundled locally as woff2,
+   Latin subset, weights 500/600/700, so the kit never touches a CDN and works
+   fully offline. Downloaded from Google Fonts; see fonts/OFL.txt for the license.
+   font-display: swap keeps text visible while the face loads. */
+
+@font-face {
+  font-family: 'Chakra Petch';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/ChakraPetch-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Chakra Petch';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/ChakraPetch-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Chakra Petch';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/ChakraPetch-Bold.woff2') format('woff2');
+}

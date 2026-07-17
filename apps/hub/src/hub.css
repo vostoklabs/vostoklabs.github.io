@@ -1,0 +1,722 @@
+/* ==========================================================================
+   Vostok Labs Hub — Landing Page Styles
+   ==========================================================================
+   All classes prefixed `hub-` to avoid collision with the `vl-` namespace
+   from @vostok/ui-kit. Relies on tokens.css (--bg, --panel, --panel-2,
+   --line, --text, --muted, --accent, --accent-text, --font-display,
+   --font-body, --font-mono, --radius-*, --space-*, --shadow-*) and
+   base.css (vl-btn, vl-btn--primary, vl-btn--secondary, etc.).
+   ========================================================================== */
+
+/* ---------- Hub-specific custom properties ---------- */
+:root {
+  /* Layout */
+  --hub-max-w: 1100px;
+  --hub-gutter: var(--space-4);            /* 20px side padding */
+  --hub-section-gap: var(--space-6);       /* 48px between sections */
+  --hub-nav-h: 56px;                       /* sticky nav height */
+
+  /* Card grid */
+  --hub-card-gap: var(--space-4);          /* 20px gap between cards */
+  --hub-card-radius: var(--radius-m);      /* 14px card corners */
+
+  /* Thumbnail aspect ratio (16:10) */
+  --hub-thumb-ratio: 10 / 16;
+
+  /* Hero glow */
+  --hub-glow-color: color-mix(in srgb, var(--accent) 12%, transparent);
+  --hub-glow-size: 520px;
+
+  /* Transitions */
+  --hub-ease: 0.2s ease;
+}
+
+
+/* ==========================================================================
+   1. GLOBAL LAYOUT
+   ========================================================================== */
+
+/* Full-page wrapper: flex column so the footer sticks to the bottom. */
+.hub-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+
+/* Horizontally centered content rail used by every section. */
+.hub-container {
+  width: 100%;
+  max-width: var(--hub-max-w);
+  margin-inline: auto;
+  padding-inline: var(--hub-gutter);
+}
+
+
+/* ==========================================================================
+   2. HEADER / NAV — sticky top bar
+   ========================================================================== */
+
+.hub-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.hub-nav__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);               /* 12px */
+  height: var(--hub-nav-h);
+}
+
+/* Logo lockup: SVG mark + wordmark. */
+.hub-nav__logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);               /* 8px */
+  text-decoration: none;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.hub-nav__logo img,
+.hub-nav__logo svg {
+  height: 28px;
+  width: auto;
+}
+
+.hub-nav__logo-text {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+/* Nav link cluster (right side). */
+.hub-nav__links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);               /* 8px */
+  flex-wrap: wrap;
+}
+
+.hub-nav__link {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: var(--radius-chip);
+  transition: color var(--hub-ease), background var(--hub-ease);
+}
+
+.hub-nav__link:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+/* License CTA in the nav — reuses the red topbar-btn style. */
+.hub-nav__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-btn);
+  background: var(--red);
+  border: 1px solid var(--red);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.hub-nav__cta:hover {
+  background: var(--red-hover);
+  border-color: var(--red-hover);
+}
+
+
+/* ==========================================================================
+   3. HERO — large heading + subtext + CTAs
+   ========================================================================== */
+
+.hub-hero {
+  position: relative;
+  overflow: hidden;
+  padding: calc(var(--hub-section-gap) * 1.5) 0 var(--hub-section-gap);
+  text-align: center;
+}
+
+/* Subtle radial accent glow behind the hero text. */
+.hub-hero::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--hub-glow-size);
+  height: var(--hub-glow-size);
+  transform: translate(-50%, -55%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    var(--hub-glow-color) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hub-hero__content {
+  position: relative;
+  z-index: 1;
+}
+
+.hub-hero__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1.15;
+  letter-spacing: 0.5px;
+  margin: 0 0 var(--space-3);
+  color: var(--text);
+}
+
+/* Accent word inside the headline. */
+.hub-hero__title em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.hub-hero__sub {
+  max-width: 560px;
+  margin: 0 auto var(--space-5);     /* 32px bottom */
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.hub-hero__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);               /* 12px */
+  flex-wrap: wrap;
+}
+
+
+/* ==========================================================================
+   4. SECTION SCAFFOLDING (generators, seller tools, license, etc.)
+   ========================================================================== */
+
+.hub-section {
+  padding: var(--hub-section-gap) 0;
+}
+
+/* Optional top hairline between sections. */
+.hub-section + .hub-section {
+  border-top: 1px solid var(--line);
+}
+
+.hub-section__header {
+  margin-bottom: var(--space-5);     /* 32px */
+  text-align: center;
+}
+
+.hub-section__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(22px, 3.5vw, 30px);
+  letter-spacing: 0.3px;
+  margin: 0 0 var(--space-2);
+  color: var(--text);
+}
+
+.hub-section__desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  max-width: 600px;
+  margin-inline: auto;
+  line-height: 1.5;
+}
+
+
+/* ==========================================================================
+   5. GENERATOR / TOOL CARD GRID
+   ========================================================================== */
+
+/* Responsive grid: 3-col → 2-col → 1-col. */
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--hub-card-gap);
+}
+
+/* ---- Individual card ---- */
+.hub-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--hub-card-radius);
+  overflow: hidden;
+  transition:
+    transform var(--hub-ease),
+    border-color var(--hub-ease),
+    box-shadow var(--hub-ease);
+}
+
+.hub-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Thumbnail area — 16:10 aspect ratio with gradient overlay. */
+.hub-card__thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.hub-card__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Subtle dark gradient at bottom of thumbnail for text readability. */
+.hub-card__thumb::after {
+  content: '';
+  position: absolute;
+  inset: 50% 0 0 0;
+  background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+}
+
+/* Card body: name, blurb, status, actions. */
+.hub-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);               /* 8px */
+  padding: var(--space-3) var(--space-3) var(--space-4);  /* 12px sides, 20px bottom */
+  flex: 1;
+}
+
+.hub-card__name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: 0.2px;
+  margin: 0;
+  color: var(--text);
+}
+
+.hub-card__blurb {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+  /* Clamp to 2 lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Spacer pushes the footer to the bottom of the card. */
+.hub-card__spacer {
+  flex: 1;
+}
+
+/* Card footer: status badge + action button(s). */
+.hub-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+
+/* ==========================================================================
+   6. STATUS BADGE — small pill
+   ========================================================================== */
+
+.hub-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+/* Live: accent color pill. */
+.hub-badge--live {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+/* Live dot indicator. */
+.hub-badge--live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Coming Soon: muted pill. */
+.hub-badge--soon {
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  color: var(--muted);
+}
+
+
+/* ==========================================================================
+   7. LICENSE / PRICING SECTION
+   ========================================================================== */
+
+/* Two-column layout for subscription vs lifetime. */
+.hub-pricing {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--hub-card-gap);
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+/* Individual pricing card. */
+.hub-pricing__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);               /* 12px */
+  padding: var(--space-5);           /* 32px */
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--hub-card-radius);
+  transition: border-color var(--hub-ease);
+}
+
+.hub-pricing__card:hover {
+  border-color: var(--accent);
+}
+
+/* Highlighted / recommended card. */
+.hub-pricing__card--featured {
+  border-color: var(--red);
+  border-width: 2px;
+  background: color-mix(in srgb, var(--red) 4%, var(--panel));
+}
+
+.hub-pricing__card--featured:hover {
+  border-color: var(--red-hover);
+}
+
+.hub-pricing__label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+
+.hub-pricing__card--featured .hub-pricing__label {
+  color: var(--red);
+}
+
+.hub-pricing__price {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 36px);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin: 0;
+  color: var(--text);
+}
+
+.hub-pricing__price small {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.hub-pricing__desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Feature list inside pricing card. */
+.hub-pricing__features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.hub-pricing__features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.hub-pricing__features li::before {
+  content: '✓';
+  flex-shrink: 0;
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+.hub-pricing__card--featured .hub-pricing__features li::before {
+  color: var(--red);
+}
+
+/* CTA button inside pricing card — uses vl-btn classes via HTML,
+   but the featured card gets a red variant. */
+.hub-pricing__cta {
+  margin-top: auto;
+}
+
+.hub-pricing__card--featured .hub-pricing__cta .vl-btn--primary {
+  background: var(--red);
+  color: #fff;
+}
+
+.hub-pricing__card--featured .hub-pricing__cta .vl-btn--primary:hover {
+  background: var(--red-hover);
+}
+
+
+/* ==========================================================================
+   8. FOOTER
+   ========================================================================== */
+
+.hub-footer {
+  margin-top: auto;                  /* push to bottom when content is short */
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  padding: var(--space-5) 0;         /* 32px */
+}
+
+.hub-footer__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.hub-footer__links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.hub-footer__link {
+  color: var(--muted);
+  font-size: 14px;
+  text-decoration: none;
+  transition: color var(--hub-ease);
+}
+
+.hub-footer__link:hover {
+  color: var(--accent);
+}
+
+.hub-footer__copy {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+
+/* ==========================================================================
+   9. RESPONSIVE BREAKPOINTS
+   ========================================================================== */
+
+/* ---- Tablet: ≤ 900px — cards go 2-col ---- */
+@media (max-width: 900px) {
+  .hub-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ---- Mobile: ≤ 600px — single column, larger touch targets ---- */
+@media (max-width: 600px) {
+  :root {
+    --hub-gutter: var(--space-3);    /* tighter 12px side padding */
+  }
+
+  .hub-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hub-pricing {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stack hero actions vertically. */
+  .hub-hero__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Nav: wrap gracefully. */
+  .hub-nav__inner {
+    flex-wrap: wrap;
+    height: auto;
+    padding-block: var(--space-2);
+  }
+
+  .hub-nav__links {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* Footer: stack. */
+  .hub-footer__inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  /* Ensure comfortable touch targets (44px min). */
+  .hub-nav__link,
+  .hub-nav__cta,
+  .hub-footer__link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* Pricing card: less padding on mobile. */
+  .hub-pricing__card {
+    padding: var(--space-4);         /* 20px */
+  }
+
+  /* Section header: left-align on mobile for scannability. */
+  .hub-section__header {
+    text-align: left;
+  }
+
+  .hub-section__desc {
+    margin-inline: 0;
+  }
+}
+
+/* ---- Coarse pointer (touch devices): enforce minimum tap size ---- */
+@media (pointer: coarse) {
+  .hub-nav__link,
+  .hub-nav__cta,
+  .hub-footer__link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+
+/* ==========================================================================
+   10. ADDITIONAL CARD DETAILS
+   ========================================================================== */
+
+/* Card header: name + status badge side-by-side. */
+.hub-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Card action buttons: fill available width when alone. */
+.hub-card__action {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+}
+
+.hub-card__action svg {
+  flex: 0 0 auto;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+/* "Coming soon" placeholder text in card footer. */
+.hub-card__coming {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* Placeholder thumbnail when no image is available. */
+.hub-card__placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 700;
+  color: var(--muted);
+  opacity: 0.25;
+  user-select: none;
+}
+
+/* Free-use line under pricing cards. */
+.hub-pricing__free {
+  text-align: center;
+  color: var(--muted);
+  font-size: 15px;
+  margin: var(--space-5) 0 0;
+  line-height: 1.55;
+}
+
+.hub-pricing__free strong {
+  color: var(--text);
+}
+
+/* Featured pricing card CTA override: red button. */
+.hub-pricing__card--featured .vl-btn--primary {
+  background: var(--red);
+  color: #fff;
+}
+
+.hub-pricing__card--featured .vl-btn--primary:hover {
+  background: var(--red-hover);
+}
+
+/* Logo SVG in the nav. */
+.hub-logo-svg {
+  height: 28px;
+  width: auto;
+  color: var(--accent);
+}

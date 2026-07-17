@@ -1,0 +1,13 @@
+{
+  "name": "vostok-labs-tools",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.8.1",
+  "scripts": {
+    "dev:hub": "pnpm --filter hub dev",
+    "build:hub": "pnpm --filter hub build",
+    "dev:demo": "pnpm --filter kit-demo dev",
+    "build:demo": "pnpm --filter kit-demo build",
+    "typecheck": "pnpm -r --if-present typecheck"
+  }
+}
