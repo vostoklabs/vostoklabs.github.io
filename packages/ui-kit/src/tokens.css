@@ -56,19 +56,20 @@
   --space-5: 32px;
   --space-6: 48px;
 
-  /* Radii ladder (matches the app: buttons 10, primary 11, fields 9, chips 8,
-     red license box 14, modals/cards 18-20, pills 999).
+  /* Radii ladder — tightened to a technical/engineered feel (2026-07-18): sharper
+     corners read as precise/CAD rather than soft-SaaS, on-brand for parametric tools.
+     Buttons 6, fields 5, chips 4, license box/cards 8, modals 12; pills stay round.
      s/m/l are convenience aliases for layout chrome. */
-  --radius-chip: 8px;
-  --radius-field: 9px;
-  --radius-btn: 10px;
-  --radius-btn-primary: 11px;
-  --radius-box: 14px;
-  --radius-modal: 20px;
+  --radius-chip: 4px;
+  --radius-field: 5px;
+  --radius-btn: 6px;
+  --radius-btn-primary: 6px;
+  --radius-box: 8px;
+  --radius-modal: 12px;
   --radius-pill: 999px;
-  --radius-s: 8px;
-  --radius-m: 14px;
-  --radius-l: 20px;
+  --radius-s: 4px;
+  --radius-m: 8px;
+  --radius-l: 12px;
 
   /* Shadows (from the app's modals/toasts) */
   --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.55);

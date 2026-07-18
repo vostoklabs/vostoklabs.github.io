@@ -87,7 +87,7 @@
   flex-direction: column;
   gap: 16px;
 }
-.vl-card h2 { margin: 0; font-size: 23px; font-weight: 700; letter-spacing: 0.2px; }
+.vl-card h2 { margin: 0; font-family: var(--font-display); font-size: 23px; font-weight: 700; letter-spacing: 0.2px; }
 .vl-card > p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
 .vl-card a { color: var(--accent); font-weight: 600; }
 
@@ -110,7 +110,7 @@
   flex-direction: column;
   gap: 14px;
 }
-.vl-dialog__title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+.vl-dialog__title { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
 .vl-dialog > div { color: var(--muted); font-size: 15px; line-height: 1.55; }
 .vl-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
 
@@ -143,7 +143,7 @@
   flex-direction: column;
   gap: 10px;
 }
-.vl-commercial-title { font-size: 18px; font-weight: 800; color: var(--text); }
+.vl-commercial-title { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--text); }
 .vl-commercial-title .vl-sell { color: var(--red); text-decoration: underline; }
 .vl-commercial p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
 .vl-commercial p strong { color: var(--text); }
@@ -183,9 +183,9 @@
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease;
 }
 .vl-license-toast.show { transform: translateX(0); opacity: 1; }
-.vl-license-toast-title { font-size: 15px; font-weight: 700; color: var(--accent-2); }
+.vl-license-toast-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--accent-2); }
 .vl-license-toast p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--muted); }
-.vl-license-toast .vl-commercial-cta { font-size: 13.5px; padding: 8px 14px; border-radius: 9px; margin-top: 2px; }
+.vl-license-toast .vl-commercial-cta { font-size: 13.5px; padding: 8px 14px; border-radius: var(--radius-btn); margin-top: 2px; }
 .vl-license-toast-x {
   position: absolute;
   top: 8px;
