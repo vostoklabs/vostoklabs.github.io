@@ -5,7 +5,7 @@ import '@vostok/ui-kit/styles.css';
 import './hub.css';
 
 import { BRAND } from '@vostok/brand';
-import { el, openCommercialModal, supportLinks, ICONS, svgEl } from '@vostok/ui-kit';
+import { el, openCommercialModal, segmentedControl, supportLinks, ICONS, svgEl } from '@vostok/ui-kit';
 import registryData from '../../../generators.json';
 import type { Registry } from './registry';
 import { generatorCard, sellerToolCard } from './cards';
@@ -43,13 +43,16 @@ function buildNav(): HTMLElement {
   const links = el('nav', { className: 'hub-nav__links' }, [
     el('a', { className: 'hub-nav__link', text: 'Generators', attrs: { href: '#generators' } }),
     el('a', { className: 'hub-nav__link', text: 'Seller Tools', attrs: { href: '#seller-tools' } }),
-    el('a', { className: 'hub-nav__link', text: 'Licensing', attrs: { href: '#licensing' } }),
+    el('a', { className: 'hub-nav__link', text: 'Pricing', attrs: { href: '#licensing' } }),
   ]);
 
-  const cta = el('a', {
+  // Same behavior as the app topbar's commercial button: open the kit's
+  // two-lane license modal rather than jumping straight off-site.
+  const cta = el('button', {
     className: 'hub-nav__cta',
     text: 'Get Commercial License',
-    attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
+    attrs: { type: 'button' },
+    on: { click: () => openCommercialModal() },
   });
 
   const inner = el('div', { className: 'hub-nav__inner hub-container' }, [logoLink, links, cta]);
@@ -60,6 +63,11 @@ function buildNav(): HTMLElement {
 // HERO
 // ---------------------------------------------------------------------------
 function buildHero(): HTMLElement {
+  const eyebrow = el('p', {
+    className: 'hub-hero__eyebrow',
+    text: 'Free for makers · License for sellers',
+  });
+
   const title = el('h1', { className: 'hub-hero__title' });
   title.innerHTML = 'Free 3D Print <em>Generators</em>';
 
@@ -68,55 +76,36 @@ function buildHero(): HTMLElement {
     text: 'Parametric model generators for makers and sellers. Customize, download, print. No account needed.',
   });
 
+  const licenseLink = el('a', {
+    className: 'hub-hero__link',
+    attrs: { href: '#licensing' },
+  });
+  licenseLink.innerHTML = 'See <u>commercial licensing</u>';
+
   const actions = el('div', { className: 'hub-hero__actions' }, [
     el('a', {
       className: 'vl-btn vl-btn--primary',
-      text: 'Browse Tools ↓',
+      text: 'Browse generators ↓',
       attrs: { href: '#generators' },
     }),
-    el('a', {
-      className: 'vl-btn vl-btn--secondary',
-      text: 'MakerWorld Profile',
-      attrs: { href: BRAND.urls.makerworld, target: '_blank', rel: 'noopener noreferrer' },
-    }),
+    licenseLink,
   ]);
 
   return el('section', { className: 'hub-hero' }, [
-    el('div', { className: 'hub-container' }, [title, sub, actions]),
-  ]);
-}
-
-// ---------------------------------------------------------------------------
-// GENERATORS
-// ---------------------------------------------------------------------------
-function buildGenerators(): HTMLElement {
-  const grid = el('div', { className: 'hub-grid' });
-  for (const gen of registry.generators) {
-    grid.append(generatorCard(gen));
-  }
-
-  return el('section', {
-    className: 'hub-section',
-    attrs: { id: 'generators' },
-  }, [
     el('div', { className: 'hub-container' }, [
-      el('div', { className: 'hub-section__header' }, [
-        el('h2', { className: 'hub-section__title', text: 'Generators' }),
-        el('p', {
-          className: 'hub-section__desc',
-          text: 'Every tool is free for personal use. Customize any parameter, download print-ready files instantly.',
-        }),
-      ]),
-      grid,
+      el('div', { className: 'hub-hero__inner' }, [eyebrow, title, sub, actions]),
     ]),
   ]);
 }
 
 // ---------------------------------------------------------------------------
-// SELLER TOOLS
+// CATALOG — generators + seller tools in one grid, filtered by category.
+// The category switch is a per-item axis, distinct from the header's page-nav.
 // ---------------------------------------------------------------------------
-function buildSellerTools(): HTMLElement {
-  // Seller tools from registry + hardcoded upcoming ones
+type Category = 'all' | 'app' | 'mw' | 'tools';
+
+function buildCatalog(): HTMLElement {
+  // Seller tools from the registry, with upcoming ones as a fallback.
   const tools = registry.sellerTools.length > 0
     ? registry.sellerTools
     : [
@@ -127,21 +116,53 @@ function buildSellerTools(): HTMLElement {
       ];
 
   const grid = el('div', { className: 'hub-grid' });
-  for (const tool of tools) {
-    grid.append(sellerToolCard(tool));
-  }
+
+  // Re-render the grid for the chosen category.
+  const render = (cat: Category) => {
+    grid.replaceChildren();
+    if (cat !== 'tools') {
+      for (const gen of registry.generators) {
+        const isApp = gen.route === 'app' || gen.route === 'both';
+        const isMw = gen.route === 'mw' || gen.route === 'both';
+        if (cat === 'all' || (cat === 'app' && isApp) || (cat === 'mw' && isMw)) {
+          grid.append(generatorCard(gen));
+        }
+      }
+    }
+    if (cat === 'all' || cat === 'tools') {
+      for (const tool of tools) grid.append(sellerToolCard(tool));
+    }
+  };
+
+  const filter = el('div', { className: 'hub-catalog__filter' }, [
+    segmentedControl<Category>({
+      value: 'all',
+      onChange: render,
+      options: [
+        { value: 'all', label: 'All' },
+        { value: 'app', label: 'Web App' },
+        { value: 'mw', label: 'MakerWorld' },
+        { value: 'tools', label: 'Tools' },
+      ],
+    }),
+  ]);
+
+  render('all');
 
   return el('section', {
     className: 'hub-section',
-    attrs: { id: 'seller-tools' },
+    attrs: { id: 'generators' },
   }, [
     el('div', { className: 'hub-container' }, [
-      el('div', { className: 'hub-section__header' }, [
-        el('h2', { className: 'hub-section__title', text: 'Seller Tools' }),
-        el('p', {
-          className: 'hub-section__desc',
-          text: 'Free utilities to help you run your 3D printing business: pricing, photos, listings, and more.',
-        }),
+      el('div', { className: 'hub-catalog__head' }, [
+        el('div', {}, [
+          el('h2', { className: 'hub-section__title', text: 'Generators' }),
+          el('p', {
+            className: 'hub-section__desc',
+            text: 'Free for personal use. Filter by where each one runs.',
+          }),
+        ]),
+        filter,
       ]),
       grid,
     ]),
@@ -191,7 +212,7 @@ function buildLicensing(): HTMLElement {
     el('a', {
       className: 'vl-btn vl-btn--secondary vl-btn--block hub-pricing__cta',
       text: 'Get License →',
-      attrs: { href: BRAND.urls.kofi, target: '_blank', rel: 'noopener noreferrer' },
+      attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
     }),
   ]);
 
@@ -258,8 +279,7 @@ function init() {
   app.append(
     buildNav(),
     buildHero(),
-    buildGenerators(),
-    buildSellerTools(),
+    buildCatalog(),
     buildLicensing(),
     buildFooter(),
   );

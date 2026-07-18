@@ -8,11 +8,11 @@
       "status": "live",
       "external": true,
       "appUrl": "https://vostoklabs.github.io/Clicker-Generator/",
-      "blurb": "Turn any image into a satisfying clicker."
+      "blurb": "Turn any image, logo, or custom text into a clicker fidget."
     },
     {
       "id": "keycap",
-      "name": "Keycap Legend Generator",
+      "name": "Custom Keycap Generator",
       "route": "app",
       "status": "live",
       "external": true,
@@ -25,7 +25,7 @@
       "route": "mw",
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/2300059",
-      "blurb": "Large customizable print-in-place box. No hinges/screws required."
+      "blurb": "Large customizable print-in-place box. No hardware/screws required."
     },
     {
       "id": "rugged-box",
@@ -33,7 +33,7 @@
       "route": "mw",
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/1642041",
-      "blurb": "Super customizable rugged box. Modify dimensions, hinges, and latches."
+      "blurb": "Super customizable rugged box. Print in place, no extra hardware."
     },
     {
       "id": "washer-spacer",
@@ -57,7 +57,7 @@
       "route": "mw",
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/1684531",
-      "blurb": "Customizable edge mount dock for devices. Fits Kindles, phones, and tablets."
+      "blurb": "Customizable edge mount dock for devices. Customize to fit your phone, Kindle, or tablet."
     },
     {
       "id": "powerstrip-holder",
