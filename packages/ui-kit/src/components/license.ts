@@ -20,16 +20,7 @@ export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): voi
 
   const ccLine = el('p');
   ccLine.append(
-    'This generator and the designs it creates are released under a ',
-    el('a', {
-      text: 'CC BY-NC-ND 4.0 license',
-      attrs: {
-        href: 'https://creativecommons.org/licenses/by-nc-nd/4.0/',
-        target: '_blank',
-        rel: 'noopener noreferrer',
-      },
-    }),
-    '. Print as many as you like for yourself, completely free.',
+    'Free for personal use — print as many as you like for yourself. Selling prints requires a commercial license (below).',
   );
 
   const commercialTitle = el('div', { className: 'vl-commercial-title' });
@@ -156,7 +147,7 @@ export function licenseNudge(opts: LicenseNudgeOptions = {}): HTMLElement {
     attrs: { type: 'button' },
     on: { click: () => openCommercialModal() },
   });
-  hint.append(`${name} is free for personal use (CC BY-NC-ND 4.0). Selling prints? `, link, '.');
+  hint.append(`${name} is free for personal use. Selling prints? `, link, '.');
   return hint;
 }
 

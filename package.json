@@ -8,6 +8,8 @@
     "build:hub": "pnpm --filter hub build",
     "dev:demo": "pnpm --filter kit-demo dev",
     "build:demo": "pnpm --filter kit-demo build",
+    "dev:keychain": "pnpm --filter name-keychain dev",
+    "build:keychain": "pnpm --filter name-keychain build",
     "typecheck": "pnpm -r --if-present typecheck"
   }
 }
