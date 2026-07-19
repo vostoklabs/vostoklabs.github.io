@@ -21,10 +21,11 @@
   padding: 6px 12px;
   border-radius: 9px;
   border: 1px solid var(--line);
-  background: var(--panel-2);
+  background: transparent;
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
+  line-height: 1;
   text-decoration: none;
   cursor: pointer;
   transition: border-color 0.12s, color 0.12s, background 0.12s;

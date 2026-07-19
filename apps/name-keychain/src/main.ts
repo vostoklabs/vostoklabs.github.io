@@ -633,12 +633,9 @@ const browseFontsBtn = el('button', {
 });
 browseFontsBtn.addEventListener('click', openFontBrowser);
 
-// Advanced tuning — collapsed by default (progressive disclosure).
-const advanced = el('details', { className: 'nk-advanced' }, [
-  el('summary', { className: 'nk-advanced__summary' }, [
-    el('span', { text: 'Advanced' }),
-    el('span', { className: 'nk-advanced__hint', text: 'fine-tuning' }),
-  ]),
+// Advanced tuning — always visible for now.
+const advanced = el('div', { className: 'vl-section nk-advanced' }, [
+  el('p', { className: 'vl-label', text: 'Advanced (Fine-tuning)' }),
   el('div', { className: 'nk-advanced__body' }, [
     sliderRow({
       label: 'Text thickness', min: 0.6, max: 4.0, step: 0.2, value: state.textThickness, unit: 'mm',
