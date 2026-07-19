@@ -10,10 +10,8 @@ import {
   presetShareButton,
   segmentedControl,
   sliderRow,
-  supportLinks,
   toggleSwitch,
   readParamsFromHash,
-  licenseNudge,
   dpad,
   dialog,
 } from '@vostok/ui-kit';
@@ -690,13 +688,6 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
     line2AlignControl,
   ]),
 
-  // Font
-  el('div', { className: 'vl-section' }, [
-    el('p', { className: 'vl-label', text: 'Font' }),
-    fontGrid,
-    browseFontsBtn,
-  ]),
-
   // Layout & style
   el('div', { className: 'vl-section' }, [
     el('p', { className: 'vl-label', text: 'Layout & style' }),
@@ -765,12 +756,12 @@ const controls = el('aside', { className: 'nk-controls' }, [
   controlsScroll
 ]);
 
-// Right column = the output rail: the file you get + how you're licensed to use it.
-const controlsRightScroll = el('div', { className: 'nk-controls__scroll' }, [
-  el('div', { className: 'nk-license-card' }, [
-    el('p', { className: 'vl-hint', text: '3MF exports include plate, halo, and text meshes mapped to distinct AMS filament slots.' }),
-    licenseNudge({ generatorName: 'Name Keychain Generator' }),
-    supportLinks(),
+// Right column = pick the font (the "source" of the look), then export.
+const controlsRightScroll = el('div', { className: 'nk-controls__scroll nk-controls__scroll--font' }, [
+  el('div', { className: 'vl-section nk-font-section' }, [
+    el('p', { className: 'vl-label', text: 'Font' }),
+    fontGrid,
+    browseFontsBtn,
   ]),
 ]);
 
