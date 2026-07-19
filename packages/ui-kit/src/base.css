@@ -98,6 +98,3 @@
 }
 
 /* Comfortable touch targets on phones. */
-@media (pointer: coarse) {
-  .vl-btn, .vl-tab, .vl-topbar-btn { min-height: 44px; }
-}
