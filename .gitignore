@@ -10,3 +10,13 @@ Thumbs.db
 # External reference clone (unlicensed upstream — reference only, re-clone if missing):
 # git clone --depth 1 https://github.com/nelsonjchen/unofficial-makerworld-parametric-model-maker-openscad-docs vendor/pmm-docs
 vendor/pmm-docs/
+
+# OpenSCAD render-loop working output (covers/ stays tracked — it is a deliverable)
+**/renders/
+
+# pnpm content-addressable store (local cache)
+.pnpm-store/
+
+# Third-party reference code (competitor .scad, upstream sources) — reference only.
+# Keep OUT of this public repo to avoid redistributing others' code.
+docs/reference/

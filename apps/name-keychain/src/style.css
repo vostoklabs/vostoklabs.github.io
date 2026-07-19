@@ -1,0 +1,518 @@
+/* @font-face for every bundled font (NK-<id>) is generated from the fonts folder. */
+@import './generated-fonts.css';
+
+:root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.nk-app {
+  min-height: 100dvh;
+  max-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) 1fr minmax(320px, 420px);
+  grid-template-rows: auto 1fr;
+  background: var(--bg);
+}
+
+.vl-topbar {
+  grid-column: 1 / -1;
+}
+
+.nk-controls {
+  overflow: hidden;
+  padding: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+
+.nk-controls__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.nk-controls__export {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  padding: var(--space-4);
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Headings are styled by the .vl-label class in ui-kit */
+
+.nk-eyebrow,
+.nk-stage__label {
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.nk-name-input,
+.nk-second-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.2rem;
+}
+
+.nk-second-input {
+  font: inherit;
+  margin-top: calc(-1 * var(--space-2));
+}
+
+.nk-font-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  height: 190px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.nk-font-card {
+  min-height: 66px;
+  text-align: left;
+  padding: var(--space-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--panel-2);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: space-between;
+}
+
+.nk-font-card:hover {
+  border-color: var(--muted);
+}
+
+.nk-font-card.active {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.nk-font-card__sample {
+  display: block;
+  font-size: 1.6rem;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nk-font-card__name {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nk-colors {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.nk-color {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.nk-color input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.nk-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, var(--panel-2), var(--bg) 70%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nk-stage canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+.nk-stage__label {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.nk-stage__hint {
+  position: absolute;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.85rem;
+  pointer-events: none;
+  background: rgba(21, 23, 28, 0.75);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+}
+
+.nk-status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.2rem;
+  background: rgba(29, 32, 39, 0.9);
+  border: 1px solid var(--line);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-box);
+  pointer-events: none;
+  display: none;
+}
+
+.nk-status.show {
+  display: block;
+}
+
+@media (max-width: 760px) {
+  body {
+    overflow-y: auto;
+  }
+  .nk-app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 300px auto auto;
+    max-height: none;
+  }
+  .nk-controls {
+    overflow: visible;
+    height: auto;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+  }
+  .nk-controls-right {
+    overflow: visible;
+    height: auto;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .nk-controls__scroll {
+    overflow: visible;
+    flex: none;
+    padding: var(--space-4);
+  }
+  .nk-export-sticky {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    box-shadow: none;
+    box-sizing: border-box;
+    background: var(--panel-2);
+    z-index: 100;
+  }
+  .nk-stage {
+    min-height: 300px;
+  }
+}
+
+.hidden {
+  display: none !important;
+}
+
+.nk-controls,
+.nk-controls-right {
+  overflow: hidden;
+  padding: 0;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+}
+
+.nk-controls {
+  border-right: 1px solid var(--line);
+}
+
+.nk-controls-right {
+  border-left: 1px solid var(--line);
+}
+
+/* Override ui-kit segmented controls to match Clicker generator tabs */
+.vl-tabs {
+  gap: 8px;
+  border-radius: 10px;
+  padding: 5px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.vl-tab {
+  height: auto;
+  padding: 9px 10px;
+  font-size: 15px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.vl-tab.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.nk-export-sticky {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  padding: var(--space-4);
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-2);
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.nk-export-sticky .vl-export {
+  flex: 1;
+}
+
+.nk-export-sticky .vl-export__buttons {
+  margin: 0;
+}
+
+.nk-export-sticky .vl-btn {
+  margin: 0;
+  width: 100%;
+}
+
+.nk-export-sticky > button.vl-btn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+}
+
+.nk-export-sticky > button.vl-btn:hover {
+  background: var(--panel-4);
+}
+
+/* Licensing & Support card styling */
+.nk-license-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-sizing: border-box;
+}
+
+.nk-license-card .vl-hint {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 0;
+  text-align: left;
+}
+
+.nk-license-card .vl-hint .vl-link {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font: inherit;
+  padding: 0;
+}
+
+.nk-license-card .vl-support {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.nk-license-card .vl-support a {
+  flex: 1;
+  min-width: 90px;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* ---- Font section: browse-all button ---- */
+.nk-browse-fonts {
+  margin-top: var(--space-2);
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.nk-browse-fonts:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- Advanced (progressive disclosure) ---- */
+.nk-advanced {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.nk-advanced__summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text);
+  user-select: none;
+}
+.nk-advanced__summary::-webkit-details-marker { display: none; }
+.nk-advanced__summary::after {
+  content: '⌄';
+  margin-left: auto;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+.nk-advanced[open] .nk-advanced__summary::after { transform: rotate(180deg); }
+.nk-advanced__hint { color: var(--muted); font-family: var(--font-body); font-weight: 400; font-size: 0.75rem; }
+.nk-advanced__body {
+  padding: var(--space-3) var(--space-3) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.nk-nudge { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+/* ---- Font browser modal ---- */
+.vl-dialog:has(.nk-fontmodal) { width: min(760px, 96vw); }
+.nk-fontmodal { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); }
+.nk-fb__search {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+}
+.nk-fb__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.nk-fb__chip {
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.nk-fb__chip:hover { border-color: var(--muted); color: var(--text); }
+.nk-fb__chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.nk-fb__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--space-2);
+  max-height: 56vh;
+  overflow-y: auto;
+  padding: 2px;
+}
+.nk-fb__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding: 10px 12px;
+  min-height: 72px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.nk-fb__row:hover { border-color: var(--muted); }
+.nk-fb__row.active { border-color: var(--accent); box-shadow: var(--ring); }
+.nk-fb__preview {
+  font-size: 1.75rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 1.9rem;
+}
+.nk-fb__meta { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.nk-fb__name { font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nk-fb__cat { color: var(--muted); font-size: 0.68rem; flex: 0 0 auto; }
+.nk-fb__empty { color: var(--muted); grid-column: 1 / -1; text-align: center; padding: 24px; }

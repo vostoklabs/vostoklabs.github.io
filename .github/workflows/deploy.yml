@@ -42,6 +42,12 @@ jobs:
       - name: Build Hub
         run: pnpm build:hub
 
+      - name: Build Name Keychain
+        run: pnpm build:keychain
+
+      - name: Copy Name Keychain to Hub Dist
+        run: cp -r apps/name-keychain/dist apps/hub/dist/name-keychain
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

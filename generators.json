@@ -20,6 +20,13 @@
       "blurb": "Custom keycaps with icons, logos, or letters."
     },
     {
+      "id": "name-keychain",
+      "name": "Name Keychain Generator",
+      "route": "both",
+      "status": "live",
+      "blurb": "Personalized plate-style name keychains — live font preview, pixel & script styles, multi-language, vertical or horizontal, 1–3 colour layers with AMS & no-AMS printing."
+    },
+    {
       "id": "large-box",
       "name": "Large Customizable Box",
       "route": "mw",
