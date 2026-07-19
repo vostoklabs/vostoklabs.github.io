@@ -27,6 +27,10 @@ body {
   grid-column: 1 / -1;
 }
 
+/* Slightly tighter vertical rhythm than the kit default — denser control panel. */
+.nk-app .vl-section { padding: 15px 0; }
+.nk-app .vl-section:first-of-type { padding-top: 2px; }
+
 .nk-controls {
   overflow: hidden;
   padding: 0;
@@ -72,14 +76,14 @@ body {
 .nk-second-input {
   box-sizing: border-box;
   width: 100%;
-  padding: var(--space-3);
+  padding: 9px var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-field);
   background: var(--panel-2);
   color: var(--text);
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 1.2rem;
+  font-size: 1.05rem;
 }
 
 .nk-second-input {
@@ -357,48 +361,22 @@ body {
   background: var(--panel-4);
 }
 
-/* Licensing & Support card styling */
-.nk-license-card {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-box);
-  padding: var(--space-4);
+/* ---- Font section in the right column: fill the height, grid scrolls ---- */
+.nk-controls__scroll--font { overflow: hidden; }
+.nk-font-section {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  box-sizing: border-box;
-}
-
-.nk-license-card .vl-hint {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-  margin: 0;
-  text-align: left;
-}
-
-.nk-license-card .vl-hint .vl-link {
-  color: var(--accent);
-  text-decoration: underline;
-  cursor: pointer;
-  background: none;
-  border: none;
-  font: inherit;
-  padding: 0;
-}
-
-.nk-license-card .vl-support {
-  display: flex;
-  flex-wrap: wrap;
   gap: var(--space-2);
 }
-
-.nk-license-card .vl-support a {
-  flex: 1;
-  min-width: 90px;
-  justify-content: center;
-  box-sizing: border-box;
+.nk-font-section .vl-label { flex: 0 0 auto; }
+.nk-font-section .nk-font-grid {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 120px;
 }
+.nk-font-section .nk-browse-fonts { flex: 0 0 auto; }
 
 /* ---- Font section: browse-all button ---- */
 .nk-browse-fonts {
