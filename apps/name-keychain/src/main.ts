@@ -22,6 +22,8 @@ import { createViewer } from './viewer/viewer';
 import { downloadThreeMF } from './export/threemfExport';
 import { FONTS, type FontChoice } from './generated-fonts';
 import type { GeometryResponse, PartMesh } from './types';
+import { getHorizontalContours, getVerticalContours } from './geometry/textLayout';
+import { noAmsPauses } from './geometry/noAms';
 
 type Layout = 'horizontal' | 'vertical';
 type LetterStyle = 'raised' | 'engraved';
@@ -58,191 +60,27 @@ const state = {
   halo: '#5b9dff',
   text: '#f2f4f8',
   haloOn: true,
-  uniformHeight: false,
   colorScheme: 'plate-halo-text' as 'single' | 'plate-text' | 'plate-halo-text',
+  plateShape: 'outline' as 'outline' | 'rectangle',
+
+  // Typography
+  lineSpacing: 1.0, // multiplier on the font's default line gap
+  letterSpacing: 0, // tracking, fraction of the em
+  boldness: 0, // glyph dilation in mm
+
+  // Edge finish
+  chamferOn: true,
+  chamfer: 0.4, // mm
+
+  // Print mode
+  printMode: 'ams' as 'ams' | 'noams',
+  layerHeight: 0.2,
 };
 
 // Check for shared URL hash parameters
 const shared = readParamsFromHash();
 if (shared) {
   Object.assign(state, shared);
-}
-
-function escapeXml(value: string): string {
-  return value.replace(/[<>&'"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[char]!));
-}
-
-// Convert opentype.js path commands into polygon contours
-function pathCommandsToPolygons(commands: any[], decimalPlaces = 3): number[][][] {
-  const polygons: number[][][] = [];
-  let currentPolygon: number[][] = [];
-
-  for (const cmd of commands) {
-    const c = cmd as any;
-    if (c.type === 'M') {
-      if (currentPolygon.length > 2) {
-        polygons.push(currentPolygon);
-      }
-      currentPolygon = [[c.x, -c.y]]; // Flip Y for Z-up 3D space
-    } else if (c.type === 'L') {
-      currentPolygon.push([c.x, -c.y]);
-    } else if (c.type === 'Q') {
-      const p0 = currentPolygon[currentPolygon.length - 1];
-      if (p0) {
-        const segments = 8;
-        for (let i = 1; i <= segments; i++) {
-          const t = i / segments;
-          const x = (1 - t) * (1 - t) * p0[0]! + 2 * (1 - t) * t * c.x1 + t * t * c.x;
-          const y = (1 - t) * (1 - t) * p0[1]! + 2 * (1 - t) * t * (-c.y1) + t * t * (-c.y);
-          currentPolygon.push([x, y]);
-        }
-      }
-    } else if (c.type === 'C') {
-      const p0 = currentPolygon[currentPolygon.length - 1];
-      if (p0) {
-        const segments = 8;
-        for (let i = 1; i <= segments; i++) {
-          const t = i / segments;
-          const x = Math.pow(1 - t, 3) * p0[0]! + 3 * Math.pow(1 - t, 2) * t * c.x1 + 3 * (1 - t) * t * t * c.x2 + Math.pow(t, 3) * c.x;
-          const y = Math.pow(1 - t, 3) * p0[1]! + 3 * Math.pow(1 - t, 2) * t * (-c.y1) + 3 * (1 - t) * t * t * (-c.y2) + Math.pow(t, 3) * (-c.y);
-          currentPolygon.push([x, y]);
-        }
-      }
-    } else if (c.type === 'Z') {
-      if (currentPolygon.length > 2) {
-        polygons.push(currentPolygon);
-      }
-      currentPolygon = [];
-    }
-  }
-  if (currentPolygon.length > 2) {
-    polygons.push(currentPolygon);
-  }
-
-  const factor = Math.pow(10, decimalPlaces);
-  return polygons.map((poly) =>
-    poly.map((pt) => [
-      Math.round(pt[0]! * factor) / factor,
-      Math.round(pt[1]! * factor) / factor,
-    ]),
-  );
-}
-
-function getHorizontalContours(
-  font: any,
-  text: string,
-  text2: string,
-  text_size: number,
-  line2_sz: number,
-  gap: number,
-  align: 'left' | 'center' | 'right',
-  spacingFactor: number,
-): { contours: number[][][]; box: { minX: number; maxX: number; minY: number; maxY: number } } {
-  const contours: number[][][] = [];
-  const line2_on = text2 !== '';
-  const dy = (text_size + line2_sz) * spacingFactor;
-
-  // Line 1
-  const y1 = line2_on ? -dy / 2 : 0;
-  const p1 = font.getPath(text, gap, y1, text_size);
-  contours.push(...pathCommandsToPolygons(p1.commands));
-
-  // Line 2
-  if (line2_on) {
-    const y2 = dy / 2;
-    let x2 = gap;
-    if (align !== 'left') {
-      const w1 = font.getAdvanceWidth(text, text_size);
-      const w2 = font.getAdvanceWidth(text2, line2_sz);
-      if (align === 'center') {
-        x2 = gap + (w1 - w2) / 2;
-      } else if (align === 'right') {
-        x2 = gap + (w1 - w2);
-      }
-    }
-    const p2 = font.getPath(text2, x2, y2, line2_sz);
-    contours.push(...pathCommandsToPolygons(p2.commands));
-  }
-
-  // Compute bounding box
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const poly of contours) {
-    for (const pt of poly) {
-      const x = pt[0]!;
-      const y = pt[1]!;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-  }
-
-  // Vertically center text around Y=0
-  const cy = (minY + maxY) / 2;
-  for (const poly of contours) {
-    for (const pt of poly) {
-      pt[1] = pt[1]! - cy;
-    }
-  }
-
-  return { contours, box: { minX, maxX, minY: minY - cy, maxY: maxY - cy } };
-}
-
-function getVerticalContours(
-  font: any,
-  text: string,
-  text_size: number,
-  vstep: number,
-): { contours: number[][][]; box: { minX: number; maxX: number; minY: number; maxY: number } } {
-  const contours: number[][][] = [];
-  const chars = Array.from(text);
-
-  for (let i = 0; i < chars.length; i++) {
-    const char = chars[i]!;
-    const path = font.getPath(char, 0, 0, text_size);
-    const poly = pathCommandsToPolygons(path.commands);
-
-    // Center character horizontally
-    let cMinX = Infinity, cMaxX = -Infinity;
-    for (const p of poly) {
-      for (const pt of p) {
-        const x = pt[0]!;
-        if (x < cMinX) cMinX = x;
-        if (x > cMaxX) cMaxX = x;
-      }
-    }
-    const cx = isFinite(cMinX) ? (cMinX + cMaxX) / 2 : 0;
-    const cy = -i * vstep;
-
-    for (const p of poly) {
-      for (const pt of p) {
-        pt[0] = pt[0]! - cx;
-        pt[1] = pt[1]! + cy;
-      }
-    }
-    contours.push(...poly);
-  }
-
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const poly of contours) {
-    for (const pt of poly) {
-      const x = pt[0]!;
-      const y = pt[1]!;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-  }
-
-  const cy = (minY + maxY) / 2;
-  for (const poly of contours) {
-    for (const pt of poly) {
-      pt[1] = pt[1]! - cy;
-    }
-  }
-
-  return { contours, box: { minX, maxX, minY: minY - cy, maxY: maxY - cy } };
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +138,9 @@ let needsRebuild = false;
 let rebuildTimeout: any = null;
 let lastParts: PartMesh[] = [];
 
-function getLineSpacingFactor(fontId: string): number {
+// Each font's natural line gap differs; this is the default the user's Line spacing
+// slider multiplies. Pixel/condensed faces want a tighter default.
+function baseLineFactor(fontId: string): number {
   if (fontId === 'vt323' || fontId === 'press-start-2p') return 0.44;
   if (fontId === 'creepster') return 0.55;
   return 0.62;
@@ -323,25 +163,12 @@ async function runRebuild() {
     const font = await getFont(state.font);
     const gap = 2 * (state.holeDia / 2 + state.ringThickness) + 2;
     const line2Sz = state.size * state.line2Scale;
-    const lineSpacingFactor = getLineSpacingFactor(state.font);
-    
-    let res: { contours: number[][][]; box: any };
-    let line2XOffset = 0;
-    if (state.layout === 'vertical') {
-      const vstep = state.size * 1.06;
-      res = getVerticalContours(font, state.name, state.size, vstep);
-    } else {
-      res = getHorizontalContours(font, state.name, state.secondLine, state.size, line2Sz, gap, state.line2Align, lineSpacingFactor);
-      if (state.secondLine !== '') {
-        const w1 = font.getAdvanceWidth(state.name, state.size);
-        const w2 = font.getAdvanceWidth(state.secondLine, line2Sz);
-        if (state.line2Align === 'center') {
-          line2XOffset = (w1 - w2) / 2;
-        } else if (state.line2Align === 'right') {
-          line2XOffset = w1 - w2;
-        }
-      }
-    }
+    // User's Line spacing slider scales the font's natural default.
+    const lineFactor = baseLineFactor(state.font) * state.lineSpacing;
+
+    const res = state.layout === 'vertical'
+      ? getVerticalContours(font, state.name, state.size, state.lineSpacing, state.letterSpacing)
+      : getHorizontalContours(font, state.name, state.secondLine, state.size, line2Sz, gap, state.line2Align, lineFactor, state.letterSpacing);
 
     worker.postMessage({
       type: 'build',
@@ -369,9 +196,14 @@ async function runRebuild() {
         plateColor: state.plate,
         haloColor: state.halo,
         textColor: state.text,
-        uniformHeight: state.uniformHeight,
-        line2XOffset,
-        lineSpacingFactor,
+        plateShape: state.plateShape,
+        lineSpacing: state.lineSpacing,
+        letterSpacing: state.letterSpacing,
+        boldness: state.boldness,
+        chamfer: state.chamferOn ? state.chamfer : 0,
+        printMode: state.printMode,
+        layerHeight: state.layerHeight,
+        lines: res.lines,
       },
     });
   } catch (e) {
@@ -449,7 +281,71 @@ const haloThicknessSlider = sliderRow({
   step: 0.1,
   value: state.haloThickness,
   unit: 'mm',
-  onInput: (v) => { state.haloThickness = v; triggerRebuild(); }
+  onInput: (v) => { state.haloThickness = v; refreshNoAmsReadout(); triggerRebuild(); }
+});
+
+// --- Typography ---
+const boldnessSlider = sliderRow({
+  label: 'Boldness',
+  min: -0.3, max: 0.7, step: 0.05, value: state.boldness, unit: 'mm',
+  help: 'Fattens (or thins) the letter strokes.',
+  onInput: (v) => { state.boldness = v; triggerRebuild(); },
+});
+
+const letterSpacingSlider = sliderRow({
+  label: 'Letter spacing',
+  min: -0.08, max: 0.4, step: 0.02, value: state.letterSpacing,
+  format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}`,
+  help: 'Squash letters together or spread them apart.',
+  onInput: (v) => { state.letterSpacing = v; triggerRebuild(); },
+});
+
+const lineSpacingSlider = sliderRow({
+  label: 'Line spacing',
+  min: 0.5, max: 1.8, step: 0.05, value: state.lineSpacing,
+  format: (v) => `${Math.round(v * 100)}%`,
+  help: 'Gap between the first and second line.',
+  onInput: (v) => { state.lineSpacing = v; triggerRebuild(); },
+});
+
+// --- Edge finish ---
+const chamferSlider = sliderRow({
+  label: 'Chamfer size',
+  min: 0.15, max: 1.0, step: 0.05, value: state.chamfer, unit: 'mm',
+  onInput: (v) => { state.chamfer = v; triggerRebuild(); },
+});
+const chamferToggle = toggleSwitch({
+  label: 'Chamfer edges',
+  checked: state.chamferOn,
+  onChange: (val) => { state.chamferOn = val; updateControlsVisibility(); triggerRebuild(); },
+});
+
+// --- Print mode (AMS vs manual filament swap) ---
+const noAmsReadout = el('p', { className: 'nk-hint nk-noams-readout' });
+function refreshNoAmsReadout() {
+  const pauses = noAmsPauses({
+    colorScheme: state.colorScheme,
+    style: state.style,
+    baseThickness: state.baseThickness,
+    haloThickness: state.haloThickness,
+    layerHeight: state.layerHeight,
+  });
+  if (state.printMode !== 'noams') {
+    noAmsReadout.textContent = 'Each colour prints on its own extruder automatically.';
+  } else if (pauses.length === 0) {
+    noAmsReadout.textContent = 'Add a second colour (raised style) to use manual swaps.';
+  } else {
+    noAmsReadout.textContent =
+      'Pause & swap filament at: ' + pauses.map((p) => `${p.z.toFixed(1)} mm → ${p.label}`).join(', ') + '.';
+  }
+}
+const printModeControl = segmentedControl<'ams' | 'noams'>({
+  value: state.printMode,
+  options: [
+    { value: 'ams', label: 'AMS / auto' },
+    { value: 'noams', label: 'Manual swap' },
+  ],
+  onChange: (v) => { state.printMode = v; updateControlsVisibility(); refreshNoAmsReadout(); triggerRebuild(); },
 });
 
 const plateColorField = colorField('Plate', state.plate, (value) => {
@@ -472,13 +368,25 @@ function updateControlsVisibility() {
   const line2Visible = state.secondLine.trim() !== '' && state.layout === 'horizontal';
   line2ScaleSlider.classList.toggle('hidden', !line2Visible);
   line2AlignControl.classList.toggle('hidden', !line2Visible);
-  
+
+  // Line spacing matters when there are two horizontal lines, or a vertical stack.
+  const lineSpacingVisible = line2Visible || state.layout === 'vertical';
+  lineSpacingSlider.classList.toggle('hidden', !lineSpacingVisible);
+
   const haloVisible = state.colorScheme === 'plate-halo-text';
   haloWidthSlider.classList.toggle('hidden', !haloVisible);
   haloThicknessSlider.classList.toggle('hidden', !haloVisible);
 
   haloColorField.classList.toggle('hidden', state.colorScheme !== 'plate-halo-text');
   textColorField.classList.toggle('hidden', state.colorScheme === 'single');
+
+  chamferSlider.classList.toggle('hidden', !state.chamferOn);
+
+  // No-AMS only applies to raised multicolour prints.
+  const noAmsApplies = state.style === 'raised' && state.colorScheme !== 'single';
+  printModeControl.classList.toggle('hidden', !noAmsApplies);
+  noAmsReadout.classList.toggle('hidden', !noAmsApplies);
+  refreshNoAmsReadout();
 }
 
 function fontSampleText(): string {
@@ -633,7 +541,7 @@ const browseFontsBtn = el('button', {
 });
 browseFontsBtn.addEventListener('click', openFontBrowser);
 
-// Advanced tuning — always visible for now.
+// Advanced tuning.
 const advanced = el('div', { className: 'vl-section nk-advanced' }, [
   el('p', { className: 'vl-label', text: 'Advanced (Fine-tuning)' }),
   el('div', { className: 'nk-advanced__body' }, [
@@ -647,7 +555,7 @@ const advanced = el('div', { className: 'vl-section nk-advanced' }, [
     }),
     sliderRow({
       label: 'Plate thickness', min: 1.0, max: 4.0, step: 0.2, value: state.baseThickness, unit: 'mm',
-      onInput: (v) => { state.baseThickness = v; triggerRebuild(); },
+      onInput: (v) => { state.baseThickness = v; refreshNoAmsReadout(); triggerRebuild(); },
     }),
     sliderRow({
       label: 'Loop thickness', min: 1.0, max: 6.0, step: 0.2, value: state.ringThickness, unit: 'mm',
@@ -657,20 +565,8 @@ const advanced = el('div', { className: 'vl-section nk-advanced' }, [
       label: 'Edge smoothing', min: 0.0, max: 4.0, step: 0.5, value: state.smoothing, unit: 'mm',
       onInput: (v) => { state.smoothing = v; triggerRebuild(); },
     }),
-    line2ScaleSlider,
     haloWidthSlider,
     haloThicknessSlider,
-    el('div', { attrs: { style: 'height: 4px;' } }),
-    toggleSwitch({
-      label: 'Uniform height (rack fit)',
-      checked: state.uniformHeight,
-      onChange: (val) => { state.uniformHeight = val; triggerRebuild(); },
-    }),
-    el('div', { attrs: { style: 'height: 8px;' } }),
-    el('div', { className: 'nk-nudge' }, [
-      el('span', { className: 'vl-hint', text: 'Nudge loop position' }),
-      holeDpad.root,
-    ]),
   ]),
 ]);
 
@@ -679,9 +575,7 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
   el('div', { className: 'vl-section' }, [
     el('p', { className: 'vl-label', text: 'Text' }),
     nameInput,
-    el('div', { attrs: { style: 'height: 10px;' } }),
     secondInput,
-    el('div', { attrs: { style: 'height: 10px;' } }),
     line2AlignControl,
   ]),
 
@@ -693,12 +587,27 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
       options: [{ value: 'horizontal', label: 'Horizontal' }, { value: 'vertical', label: 'Vertical' }],
       onChange: (value) => { state.layout = value; updateControlsVisibility(); triggerRebuild(); }
     }),
-    el('div', { attrs: { style: 'height: 12px;' } }),
     segmentedControl<LetterStyle>({
       value: state.style,
       options: [{ value: 'raised', label: 'Raised' }, { value: 'engraved', label: 'Engraved' }],
-      onChange: (value) => { state.style = value; triggerRebuild(); }
+      onChange: (value) => { state.style = value; updateControlsVisibility(); triggerRebuild(); }
     }),
+    segmentedControl<'outline' | 'rectangle'>({
+      value: state.plateShape,
+      options: [{ value: 'outline', label: 'Outline plate' }, { value: 'rectangle', label: 'Rectangle plate' }],
+      onChange: (value) => { state.plateShape = value; triggerRebuild(); }
+    }),
+    chamferToggle,
+    chamferSlider,
+  ]),
+
+  // Typography
+  el('div', { className: 'vl-section' }, [
+    el('p', { className: 'vl-label', text: 'Typography' }),
+    boldnessSlider,
+    letterSpacingSlider,
+    lineSpacingSlider,
+    line2ScaleSlider,
   ]),
 
   // Colours
@@ -718,7 +627,6 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
         triggerRebuild();
       }
     }),
-    el('div', { attrs: { style: 'height: 14px;' } }),
     el('div', { className: 'nk-colors' }, [
       plateColorField,
       haloColorField,
@@ -733,7 +641,6 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
       label: 'Text size', min: 10, max: 28, value: state.size, unit: 'mm',
       onInput: (value) => { state.size = value; triggerRebuild(); }
     }),
-    el('div', { attrs: { style: 'height: 10px;' } }),
     segmentedControl<'loop' | 'corner'>({
       value: state.ringStyle,
       options: [{ value: 'loop', label: 'Loop Tab' }, { value: 'corner', label: 'Corner Hole' }],
@@ -743,6 +650,10 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
       label: 'Hole diameter', min: 2.0, max: 8.0, step: 0.5, value: state.holeDia, unit: 'mm',
       onInput: (v) => { state.holeDia = v; triggerRebuild(); }
     }),
+    el('div', { className: 'nk-nudge' }, [
+      el('span', { className: 'vl-hint', text: 'Nudge loop position' }),
+      holeDpad.root,
+    ]),
   ]),
 
   // Advanced (collapsed)
@@ -762,6 +673,10 @@ const controlsRightScroll = el('div', { className: 'nk-controls__scroll nk-contr
   ]),
 ]);
 
+const shareButton = presetShareButton({ getParams: () => state, label: '' });
+shareButton.setAttribute('title', 'Copy a shareable link with these exact settings');
+shareButton.setAttribute('aria-label', 'Share this design');
+
 const controlsRightExport = el('div', { className: 'nk-export-sticky' }, [
   exportPanel({
     formats: [
@@ -769,7 +684,7 @@ const controlsRightExport = el('div', { className: 'nk-export-sticky' }, [
     ],
     onExport: handleExport
   }),
-  presetShareButton({ getParams: () => state, label: '' }),
+  shareButton,
 ]);
 
 const controlsRight = el('aside', { className: 'nk-controls-right' }, [

@@ -27,9 +27,27 @@ body {
   grid-column: 1 / -1;
 }
 
-/* Slightly tighter vertical rhythm than the kit default — denser control panel. */
-.nk-app .vl-section { padding: 15px 0; }
+/* Slightly tighter vertical rhythm than the kit default — denser control panel.
+   Flex + gap gives every control an even gutter, so segmented controls and
+   sliders can't crowd/overlap each other (e.g. in Size & keyring). */
+.nk-app .vl-section {
+  padding: 15px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .nk-app .vl-section:first-of-type { padding-top: 2px; }
+.nk-app .vl-section > .vl-label { margin: 0 0 2px; }
+/* Hidden controls must not leave a phantom gap. */
+.nk-app .vl-section > .hidden { display: none !important; }
+
+.nk-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.nk-noams-readout { color: var(--accent); }
 
 .nk-controls {
   overflow: hidden;
@@ -90,7 +108,6 @@ body {
 
 .nk-second-input {
   font: inherit;
-  margin-top: calc(-1 * var(--space-2));
 }
 
 .nk-font-grid {
