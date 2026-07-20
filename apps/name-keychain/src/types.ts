@@ -1,3 +1,5 @@
+import type { LineBox } from './geometry/textLayout';
+
 export interface BuildParams {
   name: string;
   secondLine: string;
@@ -21,9 +23,29 @@ export interface BuildParams {
   plateColor: string;
   haloColor: string;
   textColor: string;
-  uniformHeight: boolean;
-  line2XOffset: number;
-  lineSpacingFactor: number;
+  /** 'outline' hugs the letters; 'rectangle' is a plain rounded rectangle behind them. */
+  plateShape: 'outline' | 'rectangle';
+
+  // --- Typography ---
+  /** Baseline-to-baseline spacing between the two lines (fraction of the summed sizes). */
+  lineSpacing: number;
+  /** Tracking added between glyphs, as a fraction of the em size (negative = squashed). */
+  letterSpacing: number;
+  /** Outline dilation applied to the glyphs, in mm (positive = bolder, negative = thinner). */
+  boldness: number;
+
+  // --- Edge finish ---
+  /** Top-edge chamfer size in mm on the plate & raised text. 0 = off. */
+  chamfer: number;
+
+  // --- Print mode ---
+  /** 'ams' = auto multi-material; 'noams' = single nozzle, manual filament swap per Z band. */
+  printMode: 'ams' | 'noams';
+  /** Layer height used to snap the colour bands in no-AMS mode. */
+  layerHeight: number;
+
+  /** Per-line bounding boxes (line 1, optional line 2) from the text layout. */
+  lines: LineBox[];
 }
 
 export type GeometryRequest =
