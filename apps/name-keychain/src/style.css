@@ -14,33 +14,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.nk-app {
-  min-height: 100dvh;
-  max-height: 100dvh;
-  display: grid;
-  grid-template-columns: 22vw 1fr 24.2vw;
-  grid-template-rows: auto minmax(0, 1fr);
-  background: var(--bg);
-}
-
-.vl-topbar {
-  grid-column: 1 / -1;
-}
-
-/* Slightly tighter vertical rhythm than the kit default — denser control panel.
-   Flex + gap gives every control an even gutter, so segmented controls and
-   sliders can't crowd/overlap each other (e.g. in Size & keyring). */
-.nk-app .vl-section {
-  padding: 15px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.nk-app .vl-section:first-of-type { padding-top: 2px; }
-.nk-app .vl-section > .vl-label { margin: 0 0 2px; }
-/* Hidden controls must not leave a phantom gap. */
-.nk-app .vl-section > .hidden { display: none !important; }
-
+/* ---- Keychain-specific hint text ---- */
 .nk-hint {
   margin: 0;
   color: var(--muted);
@@ -49,46 +23,7 @@ body {
 }
 .nk-noams-readout { color: var(--accent); }
 
-.nk-controls {
-  overflow: hidden;
-  padding: 0;
-  background: var(--panel);
-  border-right: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.nk-controls__scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.nk-controls__scroll > .vl-app-header {
-  padding-top: 4px;
-}
-.nk-controls__scroll > .vl-callout {
-  margin-bottom: 8px;
-}
-
-
-/* Headings are styled by the .vl-label class in ui-kit */
-
-.nk-eyebrow,
-.nk-stage__label {
-  margin: 0;
-  color: var(--accent);
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
+/* ---- Text inputs ---- */
 .nk-name-input,
 .nk-second-input {
   box-sizing: border-box;
@@ -107,6 +42,7 @@ body {
   font: inherit;
 }
 
+/* ---- Font grid (right panel) ---- */
 .nk-font-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -160,6 +96,7 @@ body {
   text-overflow: ellipsis;
 }
 
+/* ---- Colour swatches ---- */
 .nk-colors {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -182,14 +119,9 @@ body {
   cursor: pointer;
 }
 
+/* ---- Stage (3D viewport) — keychain adds a radial gradient bg ---- */
 .nk-stage {
-  position: relative;
-  width: 100%;
-  height: 100%;
   background: radial-gradient(circle at center, var(--panel-2), var(--bg) 70%);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 .nk-stage canvas {
@@ -201,29 +133,7 @@ body {
   display: block;
 }
 
-.nk-stage__label {
-  position: absolute;
-  top: var(--space-4);
-  left: var(--space-4);
-  z-index: 10;
-  pointer-events: none;
-}
-
-.nk-stage__hint {
-  position: absolute;
-  bottom: var(--space-4);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  color: var(--muted);
-  text-align: center;
-  font-size: 0.85rem;
-  pointer-events: none;
-  background: color-mix(in srgb, var(--panel) 82%, transparent);
-  padding: 6px 12px;
-  border-radius: var(--radius-pill);
-}
-
+/* ---- Status overlay ---- */
 .nk-status {
   position: absolute;
   top: 50%;
@@ -246,31 +156,10 @@ body {
   display: block;
 }
 
+/* ---- Mobile responsive ---- */
 @media (max-width: 760px) {
   body {
     overflow-y: auto;
-  }
-  .nk-app {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 300px auto auto;
-    max-height: none;
-  }
-  .nk-controls {
-    overflow: visible;
-    height: auto;
-    border-right: 0;
-    border-top: 1px solid var(--line);
-  }
-  .nk-controls-right {
-    overflow: visible;
-    height: auto;
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-  .nk-controls__scroll {
-    overflow: visible;
-    flex: none;
-    padding: var(--space-4);
   }
   .nk-stage {
     min-height: 300px;
@@ -281,57 +170,8 @@ body {
   display: none !important;
 }
 
-.nk-controls,
-.nk-controls-right {
-  overflow: hidden;
-  padding: 0;
-  background: var(--panel);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-}
-
-.nk-controls {
-  border-right: 1px solid var(--line);
-}
-
-.nk-controls-right {
-  border-left: 1px solid var(--line);
-}
-
-.nk-controls__scroll {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 0 var(--space-3) var(--space-3);
-  scrollbar-width: thin;
-  min-height: 0;
-  height: 100%;
-}
-.vl-tabs {
-  gap: 8px;
-  border-radius: 10px;
-  padding: 5px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-}
-
-.vl-tab {
-  height: auto;
-  padding: 9px 10px;
-  font-size: 15px;
-  border-radius: 8px;
-  font-weight: 500;
-}
-
-.vl-tab.active {
-  background: var(--accent);
-  color: var(--accent-text);
-  font-weight: 600;
-}
-
 /* ---- Font section in the right column: fill the height, grid scrolls ---- */
-.nk-controls__scroll--font { overflow: hidden; }
+.nk-font-section-scroll { overflow: hidden; }
 .nk-font-section {
   flex: 1;
   min-height: 0;
@@ -369,9 +209,11 @@ body {
 }
 .nk-advanced__hint { color: var(--muted); font-family: var(--font-body); font-weight: 400; font-size: 0.75rem; }
 .nk-advanced__body {
+  padding: var(--space-3) var(--space-3) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  border-top: 1px solid var(--line);
 }
 .nk-advanced__summary::-webkit-details-marker { display: none; }
 .nk-advanced__summary::after {
@@ -383,14 +225,6 @@ body {
   transition: transform 0.2s;
 }
 .nk-advanced[open] .nk-advanced__summary::after { transform: rotate(180deg); }
-.nk-advanced__hint { color: var(--muted); font-family: var(--font-body); font-weight: 400; font-size: 0.75rem; }
-.nk-advanced__body {
-  padding: var(--space-3) var(--space-3) var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  border-top: 1px solid var(--line);
-}
 .nk-nudge { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 
 /* ---- Font browser modal ---- */

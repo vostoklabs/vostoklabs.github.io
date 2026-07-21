@@ -98,8 +98,9 @@ const shell = appShell({
     ],
   },
   stage: [
-    el('p', { className: 'tpl-stage-label', text: 'Live 3D Preview' }),
+    el('p', { className: 'vl-stage__label', text: 'Live 3D Preview' }),
     el('div', { className: 'tpl-stage-placeholder', text: 'Mount your 3D preview canvas on shell.stage' }),
+    el('p', { className: 'vl-stage__hint', text: 'Hold left click to rotate, right click to pan, scroll to zoom.' }),
   ],
   right: {
     scroll: [

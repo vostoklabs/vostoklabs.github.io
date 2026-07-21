@@ -1,3 +1,5 @@
+import '@vostok/ui-kit/styles.css';
+import { topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog } from '@vostok/ui-kit';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadKeycap } from './keycap.js';
@@ -11,6 +13,53 @@ import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
 import { zipSync } from 'fflate';
 
 const $ = (id) => document.getElementById(id);
+
+// Mount unified Vostok topbar
+const oldTopbar = $('topbar');
+if (oldTopbar) {
+  oldTopbar.replaceWith(topbarLinks({
+    githubUrl: 'https://github.com/vostoklabs/SVG-keycap-generator',
+    boostUrl: 'https://makerworld.com/en/models/2959969',
+  }));
+}
+
+// Mount header and footer components
+const oldHeader = $('keycapAppHeader');
+if (oldHeader) {
+  const header = generatorHeader({
+    title: 'Keycap Legend Generator',
+    description: 'Pick an icon or letter, size it, export a two-color 3MF.',
+  });
+  oldHeader.replaceWith(header);
+}
+
+const keycapFooter = $('keycapFooter');
+if (keycapFooter) {
+  const footer = sidebarFooter({
+    formats: [{ id: '3mf', label: '3MF' }],
+    onExport: () => $('export')?.click(),
+    onSave: () => $('saveProj')?.click(),
+    onLoad: (file) => {
+      const projFile = $('projFile');
+      if (projFile) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        projFile.files = dt.files;
+        projFile.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    },
+    onHelp: () => {
+      dialog({
+        title: 'Keycap Legend Generator — Help',
+        content: document.createTextNode('Pick an icon or custom letter, customize size, depth, rotation, and stem clearance, then click Download 3MF to export a print-ready file for your slicer.'),
+        actions: [{ label: 'Got it', primary: true }],
+      });
+    },
+    themeStorageKey: 'keycap_theme',
+  });
+  keycapFooter.replaceWith(footer);
+}
+
 const busyEl = $('busy');
 const statusEl = $('status');
 

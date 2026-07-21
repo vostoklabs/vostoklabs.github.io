@@ -10,6 +10,12 @@ importers:
 
   apps/clicker-generator:
     dependencies:
+      '@vostok/brand':
+        specifier: workspace:*
+        version: link:../../config
+      '@vostok/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
       d3-contour:
         specifier: ^4.0.2
         version: 4.0.2
@@ -79,6 +85,12 @@ importers:
 
   apps/keycap-generator:
     dependencies:
+      '@vostok/brand':
+        specifier: workspace:*
+        version: link:../../config
+      '@vostok/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
       fflate:
         specifier: ^0.8.2
         version: 0.8.3

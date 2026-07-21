@@ -1,3 +1,4 @@
+import { generatorHeader, qualityCallout, sidebarFooter, dialog } from '@vostok/ui-kit';
 import type { BaseShapeKind, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
 import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
@@ -6,9 +7,6 @@ import type { RgbaImage } from '../image/decode';
 import type { FontOption } from '../image/letter';
 import { FONT_OPTIONS, loadBundledFonts } from '../image/letter';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from '../image/lucideIcons';
-
-/** Base path for bundled public assets (favicon logos, etc.). */
-const ASSET_BASE = import.meta.env.BASE_URL;
 
 /** Neutral top↔base clearance (mm). The "Switch socket tolerance" stepper shows the
  *  offset from this baseline, so a fresh design reads 0. Keep in sync with the store default. */
@@ -193,20 +191,18 @@ export function createUi(
   const tip = (text: string) =>
     `<span class="help-tip" tabindex="0" role="img" aria-label="Help: ${text.replace(/"/g, '&quot;')}" data-tip="${text.replace(/"/g, '&quot;')}">?</span>`;
 
+  const headerEl = generatorHeader({
+    title: 'Clicker Generator',
+    description: 'Generate printable 3D model of a clicker from an image',
+  });
+
+  const qualityEl = qualityCallout({
+    html: 'For the best quality printed clicker, please use the print profile and instructions available on <a class="hint-link" href="https://makerworld.com/en/models/2980346" target="_blank" rel="noopener">MakerWorld</a>.',
+    storageKey: 'clicker-quality-callout',
+  });
+
   // Populate Left Sidebar (Settings + Preview)
   sidebarLeft.innerHTML = `
-    <div class="app-header">
-      <h1>Clicker Generator</h1>
-      <p class="app-subtitle">Generate printable 3D model of a clicker from an image</p>
-      <p class="app-credit">Made by
-        <a class="app-credit-link" href="https://makerworld.com/en/@Vostok_Labs" target="_blank" rel="noopener noreferrer">
-          <img class="credit-logo only-dark" src="${ASSET_BASE}assets/favicon/vostokfaviconwhite.png" alt="" aria-hidden="true" />
-          <img class="credit-logo only-light" src="${ASSET_BASE}assets/favicon/Vostokfaviconblack.png" alt="" aria-hidden="true" />
-          Vostok Labs
-        </a>
-      </p>
-    </div>
-
     <div class="section" id="previewViewSection">
       <span class="label">Preview &amp; View</span>
       <div class="tabs" id="viewTabs" role="tablist" style="margin-bottom: 12px;">
@@ -447,11 +443,16 @@ export function createUi(
     </div>
   `;
 
-  // Populate Right Sidebar (Import, Export)
-  sidebarRight.innerHTML = `
-    <div class="section legend-section">
-      <span class="label">Import Source</span>
-      <div class="import-grid" id="importTabs" role="tablist">
+  sidebarLeft.prepend(...(qualityEl ? [headerEl, qualityEl] : [headerEl]));
+
+  // Populate Right Sidebar (Input Modes & Export)
+  sidebarRight.innerHTML = '';
+  const rightScroll = document.createElement('div');
+  rightScroll.className = 'vl-panel__scroll';
+  rightScroll.innerHTML = `
+    <div class="section" id="importSourceSection">
+      <span class="label">Import Source ${tip('Switch between raster image, SVG vector, built-in icon, or custom text to create your clicker.')}</span>
+      <div class="import-mode-cards" id="importTabs">
         <button class="import-card active" data-mode="image" type="button">
           <span class="card-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -538,7 +539,7 @@ export function createUi(
           <span class="switch-label">Remove background ${tip('Drops a solid rectangle painted behind the artwork so only the logo is kept. Turn off to keep the SVG background.')}</span>
           <label class="toggle"><input id="removebgSvg" type="checkbox" /><span class="slider"></span></label>
         </div>
-        <button class="primary" id="generateSvg" style="margin-top: 10px; width: 100%;">Generate</button>
+        <button class="vl-btn vl-btn--primary vl-btn--block" id="generateSvg" style="margin-top: 10px;">Generate</button>
       </div>
 
       <!-- Icon Panel -->
@@ -549,7 +550,7 @@ export function createUi(
         </div>
         <div id="iconCount"></div>
         <div id="gallery"></div>
-        <button class="primary" id="generateIcon" style="margin-top: 10px; width: 100%;">Generate</button>
+        <button class="vl-btn vl-btn--primary vl-btn--block" id="generateIcon" style="margin-top: 10px;">Generate</button>
       </div>
 
       <!-- Text Panel -->
@@ -566,41 +567,59 @@ export function createUi(
             <input id="fontUpload" type="file" accept=".ttf,.otf,.json,font/ttf,font/otf,application/json" />
           </label>
         </div>
-        <button class="primary" id="generateText" style="margin-top: 10px; width: 100%;">Generate</button>
-      </div>
-    </div>
-
-    <div class="sidebar-sticky-footer">
-      <button class="primary" id="export" style="width:100%;">Download 3MF</button>
-      <div id="projectSettingsContainer">
-        <div class="btn-row">
-          <button id="saveProj" class="secondary utility-btn" type="button" aria-label="Save project">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            <span>Save project</span>
-          </button>
-          <button id="loadProj" class="secondary utility-btn" type="button" aria-label="Load project">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Load project</span>
-          </button>
-          <input type="file" id="projFile" accept="application/json" hidden />
-        </div>
-        <div class="btn-row footer-utility-row">
-          <button id="helpToggle" class="secondary utility-btn" type="button" aria-label="Show intro and help">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            <span>Help</span>
-          </button>
-          <button id="themeToggle" class="secondary utility-btn" type="button" aria-label="Toggle theme">
-            <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-            <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-            <span id="themeLabel">Dark mode</span>
-          </button>
-        </div>
+        <button class="vl-btn vl-btn--primary vl-btn--block" id="generateText" style="margin-top: 10px;">Generate</button>
       </div>
     </div>
   `;
 
+  // Hidden dummy file input for loading project JSON
+  const projFileInput = document.createElement('input');
+  projFileInput.type = 'file';
+  projFileInput.id = 'projFile';
+  projFileInput.accept = 'application/json';
+  projFileInput.hidden = true;
+  rightScroll.appendChild(projFileInput);
+
+  const rightFooter = sidebarFooter({
+    formats: [{ id: '3mf', label: '3MF' }],
+    onExport: () => cb.onGenerate(),
+    onSave: () => {
+      // Dispatch save project click / handle logic
+      const saveBtn = document.getElementById('saveProjInternal');
+      if (saveBtn) saveBtn.click();
+    },
+    onLoad: (f: File) => {
+      // Forward file to loader
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      projFileInput.files = dt.files;
+      projFileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+    onHelp: () => {
+      dialog({
+        title: 'Clicker Generator — Help',
+        content: document.createTextNode('Upload an image, SVG, icon, or text to create a custom 3D clicker. Configure colors, edges, and tolerances, then click Download 3MF.'),
+        actions: [{ label: 'Got it', primary: true }],
+      });
+    },
+    themeStorageKey: 'clicker_theme',
+  });
+
+  sidebarRight.append(rightScroll, rightFooter);
+
   // Global ID helper
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  // Quality callout dismiss
+  try {
+    if (localStorage.getItem('clicker-quality-callout') === 'dismissed') {
+      $('clickerQualityCallout')?.remove();
+    }
+  } catch {}
+  $('clickerQualityDismiss')?.addEventListener('click', () => {
+    try { localStorage.setItem('clicker-quality-callout', 'dismissed'); } catch {}
+    $('clickerQualityCallout')?.remove();
+  });
 
   // --- History bindings ---
   $('undoBtn')?.addEventListener('click', () => cb.onUndo());

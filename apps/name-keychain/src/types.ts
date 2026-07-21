@@ -21,6 +21,8 @@ export interface BuildParams {
   ringThickness: number; // ring_thickness
   ringPosX: number; // ring_pos_x
   ringPosY: number; // ring_pos_y
+  /** Tab neck rotation angle in degrees (0 = left, 90 = up/perpendicular, 180 = right, 270 = down). */
+  ringAngle?: number;
   haloWidth: number; // halo_width
   haloThickness: number; // halo_thickness
   colorScheme: 'single' | 'plate-text' | 'plate-halo-text';
