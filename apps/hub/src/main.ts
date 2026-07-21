@@ -41,8 +41,10 @@ function buildNav(): HTMLElement {
   logoLink.append(el('span', { className: 'hub-nav__logo-text', text: 'Vostok Labs' }));
 
   const links = el('nav', { className: 'hub-nav__links' }, [
-    el('a', { className: 'hub-nav__link', text: 'Generators', attrs: { href: '#generators' } }),
-    el('a', { className: 'hub-nav__link', text: 'Seller Tools', attrs: { href: '#seller-tools' } }),
+    el('a', { className: 'hub-nav__link', text: 'Generators', attrs: { href: '#generators', 'data-filter': 'all' } }),
+    // Seller tools live inside the combined catalog; this jumps there and flips
+    // the category filter to Tools (handled by the anchor click delegate).
+    el('a', { className: 'hub-nav__link', text: 'Seller Tools', attrs: { href: '#generators', 'data-filter': 'tools' } }),
     el('a', { className: 'hub-nav__link', text: 'Pricing', attrs: { href: '#licensing' } }),
   ]);
 
@@ -77,10 +79,10 @@ function buildHero(): HTMLElement {
   });
 
   const licenseLink = el('a', {
-    className: 'hub-hero__link',
+    className: 'vl-btn vl-btn--secondary hub-hero__license-btn',
+    text: 'See commercial licensing',
     attrs: { href: '#licensing' },
   });
-  licenseLink.innerHTML = 'See <u>commercial licensing</u>';
 
   const actions = el('div', { className: 'hub-hero__actions' }, [
     el('a', {
@@ -117,27 +119,52 @@ function buildCatalog(): HTMLElement {
 
   const grid = el('div', { className: 'hub-grid' });
 
-  // Re-render the grid for the chosen category.
-  const render = (cat: Category) => {
+  // Current filter state: category (segmented control) + free-text search.
+  let activeCat: Category = 'all';
+  let query = '';
+
+  const matches = (...fields: (string | undefined)[]) => {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return fields.some((f) => f && f.toLowerCase().includes(q));
+  };
+
+  // Empty-state shown when a search matches nothing.
+  const emptyState = el('p', {
+    className: 'hub-grid__empty',
+    text: 'No generators or tools match your search.',
+  });
+
+  // Re-render the grid for the chosen category + search query.
+  const render = () => {
     grid.replaceChildren();
-    if (cat !== 'tools') {
+    let count = 0;
+    if (activeCat !== 'tools') {
       for (const gen of registry.generators) {
         const isApp = gen.route === 'app' || gen.route === 'both';
         const isMw = gen.route === 'mw' || gen.route === 'both';
-        if (cat === 'all' || (cat === 'app' && isApp) || (cat === 'mw' && isMw)) {
+        const inCat = activeCat === 'all' || (activeCat === 'app' && isApp) || (activeCat === 'mw' && isMw);
+        if (inCat && matches(gen.name, gen.blurb)) {
           grid.append(generatorCard(gen));
+          count++;
         }
       }
     }
-    if (cat === 'all' || cat === 'tools') {
-      for (const tool of tools) grid.append(sellerToolCard(tool));
+    if (activeCat === 'all' || activeCat === 'tools') {
+      for (const tool of tools) {
+        if (matches(tool.name, tool.blurb)) {
+          grid.append(sellerToolCard(tool));
+          count++;
+        }
+      }
     }
+    if (count === 0) grid.append(emptyState);
   };
 
-  const filter = el('div', { className: 'hub-catalog__filter' }, [
+  const filter = el('div', { className: 'hub-catalog__filter', attrs: { id: 'catalog-filter' } }, [
     segmentedControl<Category>({
       value: 'all',
-      onChange: render,
+      onChange: (cat) => { activeCat = cat; render(); },
       options: [
         { value: 'all', label: 'All' },
         { value: 'app', label: 'Web App' },
@@ -147,7 +174,27 @@ function buildCatalog(): HTMLElement {
     }),
   ]);
 
-  render('all');
+  // Search box: filters visible cards by name/blurb, live as you type.
+  const searchInput = el('input', {
+    className: 'hub-search__input',
+    attrs: {
+      type: 'search',
+      placeholder: 'Search generators & tools…',
+      'aria-label': 'Search generators and tools',
+      autocomplete: 'off',
+      spellcheck: 'false',
+    },
+  }) as HTMLInputElement;
+  searchInput.addEventListener('input', () => {
+    query = searchInput.value.trim();
+    render();
+  });
+  const search = el('div', { className: 'hub-search' }, [
+    svgEl(ICONS.search),
+    searchInput,
+  ]);
+
+  render();
 
   return el('section', {
     className: 'hub-section',
@@ -155,14 +202,14 @@ function buildCatalog(): HTMLElement {
   }, [
     el('div', { className: 'hub-container' }, [
       el('div', { className: 'hub-catalog__head' }, [
-        el('div', {}, [
+        el('div', { className: 'hub-catalog__headings' }, [
           el('h2', { className: 'hub-section__title', text: 'Generators' }),
           el('p', {
             className: 'hub-section__desc',
             text: 'Free for personal use. Filter by where each one runs.',
           }),
         ]),
-        filter,
+        el('div', { className: 'hub-catalog__controls' }, [search, filter]),
       ]),
       grid,
     ]),
@@ -176,6 +223,14 @@ function pricingFeature(text: string): HTMLElement {
   const li = el('li');
   li.append(svgEl(ICONS.check), text);
   return li;
+}
+
+// A single lifetime-license price tier: bold "$X for N designs" on one line.
+function lifetimeTier(price: string, count: string): HTMLElement {
+  return el('li', { className: 'hub-pricing__tier' }, [
+    el('span', { className: 'hub-pricing__tier-price', text: price }),
+    el('span', { className: 'hub-pricing__tier-count', text: `for ${count}` }),
+  ]);
 }
 
 function buildLicensing(): HTMLElement {
@@ -199,13 +254,12 @@ function buildLicensing(): HTMLElement {
     }),
   ]);
 
+  // Inner lifetime card: just the header + features + CTA.
   const lifeCard = el('div', { className: 'hub-pricing__card' }, [
     el('span', { className: 'hub-pricing__label', text: 'Lifetime License' }),
     el('div', { className: 'hub-pricing__price', text: `From ${fmt(l.one)}` }),
-    el('p', { className: 'hub-pricing__desc', text: `${fmt(l.one)} / 1 design · ${fmt(l.three)} / 3 designs · ${fmt(l.twelve)} / 12 designs` }),
     el('ul', { className: 'hub-pricing__features' }, [
       pricingFeature('One-time payment, yours forever'),
-      pricingFeature('Pick any generator or specific design'),
       pricingFeature('Sell prints with no recurring fees'),
       pricingFeature('Flexible scope, set at purchase'),
     ]),
@@ -214,6 +268,26 @@ function buildLicensing(): HTMLElement {
       text: 'Get License →',
       attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
     }),
+  ]);
+
+  // One big block that wraps the lifetime card + tiers/info side-by-side
+  // into a single visual unit beside the subscription card.
+  const lifetimeInfo = el('div', { className: 'hub-pricing__lifetime-info' }, [
+    el('ul', { className: 'hub-pricing__tiers' }, [
+      lifetimeTier(fmt(l.one), '1 design'),
+      lifetimeTier(fmt(l.three), '3 designs'),
+      lifetimeTier(fmt(l.twelve), '12 designs'),
+    ]),
+    el('h3', { className: 'hub-pricing__explain-title', text: 'How lifetime licensing works' }),
+    el('p', {
+      className: 'hub-pricing__explain-text',
+      text: 'Own specific designs outright with a single payment, no subscription. A "design" is any one generator, model, app, or seller tool of your choice.',
+    }),
+  ]);
+
+  const lifetimeGroup = el('div', { className: 'hub-pricing__lifetime-group' }, [
+    lifeCard,
+    lifetimeInfo,
   ]);
 
   const freeLine = el('p', { className: 'hub-pricing__free' });
@@ -234,7 +308,10 @@ function buildLicensing(): HTMLElement {
           text: 'Sell what you print. Two paths: rent the catalog or own it outright.',
         }),
       ]),
-      el('div', { className: 'hub-pricing' }, [subCard, lifeCard]),
+      el('div', { className: 'hub-pricing__wrap' }, [
+        subCard,
+        lifetimeGroup,
+      ]),
       freeLine,
     ]),
   ]);
@@ -291,6 +368,17 @@ function init() {
     if (anchor) {
       e.preventDefault();
       const id = anchor.getAttribute('href')!.slice(1);
+      // A link may also flip the catalog category filter (e.g. "Seller Tools"
+      // → Tools). Click the matching segmented-control tab so its state stays
+      // in sync with the grid.
+      const filter = anchor.getAttribute('data-filter');
+      if (filter) {
+        const label = filter === 'tools' ? 'Tools' : filter;
+        const tab = Array.from(
+          document.querySelectorAll<HTMLButtonElement>('#catalog-filter .vl-tab'),
+        ).find((b) => b.textContent?.trim().toLowerCase() === label.toLowerCase());
+        tab?.click();
+      }
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
     }
   });

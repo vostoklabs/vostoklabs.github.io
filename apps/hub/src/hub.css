@@ -288,9 +288,70 @@
   flex-wrap: wrap;
 }
 
+/* Title/description block on the left of the catalog header. */
+.hub-catalog__headings {
+  min-width: 0;
+}
+
+/* Search + filter cluster on the right of the catalog header. */
+.hub-catalog__controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 /* Category filter (segmented control) inside the catalog header. */
 .hub-catalog__filter {
   flex-shrink: 0;
+}
+
+/* Search box: icon + input inside a bordered pill, matching the field look. */
+.hub-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 40px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  transition: border-color 0.15s;
+}
+
+.hub-search:focus-within {
+  border-color: var(--accent);
+}
+
+.hub-search svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.hub-search__input {
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  width: 190px;
+  max-width: 46vw;
+  outline: none;
+  padding: 0;
+}
+
+.hub-search__input::placeholder {
+  color: var(--muted);
+}
+
+/* No-results state spanning the whole grid. */
+.hub-grid__empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-5) 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 15px;
 }
 
 /* Responsive grid: 3-col → 2-col → 1-col. */
@@ -423,13 +484,61 @@
    7. LICENSE / PRICING SECTION
    ========================================================================== */
 
-/* Two-column layout for subscription vs lifetime. */
-.hub-pricing {
+/* Sub card (1fr) | lifetime group (2fr) – group is wider to hold two panels. */
+.hub-pricing__wrap {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr 2fr;
   gap: var(--hub-card-gap);
-  max-width: 720px;
+  align-items: stretch;
+  max-width: 1100px;
   margin-inline: auto;
+}
+
+/* Outer container: groups lifetime card + tiers/info side-by-side
+   as a single visual block matching the subscription card height. */
+.hub-pricing__lifetime-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--hub-card-gap);
+  padding: 16px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: var(--hub-card-radius);
+  transition: border-color var(--hub-ease);
+}
+
+.hub-pricing__lifetime-group:hover {
+  border-color: var(--accent);
+}
+
+/* Right column inside the lifetime group: tiers + explanation. */
+.hub-pricing__lifetime-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--hub-card-radius);
+}
+
+.hub-pricing__explain-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  margin: 8px 0 8px;
+}
+
+.hub-pricing__explain-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.hub-pricing__explain-text:last-child {
+  margin-bottom: 0;
 }
 
 /* Individual pricing card. */
@@ -442,7 +551,7 @@
   border: 1px solid var(--line);
   border-radius: var(--hub-card-radius);
   transition: border-color var(--hub-ease);
-  height: 100%;
+
 }
 
 .hub-pricing__card:hover {
@@ -494,6 +603,35 @@
   font-size: 14px;
   line-height: 1.5;
   color: var(--muted);
+}
+
+.hub-pricing__tiers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hub-pricing__tier {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.hub-pricing__tier-price {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+}
+
+.hub-pricing__tier-count {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
 }
 
 /* Feature list inside pricing card. */
@@ -621,7 +759,12 @@
     grid-template-columns: 1fr;
   }
 
-  .hub-pricing {
+  /* Cards + lifetime group stack on narrow screens. */
+  .hub-pricing__wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .hub-pricing__lifetime-group {
     grid-template-columns: 1fr;
   }
 
@@ -639,6 +782,19 @@
   .hub-catalog__head {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .hub-catalog__controls {
+    width: 100%;
+  }
+
+  .hub-search {
+    flex: 1 1 auto;
+  }
+
+  .hub-search__input {
+    width: 100%;
+    max-width: none;
   }
 
   /* Nav: wrap gracefully. */

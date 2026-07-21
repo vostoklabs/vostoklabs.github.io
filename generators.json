@@ -4,19 +4,21 @@
     {
       "id": "clicker",
       "name": "Image to Clicker",
-      "route": "app",
+      "route": "both",
       "status": "live",
       "external": true,
       "appUrl": "https://vostoklabs.github.io/Clicker-Generator/",
+      "mwUrl": "https://makerworld.com/en/models/2980346",
       "blurb": "Turn any image, logo, or custom text into a clicker fidget."
     },
     {
       "id": "keycap",
       "name": "Custom Keycap Generator",
-      "route": "app",
+      "route": "both",
       "status": "live",
       "external": true,
       "appUrl": "https://vostoklabs.github.io/SVG-keycap-generator/",
+      "mwUrl": "https://makerworld.com/en/models/2959969",
       "blurb": "Custom keycaps with icons, logos, or letters."
     },
     {
@@ -24,7 +26,7 @@
       "name": "Name Keychain Generator",
       "route": "both",
       "status": "live",
-      "blurb": "Personalized plate-style name keychains — live font preview, pixel & script styles, multi-language, vertical or horizontal, 1–3 colour layers with AMS & no-AMS printing."
+      "blurb": "Personalized plate-style name keychains with live font preview, pixel & script styles, multi-language, 1 to 3 colour layers, and AMS & no-AMS printing."
     },
     {
       "id": "large-box",

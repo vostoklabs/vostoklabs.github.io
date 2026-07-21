@@ -68,14 +68,11 @@ body {
   gap: var(--space-3);
 }
 
-.nk-controls__export {
-  flex-shrink: 0;
-  border-top: 1px solid var(--line);
-  padding: var(--space-4);
-  background: var(--panel-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+.nk-controls__scroll > .vl-app-header {
+  padding-top: 4px;
+}
+.nk-controls__scroll > .vl-callout {
+  margin-bottom: 8px;
 }
 
 
@@ -222,7 +219,7 @@ body {
   text-align: center;
   font-size: 0.85rem;
   pointer-events: none;
-  background: rgba(21, 23, 28, 0.75);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
   padding: 6px 12px;
   border-radius: var(--radius-pill);
 }
@@ -237,7 +234,7 @@ body {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 1.2rem;
-  background: rgba(29, 32, 39, 0.9);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
   border: 1px solid var(--line);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-box);
@@ -274,21 +271,6 @@ body {
     overflow: visible;
     flex: none;
     padding: var(--space-4);
-  }
-  .nk-export-sticky {
-    position: sticky;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
-    border-bottom: 0;
-    box-shadow: none;
-    box-sizing: border-box;
-    background: var(--panel-2);
-    z-index: 100;
   }
   .nk-stage {
     min-height: 300px;
@@ -346,47 +328,6 @@ body {
   background: var(--accent);
   color: var(--accent-text);
   font-weight: 600;
-}
-
-.nk-export-sticky {
-  flex-shrink: 0;
-  border-top: 1px solid var(--line);
-  padding: var(--space-4);
-  background: var(--panel-2);
-  display: flex;
-  flex-direction: row;
-  gap: var(--space-2);
-  align-items: center;
-  box-sizing: border-box;
-}
-
-.nk-export-sticky .vl-export {
-  flex: 1;
-}
-
-.nk-export-sticky .vl-export__buttons {
-  margin: 0;
-}
-
-.nk-export-sticky .vl-btn {
-  margin: 0;
-  width: 100%;
-}
-
-.nk-export-sticky > button.vl-btn {
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: var(--panel-3);
-  border: 1px solid var(--line);
-}
-
-.nk-export-sticky > button.vl-btn:hover {
-  background: var(--panel-4);
 }
 
 /* ---- Font section in the right column: fill the height, grid scrolls ---- */

@@ -12,6 +12,16 @@ export {
   type LicenseNudgeOptions,
 } from './components/license';
 export { topbarLinks, type TopbarLinksOptions } from './components/topbar-links';
+export { resolveTheme, applyTheme, themeToggleButton, type ThemeToggleOptions } from './components/theme';
+export {
+  generatorHeader,
+  qualityCallout,
+  projectActions,
+  type GeneratorHeaderOptions,
+  type QualityCalloutOptions,
+  type ProjectActionsOptions,
+} from './components/generator-chrome';
+export { sidebarFooter, type SidebarFooterOptions } from './components/sidebar-footer';
 export { showWhatsNew, maybeShowWhatsNew, type WhatsNewItem, type WhatsNewOptions } from './components/whats-new';
 export { supportLinks } from './components/support-links';
 export { exportPanel, buildExportMetadata, type ExportFormat, type ExportPanelOptions } from './components/export-panel';
