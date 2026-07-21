@@ -48,6 +48,18 @@ jobs:
       - name: Copy Name Keychain to Hub Dist
         run: cp -r apps/name-keychain/dist apps/hub/dist/name-keychain
 
+      - name: Build Clicker Generator
+        run: pnpm build:clicker
+
+      - name: Copy Clicker Generator to Hub Dist
+        run: cp -r apps/clicker-generator/dist apps/hub/dist/Clicker-Generator
+
+      - name: Build Keycap Generator
+        run: pnpm build:keycap
+
+      - name: Copy Keycap Generator to Hub Dist
+        run: cp -r apps/keycap-generator/dist apps/hub/dist/SVG-keycap-generator
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

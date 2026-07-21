@@ -48,6 +48,17 @@
 .vl-panel__scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .vl-panel__scroll::-webkit-scrollbar-track { background: transparent; }
 
+/* Pinned footer at the bottom of a panel (export + project actions). */
+.vl-panel__footer {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* Center stage — the 3D preview canvas mounts here. */
 .vl-stage {
   position: relative;

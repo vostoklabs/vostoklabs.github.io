@@ -10,6 +10,10 @@
     "build:demo": "pnpm --filter kit-demo build",
     "dev:keychain": "pnpm --filter name-keychain dev",
     "build:keychain": "pnpm --filter name-keychain build",
+    "dev:clicker": "pnpm --filter clicker-generator dev",
+    "build:clicker": "pnpm --filter clicker-generator build",
+    "dev:keycap": "pnpm --filter keycap-generator dev",
+    "build:keycap": "pnpm --filter keycap-generator build",
     "typecheck": "pnpm -r --if-present typecheck"
   }
 }

@@ -1,0 +1,41 @@
+/* App-specific styles. The layout, panels, scrollbars, controls, header, callout
+   and footer all come from @vostok/ui-kit (app-shell.css + components.css). Add
+   only what's unique to your generator here. */
+
+:root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Label pinned in the corner of the stage. */
+.tpl-stage-label {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Placeholder shown until you mount a real preview canvas. */
+.tpl-stage-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 24px;
+  text-align: center;
+}
