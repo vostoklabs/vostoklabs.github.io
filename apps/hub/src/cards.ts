@@ -61,7 +61,7 @@ export function generatorCard(gen: Generator): HTMLElement {
     if (gen.route === 'app' || gen.route === 'both') {
       const url = gen.external
         ? gen.appUrl ?? '#'
-        : `/${gen.id}/`;
+        : gen.appUrl ?? `/${gen.id}/`;
       const btn = el('a', {
         className: 'vl-btn vl-btn--primary hub-card__action',
         text: 'Open App',

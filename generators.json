@@ -6,8 +6,7 @@
       "name": "Image to Clicker",
       "route": "both",
       "status": "live",
-      "external": true,
-      "appUrl": "https://vostoklabs.github.io/Clicker-Generator/",
+      "appUrl": "/Clicker-Generator/",
       "mwUrl": "https://makerworld.com/en/models/2980346",
       "blurb": "Turn any image, logo, or custom text into a clicker fidget."
     },
@@ -16,8 +15,7 @@
       "name": "Custom Keycap Generator",
       "route": "both",
       "status": "live",
-      "external": true,
-      "appUrl": "https://vostoklabs.github.io/SVG-keycap-generator/",
+      "appUrl": "/SVG-keycap-generator/",
       "mwUrl": "https://makerworld.com/en/models/2959969",
       "blurb": "Custom keycaps with icons, logos, or letters."
     },
