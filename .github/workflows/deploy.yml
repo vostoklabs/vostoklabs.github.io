@@ -52,13 +52,17 @@ jobs:
         run: pnpm build:clicker
 
       - name: Copy Clicker Generator to Hub Dist
-        run: cp -r apps/clicker-generator/dist apps/hub/dist/Clicker-Generator
+        run: |
+          cp -r apps/clicker-generator/dist apps/hub/dist/Clicker-Generator
+          cp -r apps/clicker-generator/dist apps/hub/dist/clicker
 
       - name: Build Keycap Generator
         run: pnpm build:keycap
 
       - name: Copy Keycap Generator to Hub Dist
-        run: cp -r apps/keycap-generator/dist apps/hub/dist/SVG-keycap-generator
+        run: |
+          cp -r apps/keycap-generator/dist apps/hub/dist/SVG-keycap-generator
+          cp -r apps/keycap-generator/dist apps/hub/dist/keycap
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
