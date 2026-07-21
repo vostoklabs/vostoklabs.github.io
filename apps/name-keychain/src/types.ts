@@ -12,6 +12,10 @@ export interface BuildParams {
   textThickness: number; // text_thickness
   outlineWidth: number; // outline_width
   smoothing: number; // smoothing
+  /** Plate silhouette: hug the letters ('outline') or a rounded rectangle behind them. */
+  plateShape: 'outline' | 'rectangle';
+  /** Top-edge bevel in mm on the plate & raised letters (0 = sharp/off). */
+  chamfer: number;
   ringStyle: 'loop' | 'corner';
   holeDia: number; // hole_dia
   ringThickness: number; // ring_thickness
@@ -23,8 +27,6 @@ export interface BuildParams {
   plateColor: string;
   haloColor: string;
   textColor: string;
-  /** 'outline' hugs the letters; 'rectangle' is a plain rounded rectangle behind them. */
-  plateShape: 'outline' | 'rectangle';
 
   // --- Typography ---
   /** Baseline-to-baseline spacing between the two lines (fraction of the summed sizes). */
@@ -33,10 +35,6 @@ export interface BuildParams {
   letterSpacing: number;
   /** Outline dilation applied to the glyphs, in mm (positive = bolder, negative = thinner). */
   boldness: number;
-
-  // --- Edge finish ---
-  /** Top-edge chamfer size in mm on the plate & raised text. 0 = off. */
-  chamfer: number;
 
   // --- Print mode ---
   /** 'ams' = auto multi-material; 'noams' = single nozzle, manual filament swap per Z band. */

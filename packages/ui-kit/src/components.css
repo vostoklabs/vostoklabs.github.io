@@ -339,6 +339,10 @@
 }
 .vl-field select:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* ---------- Captioned control (segmented control with a label + tooltip) ---------- */
+.vl-control { display: grid; gap: 8px; }
+.vl-control-label { color: var(--muted); font-size: 15px; }
+
 /* ---------- "?" help tip + bubble ---------- */
 .vl-help {
   display: inline-flex;
@@ -484,3 +488,81 @@
 .vl-export { display: flex; flex-direction: column; gap: 10px; }
 .vl-export__buttons { display: flex; gap: 10px; }
 .vl-export__buttons .vl-btn { flex: 1; }
+
+/* ---------- Generator chrome: header + credit ---------- */
+.vl-app-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.vl-app-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  margin: 0;
+  color: var(--text);
+}
+.vl-app-subtitle {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.35;
+  margin: 2px 0 0;
+}
+.vl-app-credit { color: var(--muted); font-size: 14px; margin: 2px 0 0; }
+.vl-credit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.vl-credit-link:hover { text-decoration: underline; }
+.vl-credit-logo { width: 15px; height: 15px; flex: 0 0 15px; }
+
+/* ---------- Generator chrome: quality callout ---------- */
+.vl-callout {
+  position: relative;
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-2);
+  border-radius: var(--radius-field);
+  padding: 10px 30px 10px 11px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.vl-callout > svg { flex: 0 0 16px; width: 16px; height: 16px; color: var(--accent-2); margin-top: 1px; }
+.vl-callout__body a { color: var(--accent); text-decoration: none; }
+.vl-callout__body a:hover { text-decoration: underline; }
+.vl-callout__dismiss {
+  position: absolute; top: 5px; right: 6px;
+  width: 20px; height: 20px; padding: 0; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 5px;
+  color: var(--muted); font-size: 17px; cursor: pointer;
+}
+.vl-callout__dismiss:hover { color: var(--text); background: var(--panel); }
+
+/* ---------- Generator chrome: Save / Load / Help / Light-mode ---------- */
+.vl-project-actions { display: flex; flex-direction: column; gap: 8px; }
+.vl-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vl-action-btn { font-size: 14px; padding: 9px 10px; }
+.vl-theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+
+/* ---------- Sidebar sticky footer (export + project actions) ---------- */
+.vl-sidebar-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  padding: 16px 20px 20px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 5;
+}

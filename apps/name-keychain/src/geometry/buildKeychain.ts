@@ -38,6 +38,30 @@ function getMeshData(solid: any): { vertProperties: Float32Array; triVerts: Uint
   return { vertProperties: m.vertProperties, triVerts: m.triVerts };
 }
 
+/**
+ * Extrude a 2D cross-section with an optional bevelled TOP edge. A straight body
+ * up to (height - chamfer), then a few inward-inset slices approximating a 45°
+ * chamfer. offset(-inset) shrinks each glyph about its OWN outline, so letters
+ * bevel in place instead of sliding toward the word centre. chamfer ≤ 0 = plain
+ * extrude (identical to before, so it's free when the toggle is off).
+ */
+function bevelExtrude(cs: any, height: number, chamfer: number, keep: Keep): any {
+  if (chamfer <= 0.05) return keep(cs.extrude(height));
+  // One inset slice keeps the extra geometry (and union cost) light — at the small
+  // chamfer sizes used here a single step reads as a clean bevel.
+  const steps = 1;
+  const stepH = chamfer / steps;
+  let solid = keep(cs.extrude(height - chamfer));
+  for (let i = 0; i < steps; i++) {
+    const inset = (i + 0.5) * stepH;
+    const sliceCS = keep(cs.offset(-inset, 'Round', 2.0, 8));
+    if (sliceCS.area() < 0.02) continue; // thin strokes can vanish — skip
+    const slice = keep(sliceCS.extrude(stepH + 0.02).translate([0, 0, height - chamfer + i * stepH]));
+    solid = keep(solid.add(slice));
+  }
+  return solid;
+}
+
 function bboxOfContours(contours: number[][][]): LineBox {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const poly of contours) {
@@ -114,7 +138,6 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   const blockH = gBox.maxY - gBox.minY;
   const vertical = params.layout === 'vertical';
   const corner = params.ringStyle === 'corner';
-  const rect = params.plateShape === 'rectangle';
   const lines = params.lines ?? [];
 
   // --- Ring / hole placement + the ramp bar that fuses the lug into the plate ---
@@ -141,17 +164,16 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
     lugCy = a.maxY + lugOuter * 0.15;
     bar = { cx: a.minX + 1.0, cy: a.maxY - 1.0, w: 2.0, h: 2.0 };
   } else {
-    // Horizontal loop on the left. For a two-line OUTLINE plate, anchor the tab to
-    // line 1 (always present, full width) and keep it as short as that line — no giant
+    // Horizontal loop on the left. For a two-line plate, anchor the tab to line 1
+    // (always present, full width) and keep it as short as that line — no giant
     // triangular fin spanning both lines, and the empty area under a short 2nd line
-    // simply isn't plate. A rectangle plate (or a single line) has a solid left edge,
-    // so a small compact tab attaches cleanly at the block centre.
+    // simply isn't plate.
     lugCx = lugOuter;
-    const anchor = !rect && lines.length >= 2
+    const anchor = lines.length >= 2
       ? lines[0]!
       : { minX: gBox.minX, maxX: gBox.maxX, minY: gBox.minY, maxY: gBox.maxY };
     lugCy = (anchor.minY + anchor.maxY) / 2;
-    const barH = rect ? lugOuter * 1.6 : Math.max((anchor.maxY - anchor.minY) * 0.72, lugOuter);
+    const barH = Math.max((anchor.maxY - anchor.minY) * 0.72, lugOuter);
     bar = { cx: anchor.minX + 1.0, cy: lugCy, w: 2.0, h: barH };
   }
   const holeX = lugCx + params.ringPosX;
@@ -161,60 +183,61 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   const barCS = keep(CrossSection.square([bar.w, bar.h], true).translate([bar.cx, bar.cy]));
   const tabCS = keep(CrossSection.hull([lugDisc, barCS]));
 
-  // --- Assemble the plate source ---
+  // --- Assemble the plate source (glyphs + tab + connectors) ---
+  // Rectangle plate: a plain box over the glyph bbox + the tab; the offset below
+  // rounds its corners into a rounded-rect. Skips the glyph-hugging connectors.
+  const isRect = params.plateShape === 'rectangle';
   let plateSrc: any;
-  if (rect) {
-    // Uniform rectangular plate covering the whole text block; the offset below adds
-    // the border and rounds the corners into a clean rounded rectangle.
+  if (isRect) {
     const rectCS = keep(
-      CrossSection.square([Math.max(blockW, 1), Math.max(blockH, 1)], true).translate([
+      CrossSection.square([Math.max(blockW, 0.1), Math.max(blockH, 0.1)], true).translate([
         (gBox.minX + gBox.maxX) / 2,
         (gBox.minY + gBox.maxY) / 2,
       ]),
     );
     plateSrc = keep(rectCS.add(tabCS));
   } else {
-    plateSrc = keep(glyphsCS.add(tabCS));
-    if (!vertical && lines.length >= 2) {
-      // Bridge the two lines only where they OVERLAP horizontally (with a minimum
-      // width), so a short/centred 2nd line doesn't leave big empty plate on the sides.
-      const l1 = lines[0]!;
-      const l2 = lines[1]!;
-      const yt = l1.minY + (l1.maxY - l1.minY) * 0.45;
-      const yb = l2.maxY - (l2.maxY - l2.minY) * 0.45;
-      let cxL = Math.max(l1.minX, l2.minX);
-      let cxR = Math.min(l1.maxX, l2.maxX);
-      const minW = params.size * 0.6;
-      if (cxR - cxL < minW) {
-        const mid = cxR > cxL ? (cxL + cxR) / 2 : (Math.min(l1.minX, l2.minX) + Math.max(l1.maxX, l2.maxX)) / 2;
-        cxL = mid - minW / 2;
-        cxR = mid + minW / 2;
-      }
-      if (yt > yb) {
-        const band = keep(CrossSection.square([cxR - cxL, yt - yb], true).translate([(cxL + cxR) / 2, (yt + yb) / 2]));
-        plateSrc = keep(plateSrc.add(band));
-      }
-    } else if (!vertical && lines.length === 1 && params.name.includes(' ')) {
-      // Single line with a space: a hidden central strip bridges the word gap.
-      const l = lines[0]!;
-      const strip = keep(
-        CrossSection.square([l.maxX - l.minX, (l.maxY - l.minY) * 0.5], true).translate([
-          (l.minX + l.maxX) / 2,
-          (l.minY + l.maxY) / 2,
-        ]),
-      );
-      plateSrc = keep(plateSrc.add(strip));
-    } else if (vertical && blockH > 0) {
-      // Vertical: a central spine fuses the stacked characters into one bar.
-      const spine = keep(
-        CrossSection.square([Math.max(blockW * 0.42, params.size * 0.3), blockH], true).translate([
-          (gBox.minX + gBox.maxX) / 2,
-          (gBox.minY + gBox.maxY) / 2,
-        ]),
-      );
-      plateSrc = keep(plateSrc.add(spine));
+  plateSrc = keep(glyphsCS.add(tabCS));
+  if (!vertical && lines.length >= 2) {
+    // Bridge the two lines only where they OVERLAP horizontally (with a minimum
+    // width), so a short/centred 2nd line doesn't leave big empty plate on the sides.
+    const l1 = lines[0]!;
+    const l2 = lines[1]!;
+    const yt = l1.minY + (l1.maxY - l1.minY) * 0.45;
+    const yb = l2.maxY - (l2.maxY - l2.minY) * 0.45;
+    let cxL = Math.max(l1.minX, l2.minX);
+    let cxR = Math.min(l1.maxX, l2.maxX);
+    const minW = params.size * 0.6;
+    if (cxR - cxL < minW) {
+      const mid = cxR > cxL ? (cxL + cxR) / 2 : (Math.min(l1.minX, l2.minX) + Math.max(l1.maxX, l2.maxX)) / 2;
+      cxL = mid - minW / 2;
+      cxR = mid + minW / 2;
     }
+    if (yt > yb) {
+      const band = keep(CrossSection.square([cxR - cxL, yt - yb], true).translate([(cxL + cxR) / 2, (yt + yb) / 2]));
+      plateSrc = keep(plateSrc.add(band));
+    }
+  } else if (!vertical && lines.length === 1 && params.name.includes(' ')) {
+    // Single line with a space: a hidden central strip bridges the word gap.
+    const l = lines[0]!;
+    const strip = keep(
+      CrossSection.square([l.maxX - l.minX, (l.maxY - l.minY) * 0.5], true).translate([
+        (l.minX + l.maxX) / 2,
+        (l.minY + l.maxY) / 2,
+      ]),
+    );
+    plateSrc = keep(plateSrc.add(strip));
+  } else if (vertical && blockH > 0) {
+    // Vertical: a central spine fuses the stacked characters into one bar.
+    const spine = keep(
+      CrossSection.square([Math.max(blockW * 0.42, params.size * 0.3), blockH], true).translate([
+        (gBox.minX + gBox.maxX) / 2,
+        (gBox.minY + gBox.maxY) / 2,
+      ]),
+    );
+    plateSrc = keep(plateSrc.add(spine));
   }
+  } // end outline (non-rectangle) plate source
 
   // --- Offset to final silhouette (round + smoothing close), then drop trapped holes ---
   const smoothR = params.smoothing;
@@ -249,62 +272,6 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   };
 }
 
-/**
- * Chamfer a blob by extruding it as ONE tapered prism (Manifold's scaleTop draws a
- * straight sloped wall from the full-size base to a top inset by `c` per side). We
- * deliberately taper the *whole* height rather than splitting off a top band: a
- * band would leave a coincident interior face where it meets the straight part, and
- * evaluating that face is ~10× slower in Manifold. A gentle full-height bevel looks
- * clean, prints without sharp vertical walls, and stays cheap. Taper is about the
- * blob's own bbox centre so the inset is ~constant.
- */
-function taperExtrude(wasm: any, cs: any, height: number, c: number, keep: Keep): any {
-  const b = cs.bounds();
-  const W = b.max[0] - b.min[0];
-  const H = b.max[1] - b.min[1];
-  if (c < 0.06 || W < 2 * c + 0.4 || H < 2 * c + 0.4) return keep(cs.extrude(height));
-  const cx = (b.min[0] + b.max[0]) / 2;
-  const cy = (b.min[1] + b.max[1]) / 2;
-  const sx = (W - 2 * c) / W;
-  const sy = (H - 2 * c) / H;
-  const centered = keep(cs.translate([-cx, -cy]));
-  return keep(centered.extrude(height, 0, 0, [sx, sy]).translate([cx, cy, 0]));
-}
-
-/**
- * Extrude a 2D profile to `height` with an optional chamfered (bevelled) edge.
- *  - `mode: 'scale'` (plate): taper the whole blob once.
- *  - `mode: 'glyphs'` (text): decompose into individual letters and taper each
- *    about its own centre — so letters don't slide toward the word centre — then
- *    `compose` (no boolean union; glyphs don't touch), so cost barely grows with
- *    name length.
- */
-function extrudeChamfered(
-  wasm: any,
-  cs: any,
-  height: number,
-  chamfer: number,
-  mode: 'scale' | 'glyphs',
-  keep: Keep,
-): any {
-  const { Manifold } = wasm;
-  const c = Math.min(chamfer, height * (mode === 'glyphs' ? 0.5 : 0.6));
-  if (c < 0.06) return keep(cs.extrude(height));
-
-  if (mode === 'scale') return taperExtrude(wasm, cs, height, c, keep);
-
-  const glyphs: any[] = cs.decompose();
-  if (glyphs.length <= 1) {
-    for (const g of glyphs) keep(g);
-    return taperExtrude(wasm, cs, height, c, keep);
-  }
-  const pieces = glyphs.map((g) => {
-    keep(g);
-    return taperExtrude(wasm, g, height, c, keep);
-  });
-  return keep(Manifold.compose(pieces));
-}
-
 export function buildKeychain(
   wasm: any,
   textContours: number[][][],
@@ -321,7 +288,6 @@ export function buildKeychain(
     if (p.emptyText) warnings.push('Text geometry is empty or degenerate. Check your characters.');
 
     const colorScheme = params.colorScheme;
-    const chamfer = Math.max(0, params.chamfer ?? 0);
 
     const finalParts: {
       name: string;
@@ -330,8 +296,7 @@ export function buildKeychain(
       colorRgb: [number, number, number];
     }[] = [];
 
-    // Straight full-height keyring hole, subtracted from the solids in 3D so its
-    // wall stays crisp even when the plate top is chamfered.
+    // Straight full-height keyring hole, subtracted from the solids in 3D.
     const holeCut = (solid: any, zBottom: number, zTop: number) => {
       const cyl = keep(
         Manifold.cylinder(zTop - zBottom + 2, p.holeR, p.holeR, 32).translate([p.holeX, p.holeY, zBottom - 1]),
@@ -339,37 +304,51 @@ export function buildKeychain(
       return keep(solid.subtract(cyl));
     };
 
+    // Bevel amounts, clamped so they never eat more than the layer can spare.
+    const chamBase = Math.min(params.chamfer, p.baseT * 0.6);
+    const chamText = Math.min(params.chamfer, params.textThickness * 0.5);
+
     if (p.isRaised) {
-      // Base plate (chamfered top edge), then hole.
-      let baseSolid = extrudeChamfered(wasm, p.plateNoHole, p.baseT, chamfer, 'scale', keep);
+      // Base plate (bevelled top edge), then hole.
+      let baseSolid = bevelExtrude(p.plateNoHole, p.baseT, chamBase, keep);
       baseSolid = holeCut(baseSolid, 0, p.baseT);
       finalParts.push({ name: 'plate', ...getMeshData(baseSolid), colorRgb: hexToRgb(params.plateColor) });
 
-      // Halo band (no chamfer — thin accent layer).
+      // Halo band.
       if (p.hasHalo && p.haloCS) {
         const haloSolid = keep(p.haloCS.extrude(p.haloT).translate([0, 0, p.baseT]));
         finalParts.push({ name: 'halo', ...getMeshData(haloSolid), colorRgb: hexToRgb(params.haloColor) });
       }
 
-      // Raised text (chamfered top edge per glyph).
-      const textSolid = keep(
-        extrudeChamfered(wasm, p.textCS, params.textThickness, chamfer, 'glyphs', keep).translate([0, 0, p.letterZ]),
-      );
+      // Raised text (bevelled top edge).
+      const textBev = bevelExtrude(p.textCS, params.textThickness, chamText, keep);
+      const textSolid = keep(textBev.translate([0, 0, p.letterZ]));
       finalParts.push({
         name: 'text',
         ...getMeshData(textSolid),
         colorRgb: hexToRgb(colorScheme === 'single' ? params.plateColor : params.textColor),
       });
     } else {
-      // Engraved: base plate (chamfered top) minus the text groove.
-      let baseSolid = extrudeChamfered(wasm, p.plateNoHole, p.baseT, chamfer, 'scale', keep);
+      // Engraved: base plate with a recess, flush-filled with coloured inlays.
+      // 3-colour engraved recesses the halo outline (letters ⊕ haloWidth) and inlays
+      // an outline-coloured ring + the letters; 1/2-colour just recesses the letters.
+      let baseSolid = bevelExtrude(p.plateNoHole, p.baseT, chamBase, keep);
       const cutDepth = Math.min(params.textThickness, p.baseT * 0.6);
-      const textCut = keep(p.textCS.extrude(params.textThickness + 1).translate([0, 0, p.baseT - cutDepth]));
-      let engraved = keep(baseSolid.subtract(textCut));
+      const recessCS = p.hasHalo && p.haloCS ? keep(p.haloCS.add(p.textCS)) : p.textCS;
+      const recessCut = keep(recessCS.extrude(cutDepth + 1).translate([0, 0, p.baseT - cutDepth]));
+      let engraved = keep(baseSolid.subtract(recessCut));
       engraved = holeCut(engraved, 0, p.baseT);
       finalParts.push({ name: 'plate', ...getMeshData(engraved), colorRgb: hexToRgb(params.plateColor) });
 
       if (colorScheme !== 'single') {
+        // Outline ring inlay (3-colour only), then the letter inlay on top.
+        if (p.hasHalo && p.haloCS) {
+          const ringCS = keep(p.haloCS.subtract(p.textCS));
+          if (ringCS.area() > 0.02) {
+            const ringSolid = keep(ringCS.extrude(cutDepth).translate([0, 0, p.baseT - cutDepth]));
+            finalParts.push({ name: 'halo', ...getMeshData(ringSolid), colorRgb: hexToRgb(params.haloColor) });
+          }
+        }
         const inlaySolid = keep(p.textCS.extrude(cutDepth).translate([0, 0, p.baseT - cutDepth]));
         finalParts.push({ name: 'text', ...getMeshData(inlaySolid), colorRgb: hexToRgb(params.textColor) });
       }

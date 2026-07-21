@@ -6,14 +6,16 @@ import {
   toast,
   openLicenseModal,
   topbarLinks,
-  exportPanel,
-  presetShareButton,
   segmentedControl,
+  selectField,
   sliderRow,
   toggleSwitch,
   readParamsFromHash,
   dpad,
   dialog,
+  generatorHeader,
+  qualityCallout,
+  sidebarFooter,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 // @ts-ignore
@@ -42,6 +44,7 @@ const state = {
   font: 'luckiest-guy',
   layout: 'horizontal' as Layout,
   style: 'raised' as LetterStyle,
+  plateShape: 'outline' as 'outline' | 'rectangle',
   size: 18,
   line2Scale: 1.0,
   line2Align: 'center' as 'left' | 'center' | 'right',
@@ -61,7 +64,6 @@ const state = {
   text: '#f2f4f8',
   haloOn: true,
   colorScheme: 'plate-halo-text' as 'single' | 'plate-text' | 'plate-halo-text',
-  plateShape: 'outline' as 'outline' | 'rectangle',
 
   // Typography
   lineSpacing: 1.0, // multiplier on the font's default line gap
@@ -271,6 +273,7 @@ const haloWidthSlider = sliderRow({
   step: 0.1,
   value: state.haloWidth,
   unit: 'mm',
+  help: 'Width of the coloured outline that hugs each letter (3-colour schemes).',
   onInput: (v) => { state.haloWidth = v; triggerRebuild(); }
 });
 
@@ -281,6 +284,7 @@ const haloThicknessSlider = sliderRow({
   step: 0.1,
   value: state.haloThickness,
   unit: 'mm',
+  help: 'Height of the coloured halo band (raised style). Also sets the 2nd no-AMS pause layer.',
   onInput: (v) => { state.haloThickness = v; refreshNoAmsReadout(); triggerRebuild(); }
 });
 
@@ -312,12 +316,22 @@ const lineSpacingSlider = sliderRow({
 const chamferSlider = sliderRow({
   label: 'Chamfer size',
   min: 0.15, max: 1.0, step: 0.05, value: state.chamfer, unit: 'mm',
+  help: 'How deep the bevel cuts into the top edges.',
   onInput: (v) => { state.chamfer = v; triggerRebuild(); },
 });
 const chamferToggle = toggleSwitch({
   label: 'Chamfer edges',
   checked: state.chamferOn,
+  help: 'Bevels the top edges of the plate and letters for a softer, more finished look.',
   onChange: (val) => { state.chamferOn = val; updateControlsVisibility(); triggerRebuild(); },
+});
+
+// Edge smoothing lives up top (not in Advanced): it's the fix when a font's letters
+// come out visually disconnected — raise it to fuse them into one solid plate.
+const smoothingSlider = sliderRow({
+  label: 'Edge smoothing', min: 0.0, max: 4.0, step: 0.5, value: state.smoothing, unit: 'mm',
+  help: 'Fills tight gaps between letters and rounds the plate outline. If your letters look disconnected or the plate breaks into pieces, raise this until it’s one solid shape.',
+  onInput: (v) => { state.smoothing = v; triggerRebuild(); },
 });
 
 // --- Print mode (AMS vs manual filament swap) ---
@@ -551,26 +565,36 @@ const advanced = el('div', { className: 'vl-section nk-advanced' }, [
     }),
     sliderRow({
       label: 'Border outline width', min: 0.5, max: 6.0, step: 0.1, value: state.outlineWidth, unit: 'mm',
+      help: 'How much plate sticks out around the letters (the coloured border of the keychain).',
       onInput: (v) => { state.outlineWidth = v; triggerRebuild(); },
     }),
     sliderRow({
       label: 'Plate thickness', min: 1.0, max: 4.0, step: 0.2, value: state.baseThickness, unit: 'mm',
+      help: 'Overall thickness of the backing plate.',
       onInput: (v) => { state.baseThickness = v; refreshNoAmsReadout(); triggerRebuild(); },
     }),
     sliderRow({
       label: 'Loop thickness', min: 1.0, max: 6.0, step: 0.2, value: state.ringThickness, unit: 'mm',
+      help: 'How chunky the keyring loop is (material around the hole).',
       onInput: (v) => { state.ringThickness = v; triggerRebuild(); },
-    }),
-    sliderRow({
-      label: 'Edge smoothing', min: 0.0, max: 4.0, step: 0.5, value: state.smoothing, unit: 'mm',
-      onInput: (v) => { state.smoothing = v; triggerRebuild(); },
     }),
     haloWidthSlider,
     haloThicknessSlider,
   ]),
 ]);
 
+// Dismissable "best print quality" callout — returns null once the user has closed it.
+const qualityCard = qualityCallout({
+  html: 'For the best quality printed keychain, please use the print profile and instructions available on <a href="https://makerworld.com/en/@Vostok_Labs" target="_blank" rel="noopener">MakerWorld</a>.',
+  storageKey: 'nk-quality-callout',
+});
+
 const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
+  generatorHeader({
+    title: 'Name Keychain Generator',
+    description: 'Make a personalized plate-style name keychain with live font and colour preview.',
+  }),
+  ...(qualityCard ? [qualityCard] : []),
   // Text
   el('div', { className: 'vl-section' }, [
     el('p', { className: 'vl-label', text: 'Text' }),
@@ -583,20 +607,27 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
   el('div', { className: 'vl-section' }, [
     el('p', { className: 'vl-label', text: 'Layout & style' }),
     segmentedControl<Layout>({
+      label: 'Layout',
+      help: 'Letters in a row (Horizontal) or stacked in a column under the ring (Vertical).',
       value: state.layout,
       options: [{ value: 'horizontal', label: 'Horizontal' }, { value: 'vertical', label: 'Vertical' }],
       onChange: (value) => { state.layout = value; updateControlsVisibility(); triggerRebuild(); }
     }),
     segmentedControl<LetterStyle>({
+      label: 'Letter style',
+      help: 'Raised = letters stand up off the plate. Engraved = letters are inlaid flush into the plate.',
       value: state.style,
       options: [{ value: 'raised', label: 'Raised' }, { value: 'engraved', label: 'Engraved' }],
       onChange: (value) => { state.style = value; updateControlsVisibility(); triggerRebuild(); }
     }),
     segmentedControl<'outline' | 'rectangle'>({
+      label: 'Plate shape',
+      help: 'Outline hugs the letters like a sticker; Rectangle is a plain rounded rectangle behind them.',
       value: state.plateShape,
-      options: [{ value: 'outline', label: 'Outline plate' }, { value: 'rectangle', label: 'Rectangle plate' }],
+      options: [{ value: 'outline', label: 'Outline' }, { value: 'rectangle', label: 'Rectangle' }],
       onChange: (value) => { state.plateShape = value; triggerRebuild(); }
     }),
+    smoothingSlider,
     chamferToggle,
     chamferSlider,
   ]),
@@ -613,15 +644,17 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
   // Colours
   el('div', { className: 'vl-section' }, [
     el('p', { className: 'vl-label', text: 'Colours' }),
-    segmentedControl<'single' | 'plate-text' | 'plate-halo-text'>({
+    selectField({
+      label: 'Colour scheme',
+      help: 'Single = one filament. 2 colours adds a separate name colour. 3 colours adds a coloured outline (halo) around the name.',
       value: state.colorScheme,
       options: [
-        { value: 'single', label: '1 Color' },
-        { value: 'plate-text', label: '2 Colors' },
-        { value: 'plate-halo-text', label: '3 Colors' },
+        { value: 'single', label: 'Single colour' },
+        { value: 'plate-text', label: '2 colours (Plate + Name)' },
+        { value: 'plate-halo-text', label: '3 colours (Plate + Name + Outline)' },
       ],
       onChange: (value) => {
-        state.colorScheme = value;
+        state.colorScheme = value as 'single' | 'plate-text' | 'plate-halo-text';
         state.haloOn = value === 'plate-halo-text';
         updateControlsVisibility();
         triggerRebuild();
@@ -642,12 +675,15 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
       onInput: (value) => { state.size = value; triggerRebuild(); }
     }),
     segmentedControl<'loop' | 'corner'>({
+      label: 'Keyring',
+      help: 'Loop Tab adds a protruding tab with a hole; Corner Hole punches the hole into the top corner of the name.',
       value: state.ringStyle,
       options: [{ value: 'loop', label: 'Loop Tab' }, { value: 'corner', label: 'Corner Hole' }],
       onChange: (val) => { state.ringStyle = val; triggerRebuild(); }
     }),
     sliderRow({
       label: 'Hole diameter', min: 2.0, max: 8.0, step: 0.5, value: state.holeDia, unit: 'mm',
+      help: 'Diameter of the keyring hole. Match your split ring or clip.',
       onInput: (v) => { state.holeDia = v; triggerRebuild(); }
     }),
     el('div', { className: 'nk-nudge' }, [
@@ -658,6 +694,22 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
 
   // Advanced (collapsed)
   advanced,
+
+  // Reset everything to defaults (reloads at the clean URL so every control resets).
+  el('div', { className: 'vl-section nk-reset-section' }, [
+    el('button', {
+      className: 'vl-btn vl-btn--secondary nk-reset-btn',
+      text: 'Reset all settings',
+      attrs: { type: 'button' },
+      on: {
+        click: () => {
+          if (window.confirm('Reset all settings to their defaults? Your current design will be cleared.')) {
+            window.location.href = window.location.pathname;
+          }
+        },
+      },
+    }),
+  ]),
 ]);
 
 const controls = el('aside', { className: 'nk-controls' }, [
@@ -673,19 +725,50 @@ const controlsRightScroll = el('div', { className: 'nk-controls__scroll nk-contr
   ]),
 ]);
 
-const shareButton = presetShareButton({ getParams: () => state, label: '' });
-shareButton.setAttribute('title', 'Copy a shareable link with these exact settings');
-shareButton.setAttribute('aria-label', 'Share this design');
-
-const controlsRightExport = el('div', { className: 'nk-export-sticky' }, [
-  exportPanel({
-    formats: [
-      { id: '3mf', label: '3MF Print-Ready' }
-    ],
-    onExport: handleExport
-  }),
-  shareButton,
-]);
+const controlsRightExport = sidebarFooter({
+  formats: [{ id: '3mf', label: '3MF Print-Ready' }],
+  onExport: handleExport,
+  onSave: () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${state.name.trim().replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'keychain'}-project.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Project saved', { kind: 'ok' });
+  },
+  onLoad: (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const loaded = JSON.parse(reader.result as string);
+        Object.assign(state, loaded);
+        nameInput.value = state.name;
+        secondInput.value = state.secondLine;
+        holeDpad.setReadout(`X: ${state.ringPosX.toFixed(1)} mm, Y: ${state.ringPosY.toFixed(1)} mm`);
+        updateControlsVisibility();
+        renderFontGrid();
+        triggerRebuild();
+        toast('Project loaded', { kind: 'ok' });
+      } catch {
+        toast('Invalid project file', { kind: 'error' });
+      }
+    };
+    reader.readAsText(file);
+  },
+  onHelp: () => {
+    dialog({
+      title: 'Name Keychain Generator — Help',
+      content: el('div', {}, [
+        el('p', { text: 'Type a name in the Text section, pick a font from the right panel, and customise the style, colours, and keyring options.' }),
+        el('p', { text: 'When you\'re happy with the preview, click Export 3MF to download a print-ready file. Open the 3MF in your slicer (Bambu Studio, Orca, PrusaSlicer) and assign filament colours.' }),
+        el('p', { text: 'Use Save / Load project to keep your settings as a JSON file and resume later.' }),
+      ]),
+      actions: [{ label: 'Got it', primary: true }],
+    });
+  },
+  themeStorageKey: 'name-keychain-theme',
+});
 
 const controlsRight = el('aside', { className: 'nk-controls-right' }, [
   controlsRightScroll,
@@ -701,7 +784,9 @@ stage.append(
 app.append(el('main', { className: 'nk-app', attrs: { style: 'position: relative;' } }, [
   topbarLinks({
     githubUrl: BRAND.urls.github,
-    boostUrl: BRAND.urls.makerworld
+    boostUrl: BRAND.urls.makerworld,
+    themeToggle: false,
+    themeStorageKey: 'name-keychain-theme'
   }),
   controls,
   stage,

@@ -11,6 +11,8 @@ export interface ToggleOptions {
   label: string;
   checked?: boolean;
   onChange?: (checked: boolean) => void;
+  /** Optional "?" tooltip shown next to the label. */
+  help?: string;
 }
 
 /** A labelled iOS-style switch (green when on). Returns the whole row. */
@@ -19,8 +21,11 @@ export function toggleSwitch(opts: ToggleOptions): HTMLElement {
   input.checked = opts.checked ?? false;
   input.addEventListener('change', () => opts.onChange?.(input.checked));
 
+  const label = el('span', { className: 'vl-switch-label', text: opts.label });
+  if (opts.help) label.append(helpTip(opts.help));
+
   return el('div', { className: 'vl-switch-row' }, [
-    el('span', { className: 'vl-switch-label', text: opts.label }),
+    label,
     el('label', { className: 'vl-toggle' }, [input, el('span', { className: 'vl-knob' })]),
   ]);
 }
@@ -107,6 +112,10 @@ export interface SegmentedOptions<T extends string = string> {
   onChange?: (value: T) => void;
   /** Grid columns. Defaults to one per option. */
   columns?: number;
+  /** Optional caption above the tabs. */
+  label?: string;
+  /** Optional "?" tooltip next to the caption (implies a label row). */
+  help?: string;
 }
 
 /** A segmented (tab-style) picker. Exactly one option is active. */
@@ -144,6 +153,11 @@ export function segmentedControl<T extends string = string>(
     root.append(btn);
   }
 
+  if (opts.label || opts.help) {
+    const lab = el('span', { className: 'vl-control-label', text: opts.label ?? '' });
+    if (opts.help) lab.append(helpTip(opts.help));
+    return el('div', { className: 'vl-control' }, [lab, root]);
+  }
   return root;
 }
 
@@ -154,6 +168,8 @@ export interface SelectFieldOptions {
   options: { value: string; label: string }[];
   value?: string;
   onChange?: (value: string) => void;
+  /** Optional "?" tooltip shown next to the label. */
+  help?: string;
 }
 
 /** Labelled dropdown, styled to match the app's fields. */
@@ -166,7 +182,9 @@ export function selectField(opts: SelectFieldOptions): HTMLElement {
   }
   select.addEventListener('change', () => opts.onChange?.(select.value));
 
-  return el('div', { className: 'vl-field' }, [el('label', { text: opts.label }), select]);
+  const label = el('label', { text: opts.label });
+  if (opts.help) label.append(helpTip(opts.help));
+  return el('div', { className: 'vl-field' }, [label, select]);
 }
 
 /* ---------------- Help tip ---------------- */
