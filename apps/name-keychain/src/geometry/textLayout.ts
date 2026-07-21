@@ -197,7 +197,19 @@ export function getVerticalContours(
   letterSpacing: number,
 ): LayoutResult {
   const chars = Array.from(text);
-  const vstep = textSize * (1.02 + 0.18 * lineSpacing) + letterSpacing * textSize;
+
+  let capRatio = 0.70;
+  if (font && font.unitsPerEm) {
+    if (font.tables?.os2?.sCapHeight) {
+      capRatio = font.tables.os2.sCapHeight / font.unitsPerEm;
+    } else if (font.ascender) {
+      capRatio = (font.ascender / font.unitsPerEm) * 0.85;
+    }
+  }
+  capRatio = Math.max(0.55, Math.min(0.85, capRatio));
+
+  const baseVStep = capRatio * 1.02 * textSize;
+  const vstep = baseVStep * lineSpacing + letterSpacing * textSize;
   const contours: number[][][] = [];
 
   for (let i = 0; i < chars.length; i++) {

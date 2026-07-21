@@ -57,6 +57,7 @@ const state = {
   ringThickness: 2.2,
   ringPosX: 0,
   ringPosY: 0,
+  ringAngle: 180,
   haloWidth: 1.2,
   haloThickness: 0.8,
   plate: '#1d2027',
@@ -192,6 +193,7 @@ async function runRebuild() {
         ringThickness: state.ringThickness,
         ringPosX: state.ringPosX,
         ringPosY: state.ringPosY,
+        ringAngle: state.ringAngle,
         haloWidth: state.haloWidth,
         haloThickness: state.haloThickness,
         colorScheme: state.colorScheme,
@@ -228,8 +230,15 @@ function colorField(label: string, value: string, onInput: (value: string) => vo
 // ---------------------------------------------------------------------------
 // Controls & Dynamic Visibility
 // ---------------------------------------------------------------------------
+const ringAngleSlider = sliderRow({
+  label: 'Tab rotation', min: 0, max: 360, step: 5, value: state.ringAngle, unit: '°',
+  help: 'Rotate the direction of the loop tab (90° = perpendicular top, 180° = left).',
+  onInput: (v) => { state.ringAngle = v; triggerRebuild(); }
+});
+
 const holeDpad = dpad({
   readout: `X: ${state.ringPosX.toFixed(1)} mm, Y: ${state.ringPosY.toFixed(1)} mm`,
+  rotateStep: 5,
   onMove: (dir) => {
     const step = 0.5;
     if (dir === 'up') state.ringPosY += step;
@@ -239,9 +248,17 @@ const holeDpad = dpad({
     holeDpad.setReadout(`X: ${state.ringPosX.toFixed(1)} mm, Y: ${state.ringPosY.toFixed(1)} mm`);
     triggerRebuild();
   },
+  onRotate: (deltaDeg) => {
+    let next = ((state.ringAngle ?? 180) + deltaDeg) % 360;
+    if (next < 0) next += 360;
+    state.ringAngle = next;
+    holeDpad.setReadout(`X: ${state.ringPosX.toFixed(1)} mm, Y: ${state.ringPosY.toFixed(1)} mm`);
+    triggerRebuild();
+  },
   onReset: () => {
     state.ringPosX = 0;
     state.ringPosY = 0;
+    state.ringAngle = 180;
     holeDpad.setReadout(`X: 0.0 mm, Y: 0.0 mm`);
     triggerRebuild();
   }
@@ -589,7 +606,7 @@ const qualityCard = qualityCallout({
   storageKey: 'nk-quality-callout',
 });
 
-const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
+const controlsScroll = el('div', { className: 'vl-panel__scroll' }, [
   generatorHeader({
     title: 'Name Keychain Generator',
     description: 'Make a personalized plate-style name keychain with live font and colour preview.',
@@ -686,6 +703,7 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
       help: 'Diameter of the keyring hole. Match your split ring or clip.',
       onInput: (v) => { state.holeDia = v; triggerRebuild(); }
     }),
+    ringAngleSlider,
     el('div', { className: 'nk-nudge' }, [
       el('span', { className: 'vl-hint', text: 'Nudge loop position' }),
       holeDpad.root,
@@ -712,12 +730,12 @@ const controlsScroll = el('div', { className: 'nk-controls__scroll' }, [
   ]),
 ]);
 
-const controls = el('aside', { className: 'nk-controls' }, [
+const controls = el('aside', { className: 'vl-panel vl-panel--left' }, [
   controlsScroll
 ]);
 
 // Right column = pick the font (the "source" of the look), then export.
-const controlsRightScroll = el('div', { className: 'nk-controls__scroll nk-controls__scroll--font' }, [
+const controlsRightScroll = el('div', { className: 'vl-panel__scroll nk-font-section-scroll' }, [
   el('div', { className: 'vl-section nk-font-section' }, [
     el('p', { className: 'vl-label', text: 'Font' }),
     fontGrid,
@@ -726,7 +744,7 @@ const controlsRightScroll = el('div', { className: 'nk-controls__scroll nk-contr
 ]);
 
 const controlsRightExport = sidebarFooter({
-  formats: [{ id: '3mf', label: '3MF Print-Ready' }],
+  formats: [{ id: '3mf', label: '3MF' }],
   onExport: handleExport,
   onSave: () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -770,18 +788,19 @@ const controlsRightExport = sidebarFooter({
   themeStorageKey: 'name-keychain-theme',
 });
 
-const controlsRight = el('aside', { className: 'nk-controls-right' }, [
+const controlsRight = el('aside', { className: 'vl-panel vl-panel--right' }, [
   controlsRightScroll,
   controlsRightExport
 ]);
 
+stage.className = 'vl-stage nk-stage';
 stage.append(
-  el('p', { className: 'nk-stage__label', text: 'Live 3D Preview' }),
+  el('p', { className: 'vl-stage__label', text: 'Live 3D Preview' }),
   statusEl,
-  el('p', { className: 'nk-stage__hint', text: 'Hold left click to rotate, right click to pan, scroll to zoom.' })
+  el('p', { className: 'vl-stage__hint', text: 'Hold left click to rotate, right click to pan, scroll to zoom.' })
 );
 
-app.append(el('main', { className: 'nk-app', attrs: { style: 'position: relative;' } }, [
+app.append(el('main', { className: 'vl-app', attrs: { style: 'position: relative;' } }, [
   topbarLinks({
     githubUrl: BRAND.urls.github,
     boostUrl: BRAND.urls.makerworld,

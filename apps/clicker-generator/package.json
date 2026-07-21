@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
     "d3-contour": "^4.0.2",
     "fflate": "^0.8.3",
     "lucide": "^1.21.0",

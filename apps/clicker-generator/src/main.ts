@@ -1,3 +1,5 @@
+import '@vostok/ui-kit/styles.css';
+import { topbarLinks } from '@vostok/ui-kit';
 import './style.css';
 import { createStore } from './store/store';
 import { createViewer } from './viewer/viewer';
@@ -22,6 +24,15 @@ import type {
   SwitchPlacement,
 } from './types';
 import { FILAMENTS } from './types';
+
+// Mount unified Vostok topbar
+const oldTopbar = document.getElementById('topbar');
+if (oldTopbar) {
+  oldTopbar.replaceWith(topbarLinks({
+    githubUrl: 'https://github.com/vostoklabs/Clicker-Generator',
+    boostUrl: 'https://makerworld.com/en/models/2980346',
+  }));
+}
 
 // Start fetching switch assets immediately at startup to run in parallel with worker setup
 const base = import.meta.env.BASE_URL;

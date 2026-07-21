@@ -47,17 +47,28 @@ function getMeshData(solid: any): { vertProperties: Float32Array; triVerts: Uint
  */
 function bevelExtrude(cs: any, height: number, chamfer: number, keep: Keep): any {
   if (chamfer <= 0.05) return keep(cs.extrude(height));
-  // One inset slice keeps the extra geometry (and union cost) light — at the small
-  // chamfer sizes used here a single step reads as a clean bevel.
-  const steps = 1;
-  const stepH = chamfer / steps;
-  let solid = keep(cs.extrude(height - chamfer));
-  for (let i = 0; i < steps; i++) {
-    const inset = (i + 0.5) * stepH;
-    const sliceCS = keep(cs.offset(-inset, 'Round', 2.0, 8));
-    if (sliceCS.area() < 0.02) continue; // thin strokes can vanish — skip
-    const slice = keep(sliceCS.extrude(stepH + 0.02).translate([0, 0, height - chamfer + i * stepH]));
-    solid = keep(solid.add(slice));
+  const baseH = Math.max(0.01, height - chamfer);
+  let solid = keep(cs.extrude(baseH));
+
+  const components = (cs.decompose() as any[]) ?? [cs];
+  for (const comp of components) {
+    const compCS = keep(comp);
+    const b = compCS.bounds() as { min: [number, number]; max: [number, number] };
+    const W = b.max[0] - b.min[0];
+    const H = b.max[1] - b.min[1];
+    if (W <= 0.01 || H <= 0.01) continue;
+
+    const cx = (b.min[0] + b.max[0]) / 2;
+    const cy = (b.min[1] + b.max[1]) / 2;
+
+    const scaleX = Math.max(0.01, (W - 2 * chamfer) / W);
+    const scaleY = Math.max(0.01, (H - 2 * chamfer) / H);
+
+    const centered = keep(compCS.translate([-cx, -cy]));
+    const topCap = keep(
+      centered.extrude(chamfer + 0.01, 0, 0, [scaleX, scaleY]).translate([cx, cy, baseH - 0.005]),
+    );
+    solid = keep(solid.add(topCap));
   }
   return solid;
 }
@@ -140,48 +151,47 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   const corner = params.ringStyle === 'corner';
   const lines = params.lines ?? [];
 
-  // --- Ring / hole placement + the ramp bar that fuses the lug into the plate ---
-  // The bar is anchored to the *plate body* (stable); the lug moves with ringPos.
+  // --- Ring / hole placement + tab neck that fuses the lug into the plate ---
   let lugCx: number, lugCy: number;
-  let bar: { cx: number; cy: number; w: number; h: number };
+  let defaultAngle: number;
+
   if (vertical) {
     if (corner) {
       lugCx = gBox.maxX + lugOuter * 0.15;
       lugCy = gBox.maxY + lugOuter * 0.15;
-      bar = { cx: gBox.maxX - 1.0, cy: gBox.maxY - 1.0, w: 2.0, h: 2.0 };
+      defaultAngle = 45;
     } else {
       const midX = (gBox.minX + gBox.maxX) / 2;
       lugCx = midX;
       lugCy = gBox.maxY + lugOuter * 0.9;
-      bar = { cx: midX, cy: gBox.maxY - 1.0, w: Math.max(blockW * 0.7, lugOuter), h: 2.0 };
+      defaultAngle = 90;
     }
   } else if (corner) {
-    // Horizontal corner hole: sit in the top-left of LINE 1 (the top line), which is
-    // where the letters actually are — the whole block's corner can be empty when a
-    // longer/centred 2nd line indents line 1.
+    // Horizontal corner hole: sit in the top-left of LINE 1 (the top line)
     const a = lines.length >= 1 ? lines[0]! : gBox;
     lugCx = a.minX + lugOuter * 0.15;
     lugCy = a.maxY + lugOuter * 0.15;
-    bar = { cx: a.minX + 1.0, cy: a.maxY - 1.0, w: 2.0, h: 2.0 };
+    defaultAngle = 135;
   } else {
-    // Horizontal loop on the left. For a two-line plate, anchor the tab to line 1
-    // (always present, full width) and keep it as short as that line — no giant
-    // triangular fin spanning both lines, and the empty area under a short 2nd line
-    // simply isn't plate.
+    // Horizontal loop on the left
+    const anchor = lines.length >= 2 ? gBox : (lines.length >= 1 ? lines[0]! : gBox);
     lugCx = lugOuter;
-    const anchor = lines.length >= 2
-      ? lines[0]!
-      : { minX: gBox.minX, maxX: gBox.maxX, minY: gBox.minY, maxY: gBox.maxY };
     lugCy = (anchor.minY + anchor.maxY) / 2;
-    const barH = Math.max((anchor.maxY - anchor.minY) * 0.72, lugOuter);
-    bar = { cx: anchor.minX + 1.0, cy: lugCy, w: 2.0, h: barH };
+    defaultAngle = params.ringPosY > 4 ? 90 : 180;
   }
   const holeX = lugCx + params.ringPosX;
   const holeY = lugCy + params.ringPosY;
 
+  const angle = params.ringAngle ?? defaultAngle;
+  const rad = (angle * Math.PI) / 180;
+  const neckLen = Math.max(lugOuter * 2.2, 10.0);
+  const anchorX = holeX - neckLen * Math.cos(rad);
+  const anchorY = holeY - neckLen * Math.sin(rad);
+
   const lugDisc = keep(CrossSection.circle(lugPre, 32).translate([holeX, holeY]));
-  const barCS = keep(CrossSection.square([bar.w, bar.h], true).translate([bar.cx, bar.cy]));
-  const tabCS = keep(CrossSection.hull([lugDisc, barCS]));
+  const anchorR = Math.min(lugPre * 0.85, 2.0);
+  const anchorDisc = keep(CrossSection.circle(anchorR, 16).translate([anchorX, anchorY]));
+  const tabCS = keep(CrossSection.hull([lugDisc, anchorDisc]));
 
   // --- Assemble the plate source (glyphs + tab + connectors) ---
   // Rectangle plate: a plain box over the glyph bbox + the tab; the offset below

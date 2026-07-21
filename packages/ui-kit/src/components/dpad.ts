@@ -26,9 +26,33 @@ function padBtn(cls: string, icon: string, label: string, onClick: () => void): 
   const btn = el('button', {
     className: `vl-dpad-btn ${cls}`,
     attrs: { type: 'button', 'aria-label': label, title: label },
-    on: { click: onClick },
   });
   btn.append(svgEl(icon));
+
+  // Hold-to-repeat: fire immediately on press, then repeat after a delay.
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+  let repeatTimer: ReturnType<typeof setInterval> | null = null;
+
+  const stopRepeat = () => {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+    if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+  };
+
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;           // left button only
+    e.preventDefault();
+    btn.setPointerCapture(e.pointerId);   // keep events even if pointer drifts
+    onClick();
+    holdTimer = setTimeout(() => {
+      repeatTimer = setInterval(onClick, 50);
+    }, 300);
+  });
+  btn.addEventListener('pointerup', stopRepeat);
+  btn.addEventListener('pointercancel', stopRepeat);
+  btn.addEventListener('pointerleave', stopRepeat);
+  // Prevent context menu on long-press (mobile)
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+
   return btn;
 }
 

@@ -25,7 +25,9 @@ export function exportPanel(opts: ExportPanelOptions): HTMLElement {
   for (const format of opts.formats) {
     const btn = el('button', {
       className: 'vl-btn vl-btn--primary',
-      text: `Export ${format.label}`,
+      text: format.label.startsWith('Download') || format.label.startsWith('Export')
+        ? format.label
+        : `Download ${format.label}`,
       on: {
         click: async () => {
           setBusy(true);
