@@ -1,4 +1,4 @@
-import { generatorHeader, qualityCallout, sidebarFooter, dialog } from '@vostok/ui-kit';
+import { generatorHeader, qualityCallout, sidebarFooter } from '@vostok/ui-kit';
 import type { BaseShapeKind, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
 import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
@@ -126,7 +126,6 @@ export interface UiCallbacks {
   onExtrudeChamfer(on: boolean): void;
   /** Text mode: toggle splitting the word into per-letter parts. */
   onSeparateLetters(on: boolean): void;
-  onGenerate(): void;
   onUndo(): void;
   onRedo(): void;
   onRefresh(): void;
@@ -452,7 +451,7 @@ export function createUi(
   rightScroll.innerHTML = `
     <div class="section" id="importSourceSection">
       <span class="label">Import Source ${tip('Switch between raster image, SVG vector, built-in icon, or custom text to create your clicker.')}</span>
-      <div class="import-mode-cards" id="importTabs">
+      <div class="import-grid" id="importTabs">
         <button class="import-card active" data-mode="image" type="button">
           <span class="card-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -539,7 +538,6 @@ export function createUi(
           <span class="switch-label">Remove background ${tip('Drops a solid rectangle painted behind the artwork so only the logo is kept. Turn off to keep the SVG background.')}</span>
           <label class="toggle"><input id="removebgSvg" type="checkbox" /><span class="slider"></span></label>
         </div>
-        <button class="vl-btn vl-btn--primary vl-btn--block" id="generateSvg" style="margin-top: 10px;">Generate</button>
       </div>
 
       <!-- Icon Panel -->
@@ -550,7 +548,6 @@ export function createUi(
         </div>
         <div id="iconCount"></div>
         <div id="gallery"></div>
-        <button class="vl-btn vl-btn--primary vl-btn--block" id="generateIcon" style="margin-top: 10px;">Generate</button>
       </div>
 
       <!-- Text Panel -->
@@ -567,7 +564,6 @@ export function createUi(
             <input id="fontUpload" type="file" accept=".ttf,.otf,.json,font/ttf,font/otf,application/json" />
           </label>
         </div>
-        <button class="vl-btn vl-btn--primary vl-btn--block" id="generateText" style="margin-top: 10px;">Generate</button>
       </div>
     </div>
   `;
@@ -582,26 +578,17 @@ export function createUi(
 
   const rightFooter = sidebarFooter({
     formats: [{ id: '3mf', label: '3MF' }],
-    onExport: () => cb.onGenerate(),
-    onSave: () => {
-      // Dispatch save project click / handle logic
-      const saveBtn = document.getElementById('saveProjInternal');
-      if (saveBtn) saveBtn.click();
-    },
+    onExport: () => cb.onExport(),
+    onSave: () => cb.onSaveProject(),
     onLoad: (f: File) => {
-      // Forward file to loader
+      // Forward the picked file to the hidden project-file input, whose change
+      // handler (below) calls cb.onLoadProject.
       const dt = new DataTransfer();
       dt.items.add(f);
       projFileInput.files = dt.files;
       projFileInput.dispatchEvent(new Event('change', { bubbles: true }));
     },
-    onHelp: () => {
-      dialog({
-        title: 'Clicker Generator — Help',
-        content: document.createTextNode('Upload an image, SVG, icon, or text to create a custom 3D clicker. Configure colors, edges, and tolerances, then click Download 3MF.'),
-        actions: [{ label: 'Got it', primary: true }],
-      });
-    },
+    onHelp: () => showTutorialPrompt(),
     themeStorageKey: 'clicker_theme',
   });
 
@@ -866,10 +853,6 @@ export function createUi(
   FONT_OPTIONS.forEach(addFontOption);
   loadBundledFonts(addFontOption);
 
-  // --- Generate buttons ---
-  $('generateSvg').addEventListener('click', () => cb.onGenerate());
-  $('generateIcon').addEventListener('click', () => cb.onGenerate());
-  $('generateText').addEventListener('click', () => cb.onGenerate());
 
   // --- Add loading overlay to viewport dynamically ---
   const viewport = $('viewport');
@@ -1141,30 +1124,14 @@ export function createUi(
   );
 
   // --- Export and Utility actions ---
-  $('export').addEventListener('click', () => cb.onExport());
-  // render PNG and AI prompt buttons removed per design
-  $('saveProj').addEventListener('click', () => cb.onSaveProject());
+  // Export / Save / Load / Help / theme now live in the shared ui-kit sidebar
+  // footer (created above); its callbacks call cb.onExport / cb.onSaveProject /
+  // showTutorialPrompt directly. The only piece still wired here is the hidden
+  // project-file input the footer's onLoad forwards a file to.
   const projFile = $<HTMLInputElement>('projFile');
-  $('loadProj').addEventListener('click', () => projFile.click());
   projFile.addEventListener('change', () => {
     if (projFile.files?.[0]) cb.onLoadProject(projFile.files[0]);
     projFile.value = '';
-  });
-
-  // --- Theme toggle ---
-  // The label shows the mode you'll switch *to* (matches the visible icon).
-  const themeLabel = $('themeLabel');
-  const syncThemeLabel = () => {
-    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    themeLabel.textContent = isLight ? 'Dark mode' : 'Light mode';
-  };
-  syncThemeLabel();
-  $('themeToggle').addEventListener('click', () => {
-    const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : 'light';
-    cb.onThemeChange(next);
-    // onThemeChange flips data-theme synchronously; re-read to update the label.
-    syncThemeLabel();
   });
 
   // --- Help tooltips ---
@@ -1567,9 +1534,9 @@ export function createUi(
     });
   }
 
-  // Always greet on load, and let the header "?" button bring it back.
+  // Always greet on load. The footer's Help button re-opens the tutorial prompt
+  // (wired via the sidebarFooter onHelp callback above).
   showWelcome();
-  $('helpToggle').addEventListener('click', showTutorialPrompt);
 
   function getFilamentNameAndHex(rgb: RGB): [string, string] {
     let bestHex = rgbHex(rgb);
@@ -1868,8 +1835,10 @@ export function createUi(
       b.classList.toggle('active', b.dataset.view === state.view);
     }
 
+    // The export button lives in the ui-kit sidebar footer now; guard in case it
+    // isn't present. cb.onExport() also no-ops when there are no parts.
     const exportBtn = $<HTMLButtonElement>('export');
-    exportBtn.disabled = !state.hasParts || state.building;
+    if (exportBtn) exportBtn.disabled = !state.hasParts || state.building;
 
     // Toggle loading overlay
     const overlay = $('loadingOverlay');

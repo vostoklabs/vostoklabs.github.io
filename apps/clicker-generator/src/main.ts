@@ -130,13 +130,15 @@ const sidebarRight = document.getElementById('sidebar-right')!;
 const statusEl = document.getElementById('status')!;
 const viewer = createViewer(document.getElementById('app')!);
 
-// ---- Apply initial theme (system pref or saved preference) ----
-(function applyInitialTheme() {
-  const saved = localStorage.getItem('clicker-theme');
-  const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const theme = saved ?? (systemDark ? 'dark' : 'light');
-  document.documentElement.setAttribute('data-theme', theme);
-  viewer.setTheme(theme);
+// ---- Sync the 3D viewport to the active theme ----
+// index.html's bootstrap and the ui-kit sidebar-footer theme toggle both own
+// <html data-theme> (key 'clicker_theme'). Mirror it into the viewer on load and
+// whenever the toggle flips it, per the ui-kit "observe data-theme" pattern.
+(function syncViewerTheme() {
+  const readTheme = () => document.documentElement.getAttribute('data-theme') || 'dark';
+  viewer.setTheme(readTheme());
+  new MutationObserver(() => viewer.setTheme(readTheme()))
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 })();
 
 const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
@@ -332,20 +334,21 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
   onSelectSvg: (svgText, name) => {
     currentSvgText = svgText;
     currentSvgName = name;
-    store.set({ status: `Selected SVG: ${name}. Click Generate to update.` });
+    reprocess(); // auto-build on selection — no Generate button
   },
   onSelectIcon: (svgText, name) => {
     currentIconText = svgText;
     currentIconName = name;
-    store.set({ currentIconName: name, status: `Selected icon: ${name}. Click Generate to update.` });
+    store.set({ currentIconName: name });
+    reprocess();
   },
   onTextChange: (text) => {
     currentText = text;
-    store.set({ status: 'Text updated. Click Generate to update.' });
+    debouncedReprocess(); // live rebuild as you type
   },
   onFontSelect: (fontId) => {
     currentFontId = fontId;
-    store.set({ status: 'Font changed. Click Generate to update.' });
+    reprocess();
   },
   onImportFont: async (file) => {
     try {
@@ -353,7 +356,7 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
       const font = await importFontFile(file);
       ui.addFontOption(font);
       currentFontId = font.id;
-      store.set({ building: false, status: `Font ${font.name} imported! Click Generate to update.` });
+      reprocess(); // build immediately with the newly imported font
     } catch (err) {
       store.set({ building: false, status: 'Could not import font: ' + String(err) });
     }
@@ -362,9 +365,6 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('clicker-theme', theme);
     viewer.setTheme(theme);
-  },
-  onGenerate: () => {
-    reprocess();
   },
   onEditMode: (mode) => {
     // Geometry is always kept in sync by the live edit rebuilds. Keep the selection

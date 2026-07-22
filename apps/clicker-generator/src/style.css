@@ -2,6 +2,10 @@
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   font-family: var(--font-body); font-size: var(--fs-body); }
 body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+/* The topbar sits ABOVE .vl-app in the body flex column, so .vl-app must fill the
+   REMAINING height, not a full 100dvh — otherwise its bottom (and the right sidebar
+   footer's last row: Help / Light mode) is pushed off-screen. */
+main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
 
 #viewport { position: relative; min-width: 0; height: 100%; background: #3a3f47; }
 #app { position: absolute; inset: 0; }
@@ -398,6 +402,10 @@ button.secondary:disabled { opacity: 0.45; cursor: not-allowed; }
   border: 1px solid var(--line); color: var(--text); pointer-events: none;
 }
 .hint { color: var(--muted); font-size: 14px; line-height: 1.4; margin-top: 8px; }
+/* The shared stage hint is a bottom-CENTER pill; the clicker keeps a live
+   status readout in the bottom-left, so move the hint to the bottom-right
+   to prevent overlap (same approach as keycap-generator). */
+#hint.vl-stage__hint { left: auto; right: 14px; transform: none; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--muted);
   border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -1px; }
 @keyframes spin { to { transform: rotate(360deg); } }

@@ -933,24 +933,13 @@ unitSelect.addEventListener('change', () => {
   });
 })();
 
-// ------------------------------------------------------- theme toggle
-const themeToggle = $('themeToggle');
-const themeLabel = $('themeLabel');
-function syncThemeLabel() {
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  themeLabel.textContent = isLight ? 'Dark mode' : 'Light mode';
-}
-if (themeToggle) {
-  themeToggle.addEventListener('click', () => {
-    const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('keycap_theme', next);
-    applyViewportTheme(next);
-    syncThemeLabel();
-  });
-  syncThemeLabel();
-}
+// ------------------------------------------------------- theme (viewport sync)
+// The shared ui-kit sidebar footer owns the light/dark toggle; it flips
+// <html data-theme> and persists to 'keycap_theme'. Mirror that into the WebGL
+// viewport (clear colour + grid) on every change, per the ui-kit pattern.
+new MutationObserver(() => {
+  applyViewportTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
 // ------------------------------------------------------- save/load project
 $('saveProj')?.addEventListener('click', () => {
