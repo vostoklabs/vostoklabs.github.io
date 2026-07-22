@@ -343,15 +343,32 @@ export function createViewer(container: HTMLElement): Viewer {
   function onResize() {
     const w = container.clientWidth;
     const h = container.clientHeight;
+    if (w === 0 || h === 0) return; // container not laid out yet — wait for a real size
     renderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', onResize);
+  // The container is a CSS-grid cell whose height settles after this viewer is
+  // constructed, so window 'resize' alone misses it (the canvas would stay stuck
+  // at its tiny init size). Track the container directly.
+  const resizeObserver = new ResizeObserver(() => onResize());
+  resizeObserver.observe(container);
 
   let raf = 0;
   (function animate() {
     raf = requestAnimationFrame(animate);
+    // Self-heal the canvas size: the container is a CSS-grid cell whose height
+    // settles a frame or two after this viewer is built, and neither window
+    // 'resize' nor the initial ResizeObserver callback reliably catches that
+    // first settle — so the canvas can get stuck at its tiny init size. Compare
+    // each frame and only call setSize when it actually drifts (cheap).
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (w > 0 && h > 0 && (renderer.domElement.width !== Math.floor(w * renderer.getPixelRatio()) ||
+        renderer.domElement.height !== Math.floor(h * renderer.getPixelRatio()))) {
+      onResize();
+    }
     controls.update();
     renderer.render(scene, camera);
   })();
@@ -493,6 +510,7 @@ export function createViewer(container: HTMLElement): Viewer {
   function dispose() {
     cancelAnimationFrame(raf);
     window.removeEventListener('resize', onResize);
+    resizeObserver.disconnect();
     renderer.domElement.removeEventListener('pointermove', onPointerMove);
     renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
     renderer.domElement.removeEventListener('pointerdown', onPointerDown);

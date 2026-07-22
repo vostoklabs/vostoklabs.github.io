@@ -25,6 +25,14 @@
         height: 100vh;
         overflow: hidden;
       }
+      /* The topbar sits ABOVE .vl-app in the body flex column, so .vl-app must fill
+         the REMAINING height, not a full 100dvh — otherwise its bottom (and the
+         right sidebar footer's last row: Help / Light mode) is pushed off-screen. */
+      main.vl-app {
+        min-height: 0;
+        max-height: none;
+        flex: 1 1 auto;
+      }
       #viewport { position: relative; min-width: 0; overflow: hidden; background: #15171c; }
       #viewport canvas { display: block; width: 100%; height: 100%; }
       #busy {
@@ -34,7 +42,6 @@
       }
       .legend-section { display: flex; flex-direction: column; }
       #iconPanel:not([hidden]) { display: flex; flex-direction: column; }
-      }
       .section { border-top: 1px solid var(--line); padding: 14px 0; }
       .section:first-of-type { border-top: none; padding-top: 0; }
       .label { font-family: var(--font-display); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
@@ -133,7 +140,9 @@
       .prow input[type=number] {
         width: 100%; background: var(--panel-2); border: 1px solid var(--line);
         color: var(--text); border-radius: 6px; padding: 4px 5px; text-align: right;
-        font: inherit; font-variant-numeric: tabular-nums;
+        /* Explicit 14px (not the 17.5px base): the value column is a fixed 46px sized
+           for this scale, so a larger inherited font clips values like "7.6"/"18.0". */
+        font-family: inherit; font-size: 14px; font-variant-numeric: tabular-nums;
       }
       .prow input[type=number]:disabled { opacity: .45; }
       .prow .unit { font-size: 11px; color: var(--muted); }
@@ -141,7 +150,10 @@
       .field label { color: var(--muted); font-size: 12px; }
       .field input, .field select {
         width: 100%; background: var(--panel-2); border: 1px solid var(--line);
-        color: var(--text); border-radius: 7px; padding: 8px 9px; font: inherit;
+        color: var(--text); border-radius: 7px; padding: 8px 9px;
+        /* 14px to match the rest of the compact control panel (the 17.5px base font
+           makes these dropdowns/inputs read oversized next to their labels). */
+        font-family: inherit; font-size: 14px;
       }
       .colors { display: flex; gap: 18px; }
       .color { display: flex; align-items: center; gap: 8px; }
@@ -242,6 +254,10 @@
       #status.warn { color: #e3b341; }
       #status.err { color: #f0726a; }
       .meta { position: absolute; left: 14px; bottom: 12px; font-size: 11px; color: var(--muted); margin: 0; pointer-events: none; user-select: none; }
+      /* The shared stage hint is a bottom-CENTER pill; the keycap keeps a live
+         status/meta readout in the bottom-left, so move the hint to the bottom-right
+         (its original corner) to keep the two from overlapping. */
+      #hint.vl-stage__hint { left: auto; right: 14px; transform: none; }
       code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
 
       /* "What's new" modal — centered overlay shown on load until dismissed */
@@ -457,13 +473,17 @@
         </div>
       </div>
 
-      <div id="keycapFooter">
-        <button id="export" class="primary" disabled style="display:none;">Download 3MF</button>
-        <button id="saveProj" style="display:none;"></button>
+      <!-- Hidden legacy controls the shared ui-kit footer delegates to. These MUST
+           live outside #keycapFooter: mounting the footer replaces #keycapFooter,
+           which would otherwise destroy these and crash main.js ($('export') etc.). -->
+      <div id="keycapLegacyControls" hidden>
+        <button id="export" class="primary" disabled>Download 3MF</button>
+        <button id="saveProj"></button>
         <input type="file" id="projFile" accept="application/json" hidden />
-        <button id="helpToggle" style="display:none;"></button>
-        <button id="themeToggle" style="display:none;"></button>
       </div>
+
+      <!-- Mount point for the shared ui-kit sidebar footer (Export / Save / Load / Help / theme). -->
+      <div id="keycapFooter"></div>
     </aside>
     </main><!-- .vl-app -->
 
