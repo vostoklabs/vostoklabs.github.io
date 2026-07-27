@@ -981,3 +981,22 @@ worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
 };
 
 worker.postMessage({ type: 'init' });
+
+// Show What's New dialog once
+if (!localStorage.getItem('nk_whats_new_v2')) {
+  localStorage.setItem('nk_whats_new_v2', '1');
+  dialog({
+    title: 'What\'s New! 🎉',
+    content: el('div', { attrs: { style: 'display: flex; flex-direction: column; gap: 16px; margin-top: 8px;' } }, [
+      el('div', {}, [
+        el('strong', { text: '🌍 Cyrillic & Non-English Support' }),
+        el('p', { text: 'Fonts with non-English characters are now fully supported. Unsupported fonts are automatically dimmed in the preview panel so you know exactly what works.', attrs: { style: 'margin-top: 4px; line-height: 1.4;' } })
+      ]),
+      el('div', {}, [
+        el('strong', { text: '✨ Solid Icon Symbols' }),
+        el('p', { text: 'You can now insert dozens of solid FontAwesome symbols directly into your keychains using the "Insert Symbol" button! They scale perfectly and extrude into solid 3D plastic.', attrs: { style: 'margin-top: 4px; line-height: 1.4;' } })
+      ]),
+    ]),
+    actions: [{ label: 'Awesome!', primary: true }],
+  });
+}
