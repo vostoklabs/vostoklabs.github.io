@@ -37,6 +37,4 @@ export interface SvgSampleInfo {
 
 export const SVG_SAMPLES: SvgSampleInfo[] = [
   { name: 'Bambu Lab', src: SVG_DIR + 'bambulab.svg' },
-  { name: 'YouTube', src: SVG_DIR + 'youtube.svg' },
-  { name: 'Instagram', src: SVG_DIR + 'instagram.svg' },
 ];

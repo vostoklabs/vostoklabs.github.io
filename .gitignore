@@ -20,3 +20,7 @@ vendor/pmm-docs/
 # Third-party reference code (competitor .scad, upstream sources) — reference only.
 # Keep OUT of this public repo to avoid redistributing others' code.
 docs/reference/
+
+# opal-suite planning & research docs (local working notes, not part of the shipped app)
+apps/opal-suite/*.md
+apps/opal-suite/planning/

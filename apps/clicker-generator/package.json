@@ -8,7 +8,11 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:mw": "tsc -p tsconfig.json && vite build --mode makerworld",
+    "preview:mw": "vite preview --port 5174",
+    "pack:mw": "tsc -p tsconfig.json && vite build --mode makerworld && node makerlab/pack.mjs",
+    "serve:mw": "node makerlab/server.cjs -c config.json -p 8001"
   },
   "dependencies": {
     "@vostok/brand": "workspace:*",

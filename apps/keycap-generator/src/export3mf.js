@@ -23,7 +23,7 @@ function meshXml(geom) {
 }
 
 // "#rrggbb" -> "#RRGGBBFF" (3MF wants 8-digit sRGB with alpha).
-const color3mf = (hex) => (hex.replace('#', '#').toUpperCase() + 'FF').replace('##', '#');
+const color3mf = (hex) => '#' + hex.replace('#', '').toUpperCase() + 'FF';
 
 /**
  * Build a multi-material 3MF that loads as a SINGLE model with N parts.

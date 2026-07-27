@@ -8,6 +8,7 @@
 //  - Bambu/Orca read Metadata/model_settings.config, where each part maps to a
 //    1-based filament slot (`extruder`). Parts sharing a color share a slot.
 import { zipSync, strToU8 } from 'fflate';
+import { BRAND } from '@vostok/brand';
 import type { ClickerPart, PartGroup, RGB } from '../types';
 
 const f = (n: number): string => String(Math.round(n * 1e4) / 1e4);
@@ -21,7 +22,7 @@ function esc(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-const COMMERCIAL_URL = 'https://makerworld.com/en/@Vostok_Labs#commercial-membership-open';
+const COMMERCIAL_URL = BRAND.urls.mwCommercial;
 // Custom metadata namespace (need not resolve; identifies our provenance keys).
 const VL_NS = 'https://vostoklabs.com/3mf/2026';
 

@@ -3,8 +3,16 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ClickerPart, MeshData, RGB, SwitchPlacement, ViewMode } from '../types';
+import { MAKERLAB } from 'virtual:makerlab';
 
 export type SectionAxis = 'x' | 'y' | 'z';
+
+// MakerWorld review feedback (2026-07-27): the default framing filled the embed, so the
+// model read as the whole app before the panels did. The MakerLab build starts ~25%
+// further back; orbit/zoom are untouched, so users can pull straight in. The public
+// build keeps the original framing. Mirrors the keycap generator's frameMul.
+const FRAME_MUL = MAKERLAB ? 2.75 : 2.2;
+const FRAME_PAD = MAKERLAB ? 19 : 15;
 
 export interface Viewer {
   setParts(parts: ClickerPart[], preserveCamera?: boolean): void;
@@ -163,7 +171,7 @@ export function createViewer(container: HTMLElement): Viewer {
 
   function framePlaceholder() {
     root.position.set(0, 0, 0);
-    const radius = 40 * 2.2 + 15;
+    const radius = 40 * FRAME_MUL + FRAME_PAD;
     camera.position.set(radius, -radius, radius * 0.75);
     controls.target.set(0, 0, 11);
     controls.update();
@@ -235,7 +243,7 @@ export function createViewer(container: HTMLElement): Viewer {
     rebuildGrid(activeTheme, -GRID_GAP);
 
     if (!preserveCamera) {
-      const radius = Math.max(size.x, size.y, size.z) * 2.2 + 15;
+      const radius = Math.max(size.x, size.y, size.z) * FRAME_MUL + FRAME_PAD;
       camera.position.set(radius, -radius, radius * 0.75);
       controls.target.set(0, 0, size.z / 2);
       controls.update();

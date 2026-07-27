@@ -16,5 +16,6 @@
     "useDefineForClassFields": true,
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/makerlab/glue.ts", "src/makerlab/lib"]
 }

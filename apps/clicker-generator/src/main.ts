@@ -1,3 +1,4 @@
+import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import { topbarLinks } from '@vostok/ui-kit';
 import './style.css';
@@ -8,10 +9,21 @@ import { loadFileToImage, type RgbaImage } from './image/decode';
 import { processImage } from './image/pipeline';
 import { runWizard } from './ui/wizard';
 import { downloadThreeMF } from './export/threemfExport';
+import { buildObjMtl, objToArrayBuffer } from './export/objExport';
 import { parseSvg } from './image/logo';
 import { SAMPLES, SVG_SAMPLES } from './image/sample';
 import { parseLetter, importFontFile } from './image/letter';
 import { LUCIDE_ICONS, buildSvg } from './image/lucideIcons';
+// MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
+// SDK glue in the MakerWorld build (`--mode makerworld`) — see vite.config.ts.
+import {
+  MAKERLAB,
+  initMakerlab,
+  isReady as mlReady,
+  can as mlCan,
+  sdkExport,
+  sdkToast,
+} from 'virtual:makerlab';
 import type {
   BuildParams,
   BuildRegion,
@@ -25,13 +37,18 @@ import type {
 } from './types';
 import { FILAMENTS } from './types';
 
-// Mount unified Vostok topbar
+// Mount the unified Vostok topbar — except in the MakerWorld build, where the host provides
+// its own chrome and links out of the iframe wouldn't work anyway.
 const oldTopbar = document.getElementById('topbar');
 if (oldTopbar) {
-  oldTopbar.replaceWith(topbarLinks({
-    githubUrl: 'https://github.com/vostoklabs/Clicker-Generator',
-    boostUrl: 'https://makerworld.com/en/models/2980346',
-  }));
+  if (MAKERLAB) {
+    oldTopbar.remove();
+  } else {
+    oldTopbar.replaceWith(topbarLinks({
+      githubUrl: BRAND.urls.github,
+      boostUrl: BRAND.urls.makerworld,
+    }));
+  }
 }
 
 // Start fetching switch assets immediately at startup to run in parallel with worker setup
@@ -281,14 +298,52 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
     viewer.showSwitch(on);
   },
   onSection: (axis, pos) => viewer.setSection(axis, pos),
-  onExport: () => {
+  onExport: async () => {
     if (!latestParts.length) return;
-    downloadThreeMF(latestParts, 'clicker.3mf');
-    // First download of the session → big license modal; later ones → quiet corner toast.
-    // The counter is in-memory, so a page refresh re-shows the big modal on the next download.
-    downloadCount += 1;
-    if (downloadCount === 1) showLicenseModal();
-    else showLicenseToast();
+    if (MAKERLAB && mlReady() && mlCan('export')) {
+      // MakerWorld path: follow the SDK guide's OBJ route — hand the host an OBJ (one `o`
+      // object per colour region) plus an MTL carrying those colours, and the host converts
+      // it into the 3MF the user receives. Per MakerWorld's 2026-07-27 review this replaces
+      // the previous ZIP-with-our-own-.3mf-inside approach.
+      const status = (msg: string) => store.set({ status: msg });
+      status('Sending to MakerLab…');
+      try {
+        const { obj, mtl } = buildObjMtl(latestParts, 'clicker.mtl');
+        // Capture a cover image from the WebGL canvas.
+        const canvas = document.querySelector('#app canvas') as HTMLCanvasElement | null;
+        const coverImage = canvas?.toDataURL('image/png') ?? '';
+        const result = await sdkExport({
+          artifacts: [
+            {
+              fileName: 'clicker.obj',
+              format: 'obj',
+              buffer: objToArrayBuffer(obj),
+              mtl,
+              coverImage,
+              description: 'Multi-color clicker — made with the Clicker Generator.',
+            },
+          ],
+        });
+        if (result.success) {
+          status('Exported to MakerLab ✓');
+          sdkToast({ message: 'Clicker exported', type: 'success' });
+        } else {
+          status(`Export failed: ${result.errorMessage ?? result.errorCode}`);
+          sdkToast({ message: 'Export failed', type: 'error' });
+        }
+      } catch (err) {
+        status('Export error: ' + String(err));
+        console.error('[MakerLab export]', err);
+      }
+    } else {
+      // Standalone / public path: direct browser download + license reminder.
+      downloadThreeMF(latestParts, 'clicker.3mf');
+      // First download of the session → big license modal; later ones → quiet corner toast.
+      // The counter is in-memory, so a page refresh re-shows the big modal on the next download.
+      downloadCount += 1;
+      if (downloadCount === 1) showLicenseModal();
+      else showLicenseToast();
+    }
   },
   onRenderPng: async () => {
     const blob = await viewer.renderToPng();
@@ -363,7 +418,7 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
   },
   onThemeChange: (theme) => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('clicker-theme', theme);
+    localStorage.setItem('clicker_theme', theme);
     viewer.setTheme(theme);
   },
   onEditMode: (mode) => {
@@ -1247,3 +1302,15 @@ const AI_PROMPT = [
   '- Square-ish framing, subject fills ~80% of the canvas.',
   'Subject: <describe your subject here>.',
 ].join('\n');
+
+// ------------------------------------------------------- MakerLab handshake
+// MakerWorld build only: connect to the host when embedded (no-op otherwise). Runs alongside
+// boot(); the export buttons check mlReady() at click time, so ordering doesn't matter.
+if (MAKERLAB) {
+  initMakerlab({
+    onDisconnect: () => store.set({ status: 'Disconnected from the MakerLab host.' }),
+  }).then((ctx) => {
+    if (!ctx) return;
+    console.log('[MakerLab] connected — capabilities:', (ctx as Record<string, unknown>).capabilities);
+  });
+}

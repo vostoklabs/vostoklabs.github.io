@@ -8,7 +8,11 @@
     "convert": "node scripts/convert-keycap.mjs",
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:mw": "vite build --mode makerworld",
+    "preview:mw": "vite preview --port 5174",
+    "pack:mw": "vite build --mode makerworld && node makerlab/pack.mjs",
+    "serve:mw": "node makerlab/server.cjs -c config.json -p 8001"
   },
   "dependencies": {
     "@vostok/brand": "workspace:*",
@@ -17,7 +21,6 @@
     "lucide": "^1.21.0",
     "manifold-3d": "^3.5.1",
     "three": "^0.169.0",
-    "three-bvh-csg": "^0.0.16",
     "three-mesh-bvh": "^0.7.8"
   },
   "devDependencies": {

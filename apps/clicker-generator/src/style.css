@@ -1909,3 +1909,28 @@ button.fil-chip:active {
   color: var(--text);
 }
 .history-btn:disabled { opacity: 0.35; cursor: default; }
+
+/* Bottom-left credit block (MakerLab build only — see ui.ts). Sits outside the left
+   panel's scroll area so it's pinned to the bottom corner, and is toned down to a
+   two-line muted footer rather than the top-of-sidebar intro header. */
+#sidebar-left > .kc-credit-block {
+  flex: 0 0 auto;
+  gap: 1px;
+  margin-bottom: 0; /* .vl-app-header's 4px would leave a strip under the panel */
+  padding: 9px 16px 11px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+#sidebar-left > .kc-credit-block .vl-app-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--muted);
+  margin: 0;
+}
+/* The description belongs to the onboarding header, not to a footer credit. */
+#sidebar-left > .kc-credit-block .vl-app-subtitle { display: none; }
+#sidebar-left > .kc-credit-block .vl-app-credit { font-size: 11.5px; margin: 0; }
+#sidebar-left > .kc-credit-block .vl-credit-link { color: var(--muted); }
+#sidebar-left > .kc-credit-block .vl-credit-link:hover { color: var(--accent); }
+#sidebar-left > .kc-credit-block .vl-credit-logo { width: 12px; height: 12px; flex: 0 0 12px; }

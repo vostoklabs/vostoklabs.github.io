@@ -425,13 +425,34 @@ function fontSampleText(): string {
   return t.length > 8 ? t.slice(0, 7) + '…' : t;
 }
 
+function getRequiredSubsets(text: string): string[] {
+  const subsets = new Set<string>();
+  for (const char of text) {
+    const code = char.charCodeAt(0);
+    if ((code >= 0x0400 && code <= 0x04FF) || (code >= 0x0500 && code <= 0x052F)) subsets.add('cyrillic');
+    else if (code >= 0x0370 && code <= 0x03FF) subsets.add('greek');
+    else if (code >= 0x0100 && code <= 0x024F) subsets.add('latin-ext');
+  }
+  return Array.from(subsets);
+}
+
+function isFontSupported(font: FontChoice, text: string): boolean {
+  if (!font.subsets) return true;
+  const required = getRequiredSubsets(text);
+  return required.every(req => font.subsets.includes(req) || font.subsets.includes(`${req}-ext`));
+}
+
 function makeFontCard(font: FontChoice): HTMLButtonElement {
+  const text = state.name + (state.secondLine || '');
+  const supported = isFontSupported(font, text);
+
   const btn = el('button', {
-    className: 'nk-font-card',
-    attrs: { type: 'button', 'data-font': font.id, title: font.label },
+    className: `nk-font-card${supported ? '' : ' unsupported'}`,
+    attrs: { type: 'button', 'data-font': font.id, title: supported ? font.label : `${font.label} (Characters missing)` },
   }, [
     el('span', { className: 'nk-font-card__sample', text: fontSampleText(), attrs: { style: `font-family: NK-${font.id}` } }),
     el('span', { className: 'nk-font-card__name', text: font.label }),
+    ...(!supported ? [el('span', { className: 'nk-font-card__warn', text: '⚠' })] : [])
   ]) as HTMLButtonElement;
   btn.addEventListener('click', () => selectFont(font.id));
   return btn;
@@ -449,8 +470,23 @@ function renderFontGrid() {
 
 function updateActiveFont() {
   const sample = fontSampleText();
+  const text = state.name + (state.secondLine || '');
   for (const btn of fontGrid.querySelectorAll<HTMLButtonElement>('button')) {
-    btn.classList.toggle('active', btn.dataset.font === state.font);
+    const fontId = btn.dataset.font!;
+    const font = FONTS.find(f => f.id === fontId);
+    if (font) {
+      const supported = isFontSupported(font, text);
+      btn.classList.toggle('unsupported', !supported);
+      btn.title = supported ? font.label : `${font.label} (Characters missing)`;
+      const warn = btn.querySelector('.nk-font-card__warn');
+      if (!supported && !warn) {
+        btn.append(el('span', { className: 'nk-font-card__warn', text: '⚠' }));
+      } else if (supported && warn) {
+        warn.remove();
+      }
+    }
+
+    btn.classList.toggle('active', fontId === state.font);
     const s = btn.querySelector('.nk-font-card__sample');
     if (s) s.textContent = sample;
   }
@@ -510,14 +546,16 @@ function openFontBrowser() {
       const preview = el('span', { className: 'nk-fb__preview', text: sample });
       // Eager-load the first screenful; lazy-load the rest as they scroll in.
       if (i < 36) preview.style.fontFamily = `NK-${f.id}`;
+      const supported = isFontSupported(f, state.name + (state.secondLine || ''));
       const row = el('button', {
-        className: `nk-fb__row${f.id === state.font ? ' active' : ''}`,
-        attrs: { type: 'button', 'data-font': f.id, title: f.label },
+        className: `nk-fb__row${f.id === state.font ? ' active' : ''}${supported ? '' : ' unsupported'}`,
+        attrs: { type: 'button', 'data-font': f.id, title: supported ? f.label : `${f.label} (Characters missing)` },
       }, [
         preview,
         el('span', { className: 'nk-fb__meta' }, [
           el('span', { className: 'nk-fb__name', text: f.label }),
           el('span', { className: 'nk-fb__cat', text: f.category }),
+          ...(!supported ? [el('span', { className: 'nk-fb__warn', text: '⚠' })] : [])
         ]),
       ]);
       row.addEventListener('click', () => { selectFont(f.id); handle.close(); });

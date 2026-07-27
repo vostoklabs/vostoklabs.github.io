@@ -1,4 +1,5 @@
 import { generatorHeader, qualityCallout, sidebarFooter } from '@vostok/ui-kit';
+import { MAKERLAB } from 'virtual:makerlab';
 import type { BaseShapeKind, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
 import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
@@ -195,13 +196,19 @@ export function createUi(
     description: 'Generate printable 3D model of a clicker from an image',
   });
 
-  const qualityEl = qualityCallout({
+  // The quality callout links to an external MakerWorld page — suppress when embedded
+  // in MakerLab (the link won't work in the sandboxed iframe).
+  const qualityEl = MAKERLAB ? null : qualityCallout({
     html: 'For the best quality printed clicker, please use the print profile and instructions available on <a class="hint-link" href="https://makerworld.com/en/models/2980346" target="_blank" rel="noopener">MakerWorld</a>.',
     storageKey: 'clicker-quality-callout',
   });
 
-  // Populate Left Sidebar (Settings + Preview)
-  sidebarLeft.innerHTML = `
+  // Populate Left Sidebar (Settings + Preview). The controls go into their own scrolling
+  // body — mirroring the right sidebar — so the MakerLab credit block can pin to the
+  // bottom-left corner instead of scrolling away with the controls (see below).
+  const leftScroll = document.createElement('div');
+  leftScroll.className = 'vl-panel__scroll';
+  leftScroll.innerHTML = `
     <div class="section" id="previewViewSection">
       <span class="label">Preview &amp; View</span>
       <div class="tabs" id="viewTabs" role="tablist" style="margin-bottom: 12px;">
@@ -442,7 +449,21 @@ export function createUi(
     </div>
   `;
 
-  sidebarLeft.prepend(...(qualityEl ? [headerEl, qualityEl] : [headerEl]));
+  sidebarLeft.innerHTML = '';
+  sidebarLeft.append(leftScroll);
+
+  if (MAKERLAB) {
+    // MakerWorld review feedback (2026-07-27): the Vostok Labs intro block is the most
+    // prominent thing in the embed on first load, and the host would rather off-platform
+    // promotion not sit in that spot. In the MakerLab build it moves to the BOTTOM-LEFT
+    // — pinned below the scroll area — and is demoted to a compact muted credit line
+    // (.kc-credit-block in style.css). The host page already shows the app's name, so
+    // the top-of-sidebar heading isn't needed here. Public build keeps it up top.
+    headerEl.classList.add('kc-credit-block');
+    sidebarLeft.append(headerEl);
+  } else {
+    leftScroll.prepend(...(qualityEl ? [headerEl, qualityEl] : [headerEl]));
+  }
 
   // Populate Right Sidebar (Input Modes & Export)
   sidebarRight.innerHTML = '';
@@ -591,6 +612,10 @@ export function createUi(
     onHelp: () => showTutorialPrompt(),
     themeStorageKey: 'clicker_theme',
   });
+
+  if (MAKERLAB) {
+    rightFooter.querySelector('.vl-action-row')?.remove();
+  }
 
   sidebarRight.append(rightScroll, rightFooter);
 

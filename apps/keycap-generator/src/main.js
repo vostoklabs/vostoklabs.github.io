@@ -1,3 +1,4 @@
+import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import { topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog } from '@vostok/ui-kit';
 import * as THREE from 'three';
@@ -9,18 +10,34 @@ import { buildBodies } from './geometry.js';
 import { initManifold, geomToManifold, manifoldToGeom, creaseNormals } from './manifold.js';
 import { scaleStemComponentsXY } from './meshUtils.js';
 import { buildThreeMF } from './export3mf.js';
+import { buildObjMtl, objToArrayBuffer } from './exportObj.js';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
 import { zipSync } from 'fflate';
+// MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
+// SDK glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
+import {
+  MAKERLAB,
+  initMakerlab,
+  isReady as mlReady,
+  can as mlCan,
+  sdkExport,
+  sdkToast,
+} from 'virtual:makerlab';
 
 const $ = (id) => document.getElementById(id);
 
-// Mount unified Vostok topbar
+// Mount the unified Vostok topbar — except in the MakerWorld build, where the host provides
+// its own chrome and links out of the iframe wouldn't work anyway.
 const oldTopbar = $('topbar');
 if (oldTopbar) {
-  oldTopbar.replaceWith(topbarLinks({
-    githubUrl: 'https://github.com/vostoklabs/SVG-keycap-generator',
-    boostUrl: 'https://makerworld.com/en/models/2959969',
-  }));
+  if (MAKERLAB) {
+    oldTopbar.remove();
+  } else {
+    oldTopbar.replaceWith(topbarLinks({
+      githubUrl: BRAND.urls.github,
+      boostUrl: BRAND.urls.makerworld,
+    }));
+  }
 }
 
 // Mount header and footer components
@@ -30,7 +47,20 @@ if (oldHeader) {
     title: 'Keycap Legend Generator',
     description: 'Pick an icon or letter, size it, export a two-color 3MF.',
   });
-  oldHeader.replaceWith(header);
+  if (MAKERLAB) {
+    // MakerWorld review feedback (2026-07-27): the Vostok Labs intro block is the most
+    // prominent thing in the embed on first load, and the host would rather off-platform
+    // promotion not sit in that spot. In the MakerLab build it moves to the BOTTOM-LEFT
+    // — pinned below the left panel's scroll area — and is demoted to a compact muted
+    // credit line (see .kc-credit-block in index.html). The host page already shows the
+    // app's name, so the top-left heading isn't needed here.
+    // The public build keeps the original top-left header.
+    header.classList.add('kc-credit-block');
+    oldHeader.remove();
+    $('keycapCredit')?.append(header);
+  } else {
+    oldHeader.replaceWith(header);
+  }
 }
 
 const keycapFooter = $('keycapFooter');
@@ -57,6 +87,9 @@ if (keycapFooter) {
     },
     themeStorageKey: 'keycap_theme',
   });
+  if (MAKERLAB) {
+    footer.querySelector('.vl-action-row')?.remove();
+  }
   keycapFooter.replaceWith(footer);
 }
 
@@ -70,7 +103,9 @@ function setStatus(msg, kind = '') {
 
 // ---------------------------------------------------------------- three setup
 const viewport = $('viewport');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// preserveDrawingBuffer (MakerWorld build only) lets us read the canvas with toDataURL() for
+// the host export cover image; the public build keeps the default for a touch less overhead.
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: MAKERLAB });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 viewport.appendChild(renderer.domElement);
 
@@ -171,7 +206,12 @@ let currentUnit = 1;        // size of the active keycap (drives the letter limi
 
 // debug handles (harmless; used for automated verification)
 window.__app = {
-  THREE, scene, camera, renderer, capMesh, logoMesh, stemMesh, buildThreeMF,
+  THREE, scene, camera, renderer, capMesh, logoMesh, stemMesh, buildThreeMF, buildObjMtl,
+  get exportParts() {
+    return lastBodies
+      ? buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked)
+      : null;
+  },
   get meta() { return meta; },
   get lastBodies() { return lastBodies; },
   get shellGeometry() { return shellGeometry; },
@@ -659,40 +699,112 @@ function buildExportParts(bodies, capColor, logoColor, through) {
   return parts;
 }
 
-$('export').addEventListener('click', () => {
-  if (!lastBodies) return;
-  const parts = buildExportParts(
-    lastBodies, $('capColor').value, $('logoColor').value, $('through').checked
-  );
-  const blob = buildThreeMF(parts);
+// 1x1 transparent PNG — last-resort cover if the canvas can't be read (coverImage is a
+// required SDK field). In practice preserveDrawingBuffer makes the real capture succeed.
+const BLANK_COVER =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+// Grab the live preview as a PNG data URL for the MakerLab export cover. Render once first so
+// the buffer holds the current frame at the moment of capture.
+function captureCover() {
+  try {
+    renderer.render(scene, camera);
+    const url = renderer.domElement.toDataURL('image/png');
+    return url && url.length > 128 ? url : BLANK_COVER;
+  } catch (e) {
+    console.error('Cover capture failed:', e);
+    return BLANK_COVER;
+  }
+}
+
+/**
+ * Deliver the finished keycap.
+ *
+ * In the MakerWorld build, when embedded, follow the SDK guide's OBJ route: hand the host
+ * an OBJ (one `o` object per filament region) plus an MTL carrying the two colours, and the
+ * host converts it into the 3MF the user receives. Per MakerWorld's 2026-07-27 review this
+ * replaces the previous ZIP-with-our-own-.3mf-inside approach.
+ *
+ * Standalone (public site, or the built app opened outside the host) still downloads the
+ * two-colour .3mf we build ourselves — unchanged.
+ *
+ * @param {() => Array} makeParts  Deferred so the standalone path doesn't pay for OBJ work
+ *                                 and the host path doesn't pay for 3MF zipping.
+ */
+async function deliverModel(makeParts, baseName, downloadMsg, description) {
+  if (MAKERLAB && mlReady() && mlCan('export')) {
+    setStatus('Sending to MakerLab…');
+    try {
+      const { obj, mtl } = buildObjMtl(makeParts(), { mtlFileName: `${baseName}.mtl` });
+      const result = await sdkExport({
+        artifacts: [
+          {
+            fileName: `${baseName}.obj`,
+            format: 'obj',
+            buffer: objToArrayBuffer(obj),
+            mtl,
+            coverImage: captureCover(),
+            description,
+          },
+        ],
+      });
+      if (result.success) {
+        setStatus('Exported to MakerLab ✓');
+        sdkToast({ message: 'Keycap exported to MakerLab', type: 'success' });
+      } else {
+        setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
+        sdkToast({ message: 'Export failed', type: 'error' });
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus(`Export failed: ${err.message || err}`, 'err');
+    }
+    return;
+  }
+
+  const blob = buildThreeMF(makeParts());
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  const legendSlug = (currentLegend?.name || 'legend').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  a.download = `keycap-${legendSlug}${profileSlug() ? '-' + profileSlug() : ''}.3mf`;
+  a.download = `${baseName}.3mf`;
   a.click();
   URL.revokeObjectURL(a.href);
-  setStatus($('single').checked
-    ? 'Exported 3MF ✓  Single-colour cap with an engraved legend — one filament.'
-    : 'Exported 3MF ✓  Open in your slicer and assign two filaments.');
+  setStatus(downloadMsg);
+}
+
+$('export').addEventListener('click', async () => {
+  if (!lastBodies) return;
+  const legendSlug = (currentLegend?.name || 'legend').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  const baseName = `keycap-${legendSlug}${profileSlug() ? '-' + profileSlug() : ''}`;
+  await deliverModel(
+    () => buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked),
+    baseName,
+    $('single').checked
+      ? 'Exported 3MF ✓  Single-colour cap with an engraved legend — one filament.'
+      : 'Exported 3MF ✓  Open in your slicer and assign two filaments.',
+    'Two-colour keycap — made with the Keycap Legend Generator.'
+  );
 });
 
 // Export the bare cap (uncarved shell + stem) in a single colour — no legend.
 // Works for any size; uses the loaded shell directly (already a clean indexed solid).
-$('exportBlank').addEventListener('click', () => {
+$('exportBlank').addEventListener('click', async () => {
   if (!shellGeometry) return;
-  const capColor = $('capColor').value;
-  const parts = [{ name: 'Keycap', color: capColor, extruder: 1, geom: shellGeometry }];
-  if (stemGeometry) parts.push({ name: 'Stem', color: capColor, extruder: 1, geom: stemGeometry });
+  const makeParts = () => {
+    const capColor = $('capColor').value;
+    const parts = [{ name: 'Keycap', color: capColor, extruder: 1, geom: shellGeometry }];
+    if (stemGeometry) parts.push({ name: 'Stem', color: capColor, extruder: 1, geom: stemGeometry });
+    return parts;
+  };
 
-  const blob = buildThreeMF(parts);
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
   const sizeLabel = ($('unitSelect').value || '').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   const tags = [profileSlug(), sizeLabel].filter(Boolean).join('-');
-  a.download = `keycap-blank${tags ? '-' + tags : ''}.3mf`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  setStatus('Exported blank keycap ✓  Single-colour cap with no legend.');
+  const baseName = `keycap-blank${tags ? '-' + tags : ''}`;
+  await deliverModel(
+    makeParts,
+    baseName,
+    'Exported blank keycap ✓  Single-colour cap with no legend.',
+    'Blank keycap — made with the Keycap Legend Generator.'
+  );
 });
 
 // -------------------------------------------------------- full alphabet set
@@ -729,6 +841,13 @@ async function generateAlphabetSet() {
   alphabetBtn.disabled = true;
   busyEl.style.display = 'block';
   const files = {};
+  // Host path: one OBJ per letter, handed over as a multi-plate artifact (SDK guide,
+  // "Export OBJ (Multi-Plate + MTL Materials)") — the host turns the 26 plates into a
+  // single multi-plate 3MF. Every letter shares the same two colours, so one MTL covers
+  // the whole set. Standalone path still zips 26 of our own .3mf files.
+  const toHost = MAKERLAB && mlReady() && mlCan('export');
+  const plates = [];
+  let plateMtl = '';
 
   try {
     for (let i = 0; i < ALPHABET.length; i++) {
@@ -740,20 +859,51 @@ async function generateAlphabetSet() {
       const legend = parseLetter(ch, fontId, 1);
       const bodies = await buildBodies(shellGeometry, meta, legend, opts);
       const parts = buildExportParts(bodies, capColor, logoColor, through);
-      files[`keycap-${ch}.3mf`] = new Uint8Array(await buildThreeMF(parts).arrayBuffer());
+      if (toHost) {
+        const { obj, mtl } = buildObjMtl(parts, { mtlFileName: 'keycap-alphabet.mtl' });
+        plates.push(objToArrayBuffer(obj));
+        plateMtl = mtl;
+      } else {
+        files[`keycap-${ch}.3mf`] = new Uint8Array(await buildThreeMF(parts).arrayBuffer());
+      }
       bodies.keycapGeometry.dispose();
       bodies.logoGeometry?.dispose();
     }
 
-    // 3MFs are already deflated zips — store (level 0) rather than re-compress.
-    const zipped = zipSync(files, { level: 0 });
     const fontSlug = fontName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([zipped], { type: 'application/zip' }));
-    a.download = `keycap-alphabet-${fontSlug}${profileSlug() ? '-' + profileSlug() : ''}.zip`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    setStatus('Exported full alphabet set ✓  26 keycaps (A–Z) zipped — open each 3MF in your slicer.');
+    const baseName = `keycap-alphabet-${fontSlug}${profileSlug() ? '-' + profileSlug() : ''}`;
+
+    if (toHost) {
+      setStatus('Sending alphabet set to MakerLab…');
+      const result = await sdkExport({
+        artifacts: [
+          {
+            fileName: `${baseName}.obj`,
+            format: 'obj',
+            buffer: plates, // ArrayBuffer[] — one print plate per letter
+            mtl: plateMtl,
+            coverImage: captureCover(),
+            description: 'Full A–Z keycap alphabet set (26 print plates).',
+          },
+        ],
+      });
+      if (result.success) {
+        setStatus('Exported alphabet set to MakerLab ✓  26 keycaps (A–Z).');
+        sdkToast({ message: 'Alphabet set exported', type: 'success' });
+      } else {
+        setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
+        sdkToast({ message: 'Export failed', type: 'error' });
+      }
+    } else {
+      // 3MFs are already deflated zips — store (level 0) rather than re-compress.
+      const zipped = zipSync(files, { level: 0 });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([zipped], { type: 'application/zip' }));
+      a.download = `${baseName}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setStatus('Exported full alphabet set ✓  26 keycaps (A–Z) zipped — open each 3MF in your slicer.');
+    }
   } catch (e) {
     console.error(e);
     setStatus('Could not generate the alphabet set (try a simpler font or smaller size).', 'err');
@@ -829,7 +979,13 @@ function setKeycap(kc) {
   // so wide caps (spacebars) still fit the viewport.
   const spanX = meta.bbox.max[0] - meta.bbox.min[0];
   const spanY = meta.bbox.max[1] - meta.bbox.min[1];
-  const dist = Math.max(Math.max(spanX, spanY) * 1.4, 34);
+  // MakerWorld review feedback (2026-07-27): the default framing filled the embed, so the
+  // cap read as the whole app before the panels did. The MakerLab build starts ~25% further
+  // back (the cap still dominates the stage, just with breathing room); zoom is unchanged,
+  // so users can pull in immediately. The public build keeps the original framing.
+  const frameMul = MAKERLAB ? 1.75 : 1.4;
+  const frameMin = MAKERLAB ? 42 : 34;
+  const dist = Math.max(Math.max(spanX, spanY) * frameMul, frameMin);
   const target = new THREE.Vector3(0, meta.topZ / 2, 0);
   controls.target.copy(target);
   camera.position.copy(target).add(new THREE.Vector3(0.5, 0.45, 0.75).multiplyScalar(dist));
@@ -925,10 +1081,15 @@ unitSelect.addEventListener('change', () => {
 (function initQualityCallout() {
   const callout = $('qualityCallout');
   if (!callout) return;
+  // remove(), not `hidden = true`: the ui-kit `.vl-callout` rule sets `display: flex`,
+  // which outranks the [hidden] UA style — so setting `hidden` left it fully visible.
+  // The MakerLab build drops it entirely: it points users off-platform to a MakerWorld
+  // model page, which the host doesn't want surfaced inside the embed.
+  if (MAKERLAB) { callout.remove(); return; }
   const KEY = 'keycap_quality_callout';
-  try { if (localStorage.getItem(KEY) === 'dismissed') { callout.hidden = true; return; } } catch {}
+  try { if (localStorage.getItem(KEY) === 'dismissed') { callout.remove(); return; } } catch {}
   $('qualityCalloutDismiss')?.addEventListener('click', () => {
-    callout.hidden = true;
+    callout.remove();
     try { localStorage.setItem(KEY, 'dismissed'); } catch {}
   });
 })();
@@ -1011,11 +1172,11 @@ $('helpToggle')?.addEventListener('click', () => {
 // ------------------------------------------------------- "what's new" modal
 // Shows on every visit until the user ticks "Don't show this again". Bump
 // WHATS_NEW_VERSION whenever the notes change so the popup resurfaces for everyone.
-(function whatsNew() {
+(function initWhatsNew() {
   const WHATS_NEW_VERSION = '2026-07-thocky-stem';
   const KEY = 'keycap_whatsnew_dismissed';
   const overlay = $('whatsNew');
-  if (!overlay) return;
+  if (MAKERLAB || !overlay) return;
 
   let dismissed = null;
   try { dismissed = localStorage.getItem(KEY); } catch {}
@@ -1035,6 +1196,19 @@ $('helpToggle')?.addEventListener('click', () => {
   document.addEventListener('keydown', onKey);
   overlay.hidden = false;
 })();
+
+// ------------------------------------------------------- MakerLab handshake
+// MakerWorld build only: connect to the host when embedded (no-op otherwise). Runs alongside
+// boot(); the export buttons check mlReady() at click time, so ordering doesn't matter.
+if (MAKERLAB) {
+  initMakerlab({
+    onDisconnect: () => setStatus('Disconnected from the MakerLab host.', 'warn'),
+  }).then((ctx) => {
+    if (!ctx) return;
+    document.body.classList.add('makerlab');
+    console.log('[MakerLab] connected — capabilities:', ctx.capabilities.join(', '));
+  });
+}
 
 // ---------------------------------------------------------------- boot
 (async function boot() {

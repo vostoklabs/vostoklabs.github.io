@@ -1,0 +1,39 @@
+{
+  "appId": "keycap-legend-generator",
+  "name": "Keycap Legend Generator",
+  "entryUrl": "http://localhost:5174/",
+  "csp": {
+    "script-src": "'self' 'wasm-unsafe-eval'",
+    "style-src": "'self' 'unsafe-inline'",
+    "img-src": "'self' data: blob:",
+    "font-src": "'self'",
+    "media-src": "'self'",
+    "connect-src": "'self'"
+  },
+  "capabilities": ["export", "dialog", "toast"],
+  "sandboxOverrides": {
+    "allowScripts": true,
+    "allowDownloads": false,
+    "allowSameOrigin": true,
+    "allowForms": false,
+    "allowPopups": false,
+    "allowPopupsToEscapeSandbox": false,
+    "allowModals": false,
+    "allowPointerLock": false,
+    "allowPresentation": false,
+    "allowTopNavigation": false,
+    "allowTopNavigationByUserActivation": false,
+    "allowTopNavigationToCustomProtocols": false,
+    "allowStorageAccessByUserActivation": false
+  },
+  "permissionsOverrides": {
+    "camera": false,
+    "microphone": false,
+    "geolocation": false,
+    "payment": false,
+    "displayCapture": false,
+    "clipboardRead": false,
+    "clipboardWrite": false,
+    "fullscreen": false
+  }
+}

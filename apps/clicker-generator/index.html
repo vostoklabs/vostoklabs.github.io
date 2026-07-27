@@ -23,7 +23,9 @@
   <body>
     <header id="topbar"></header>
     <main class="vl-app">
-      <aside id="sidebar-left" class="vl-panel vl-panel--left vl-panel__scroll"></aside>
+      <!-- The scrolling body is created inside by createUi(), so a pinned block (the
+           MakerLab credit) can sit in the bottom-left corner. Mirrors #sidebar-right. -->
+      <aside id="sidebar-left" class="vl-panel vl-panel--left"></aside>
       <div id="viewport" class="vl-stage">
         <p class="vl-stage__label">Live 3D Preview</p>
         <div id="app"></div>
@@ -32,6 +34,6 @@
       </div>
       <aside id="sidebar-right" class="vl-panel vl-panel--right"></aside>
     </main>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

@@ -137,7 +137,12 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   const gap = 2 * lugOuter + 2;
 
   // Raw glyphs, then apply the boldness offset (dilate = bolder, erode = thinner).
-  let glyphsCS = keep(new CrossSection(textContours, 'NonZero'));
+  let glyphsCS: any;
+  if (textContours.length === 0 || textContours.every(c => c.length === 0)) {
+    glyphsCS = keep(CrossSection.circle(0.01, 3));
+  } else {
+    glyphsCS = keep(new CrossSection(textContours, 'NonZero'));
+  }
   if (Math.abs(params.boldness) > 0.02) {
     const bolded = keep(glyphsCS.offset(params.boldness, 'Round', 2.0, 12));
     if (bolded.area() > 0.1) glyphsCS = bolded;

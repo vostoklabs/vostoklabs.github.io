@@ -5,8 +5,18 @@ dist/
 .vite/
 *.log
 
-# local backups / archives (e.g. project zip snapshots)
-*.zip
-
 # local planning docs (AI agent manuals, not for the public repo)
 New featrures dev plan.md
+
+# MakerWorld SDK — proprietary/NDA material, never commit.
+Makerworlf SDK example/
+Makerworld SDK example/
+**/makerworld-sdk/
+__MACOSX/
+
+# MakerWorld build layer: the SDK runtime + host simulator are NDA (see makerlab/README.md
+# to reconstruct); the submission zip is a build artifact. The glue, config, and pack script
+# ARE committed.
+src/makerlab/lib/
+makerlab/server.cjs
+makerlab/*.zip

@@ -3,11 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" type="image/png" href="./favicon.png" />
     <title>Keycap Legend Generator</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- Chakra Petch is bundled locally by @vostok/ui-kit (fonts.css), so no CDN is needed. -->
     <script>
       (function() {
         var saved = localStorage.getItem('keycap_theme');
@@ -296,25 +294,50 @@
       .whatsnew-dismiss input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
       .modal-foot button.primary { width: auto; padding: 9px 20px; }
 
+      /* Bottom-left credit block (MakerLab build only — see main.js). Sits outside the
+         left panel's scroll area so it's pinned to the bottom corner, and is toned down
+         to a two-line muted footer rather than the top-of-sidebar intro header. */
+      #keycapCredit:empty { display: none; }
+      #keycapCredit .kc-credit-block {
+        flex: 0 0 auto; gap: 1px;
+        margin-bottom: 0; /* .vl-app-header's 4px would leave a strip under the panel */
+        padding: 9px 16px 11px;
+        border-top: 1px solid var(--line);
+        background: var(--panel);
+      }
+      #keycapCredit .vl-app-title {
+        font-size: 12px; font-weight: 600; letter-spacing: .2px;
+        color: var(--muted); margin: 0;
+      }
+      /* The description belongs to the onboarding header, not to a footer credit. */
+      #keycapCredit .vl-app-subtitle { display: none; }
+      #keycapCredit .vl-app-credit { font-size: 11.5px; margin: 0; }
+      #keycapCredit .vl-credit-link { color: var(--muted); }
+      #keycapCredit .vl-credit-link:hover { color: var(--accent); }
+      #keycapCredit .vl-credit-logo { width: 12px; height: 12px; flex: 0 0 12px; }
+
     </style>
   </head>
   <body>
     <header id="topbar"></header>
     <main class="vl-app">
-      <aside class="vl-panel vl-panel--left vl-panel__scroll">
-        <div id="keycapAppHeader">
-          <div class="app-header">
-            <h1>Keycap Legend Generator</h1>
-            <p class="app-subtitle">Pick an icon or letter, size it, export a two-color 3MF.</p>
-            <p class="app-credit">Made by <a class="app-credit-link" href="https://makerworld.com/en/@Vostok_Labs" target="_blank" rel="noopener">Vostok Labs</a></p>
-          </div>
-        </div>
+      <!-- The left panel is a flex column with its own scrolling body, mirroring the right
+           panel, so a pinned block (the MakerLab credit) can sit in the bottom-left corner
+           instead of scrolling away with the controls. -->
+      <aside class="vl-panel vl-panel--left">
+        <div class="vl-panel__scroll">
+        <div id="keycapAppHeader"></div>
 
+        <!-- mw:strip:start — this callout points users off-platform to a MakerWorld model
+             page, which the host doesn't want surfaced inside the embed. main.js removes it
+             at runtime too, but stripping the markup here keeps it from flashing before the
+             module loads (and keeps the copy out of the shipped file entirely). -->
         <div class="vl-callout" id="qualityCallout">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <div class="vl-callout__body">For the best quality printed keycap, please use the print profile and instructions available on <a class="hint-link" href="https://makerworld.com/en/models/2959969" target="_blank" rel="noopener">MakerWorld</a>.</div>
+          <div class="vl-callout__body">For the best quality printed keycap, please use the print profile and instructions available on <a class="hint-link" id="qualityCalloutLink" href="https://makerworld.com/en/models/2959969" target="_blank" rel="noopener">MakerWorld</a>.</div>
           <button class="vl-callout__dismiss" id="qualityCalloutDismiss" type="button" aria-label="Dismiss">&times;</button>
-        </div></div>
+        </div>
+        <!-- mw:strip:end -->
 
       <div class="section">
         <div class="label">Keycap</div>
@@ -395,6 +418,12 @@
           </div>
         </div>
       </div>
+      </div><!-- .vl-panel__scroll -->
+
+      <!-- Bottom-left credit slot. Only the MakerLab build fills this: per MakerWorld's
+           review the Vostok Labs intro moves out of the top-left into a compact pinned
+           line down here. Stays empty (and display:none) in the public build. -->
+      <div id="keycapCredit"></div>
     </aside>
 
     <div id="viewport" class="vl-stage">
@@ -508,6 +537,6 @@
       </div>
     </div>
 
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>
