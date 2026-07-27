@@ -94,6 +94,29 @@ if (!app) throw new Error('Missing #app');
 
 const nameInput = el('input', { className: 'nk-name-input', attrs: { type: 'text', maxlength: '18', value: state.name, 'aria-label': 'Name' } });
 const secondInput = el('input', { className: 'nk-second-input', attrs: { type: 'text', maxlength: '18', placeholder: 'Optional second line', 'aria-label': 'Second line', value: state.secondLine } });
+
+const POPULAR_EMOJIS = ['❤️', '⭐', '🐾', '🚀', '💀', '⚡', '🌸', '🎶', '🍀', '✨', '🔥', '🐶', '🐱'];
+const emojiGrid = el('div', { className: 'nk-emoji-grid', attrs: { style: 'display: none;' } }, 
+  POPULAR_EMOJIS.map(e => {
+    const btn = el('button', { className: 'nk-emoji-btn', text: e });
+    btn.addEventListener('click', () => {
+      const active = document.activeElement === secondInput ? secondInput : nameInput;
+      active.value += e;
+      active.dispatchEvent(new Event('input'));
+    });
+    return btn;
+  })
+);
+
+const emojiToggle = el('button', { 
+  className: 'vl-btn vl-btn--secondary nk-emoji-toggle',
+  text: '😀 Insert Emoji'
+});
+emojiToggle.addEventListener('click', () => {
+  const isHidden = emojiGrid.style.display === 'none';
+  emojiGrid.style.display = isHidden ? 'grid' : 'none';
+});
+
 const fontGrid = el('div', { className: 'nk-font-grid' });
 const stage = el('section', { className: 'nk-stage' });
 const statusEl = el('div', { className: 'nk-status show', text: 'Loading worker...' });
@@ -163,15 +186,19 @@ async function runRebuild() {
   showStatus('Generating 3D model...');
 
   try {
-    const font = await getFont(state.font);
+    const [font, fallbackFont] = await Promise.all([
+      getFont(state.font),
+      getFont('emoji-fallback').catch(() => null) // Optional in case it failed to download
+    ]);
+
     const gap = 2 * (state.holeDia / 2 + state.ringThickness) + 2;
     const line2Sz = state.size * state.line2Scale;
     // User's Line spacing slider scales the font's natural default.
     const lineFactor = baseLineFactor(state.font) * state.lineSpacing;
 
     const res = state.layout === 'vertical'
-      ? getVerticalContours(font, state.name, state.size, state.lineSpacing, state.letterSpacing)
-      : getHorizontalContours(font, state.name, state.secondLine, state.size, line2Sz, gap, state.line2Align, lineFactor, state.letterSpacing);
+      ? getVerticalContours(font, fallbackFont, state.name, state.size, state.lineSpacing, state.letterSpacing)
+      : getHorizontalContours(font, fallbackFont, state.name, state.secondLine, state.size, line2Sz, gap, state.line2Align, lineFactor, state.letterSpacing);
 
     worker.postMessage({
       type: 'build',
@@ -655,6 +682,8 @@ const controlsScroll = el('div', { className: 'vl-panel__scroll' }, [
     el('p', { className: 'vl-label', text: 'Text' }),
     nameInput,
     secondInput,
+    emojiToggle,
+    emojiGrid,
     line2AlignControl,
   ]),
 

@@ -90,6 +90,7 @@ function bboxOf(contours: number[][][]): LineBox {
  */
 function layoutLine(
   font: any,
+  fallbackFont: any,
   text: string,
   size: number,
   xStart: number,
@@ -97,22 +98,39 @@ function layoutLine(
   letterSpacing: number,
 ): { contours: number[][][]; width: number } {
   const scale = size / font.unitsPerEm;
+  const fbScale = fallbackFont ? size / fallbackFont.unitsPerEm : scale;
   const track = letterSpacing * size;
-  const glyphs = font.stringToGlyphs(text);
+  const chars = Array.from(text);
   const contours: number[][][] = [];
   let x = xStart;
 
-  for (let i = 0; i < glyphs.length; i++) {
-    const g = glyphs[i];
+  for (let i = 0; i < chars.length; i++) {
+    const char = chars[i]!;
+    let g = font.charToGlyph(char);
+    let isFb = false;
+
+    if ((!g || g.index === 0) && fallbackFont) {
+      const fbG = fallbackFont.charToGlyph(char);
+      if (fbG && fbG.index !== 0) {
+        g = fbG;
+        isFb = true;
+      }
+    }
+
+    const activeScale = isFb ? fbScale : scale;
     const path = g.getPath(x, yBaseline, size);
     contours.push(...pathCommandsToPolygons(path.commands));
 
-    let adv = (g.advanceWidth || 0) * scale;
-    if (i < glyphs.length - 1) {
-      // opentype's getPath doesn't apply kerning; add it ourselves for tight pairs.
-      const kern = font.getKerningValue ? font.getKerningValue(g, glyphs[i + 1]) * scale : 0;
-      adv += kern + track;
+    let adv = (g.advanceWidth || 0) * activeScale;
+    if (i < chars.length - 1 && !isFb) {
+      const nextChar = chars[i + 1]!;
+      const nextG = font.charToGlyph(nextChar);
+      if (nextG && nextG.index !== 0) {
+        const kern = font.getKerningValue ? font.getKerningValue(g, nextG) * scale : 0;
+        adv += kern;
+      }
     }
+    adv += track;
     x += adv;
   }
 
@@ -120,8 +138,8 @@ function layoutLine(
 }
 
 /** Advance width of a line under the same custom letter-spacing layout. */
-export function measureLine(font: any, text: string, size: number, letterSpacing: number): number {
-  return layoutLine(font, text, size, 0, 0, letterSpacing).width;
+export function measureLine(font: any, fallbackFont: any, text: string, size: number, letterSpacing: number): number {
+  return layoutLine(font, fallbackFont, text, size, 0, 0, letterSpacing).width;
 }
 
 /**
@@ -131,6 +149,7 @@ export function measureLine(font: any, text: string, size: number, letterSpacing
  */
 export function getHorizontalContours(
   font: any,
+  fallbackFont: any,
   text: string,
   text2: string,
   textSize: number,
@@ -145,7 +164,7 @@ export function getHorizontalContours(
 
   // Line 1
   const y1 = line2On ? -dy / 2 : 0;
-  const l1 = layoutLine(font, text, textSize, gap, y1, letterSpacing);
+  const l1 = layoutLine(font, fallbackFont, text, textSize, gap, y1, letterSpacing);
   const line1Contours = l1.contours;
 
   // Line 2, aligned under line 1.
@@ -154,10 +173,10 @@ export function getHorizontalContours(
     const y2 = dy / 2;
     let x2 = gap;
     if (align !== 'left') {
-      const delta = l1.width - l2Width(font, text2, line2Size, letterSpacing);
+      const delta = l1.width - l2Width(font, fallbackFont, text2, line2Size, letterSpacing);
       x2 = gap + (align === 'center' ? delta / 2 : delta);
     }
-    line2Contours = layoutLine(font, text2, line2Size, x2, y2, letterSpacing).contours;
+    line2Contours = layoutLine(font, fallbackFont, text2, line2Size, x2, y2, letterSpacing).contours;
   }
 
   const contours = [...line1Contours, ...line2Contours];
@@ -181,8 +200,8 @@ export function getHorizontalContours(
   return { contours, box: shift(box0), lines };
 }
 
-function l2Width(font: any, text: string, size: number, letterSpacing: number): number {
-  return measureLine(font, text, size, letterSpacing);
+function l2Width(font: any, fallbackFont: any, text: string, size: number, letterSpacing: number): number {
+  return measureLine(font, fallbackFont, text, size, letterSpacing);
 }
 
 /**
@@ -191,6 +210,7 @@ function l2Width(font: any, text: string, size: number, letterSpacing: number): 
  */
 export function getVerticalContours(
   font: any,
+  fallbackFont: any,
   text: string,
   textSize: number,
   lineSpacing: number,
@@ -214,7 +234,12 @@ export function getVerticalContours(
 
   for (let i = 0; i < chars.length; i++) {
     const char = chars[i]!;
-    const glyphPoly = pathCommandsToPolygons(font.getPath(char, 0, 0, textSize).commands);
+    let g = font.charToGlyph(char);
+    if ((!g || g.index === 0) && fallbackFont) {
+      const fbG = fallbackFont.charToGlyph(char);
+      if (fbG && fbG.index !== 0) g = fbG;
+    }
+    const glyphPoly = pathCommandsToPolygons(g.getPath(0, 0, textSize).commands);
 
     // Centre this character on X, drop it by i steps on Y.
     const cb = bboxOf(glyphPoly);

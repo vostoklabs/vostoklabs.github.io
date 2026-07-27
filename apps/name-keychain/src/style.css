@@ -319,3 +319,38 @@ body {
   justify-content: center;
   font-size: 14px;
 }
+
+/* ---- Emoji Picker ---- */
+.nk-emoji-toggle {
+  align-self: flex-start;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  margin-top: -8px;
+  margin-bottom: 8px;
+}
+
+.nk-emoji-grid {
+  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+  gap: 6px;
+  background: var(--panel-2);
+  padding: 8px;
+  border-radius: var(--radius-field);
+  border: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+
+.nk-emoji-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  text-align: center;
+  transition: background 0.15s;
+}
+
+.nk-emoji-btn:hover {
+  background: var(--hover);
+}
+
