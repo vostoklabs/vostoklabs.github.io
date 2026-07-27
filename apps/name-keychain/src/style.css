@@ -67,6 +67,7 @@ body {
   flex-direction: column;
   gap: 4px;
   justify-content: space-between;
+  overflow: hidden;
 }
 
 .nk-font-card:hover {
@@ -85,6 +86,8 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 100%;
+  padding-right: 20px;
 }
 
 .nk-font-card__name {
@@ -95,6 +98,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 100%;
 }
 
 /* ---- Colour swatches ---- */
