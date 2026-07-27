@@ -120,6 +120,7 @@ const FA_ICONS = [
   { name: 'Tree', char: '\uf1bb' },
   { name: 'Leaf', char: '\uf06c' },
   { name: 'Seedling', char: '\uf4d8' },
+  { name: 'Flower', char: '\uf5bb' },
   { name: 'Skull', char: '\uf187' },
   { name: 'Ghost', char: '\uf6e2' },
   { name: 'Gamepad', char: '\uf11b' },
