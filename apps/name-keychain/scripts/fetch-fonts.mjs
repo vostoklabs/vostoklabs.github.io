@@ -240,23 +240,7 @@ const failed = results.filter((r) => r.status === 'FAIL');
 console.log(`\nDownloaded: ${ok.length} new, ${exists.length} already present, ${failed.length} failed.`);
 if (failed.length) console.log('FAILED:', failed.map((f) => `${f.slug} (${f.error})`).join(', '));
 
-// Download fallback emoji font
-const emojiDest = path.join(FONTS_DIR, 'emoji-fallback.ttf');
-if (!existsSync(emojiDest)) {
-  console.log('\nDownloading fallback emoji font...');
-  try {
-    const { url } = await fetchTtfUrl('noto-emoji');
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const buf = Buffer.from(await r.arrayBuffer());
-    await writeFile(emojiDest, buf);
-    console.log('Downloaded emoji-fallback.ttf (', buf.length, 'bytes)');
-  } catch (e) {
-    console.error('Failed to download emoji fallback font:', e.message);
-  }
-} else {
-  console.log('\nFallback emoji font already present.');
-}
+// Fallback is now handled manually (icon-fallback.ttf)
 
 // Map subsets back to MAP for all successful results
 for (const r of results) {
@@ -266,7 +250,7 @@ for (const r of results) {
 }
 
 // Regenerate registry + CSS from files actually present.
-const files = (await readdir(FONTS_DIR)).filter((f) => f.endsWith('.ttf') && f !== 'emoji-fallback.ttf');
+const files = (await readdir(FONTS_DIR)).filter((f) => f.endsWith('.ttf') && f !== 'icon-fallback.ttf');
 const present = new Set(files.map((f) => f.replace('.ttf', '')));
 
 const rows = Object.entries(MAP)

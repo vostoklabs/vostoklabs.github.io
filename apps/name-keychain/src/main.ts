@@ -95,13 +95,35 @@ if (!app) throw new Error('Missing #app');
 const nameInput = el('input', { className: 'nk-name-input', attrs: { type: 'text', maxlength: '18', value: state.name, 'aria-label': 'Name' } });
 const secondInput = el('input', { className: 'nk-second-input', attrs: { type: 'text', maxlength: '18', placeholder: 'Optional second line', 'aria-label': 'Second line', value: state.secondLine } });
 
-const POPULAR_EMOJIS = ['❤️', '⭐', '🐾', '🚀', '💀', '⚡', '🌸', '🎶', '🍀', '✨', '🔥', '🐶', '🐱'];
+const FA_ICONS = [
+  { name: 'Heart', char: '\uf004' },
+  { name: 'Star', char: '\uf005' },
+  { name: 'Cat', char: '\uf6be' },
+  { name: 'Dog', char: '\uf6d3' },
+  { name: 'Paw', char: '\uf1b0' },
+  { name: 'Rocket', char: '\uf135' },
+  { name: 'Lightning', char: '\uf0e7' },
+  { name: 'Fire', char: '\uf06d' },
+  { name: 'Skull', char: '\uf187' },
+  { name: 'Ghost', char: '\uf6e2' },
+  { name: 'Gamepad', char: '\uf11b' },
+  { name: 'Crown', char: '\uf521' },
+  { name: 'Gem', char: '\uf3a5' },
+  { name: 'Music', char: '\uf001' },
+  { name: 'Leaf', char: '\uf06c' },
+  { name: 'Snowflake', char: '\uf2dc' },
+];
+
 const emojiGrid = el('div', { className: 'nk-emoji-grid', attrs: { style: 'display: none;' } }, 
-  POPULAR_EMOJIS.map(e => {
-    const btn = el('button', { className: 'nk-emoji-btn', text: e });
+  FA_ICONS.map(icon => {
+    const btn = el('button', { 
+      className: 'nk-emoji-btn', 
+      text: icon.char,
+      attrs: { title: icon.name, style: 'font-family: NK-icon-fallback;' } // Use the fallback font explicitly in UI
+    });
     btn.addEventListener('click', () => {
       const active = document.activeElement === secondInput ? secondInput : nameInput;
-      active.value += e;
+      active.value += icon.char;
       active.dispatchEvent(new Event('input'));
     });
     return btn;
@@ -110,7 +132,7 @@ const emojiGrid = el('div', { className: 'nk-emoji-grid', attrs: { style: 'displ
 
 const emojiToggle = el('button', { 
   className: 'vl-btn vl-btn--secondary nk-emoji-toggle',
-  text: '😀 Insert Emoji'
+  text: '✨ Insert Symbol'
 });
 emojiToggle.addEventListener('click', () => {
   const isHidden = emojiGrid.style.display === 'none';
@@ -188,7 +210,7 @@ async function runRebuild() {
   try {
     const [font, fallbackFont] = await Promise.all([
       getFont(state.font),
-      getFont('emoji-fallback').catch(() => null) // Optional in case it failed to download
+      getFont('icon-fallback').catch(() => null)
     ]);
 
     const gap = 2 * (state.holeDia / 2 + state.ringThickness) + 2;

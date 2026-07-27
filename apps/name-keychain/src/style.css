@@ -1,4 +1,9 @@
 /* @font-face for every bundled font (NK-<id>) is generated from the fonts folder. */
+@font-face {
+  font-family: 'NK-icon-fallback';
+  src: url('./fonts/icon-fallback.ttf') format('truetype');
+}
+
 @import './generated-fonts.css';
 
 :root {
