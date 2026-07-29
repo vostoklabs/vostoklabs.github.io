@@ -20,6 +20,7 @@ import {
 import { BRAND } from '@vostok/brand';
 // @ts-ignore
 import * as opentype from 'opentype.js';
+import { unzipSync } from 'fflate';
 import { createViewer } from './viewer/viewer';
 import { downloadThreeMF } from './export/threemfExport';
 import { FONTS, type FontChoice } from './generated-fonts';
@@ -188,7 +189,10 @@ const fontUrlsClean = Object.entries(fontUrls).reduce((acc, [k, v]) => {
 
 async function loadFont(fontId: string): Promise<any> {
   const url = fontUrlsClean[fontId];
-  if (!url) throw new Error(`Font url not resolved for ${fontId}`);
+  if (!url) {
+    if (fontId.startsWith('custom-')) throw new Error('Custom font is missing. Please import the .ttf/.otf file again.');
+    throw new Error(`Font url not resolved for ${fontId}`);
+  }
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Fetch failed for font ${fontId}`);
   return opentype.parse(await r.arrayBuffer());
@@ -695,6 +699,91 @@ const browseFontsBtn = el('button', {
 });
 browseFontsBtn.addEventListener('click', openFontBrowser);
 
+const importFontBtn = el('button', {
+  className: 'nk-browse-fonts',
+  text: `Import custom font (.ttf/.otf/.zip)`,
+  attrs: { type: 'button', style: 'margin-top: 8px;' },
+});
+const fileInput = el('input', {
+  attrs: { type: 'file', accept: '.ttf,.otf,.zip', style: 'display: none;' }
+});
+importFontBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  try {
+    const rawBuffer = await file.arrayBuffer();
+    const isZip = file.name.toLowerCase().endsWith('.zip');
+    
+    const filesToProcess: { name: string; buffer: ArrayBuffer }[] = [];
+
+    if (isZip) {
+      const unzipped = unzipSync(new Uint8Array(rawBuffer));
+      for (const [name, data] of Object.entries(unzipped)) {
+        if (!name.endsWith('/') && (name.toLowerCase().endsWith('.ttf') || name.toLowerCase().endsWith('.otf'))) {
+          const cleanName = name.split('/').pop() || name;
+          const arrayBuf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+          filesToProcess.push({ name: cleanName, buffer: arrayBuf });
+        }
+      }
+      if (filesToProcess.length === 0) {
+        toast('No .ttf or .otf files found in the zip.', { kind: 'error' });
+        (e.target as HTMLInputElement).value = '';
+        return;
+      }
+    } else {
+      filesToProcess.push({ name: file.name, buffer: rawBuffer });
+    }
+
+    let lastFontId = '';
+    let count = 0;
+
+    for (const f of filesToProcess) {
+      try {
+        const fontName = f.name.replace(/\.[^/.]+$/, "");
+        const font = opentype.parse(f.buffer);
+        const fontId = `custom-${Date.now()}-${count++}`;
+        
+        fontCache.set(fontId, font);
+        
+        const fontFileBlob = new Blob([f.buffer]);
+        const fontUrl = URL.createObjectURL(fontFileBlob);
+        const style = document.createElement('style');
+        style.textContent = `@font-face { font-family: 'NK-${fontId}'; src: url('${fontUrl}'); }`;
+        document.head.appendChild(style);
+        
+        const fontChoice = {
+          id: fontId,
+          label: fontName,
+          category: 'Custom',
+          curated: true,
+          subsets: ['latin', 'latin-ext', 'cyrillic', 'greek']
+        };
+        
+        FONTS.unshift(fontChoice);
+        curatedFonts.unshift(fontChoice);
+        
+        lastFontId = fontId;
+      } catch (err) {
+        console.error(`Failed to load font ${f.name}:`, err);
+      }
+    }
+
+    if (count > 0) {
+      selectFont(lastFontId);
+      toast(`Imported ${count} font${count !== 1 ? 's' : ''}`, { kind: 'ok' });
+    } else {
+      toast('Failed to load any fonts from the file.', { kind: 'error' });
+    }
+  } catch (err) {
+    console.error(err);
+    toast('Failed to process file. Make sure it is a valid TTF, OTF or ZIP file.', { kind: 'error' });
+  }
+  
+  (e.target as HTMLInputElement).value = '';
+});
+
 // Advanced tuning.
 const advanced = el('div', { className: 'vl-section nk-advanced' }, [
   el('p', { className: 'vl-label', text: 'Advanced (Fine-tuning)' }),
@@ -865,6 +954,8 @@ const controlsRightScroll = el('div', { className: 'vl-panel__scroll nk-font-sec
     el('p', { className: 'vl-label', text: 'Font' }),
     fontGrid,
     browseFontsBtn,
+    importFontBtn,
+    fileInput,
   ]),
 ]);
 
@@ -984,17 +1075,21 @@ worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
 worker.postMessage({ type: 'init' });
 
 // Show What's New dialog once
-if (!localStorage.getItem('nk_whats_new_v2')) {
-  localStorage.setItem('nk_whats_new_v2', '1');
+if (!localStorage.getItem('nk_whats_new_v3')) {
+  localStorage.setItem('nk_whats_new_v3', '1');
   dialog({
-    title: 'What\'s New! 🎉',
+    title: 'What\'s New!',
     content: el('div', { attrs: { style: 'display: flex; flex-direction: column; gap: 16px; margin-top: 8px;' } }, [
       el('div', {}, [
-        el('strong', { text: '🌍 Cyrillic & Non-English Support' }),
+        el('strong', { text: 'Custom Font Import' }),
+        el('p', { text: 'You can now import your own .ttf or .otf files directly into the generator using the new "Import custom font" button.', attrs: { style: 'margin-top: 4px; line-height: 1.4;' } })
+      ]),
+      el('div', {}, [
+        el('strong', { text: 'Cyrillic & Non-English Support' }),
         el('p', { text: 'Fonts with non-English characters are now fully supported. Unsupported fonts are automatically dimmed in the preview panel so you know exactly what works.', attrs: { style: 'margin-top: 4px; line-height: 1.4;' } })
       ]),
       el('div', {}, [
-        el('strong', { text: '✨ Solid Icon Symbols' }),
+        el('strong', { text: 'Solid Icon Symbols' }),
         el('p', { text: 'You can now insert dozens of solid FontAwesome symbols directly into your keychains using the "Insert Symbol" button! They scale perfectly and extrude into solid 3D plastic.', attrs: { style: 'margin-top: 4px; line-height: 1.4;' } })
       ]),
     ]),
