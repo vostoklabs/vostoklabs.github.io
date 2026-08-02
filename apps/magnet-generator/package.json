@@ -1,0 +1,29 @@
+{
+  "name": "magnet-generator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Image-to-fridge-magnet 3D model generator (flat base, magnet pockets, 3MF/STL export).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:geometry": "esbuild tests/geometry-sweep.mts --bundle --platform=node --format=esm --external:manifold-3d --outfile=node_modules/.cache/geometry-sweep.mjs --log-level=error && node node_modules/.cache/geometry-sweep.mjs"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
+    "d3-contour": "^4.0.2",
+    "fflate": "^0.8.3",
+    "manifold-3d": "^3.0.1",
+    "pica": "^10.0.2",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/d3-contour": "^3.0.6",
+    "@types/three": "^0.171.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

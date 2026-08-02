@@ -30,3 +30,13 @@ docs/reference/
 # opal-suite planning & research docs (local working notes, not part of the shipped app)
 apps/opal-suite/*.md
 apps/opal-suite/planning/
+
+# MakerLab submissions and private agreements
+**/makerlab/agreements/
+**/makerlab/launch/
+
+# MakerLab submissions and private packages
+**/makerlab/
+**/source 3d models/
+**/tests/
+packages/manifold-noeval/README.md
