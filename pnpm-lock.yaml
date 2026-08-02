@@ -130,6 +130,43 @@ importers:
         specifier: ^6.0.5
         version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
 
+  apps/magnet-generator:
+    dependencies:
+      '@vostok/brand':
+        specifier: workspace:*
+        version: link:../../config
+      '@vostok/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
+      d3-contour:
+        specifier: ^4.0.2
+        version: 4.0.2
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+      manifold-3d:
+        specifier: ^3.0.1
+        version: 3.5.1(@gltf-transform/core@4.4.1)(@gltf-transform/extensions@4.4.1)(@gltf-transform/functions@4.4.1)(esbuild-wasm@0.27.7)
+      pica:
+        specifier: ^10.0.2
+        version: 10.0.2
+      three:
+        specifier: ^0.171.0
+        version: 0.171.0
+    devDependencies:
+      '@types/d3-contour':
+        specifier: ^3.0.6
+        version: 3.0.6
+      '@types/three':
+        specifier: ^0.171.0
+        version: 0.171.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.5
+        version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
+
   apps/name-keychain:
     dependencies:
       '@vostok/brand':

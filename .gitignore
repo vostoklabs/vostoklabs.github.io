@@ -40,3 +40,8 @@ apps/opal-suite/planning/
 **/source 3d models/
 **/tests/
 packages/manifold-noeval/README.md
+
+# Blocks and 3mf files
+**/blocks/**/*.3mf
+**/blocks.3mf
+*.3mf
