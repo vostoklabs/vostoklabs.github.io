@@ -13,8 +13,8 @@ export interface ExportPanelOptions {
   note?: string;
 }
 
-/** Format buttons with busy-state handling. The app owns the actual export logic
- *  (kept behind one function per app, see CLAUDE.md invariant 8). */
+/** Format buttons with busy-state handling. The app owns the actual export logic,
+ *  kept behind one function so future export targets (e.g. a host SDK) are a drop-in swap. */
 export function exportPanel(opts: ExportPanelOptions): HTMLElement {
   const buttons: HTMLButtonElement[] = [];
   const setBusy = (busy: boolean) => {

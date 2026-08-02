@@ -8,14 +8,14 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-const esbuildPath = 'C:/Users/ianku/Desktop/cursor projects/vostok-labs-tools/node_modules/.pnpm/esbuild@0.25.12/node_modules/esbuild/lib/main.js';
-const { build } = await import('file://' + esbuildPath);
+import { tmpdir } from 'node:os';
+import { build } from 'esbuild';
 import opentype from 'opentype.js';
 import Module from 'manifold-3d';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(__dirname, '..');
-const outDir = resolve(process.env.NK_OUT || 'C:/Users/ianku/AppData/Local/Temp/claude/C--Users-ianku-Desktop-cursor-projects-generators-galore/c46bea2c-ba75-4249-befa-5d9111fc2200/scratchpad/nk');
+const outDir = resolve(process.env.NK_OUT || resolve(tmpdir(), 'vostok-labs-nk-harness'));
 mkdirSync(outDir, { recursive: true });
 
 // --- Bundle the TS geometry to a temp mjs and import it ---

@@ -6,6 +6,12 @@ Thumbs.db
 
 # Claude / AI agent config (skills, local settings) — not part of the shipped project
 .claude/
+CLAUDE.md
+
+# Internal planning/business docs (pricing, decisions, NDA-adjacent notes) — local reference
+# only, never part of the public shipped project.
+docs/decisions.md
+docs/briefs/
 
 # External reference clone (unlicensed upstream — reference only, re-clone if missing):
 # git clone --depth 1 https://github.com/nelsonjchen/unofficial-makerworld-parametric-model-maker-openscad-docs vendor/pmm-docs
