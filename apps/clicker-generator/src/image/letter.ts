@@ -3,7 +3,9 @@ import { FontLoader, Font } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TTFLoader } from 'three/examples/jsm/loaders/TTFLoader.js';
 import helvetikerRegular from 'three/examples/fonts/helvetiker_regular.typeface.json';
 import helvetikerBold from 'three/examples/fonts/helvetiker_bold.typeface.json';
-import type { RegionSet, Ring, RGB } from '../types';
+import { LUCIDE_ICONS, buildSvg } from './lucideIcons';
+import { parseSvg } from './logo';
+import type { BlockSlot, RegionSet, Ring, RGB } from '../types';
 
 const fontLoader = new FontLoader();
 const ttfLoader = new TTFLoader();
@@ -232,4 +234,89 @@ export function parseLetter(text: string, fontId: string, maxLen = 30, separate 
       }];
 
   return { regions, outline, aspect };
+}
+
+// ---------------------------------------------------------------------------
+// Letter blocks
+// ---------------------------------------------------------------------------
+
+/** Rings of one glyph, in the font's own units (Y-up), positioned as the font laid it. */
+function glyphRings(font: Font, ch: string): Ring[] {
+  const rings: Ring[] = [];
+  for (const shape of font.generateShapes(ch, 100)) {
+    const extracted = shape.extractPoints(16);
+    if (extracted.shape.length >= 3) rings.push(extracted.shape.map((p) => [p.x, p.y] as [number, number]));
+    for (const hole of extracted.holes) {
+      if (hole.length >= 3) rings.push(hole.map((p) => [p.x, p.y] as [number, number]));
+    }
+  }
+  return rings;
+}
+
+function bboxOf(rings: Ring[]) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const r of rings) for (const [x, y] of r) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+}
+
+/**
+ * Build the region list for a letter-block chain: one region per block, in chain order.
+ *
+ * Unlike `parseLetter` (which normalises a whole WORD to a longest side of 1, because it
+ * lands on a single cap), every block gets its own cap, so each slot is normalised on its
+ * own — but all the letters share ONE scale factor, taken from the biggest glyph in the
+ * chain. That is what keeps an "i" small next to a "W" instead of blowing both up to the
+ * same height. Icons are square line-art and are normalised to their own box, trimmed a
+ * little so a symbol doesn't crowd the cap more than a capital letter does.
+ */
+export function parseBlockChain(slots: BlockSlot[], fontId: string): RegionSet {
+  const option = FONT_OPTIONS.find((font) => font.id === fontId) || FONT_OPTIONS[0];
+  const ICON_FILL = 0.9; // icons read bigger than letters at equal height
+
+  // Every slot produces a region, INCLUDING empties and glyphs the font can't draw: the
+  // builder positions cells by index, so a hole has to keep its place in the grid.
+  const raw: { rings: Ring[]; icon: boolean }[] = [];
+  for (const slot of slots) {
+    if (slot.kind === 'empty') {
+      raw.push({ rings: [], icon: false });
+    } else if (slot.kind === 'icon') {
+      const info = LUCIDE_ICONS.find((ic) => ic.name === slot.name);
+      let rings: Ring[] = [];
+      try {
+        // parseSvg already centres the art and normalises its longest side to 1.
+        if (info) rings = parseSvg(buildSvg(info.node)).outline;
+      } catch {
+        rings = [];
+      }
+      raw.push({ rings, icon: true });
+    } else {
+      raw.push({ rings: glyphRings(option.font, slot.ch), icon: false });
+    }
+  }
+  if (!raw.some((r) => r.rings.length)) throw new Error('Add a letter or a symbol first.');
+
+  // One scale for every letter: the tallest/widest glyph in the chain sets it.
+  let charMax = 0;
+  for (const r of raw) {
+    if (r.icon) continue;
+    const b = bboxOf(r.rings);
+    charMax = Math.max(charMax, b.w, b.h);
+  }
+  if (!charMax) charMax = 1;
+
+  // Legends default to black: the caps default to a light filament, and black on white is
+  // the contrast every keycap set starts from.
+  const BLACK: RGB = [22, 22, 22];
+  const regions = raw.map((r) => {
+    const k = r.icon ? ICON_FILL : 1 / charMax;
+    const rings = r.rings.map((ring) => ring.map(([x, y]) => [x * k, y * k] as [number, number]));
+    return { quantRgb: BLACK, components: [{ rings, coverage: 1.0 }], coverage: 1.0 };
+  });
+
+  return { regions, outline: regions.flatMap((r) => r.components[0].rings), aspect: 1 };
 }

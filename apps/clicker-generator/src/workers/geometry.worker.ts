@@ -4,6 +4,7 @@ import Module from 'manifold-3d';
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
 import { parse3MF } from '../geometry/threemfImport';
 import { buildClicker } from '../geometry/buildClicker';
+import { buildBlocks, prepareBlockAssets, type BlockAssets, type KeycapAsset } from '../geometry/buildBlocks';
 import type { GeometryRequest, GeometryResponse } from '../types';
 
 type Wasm = Awaited<ReturnType<typeof Module>>;
@@ -11,6 +12,9 @@ type Wasm = Awaited<ReturnType<typeof Module>>;
 let modulePromise: Promise<Wasm> | null = null;
 let socket: any = null; // cached MX socket (negative), in mm
 let stem: any = null; // cached MX stem (positive), in mm
+// Letter-block assets, normalised into the assembly frame once at init.
+let blockAssets: BlockAssets | null = null;
+let keycapAsset: KeycapAsset | null = null;
 
 async function getModule(): Promise<Wasm> {
   if (!modulePromise) {
@@ -45,6 +49,18 @@ function assetToSolid(wasm: any, buf: ArrayBuffer): { solid: any; info: string }
   return { solid, info };
 }
 
+/** keycap.json (shared with the keycap generator): shell mesh at the top level, the MX
+ *  stem as its own body, and metadata describing the dish. Authored in the same Z frame
+ *  as the MX assets, so no re-anchoring is needed. */
+function toKeycapAsset(json: any): KeycapAsset | null {
+  if (!json?.positions || !json?.indices || !json?.meta) return null;
+  return {
+    shell: { positions: json.positions, indices: json.indices },
+    stem: json.stem ?? null,
+    meta: json.meta,
+  };
+}
+
 self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
   try {
     const wasm = await getModule();
@@ -74,6 +90,31 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       stem = b.solid.translate([-tcx, -tcy, 0]);
       a.solid.delete();
       b.solid.delete();
+
+      // Letter blocks: measure and re-anchor each block asset now (see buildBlocks) so a
+      // rebuild is pure placement. Failure here only disables the Blocks mode.
+      for (const v of blockAssets?.byMask.values() ?? []) {
+        try { v.solid.delete(); } catch { /* shared between masks — already freed */ }
+      }
+      blockAssets = null;
+      if (msg.blockNoSides && msg.blockSouth && msg.blockNorthSouth) {
+        const rawBlocks: Record<string, any> = {
+          noSides: assetToSolid(wasm, msg.blockNoSides).solid,
+          south: assetToSolid(wasm, msg.blockSouth).solid,
+          northSouth: assetToSolid(wasm, msg.blockNorthSouth).solid,
+        };
+        // The grid shells are optional: without them only rows and columns are possible.
+        if (msg.blockNorthWest) rawBlocks.northWest = assetToSolid(wasm, msg.blockNorthWest).solid;
+        if (msg.blockNorthSouthWest) rawBlocks.northSouthWest = assetToSolid(wasm, msg.blockNorthSouthWest).solid;
+        if (msg.blockAllSides) rawBlocks.allSides = assetToSolid(wasm, msg.blockAllSides).solid;
+        try {
+          blockAssets = prepareBlockAssets(wasm, socket, rawBlocks as any);
+        } catch (err) {
+          console.error('[blocks] asset prep failed', err);
+        }
+        for (const s of Object.values(rawBlocks)) s.delete();
+      }
+      if (msg.keycapJson) keycapAsset = toKeycapAsset(msg.keycapJson);
 
       // The switch is DISPLAY-ONLY (a preview toggle) — no CSG. Parse it raw and place
       // it in the assembly frame:
@@ -124,6 +165,21 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
         stem,
         msg.regions,
         msg.outline,
+        msg.params,
+      );
+      const transfer: Transferable[] = [];
+      for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
+      post({ type: 'parts', parts, switchPlacements, warnings }, transfer);
+      return;
+    }
+
+    if (msg.type === 'buildBlocks') {
+      if (!blockAssets || !keycapAsset) throw new Error('Block assets not initialized');
+      const { parts, switchPlacements, warnings } = buildBlocks(
+        wasm,
+        blockAssets,
+        keycapAsset,
+        msg.regions,
         msg.params,
       );
       const transfer: Transferable[] = [];

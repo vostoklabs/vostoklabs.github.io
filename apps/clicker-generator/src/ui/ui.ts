@@ -1,6 +1,6 @@
 import { generatorHeader, qualityCallout, sidebarFooter } from '@vostok/ui-kit';
 import { MAKERLAB } from 'virtual:makerlab';
-import type { BaseShapeKind, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
+import type { BaseShapeKind, BlockOrientation, BlockSlot, KeychainSide, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
 import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
 import { SAMPLES } from '../image/sample';
@@ -12,6 +12,9 @@ import { LUCIDE_ICONS, buildSvg, svgDataUrl } from '../image/lucideIcons';
 /** Neutral top↔base clearance (mm). The "Switch socket tolerance" stepper shows the
  *  offset from this baseline, so a fresh design reads 0. Keep in sync with the store default. */
 const BASE_SOCKET_TOL = 0.4;
+
+/** Fallback swatch for the keycap row before the build derives a contrasting frame. */
+const DEFAULT_CAP_RGB: RGB = [240, 240, 240];
 
 export interface UiState {
   status: string;
@@ -36,7 +39,8 @@ export interface UiState {
   removeBg: boolean;
   view: ViewMode;
   showSwitch: boolean;
-  importMode: 'image' | 'svg' | 'icon' | 'text';
+  /** 'blocks' = the letter-block chain (one block + switch + keycap per letter). */
+  importMode: 'image' | 'svg' | 'icon' | 'text' | 'blocks';
   currentIconName: string;
   colorMode: 'normal' | 'limited';
   limitedColors: RGB[];
@@ -54,6 +58,17 @@ export interface UiState {
   extrudeChamfer: boolean;
   /** Text mode: when true each letter is its own selectable/colorable part. Default false. */
   separateLetters: boolean;
+  // ---- Letter blocks (importMode 'blocks') ----
+  /** The chain, in order: one entry per printed block (a letter or a symbol). */
+  blockSlots: BlockSlot[];
+  /** Row (reads left→right) or column (top→bottom). */
+  blockOrientation: BlockOrientation;
+  /** Legend size multiplier on the keycap (1 = default fit). */
+  legendScale: number;
+  /** Legend outline offset in mm — "boldness". */
+  legendBold: number;
+  /** Which side of the block set the keyring loop hangs off. */
+  keychainEnd: KeychainSide;
   /** Current extrude height being dragged (for HUD display), null when not dragging. */
   extrudeHeight: number | null;
   /** Component-specific heights */
@@ -111,7 +126,7 @@ export interface UiCallbacks {
   onBodyColor(hex: string): void;
 
   // New callbacks for vector modes
-  onImportMode(mode: 'image' | 'svg' | 'icon' | 'text'): void;
+  onImportMode(mode: UiState['importMode']): void;
   onSvgUpload(file: File): void;
   onSelectSvg(svgText: string, name: string): void;
   onSelectIcon(svgText: string, name: string): void;
@@ -127,10 +142,34 @@ export interface UiCallbacks {
   onExtrudeChamfer(on: boolean): void;
   /** Text mode: toggle splitting the word into per-letter parts. */
   onSeparateLetters(on: boolean): void;
+  // ---- Letter blocks ----
+  /** The whole chain changed (a chip was added or removed). */
+  onBlockSlots(slots: BlockSlot[]): void;
+  /** The blocks text box changed — retype the letter chips, keep the symbols. */
+  onBlockText(text: string): void;
+  onBlockOrientation(o: BlockOrientation): void;
+  onLegendScale(v: number): void;
+  onLegendBold(mm: number): void;
+  /** Keycap colour (shared by every cap in the chain). */
+  onCapColor(hex: string): void;
+  onKeychainEnd(side: KeychainSide): void;
   onUndo(): void;
   onRedo(): void;
   onRefresh(): void;
 }
+
+/** The symbols worth putting on a keycap: cute, playful, instantly readable at 11 mm.
+ *  These lead the block symbol picker (search still reaches the full Lucide set). */
+const BLOCK_SYMBOLS = [
+  'heart', 'star', 'sun', 'moon', 'cloud', 'flower', 'flower-2', 'leaf', 'sprout',
+  'smile', 'laugh', 'ghost', 'cat', 'dog', 'bird', 'fish', 'bug', 'paw-print',
+  'rocket', 'gamepad-2', 'music', 'headphones', 'camera', 'palette', 'brush',
+  'crown', 'trophy', 'gift', 'cake', 'coffee', 'pizza', 'ice-cream-cone',
+  'zap', 'flame', 'snowflake', 'droplet', 'rainbow', 'sparkles',
+  'anchor', 'plane', 'car', 'bike', 'tent', 'mountain', 'umbrella',
+  'check', 'x', 'plus', 'minus', 'arrow-up', 'arrow-down', 'arrow-left', 'arrow-right',
+  'thumbs-up', 'hand', 'key', 'lock', 'bell', 'clock', 'map-pin', 'lightbulb',
+];
 
 const POPULAR_LUCIDE = [
   // File & clipboard
@@ -221,6 +260,33 @@ export function createUi(
       </div>
     </div>
 
+    <!-- Letter blocks: the shape controls for the chain live here, next to the preview,
+         because the right panel is for WHAT is on the blocks (text, chips, font). -->
+    <div class="section" id="blocksSection" hidden>
+      <span class="label">Blocks</span>
+      <div class="field">
+        <label>Layout ${tip('A row reading left to right, or a column reading top to bottom.')}</label>
+        <div class="tabs" id="blockOrient" role="tablist">
+          <button class="tab active" data-orient="horizontal" type="button">Horizontal</button>
+          <button class="tab" data-orient="vertical" type="button">Vertical</button>
+        </div>
+      </div>
+      <div class="prow-stacked">
+        <div class="prow-header">
+          <label for="legendSize">Letter size ${tip('Scales the letter or symbol on the keycap. 100% fills the flat top of the cap.')}</label>
+          <input type="text" class="val" id="legendSizeVal" />
+        </div>
+        <input type="range" id="legendSize" min="0.5" max="1.4" step="0.05" />
+      </div>
+      <div class="prow-stacked">
+        <div class="prow-header">
+          <label for="legendBold">Boldness ${tip('Thickens (or thins) the legend outline in mm. Symbols are hairline strokes, so a little boldness is what makes them print cleanly.')}</label>
+          <input type="text" class="val" id="legendBoldVal" />
+        </div>
+        <input type="range" id="legendBold" min="-0.3" max="0.8" step="0.05" />
+      </div>
+    </div>
+
     <div class="section" id="baseStyleSection">
       <span class="label">Base style ${tip('Outline follows your image silhouette. Shape places the image on a preset base such as a circle or square.')}</span>
       <div class="field">
@@ -291,8 +357,18 @@ export function createUi(
             <label class="toggle"><input id="keychain" type="checkbox" /><span class="slider"></span></label>
           </div>
           <div id="keychainOpts" style="display:none;">
-
-            <div class="prow-stacked">
+            <!-- Blocks mode: the loop welds onto an end block's outer face, so the only
+                 choice is which end of the chain it hangs from. -->
+            <div class="field" id="keychainEndField" style="display:none;">
+              <label>Loop side ${tip('Which side of the block set the keyring loop hangs off.')}</label>
+              <div class="tabs" id="keychainEnd" role="tablist">
+                <button class="tab active" data-end="left" type="button">Left</button>
+                <button class="tab" data-end="right" type="button">Right</button>
+                <button class="tab" data-end="top" type="button">Top</button>
+                <button class="tab" data-end="bottom" type="button">Bottom</button>
+              </div>
+            </div>
+            <div class="prow-stacked" id="keychainAngleRow">
               <div class="prow-header">
                 <label>Position ${tip('Slides the keychain attachment around the edge of the body.')}</label>
               </div>
@@ -302,7 +378,7 @@ export function createUi(
                 <button class="btn" id="keychainRotPlus" type="button" aria-label="Rotate clockwise">⟳</button>
               </div>
             </div>
-            <div class="prow-stacked">
+            <div class="prow-stacked" id="keychainOffsetRow">
               <div class="prow-header">
                 <label>Slide offset ${tip('Slides the keychain along the tangent of the body edge (fine-tuning).')}</label>
               </div>
@@ -314,7 +390,7 @@ export function createUi(
             </div>
             <div class="prow-stacked">
               <div class="prow-header">
-                <label>Hole size ${tip('Diameter of the ring hole — size it for a keyring, cord, or carabiner.')}</label>
+                <label>Hole size ${tip('Diameter of the ring hole. Size it for a keyring, cord, or carabiner.')}</label>
               </div>
               <div class="tol-stepper" id="keychainSizeStepper">
                 <button class="btn" id="keychainSizeMinus" type="button" aria-label="Smaller hole">−</button>
@@ -396,7 +472,7 @@ export function createUi(
         <summary class="label collapsible-head">3 · Switch</summary>
         <div class="collapsible-body">
         <div class="field" style="margin-bottom:10px;">
-          <label>Switches ${tip('Use 1–3 MX switches for larger or wider designs — more click points and stability. Each switch can be moved and rotated individually.')}</label>
+          <label>Switches ${tip('Use 1 to 3 MX switches for larger or wider designs, for more click points and stability. Each switch can be moved and rotated individually.')}</label>
           <div class="tabs" id="switchCount" role="tablist">
             <button class="tab active" data-count="1" type="button">1</button>
             <button class="tab" data-count="2" type="button">2</button>
@@ -514,6 +590,16 @@ export function createUi(
           </span>
           <span class="card-label">Text</span>
         </button>
+        <button class="import-card" data-mode="blocks" type="button">
+          <span class="card-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="7" width="6.5" height="10" rx="1.4"/>
+              <rect x="8.75" y="7" width="6.5" height="10" rx="1.4"/>
+              <rect x="15.5" y="7" width="6.5" height="10" rx="1.4"/>
+            </svg>
+          </span>
+          <span class="card-label">Blocks</span>
+        </button>
       </div>
 
       <!-- Image Panel -->
@@ -571,12 +657,29 @@ export function createUi(
         <div id="gallery"></div>
       </div>
 
-      <!-- Text Panel -->
+      <!-- Text / Blocks Panel (shared: both modes are driven by text + a font) -->
       <div id="letterPanel" class="mode-panel" hidden>
-        <div class="field">
+        <div class="field" id="textOnlyField">
           <label for="letterText">Custom Text</label>
           <textarea id="letterText" rows="2" maxlength="30" autocomplete="off" spellcheck="false" style="width: 100%; resize: vertical; min-height: 48px;">Custom\nText</textarea>
         </div>
+
+        <!-- Blocks-only: the chain, one chip per printed block -->
+        <div class="field" id="blocksTextField" hidden>
+          <label for="blocksText">Text</label>
+          <textarea id="blocksText" rows="1" maxlength="24" autocomplete="off" spellcheck="false" style="width: 100%; resize: none; min-height: 34px;">Name</textarea>
+        </div>
+        <div class="field" id="blocksChainField" hidden>
+          <label>Add symbol or emoji ${tip('One chip is one printed block. Click a chip to change its letter or swap in a symbol; the small + between chips drops a symbol anywhere in the row.')}</label>
+          <p class="hint-text" style="margin: 0 0 6px;">
+            Press + between two blocks to add a symbol there, or click a block to change it.
+          </p>
+          <div id="blockChips" class="block-chips"></div>
+        </div>
+        ${MAKERLAB ? '' : `<p class="hint-text" id="blocksKeycapLink" hidden>
+          Want more keycap options, like profiles, sizes, or your own SVG or photo on the
+          cap? Use the <a class="hint-link" href="https://vostoklabs.github.io/SVG-keycap-generator/" target="_blank" rel="noopener">Vostok Labs Keycap Generator</a>.
+        </p>`}
         <div class="field">
           <label>Font</label>
           <div id="fontGrid" class="font-grid"></div>
@@ -585,6 +688,7 @@ export function createUi(
             <input id="fontUpload" type="file" accept=".ttf,.otf,.json,font/ttf,font/otf,application/json" />
           </label>
         </div>
+
       </div>
     </div>
   `;
@@ -859,6 +963,198 @@ export function createUi(
     fontUpload.value = '';
   });
 
+  // --- Letter-block arrangement editor ---------------------------------------------
+  // One chip per printed block. In a row or a column the chips sit in a line with a
+  // hairline "+" in every gap (that is how "I ♥ U" gets its heart); in grid mode they lay
+  // out as the actual grid, so a WASD shape is built by emptying the cells you don't want.
+  // Clicking a chip edits that block — type a letter, pick a symbol, empty it, or remove
+  // it — which is the only way to author a grid, where a text box no longer maps.
+  const blockChipsEl = $('blockChips');
+  const blocksTextEl = $<HTMLTextAreaElement>('blocksText');
+  let renderedSlots: BlockSlot[] = [];
+
+  blocksTextEl.addEventListener('input', () => cb.onBlockText(blocksTextEl.value));
+
+  function chipFace(slot: BlockSlot): { el: HTMLElement; title: string } {
+    const chip = document.createElement('span');
+    chip.className = 'block-chip';
+    if (slot.kind === 'icon') {
+      chip.classList.add('is-icon');
+      const info = LUCIDE_ICONS.find((ic) => ic.name === slot.name);
+      if (info) {
+        const img = document.createElement('img');
+        img.src = svgDataUrl(buildSvg(info.node));
+        img.alt = slot.name;
+        chip.appendChild(img);
+      } else {
+        chip.textContent = '?';
+      }
+      return { el: chip, title: slot.name };
+    }
+    if (slot.kind === 'empty') {
+      chip.classList.add('is-empty');
+      return { el: chip, title: 'Empty, no block here' };
+    }
+    chip.textContent = slot.ch;
+    return { el: chip, title: `Letter "${slot.ch}"` };
+  }
+
+  function renderBlockChips(slots: BlockSlot[]) {
+    renderedSlots = slots;
+    blockChipsEl.innerHTML = '';
+
+    const addGap = (index: number) => {
+      const gap = document.createElement('button');
+      gap.type = 'button';
+      gap.className = 'block-gap';
+      gap.title = 'Insert a symbol here';
+      gap.setAttribute('aria-label', `Insert a symbol at position ${index + 1}`);
+      gap.textContent = '+';
+      gap.addEventListener('click', () => openSymbolPicker(index));
+      blockChipsEl.appendChild(gap);
+    };
+
+    addGap(0);
+    slots.forEach((slot, i) => {
+      const { el: chip, title } = chipFace(slot);
+      chip.title = `${title}, click to edit`;
+      chip.tabIndex = 0;
+      chip.addEventListener('click', () => openSlotEditor(i, chip));
+      chip.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openSlotEditor(i, chip);
+        }
+      });
+      blockChipsEl.appendChild(chip);
+      addGap(i + 1);
+    });
+  }
+
+  /** Edit one block: retype its letter, swap in a symbol, blank the cell, or delete it. */
+  function openSlotEditor(index: number, anchor: HTMLElement) {
+    document.querySelector('.slot-editor')?.remove();
+    const slot = renderedSlots[index];
+    const pop = document.createElement('div');
+    pop.className = 'color-popover slot-editor';
+    pop.innerHTML = `
+      <label class="slot-editor-label">Letter</label>
+      <input class="slot-editor-input" type="text" maxlength="1" autocomplete="off" spellcheck="false"
+             value="${slot.kind === 'char' ? slot.ch.replace(/"/g, '&quot;') : ''}" />
+      <button type="button" class="secondary slot-editor-symbol">Pick a symbol…</button>
+      <button type="button" class="secondary slot-editor-remove">Remove block</button>`;
+    document.body.appendChild(pop);
+
+    const r = anchor.getBoundingClientRect();
+    pop.style.left = `${Math.min(window.innerWidth - pop.offsetWidth - 10, r.left)}px`;
+    pop.style.top = `${Math.min(window.innerHeight - pop.offsetHeight - 10, r.bottom + 6)}px`;
+
+    const close = () => {
+      pop.remove();
+      document.removeEventListener('mousedown', onOutside, true);
+    };
+    const onOutside = (e: MouseEvent) => {
+      if (!pop.contains(e.target as Node)) close();
+    };
+    setTimeout(() => document.addEventListener('mousedown', onOutside, true), 0);
+
+    const replace = (next: BlockSlot | null) => {
+      const slots = renderedSlots.slice();
+      if (next === null) slots.splice(index, 1);
+      else slots[index] = next;
+      close();
+      cb.onBlockSlots(slots);
+    };
+
+    const input = pop.querySelector('.slot-editor-input') as HTMLInputElement;
+    input.addEventListener('input', () => {
+      const ch = input.value.trim();
+      if (ch) replace({ kind: 'char', ch });
+    });
+    (pop.querySelector('.slot-editor-symbol') as HTMLElement).addEventListener('click', () => {
+      close();
+      openSymbolPicker(index, true);
+    });
+    (pop.querySelector('.slot-editor-remove') as HTMLElement).addEventListener('click', () =>
+      replace(null),
+    );
+    input.focus();
+    input.select();
+  }
+
+  /** Compact Lucide picker. Inserts the chosen symbol at `index`, or replaces the slot
+   *  already there when `replace` is set (used by the per-block editor). */
+  function openSymbolPicker(index: number, replace = false) {
+    const back = document.createElement('div');
+    back.className = 'wz-overlay symbol-overlay';
+    back.innerHTML = `
+      <div class="wz-modal symbol-modal">
+        <div class="wz-head">Add a symbol</div>
+        <div class="wz-body">
+          <input type="search" class="symbol-search" placeholder="Search symbols…" autocomplete="off" spellcheck="false" />
+          <div class="symbol-grid"></div>
+        </div>
+        <div class="wz-foot"><button type="button" class="secondary symbol-cancel">Cancel</button></div>
+      </div>`;
+    document.body.appendChild(back);
+    const grid = back.querySelector('.symbol-grid') as HTMLElement;
+    const search = back.querySelector('.symbol-search') as HTMLInputElement;
+    const close = () => {
+      back.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('keydown', onKey);
+    back.addEventListener('click', (e) => {
+      if (e.target === back) close();
+    });
+    (back.querySelector('.symbol-cancel') as HTMLElement).addEventListener('click', close);
+
+    const paint = () => {
+      grid.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      // No query → the curated keycap set only. Typing searches all of Lucide.
+      const q = search.value.trim();
+      const list = q
+        ? rankLucide(q).slice(0, 180)
+        : BLOCK_SYMBOLS.map((n) => LUCIDE_ICONS.find((ic) => ic.name === n)).filter(
+            (ic): ic is (typeof LUCIDE_ICONS)[number] => !!ic,
+          );
+      for (const ic of list) {
+        const el = makeIconEl(svgDataUrl(buildSvg(ic.node)), ic.name, () => {
+          const next = renderedSlots.slice();
+          next.splice(index, replace ? 1 : 0, { kind: 'icon', name: ic.name });
+          cb.onBlockSlots(next);
+          close();
+        });
+        frag.appendChild(el);
+      }
+      grid.appendChild(frag);
+    };
+    let t: number | null = null;
+    search.addEventListener('input', () => {
+      if (t !== null) clearTimeout(t);
+      t = window.setTimeout(paint, 80);
+    });
+    paint();
+    search.focus();
+  }
+
+  $('keychainEnd').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('[data-end]') as HTMLElement | null;
+    if (b) cb.onKeychainEnd(b.dataset.end as KeychainSide);
+  });
+  $('blockOrient').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('[data-orient]') as HTMLElement | null;
+    if (b) cb.onBlockOrientation(b.dataset.orient as BlockOrientation);
+  });
+  const legendSize = $<HTMLInputElement>('legendSize');
+  legendSize.addEventListener('input', () => cb.onLegendScale(parseFloat(legendSize.value)));
+  const legendBold = $<HTMLInputElement>('legendBold');
+  legendBold.addEventListener('input', () => cb.onLegendBold(parseFloat(legendBold.value)));
+
   function addFontOption(font: FontOption) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -922,6 +1218,7 @@ export function createUi(
     // --- Separate-letters toggle (text mode, Color + Extrude) ---
     // Off: the whole word is one element (select/recolor/extrude all letters together).
     // On: each letter is its own part, so you can pick and color letters individually.
+    // (Blocks mode always separates, so the toggle stays hidden there.)
     const lettersToggle = document.createElement('div');
     lettersToggle.id = 'lettersToggle';
     lettersToggle.className = 'letters-toggle';
@@ -1254,7 +1551,9 @@ export function createUi(
   // --- "What's new" update notification ---
   // Shown once after the welcome modal, before the tutorial. Its "Don't show
   // again" flag is independent of the tutorial / welcome dismissal keys.
-  const UPDATE_KEY = 'clicker_update_dismissed_2026_08';
+  // Bump the key whenever the list below changes, so the note shows again to people who
+  // already ticked "Don't show again" for the previous round.
+  const UPDATE_KEY = 'clicker_update_dismissed_2026_08_blocks';
 
   // Continue the on-load chain after welcome + update: open the tutorial unless
   // the user has permanently dismissed it.
@@ -1280,10 +1579,10 @@ export function createUi(
         <h2>Latest updates ✨</h2>
         <p>A few improvements landed since your last visit:</p>
         <ul class="whats-new-list">
+          <li>${check}<span><strong>Letter blocks</strong>: a new <em>Blocks</em> tab that turns a word into a row of snap-together blocks, each with its own MX switch and a real keycap with the letter printed into the top.</span></li>
+          <li>${check}<span><strong>Symbols on the caps</strong>: drop a heart, a star, a rocket or any of 60 curated symbols anywhere in the row, and set the letter size and boldness to taste.</span></li>
           <li>${check}<span><strong>Sharper image tracing</strong>: high-quality resampling, perceptual color matching, and detail-preserving smoothing keep fine text and small features intact.</span></li>
-          <li>${check}<span><strong>Multiple switches</strong>: use 1–3 MX switches for bigger designs — each one moves and rotates on its own from the <em>Switch</em> section.</span></li>
-          <li>${check}<span><strong>Keychain loop</strong>: add a keyring loop, slide it around the body edge, adjust its tangent slide offset, or resize the ring hole.</span></li>
-          <li>${check}<span><strong>Polish &amp; fixes</strong>: lots of smaller improvements across the app.</span></li>
+          <li>${check}<span><strong>Multiple switches</strong>: use 1 to 3 MX switches for bigger designs, each moving and rotating on its own from the <em>Switch</em> section.</span></li>
         </ul>
         <div class="whats-new-foot">
           <label class="whats-new-dismiss">
@@ -1323,7 +1622,7 @@ export function createUi(
       focus: 'right',
       target: '#importTabs',
       title: 'Import Source',
-      text: 'Choose how to generate your 3D clicker model. You can upload any custom <strong>Image</strong> (PNG with transparency works best), choose from <strong>1700+ vector icons</strong>, import custom <strong>SVG</strong> files, or enter your own custom <strong>Text</strong>.',
+      text: 'Choose how to generate your 3D clicker model. You can upload any custom <strong>Image</strong> (PNG with transparency works best), choose from <strong>1700+ vector icons</strong>, import custom <strong>SVG</strong> files, enter your own custom <strong>Text</strong>, or pick <strong>Blocks</strong> to turn a word into a row of snap-together letter blocks, each with its own switch and keycap.',
       arrow: 'right'
     },
     {
@@ -1658,7 +1957,13 @@ export function createUi(
     });
   }
 
-  function renderPalette(palette: PaletteEntry[], bodyColorRgb: RGB, colorMode?: 'normal' | 'limited', limitedColors?: RGB[]) {
+  function renderPalette(
+    palette: PaletteEntry[],
+    bodyColorRgb: RGB,
+    colorMode?: 'normal' | 'limited',
+    limitedColors?: RGB[],
+    blocks?: { capRgb: RGB },
+  ) {
     const pal = $('palette');
     pal.innerHTML = '';
 
@@ -1671,6 +1976,36 @@ export function createUi(
       FILAMENTS.forEach(([name, hex]) => {
         chipsToRender.push([name, hex]);
       });
+    }
+
+    // Letter blocks print in exactly three filaments — the blocks, the caps, and the
+    // legends — so the palette is those three rows, not one per letter.
+    if (blocks) {
+      const row = (label: string, rgb: RGB, title: string, onPick: (hex: string) => void) => {
+        const el = document.createElement('div');
+        el.className = 'fil-row body-row';
+        el.innerHTML = `
+          <span class="slot-no slot-body">${label}</span>
+          <span class="swatch" style="background:${rgbHex(rgb)}" title="${title}"></span>
+          <span class="arrow">→</span>
+          <button type="button" class="fil-chip" title="${title}" style="background:${rgbHex(rgb)}"></button>`;
+        const chip = el.querySelector('.fil-chip') as HTMLElement;
+        chip.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showSidebarColorPicker(chip, rgbHex(rgb), chipsToRender, onPick);
+        });
+        pal.appendChild(el);
+      };
+      row('Body', bodyColorRgb, 'block body color', (hex) => cb.onBodyColor(hex));
+      row('Caps', blocks.capRgb, 'keycap color', (hex) => cb.onCapColor(hex));
+      row('Letters', palette[0]?.filamentRgb ?? [247, 247, 245], 'legend color', (hex) =>
+        cb.onFilament(0, hex),
+      );
+      const tip = document.createElement('div');
+      tip.className = 'hint model-recolor-tip';
+      tip.textContent = 'Tip: click a block, a cap or a letter on the 3D model to recolor it.';
+      pal.appendChild(tip);
+      return;
     }
 
     // ALWAYS render the Clicker Body row.
@@ -1826,10 +2161,41 @@ export function createUi(
     for (const b of importTabs.querySelectorAll<HTMLElement>('[data-mode]')) {
       b.classList.toggle('active', b.dataset.mode === state.importMode);
     }
+    const isBlockMode = state.importMode === 'blocks';
     $('imagePanel').hidden = state.importMode !== 'image';
     $('svgPanel').hidden = state.importMode !== 'svg';
     $('iconPanel').hidden = state.importMode !== 'icon';
-    $('letterPanel').hidden = state.importMode !== 'text';
+    // Text and Blocks share one panel — both are "type something, pick a font".
+    $('letterPanel').hidden = state.importMode !== 'text' && !isBlockMode;
+    $('blocksChainField').hidden = !isBlockMode;
+    $('blocksSection').hidden = !isBlockMode;
+    $('textOnlyField').hidden = isBlockMode;
+    const keycapLink = document.getElementById('blocksKeycapLink');
+    if (keycapLink) keycapLink.hidden = !isBlockMode;
+    if (isBlockMode) {
+      renderBlockChips(state.blockSlots);
+      $('blocksTextField').hidden = false;
+      // Keep the box in step when chips are deleted in the row below it.
+      if (document.activeElement !== blocksTextEl) {
+        blocksTextEl.value = state.blockSlots
+          .filter((s): s is { kind: 'char'; ch: string } => s.kind === 'char')
+          .map((s) => s.ch)
+          .join('');
+      }
+      for (const b of $('blockOrient').querySelectorAll<HTMLElement>('[data-orient]')) {
+        b.classList.toggle('active', b.dataset.orient === state.blockOrientation);
+      }
+      const size = $<HTMLInputElement>('legendSize');
+      if (document.activeElement !== size) size.value = String(state.legendScale);
+      $<HTMLInputElement>('legendSizeVal').value = `${Math.round(state.legendScale * 100)}%`;
+      const bold = $<HTMLInputElement>('legendBold');
+      if (document.activeElement !== bold) bold.value = String(state.legendBold);
+      $<HTMLInputElement>('legendBoldVal').value =
+        `${state.legendBold > 0 ? '+' : ''}${state.legendBold.toFixed(2)} mm`;
+      for (const b of $('keychainEnd').querySelectorAll<HTMLElement>('[data-end]')) {
+        b.classList.toggle('active', b.dataset.end === state.keychainEnd);
+      }
+    }
 
     // Hide/show image specific fields in colors section
     const showSmoothingAndBg = state.importMode === 'image';
@@ -1844,6 +2210,27 @@ export function createUi(
     const outlineTab = shapeTypeTabs.querySelector<HTMLElement>('[data-style="outline"]');
     if (outlineTab) outlineTab.style.display = state.importMode === 'icon' ? 'none' : '';
     const treatAsOutline = state.baseShape === 'outline' && state.importMode !== 'icon';
+    $('shapeSelectField').style.display = treatAsOutline ? 'none' : 'block';
+
+    // Blocks mode: the block shells are fixed CAD parts, so everything that shapes a
+    // free-form clicker body (base style, size, keychain angle, backing thickness, legend
+    // depth, the socket fit and the switch layout) has nothing to act on and is hidden.
+    // What stays is what still means something: the stem fit and the palette.
+    const hideForBlocks = (el: HTMLElement | null) => {
+      if (el) el.style.display = isBlockMode ? 'none' : '';
+    };
+    hideForBlocks(document.getElementById('baseStyleSection'));
+    hideForBlocks(document.getElementById('topthick')?.closest('.prow-stacked') as HTMLElement | null);
+    hideForBlocks(document.getElementById('imgdepth')?.closest('.prow-stacked') as HTMLElement | null);
+    // The keychain stays, but a block set has no round edge to slide a loop around, so it
+    // welds to one side of the set instead.
+    const kcEndField = document.getElementById('keychainEndField');
+    if (kcEndField) kcEndField.style.display = isBlockMode ? '' : 'none';
+    hideForBlocks(document.getElementById('keychainAngleRow'));
+    hideForBlocks(document.getElementById('keychainOffsetRow'));
+    hideForBlocks(document.getElementById('socketTolStepper')?.closest('.prow-stacked') as HTMLElement | null);
+    hideForBlocks(document.getElementById('sectionSwitch'));
+
     for (const btn of shapeTypeTabs.querySelectorAll<HTMLElement>('button')) {
       btn.classList.toggle('active', btn.dataset.style === (treatAsOutline ? 'outline' : 'shape'));
     }
@@ -1879,7 +2266,13 @@ export function createUi(
       }
     }
 
-    renderPalette(state.palette, state.bodyColorRgb, state.colorMode, state.limitedColors);
+    renderPalette(
+      state.palette,
+      state.bodyColorRgb,
+      state.colorMode,
+      state.limitedColors,
+      isBlockMode ? { capRgb: state.baseColorOverride ?? DEFAULT_CAP_RGB } : undefined,
+    );
 
     // Highlight the active icon in the Lucide gallery
     if (state.currentIconName) {

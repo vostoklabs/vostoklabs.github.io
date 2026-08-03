@@ -20,7 +20,7 @@ export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): voi
 
   const ccLine = el('p');
   ccLine.append(
-    'Free for personal use — print as many as you like for yourself. Selling prints requires a commercial license (below).',
+    'Free for personal use. Print as many as you like for yourself; selling prints requires a commercial license (below).',
   );
 
   const commercialTitle = el('div', { className: 'vl-commercial-title' });

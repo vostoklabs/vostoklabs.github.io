@@ -228,9 +228,16 @@ export function createViewer(container: HTMLElement): Viewer {
     root.position.set(0, 0, 0);
     capGroup.position.set(0, 0, 0);
     const box = new THREE.Box3().expandByObject(capGroup).expandByObject(bodyGroup);
-    const center = box.getCenter(new THREE.Vector3());
+    // Anchor on the BASE alone. The base is the part that defines where the model sits;
+    // the caps and their legends ride on top of it and change shape constantly (a bolder
+    // or larger letter, a different font), and centring on those made the whole model
+    // twitch sideways on every keystroke.
+    const anchor = bodyGroup.children.length
+      ? new THREE.Box3().expandByObject(bodyGroup)
+      : box;
+    const center = anchor.getCenter(new THREE.Vector3());
     // Shift X and Y to center, but shift Z so the bottom of the model lands at 0.
-    root.position.set(-center.x, -center.y, -box.min.z);
+    root.position.set(-center.x, -center.y, -anchor.min.z);
 
     const size = box.getSize(new THREE.Vector3());
     bounds.copy(size);
@@ -288,7 +295,7 @@ export function createViewer(container: HTMLElement): Viewer {
     if (!switchGeometry || !switchMaterial) return;
     for (const p of switchPlacements) {
       const m = new THREE.Mesh(switchGeometry, switchMaterial);
-      m.position.set(p.x, p.y, 0);
+      m.position.set(p.x, p.y, p.z ?? 0);
       m.rotation.z = (p.rotation * Math.PI) / 180; // match the geometry's socket/stem rotation
       switchGroup.add(m);
     }

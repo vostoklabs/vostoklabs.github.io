@@ -21,10 +21,51 @@ export function parseSvg(svgText) {
     new THREE.Vector2(-Infinity, -Infinity)
   );
 
+  const isWhite = (color) => {
+    if (!color) return false;
+    const c = color.toLowerCase().replace(/\s/g, '');
+    return c === '#ffffff' || c === '#fff' || c === 'white' || c.startsWith('rgb(255,255,255)') || c.startsWith('rgba(255,255,255,');
+  };
+
+  let viewW = 0, viewH = 0;
+  if (data.xml) {
+    const vb = data.xml.getAttribute('viewBox');
+    if (vb) {
+      const p = vb.split(/[\s,]+/).map(Number);
+      if (p.length === 4) { viewW = p[2]; viewH = p[3]; }
+    } else {
+      viewW = parseFloat(data.xml.getAttribute('width')) || 0;
+      viewH = parseFloat(data.xml.getAttribute('height')) || 0;
+    }
+  }
+
   for (const path of data.paths) {
     const style = path.userData.style;
-    const hasFill   = style.fill   && style.fill   !== 'none';
-    const hasStroke = style.stroke && style.stroke !== 'none';
+    let hasFill   = style.fill   && style.fill   !== 'none';
+    let hasStroke = style.stroke && style.stroke !== 'none';
+
+    // Ignore white fills/strokes (often used as background or negative space in black-and-white SVGs).
+    // If extruded along with dark paths, they form a solid block.
+    if (hasFill && isWhite(style.fill)) hasFill = false;
+    if (hasStroke && isWhite(style.stroke)) hasStroke = false;
+
+    // Ignore rects that span the entire viewBox (background artboards)
+    const node = path.userData.node;
+    if (node && node.nodeName === 'rect') {
+      const wStr = node.getAttribute('width');
+      const hStr = node.getAttribute('height');
+      if (wStr === '100%' && hStr === '100%') {
+        hasFill = false;
+        hasStroke = false;
+      } else if (viewW && viewH) {
+        const w = parseFloat(wStr);
+        const h = parseFloat(hStr);
+        if (Math.abs(w - viewW) < 1 && Math.abs(h - viewH) < 1) {
+          hasFill = false;
+          hasStroke = false;
+        }
+      }
+    }
 
     // ── Filled paths ──────────────────────────────────────────────────────────
     if (hasFill) {

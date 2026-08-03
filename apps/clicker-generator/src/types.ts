@@ -67,6 +67,10 @@ export interface SwitchPlacement {
   x: number;
   y: number;
   rotation: number;
+  /** Seat height for the PREVIEW switch mesh (mm above the frame's Z 0). A clicker body
+   *  latches the switch at Z 0; a letter block keeps a slightly thicker plate around the
+   *  cut-out, so its switch (and its keycap) sit that much higher. Undefined = 0. */
+  z?: number;
 }
 
 /** Keychain attachment settings. */
@@ -143,7 +147,41 @@ export interface BuildParams {
   edgeSettings: EdgeSetting[];
   /** Global toggle: chamfer the top edge of every raised (extruded) color part. */
   extrudeChamfer: boolean;
+  // ---- Letter-block mode ----
+  /** Arrangement: a row, a column, or a grid that wraps at `blockColumns`. */
+  blockOrientation?: BlockOrientation;
+  /** Columns per row when the layout is 'grid'. */
+  blockColumns?: number;
+  /** Legend size multiplier on the keycap (1 = the default fit). */
+  legendScale?: number;
+  /** Outward offset applied to every legend outline, mm — the "boldness" control. */
+  legendBold?: number;
+  /** Which side of the block set the keyring loop hangs off (blocks mode). */
+  keychainEnd?: KeychainSide;
+  /** Per-part colour overrides (partName -> rgb), for parts the user recoloured one at a
+   *  time by clicking them in the viewport. The left-hand palette sets the whole group and
+   *  clears these. */
+  partOverrides?: Record<string, RGB>;
 }
+
+/** One cell of a block arrangement: a glyph, a Lucide symbol, or a deliberate hole (which
+ *  keeps its place in the grid so shapes like WASD are possible). */
+export type BlockSlot =
+  | { kind: 'char'; ch: string }
+  | { kind: 'icon'; name: string }
+  | { kind: 'empty' };
+
+/** 'grid' is implemented in the geometry (and covered by the headless tests) but is NOT
+ *  offered in the UI, because the current shells can't tile one cleanly:
+ *   • They are 0.34 mm wider than they are deep, and a grid puts neighbours 90° apart, so
+ *     every rotated joint pairs a wide face with a narrow one (0.17–0.34 mm of slop).
+ *   • A wall with no neighbour stays FULL, which is 0.875 mm thicker than a halved one —
+ *     so in a non-rectangular shape (an L, a WASD cluster) two diagonal blocks run their
+ *     full outer walls into each other's corner.
+ *  Both go away if the block CAD is made square; then this can be re-exposed as-is. */
+export type KeychainSide = 'left' | 'right' | 'top' | 'bottom';
+
+export type BlockOrientation = 'horizontal' | 'vertical' | 'grid';
 
 /** Mesh payload (transferable). First 3 of each `numProp` stride are x,y,z. */
 export interface MeshData {
@@ -175,11 +213,28 @@ export interface BuildRegion {
 
 // ---- Worker messages ----
 export type GeometryRequest =
-  | { type: 'init'; socket: ArrayBuffer; stem: ArrayBuffer; switch: ArrayBuffer }
+  | { 
+      type: 'init'; 
+      socket: ArrayBuffer; 
+      stem: ArrayBuffer; 
+      switch: ArrayBuffer;
+      blockNoSides?: ArrayBuffer;
+      blockSouth?: ArrayBuffer;
+      blockNorthSouth?: ArrayBuffer;
+      blockNorthWest?: ArrayBuffer;
+      blockNorthSouthWest?: ArrayBuffer;
+      blockAllSides?: ArrayBuffer;
+      keycapJson?: any;
+    }
   | {
       type: 'buildClicker';
       regions: BuildRegion[];
       outline: Ring[];
+      params: BuildParams;
+    }
+  | {
+      type: 'buildBlocks';
+      regions: BuildRegion[];
       params: BuildParams;
     };
 

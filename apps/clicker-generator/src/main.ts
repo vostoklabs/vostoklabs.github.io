@@ -12,7 +12,7 @@ import { downloadThreeMF } from './export/threemfExport';
 import { buildObjMtl, objToArrayBuffer } from './export/objExport';
 import { parseSvg } from './image/logo';
 import { SAMPLES, SVG_SAMPLES } from './image/sample';
-import { parseLetter, importFontFile } from './image/letter';
+import { parseLetter, parseBlockChain, importFontFile } from './image/letter';
 import { LUCIDE_ICONS, buildSvg } from './image/lucideIcons';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // SDK glue in the MakerWorld build (`--mode makerworld`) — see vite.config.ts.
@@ -25,6 +25,7 @@ import {
   sdkToast,
 } from 'virtual:makerlab';
 import type {
+  BlockSlot,
   BuildParams,
   BuildRegion,
   ClickerPart,
@@ -57,13 +58,26 @@ const assetsPromise = Promise.all([
   fetch(base + 'assets/switch/mx/mx-socket.3mf').then((r) => r.arrayBuffer()),
   fetch(base + 'assets/switch/mx/mx-stem.3mf').then((r) => r.arrayBuffer()),
   fetch(base + 'assets/switch/mx/mx-switch.3mf').then((r) => r.arrayBuffer()),
+  fetch(base + 'assets/blocks/block no sides to connect.3mf').then((r) => r.arrayBuffer()),
+  fetch(base + 'assets/blocks/block south side to connect.3mf').then((r) => r.arrayBuffer()),
+  fetch(base + 'assets/blocks/block north and south side to connect.3mf').then((r) => r.arrayBuffer()),
+  // Grid shells: a corner (two adjacent faces), an edge (three) and an interior (four).
+  fetch(base + 'assets/blocks/block north and west side to connect.3mf').then((r) => r.arrayBuffer()),
+  fetch(base + 'assets/blocks/block north, south and west side to connect.3mf').then((r) => r.arrayBuffer()),
+  fetch(base + 'assets/blocks/block all sides to connect.3mf').then((r) => r.arrayBuffer()),
+  fetch(base + 'assets/keycap.json').then((r) => r.json()),
 ]).catch((err) => {
   console.error('[assets] Pre-fetch failed:', err);
   throw err;
 });
 
 /** Which editable color a clicked model part maps back to. */
-type ColorTarget = { kind: 'region'; index: number; compIndex: number } | { kind: 'body' } | { kind: 'base' };
+type ColorTarget =
+  | { kind: 'region'; index: number; compIndex: number }
+  | { kind: 'body' }
+  | { kind: 'base' }
+  /** Exactly one named part — a single keycap or a single letter picked in the viewport. */
+  | { kind: 'part'; name: string };
 
 /** Symmetric default placement layout for 1..3 switches, spread across the cap width. */
 function defaultSwitchLayout(n: number, capWidthMm: number): SwitchPlacement[] {
@@ -112,6 +126,17 @@ const store = createStore<UiState>({
   ],
   extrudeChamfer: false,
   separateLetters: false,
+  // ---- Letter blocks ----
+  blockSlots: [
+    { kind: 'char', ch: 'N' },
+    { kind: 'char', ch: 'a' },
+    { kind: 'char', ch: 'm' },
+    { kind: 'char', ch: 'e' },
+  ],
+  blockOrientation: 'horizontal',
+  legendScale: 1,
+  legendBold: 0,
+  keychainEnd: 'left',
   extrudeHeight: null,
   componentHeights: {},
   selectedParts: [],
@@ -320,7 +345,7 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
               buffer: objToArrayBuffer(obj),
               mtl,
               coverImage,
-              description: 'Multi-color clicker — made with the Clicker Generator.',
+              description: 'Multi-color clicker, made with the Clicker Generator.',
             },
           ],
         });
@@ -361,18 +386,24 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
   onSaveProject: () => saveProject(),
   onLoadProject: (file) => loadProject(file),
   onBodyColor: (hex) => {
-    // Live recolor of the clicker body — no rebuild (geometry is unchanged).
-    const idx = latestParts.findIndex((p) => p.name === 'base-body');
+    // Live recolor of the clicker body — no rebuild (geometry is unchanged). A block
+    // chain has no 'base-body' part; its bodies are block-0…block-N, so match either.
+    const idx = latestParts.findIndex((p) => p.name === 'base-body' || /^block-\d+$/.test(p.name));
     if (idx >= 0) applyModelRecolor({ kind: 'body' }, hexToRgb(hex), idx);
     else store.set({ bodyColorRgb: hexToRgb(hex) });
   },
 
   onImportMode: (mode) => {
     const s = store.get();
+    pendingReframe = true;
     store.set({
       importMode: mode,
       baseShape: mode === 'text' ? 'outline' : s.baseShape,
       colorMode: mode !== 'image' ? 'normal' : s.colorMode,
+      // Part names differ per mode (blocks vs. one clicker), so a stale selection or a
+      // pinned frame colour from the previous mode would apply to the wrong thing.
+      selectedParts: [],
+      baseColorOverride: null,
     });
     reprocess();
   },
@@ -387,11 +418,13 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
     }
   },
   onSelectSvg: (svgText, name) => {
+    pendingReframe = true;
     currentSvgText = svgText;
     currentSvgName = name;
     reprocess(); // auto-build on selection — no Generate button
   },
   onSelectIcon: (svgText, name) => {
+    pendingReframe = true;
     currentIconText = svgText;
     currentIconName = name;
     store.set({ currentIconName: name });
@@ -400,6 +433,55 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
   onTextChange: (text) => {
     currentText = text;
     debouncedReprocess(); // live rebuild as you type
+  },
+  onBlockText: (text) => {
+    // The chain is the source of truth in Blocks mode: retype the LETTER chips from the
+    // box and leave the symbols where the user put them (clamped to the new length).
+    const slots = store.get().blockSlots;
+    const icons: { at: number; slot: BlockSlot }[] = [];
+    slots.forEach((slot, i) => {
+      if (slot.kind === 'icon') icons.push({ at: i, slot });
+    });
+    const next: BlockSlot[] = Array.from(text.replace(/\s+/g, '')).map(
+      (ch) => ({ kind: 'char', ch }) as BlockSlot,
+    );
+    for (const { at, slot } of icons) next.splice(Math.min(at, next.length), 0, slot);
+    store.set({ blockSlots: next });
+    debouncedReprocess();
+  },
+  onBlockSlots: (slots) => {
+    store.set({ blockSlots: slots });
+    debouncedReprocess();
+  },
+  onBlockOrientation: (o) => {
+    store.set({ blockOrientation: o });
+    debouncedRebuild();
+  },
+  onLegendScale: (v) => {
+    store.set({ legendScale: v });
+    debouncedQuietRebuild();
+  },
+  onLegendBold: (mm) => {
+    store.set({ legendBold: mm });
+    debouncedQuietRebuild();
+  },
+  onCapColor: (hex) => {
+    // The palette sets the WHOLE group: repaint every cap and drop any per-cap colours the
+    // user had picked in the viewport, so the menu is always the way back to uniform.
+    const rgb = hexToRgb(hex);
+    const overrides = { ...(store.get().partOverrides ?? {}) };
+    for (const k of Object.keys(overrides)) if (/^cap-\d+$/.test(k)) delete overrides[k];
+    store.set({ baseColorOverride: rgb, partOverrides: overrides });
+    latestParts.forEach((p, i) => {
+      if (p.name === 'top-base' || /^cap-\d+$/.test(p.name)) {
+        latestParts[i] = { ...latestParts[i], colorRgb: rgb };
+        viewer.setPartColor(i, rgb);
+      }
+    });
+  },
+  onKeychainEnd: (side) => {
+    store.set({ keychainEnd: side });
+    debouncedRebuild();
   },
   onFontSelect: (fontId) => {
     currentFontId = fontId;
@@ -509,6 +591,8 @@ let history: string[] = [];
 let histIndex = -1;
 let restoringHistory = false;
 let pendingHistoryReset = false;
+/** Set when the next build should re-frame the camera (new subject, not an edit). */
+let pendingReframe = true;
 
 function snapshotHistory(): string {
   const s = store.get() as any;
@@ -652,6 +736,15 @@ viewer.onPartPick((index, clientX, clientY, shiftKey) => {
 function partColorTarget(name: string): ColorTarget | null {
   if (name === 'base-body') return { kind: 'body' };
   if (name === 'top-base') return { kind: 'base' };
+  // Letter blocks: the left-hand palette sets a whole group (see onCapColor / onFilament),
+  // while clicking in the viewport is the way to customise ONE cap or ONE letter. The
+  // bodies are the exception — the blocks read as a single object, so any of them recolors
+  // the lot.
+  if (/^block-\d+$/.test(name)) return { kind: 'body' };
+  if (store.get().importMode === 'blocks') {
+    if (/^cap-\d+$/.test(name)) return { kind: 'part', name };
+    if (/^top-color-\d+-\d+$/.test(name)) return { kind: 'part', name };
+  }
   const m = /^top-color-(\d+)(?:-(\d+))?$/.exec(name);
   if (m) {
     return { kind: 'region', index: +m[1], compIndex: m[2] ? +m[2] : 0 };
@@ -671,10 +764,20 @@ function applyModelRecolor(target: ColorTarget, rgb: RGB, partIndex: number) {
     // one) and update the palette swatch + overrides, so clicking a color in the
     // viewport behaves like changing its filament in the left menu (whole model).
     const i = target.index;
+    // A block chain has one legend part per block (top-color-0-0, top-color-1-0, …). This
+    // path is only reached from the left-hand palette there, and the palette means "all
+    // of them" — so it also wipes any single letters that were recoloured by clicking.
+    const blocks = s.importMode === 'blocks';
     const prefix = `top-color-${i}-`;
+    const isTarget = blocks
+      ? (n: string) => /^top-color-\d+-\d+$/.test(n)
+      : (n: string) => n.startsWith(prefix);
     const overrides = s.partOverrides ? { ...s.partOverrides } : {};
+    if (blocks) {
+      for (const k of Object.keys(overrides)) if (isTarget(k)) delete overrides[k];
+    }
     latestParts.forEach((p, idx) => {
-      if (p.name.startsWith(prefix)) {
+      if (isTarget(p.name)) {
         viewer.setPartColor(idx, rgb);
         latestParts[idx] = { ...latestParts[idx], colorRgb: rgb };
         overrides[p.name] = rgb;
@@ -686,14 +789,25 @@ function applyModelRecolor(target: ColorTarget, rgb: RGB, partIndex: number) {
     paletteOverrides[i] = rgb;
     store.set({ partOverrides: overrides, palette, paletteOverrides });
     syncBaseColor(); // the cap frame mirrors the dominant region, keep it in step
-  } else if (target.kind === 'body') {
+  } else if (target.kind === 'part') {
+    // One part only. Recorded in partOverrides so it survives the next rebuild.
     viewer.setPartColor(partIndex, rgb);
     if (latestParts[partIndex]) latestParts[partIndex] = { ...latestParts[partIndex], colorRgb: rgb };
-    store.set({ bodyColorRgb: rgb });
+    store.set({ partOverrides: { ...(s.partOverrides ?? {}), [target.name]: rgb } });
   } else {
-    viewer.setPartColor(partIndex, rgb);
-    if (latestParts[partIndex]) latestParts[partIndex] = { ...latestParts[partIndex], colorRgb: rgb };
-    store.set({ baseColorOverride: rgb });
+    // Body / cap colours are model-wide. A block chain has one mesh per block and one per
+    // cap, so repaint every member of the group — not just the one that was clicked.
+    const isMember =
+      target.kind === 'body'
+        ? (n: string) => n === 'base-body' || /^block-\d+$/.test(n)
+        : (n: string) => n === 'top-base' || /^cap-\d+$/.test(n);
+    latestParts.forEach((p, i) => {
+      if (i === partIndex || isMember(p.name)) {
+        latestParts[i] = { ...latestParts[i], colorRgb: rgb };
+        viewer.setPartColor(i, rgb);
+      }
+    });
+    store.set(target.kind === 'body' ? { bodyColorRgb: rgb } : { baseColorOverride: rgb });
   }
 }
 
@@ -725,6 +839,9 @@ function dominantInk(s: UiState): RGB {
 // its own backing (the "svg comes out one color" bug), so we pick a contrasting frame
 // instead. The design then reads clearly without any manual recolor.
 function deriveFrameColor(s: UiState): RGB {
+  // Blocks: the keycap is its own filament the user picks, not a backing derived from the
+  // artwork — deriving it would flip the caps light/dark every time the legend changed.
+  if (s.importMode === 'blocks') return s.baseColorOverride ?? LIGHT_FRAME;
   const ink = dominantInk(s);
   return s.importMode === 'image' ? ink : contrastingFrame(ink);
 }
@@ -733,13 +850,17 @@ function deriveFrameColor(s: UiState): RGB {
 // rebuild — so it never lags a frame behind the inlay it shares a color with.
 function syncBaseColor() {
   const s = store.get();
+  // Blocks keep an independent cap colour — never mirror the legend into it.
+  if (s.importMode === 'blocks') return;
   if (s.baseColorOverride || s.palette.length === 0) return;
   const baseRgb = deriveFrameColor(s);
-  const bi = latestParts.findIndex((p) => p.name === 'top-base');
-  if (bi >= 0) {
-    latestParts[bi] = { ...latestParts[bi], colorRgb: baseRgb };
-    viewer.setPartColor(bi, baseRgb);
-  }
+  latestParts.forEach((p, i) => {
+    // 'top-base' is the single clicker cap; 'cap-N' are the keycaps of a block chain.
+    if (p.name === 'top-base' || /^cap-\d+$/.test(p.name)) {
+      latestParts[i] = { ...latestParts[i], colorRgb: baseRgb };
+      viewer.setPartColor(i, baseRgb);
+    }
+  });
 }
 
 // Seed the SVG panel with bundled vector presets (added quietly, not selected).
@@ -790,7 +911,11 @@ worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
       break;
     case 'parts': {
       latestParts = msg.parts;
-      viewer.setParts(msg.parts, !pendingHistoryReset);
+      // Re-frame the camera only when the SUBJECT changed (a new image, icon, SVG, or a
+      // different import mode). Editing what is already on screen — the text, the font,
+      // the legend size — must leave the view exactly where the user put it.
+      viewer.setParts(msg.parts, !pendingReframe);
+      pendingReframe = false;
       viewer.setView(store.get().view);
       // Seat one preview switch per (clamped) placement the geometry was built around.
       viewer.setSwitchPlacements(msg.switchPlacements ?? []);
@@ -828,8 +953,18 @@ worker.onerror = (e) => {
 
 async function initAssets() {
   try {
-    const [socket, stem, sw] = await assetsPromise;
-    worker.postMessage({ type: 'init', socket, stem, switch: sw }, [socket, stem, sw]);
+    const [socket, stem, sw, blockNoSides, blockSouth, blockNorthSouth,
+           blockNorthWest, blockNorthSouthWest, blockAllSides, keycapJson] = await assetsPromise;
+    worker.postMessage(
+      {
+        type: 'init', socket, stem, switch: sw,
+        blockNoSides, blockSouth, blockNorthSouth,
+        blockNorthWest, blockNorthSouthWest, blockAllSides,
+        keycapJson,
+      },
+      [socket, stem, sw, blockNoSides, blockSouth, blockNorthSouth,
+       blockNorthWest, blockNorthSouthWest, blockAllSides]
+    );
   } catch (err) {
     store.set({ status: 'Failed to load switch assets: ' + String(err) });
     isInitialLoad = false;
@@ -872,6 +1007,7 @@ async function loadDefaultClicker() {
 // ---- Pipeline ----
 async function openWizard(getter: () => Promise<RgbaImage>) {
   try {
+    pendingReframe = true; // a new picture is a new subject, so frame it
     store.set({ building: true, status: 'Reading image…' });
     const baseImage = await getter();
     store.set({ building: false, status: 'Preprocess your image…' });
@@ -908,9 +1044,11 @@ async function openWizard(getter: () => Promise<RgbaImage>) {
 
 function reprocess() {
   // A fresh trace means fresh regions, so start a new undo baseline and drop any
-  // pinned frame color so it re-derives.
+  // pinned frame color so it re-derives. Blocks are the exception: their three colours
+  // (bodies / caps / legends) are chosen deliberately and must survive editing the chain
+  // — otherwise adding a symbol repaints the caps out from under you.
   pendingHistoryReset = true;
-  store.set({ baseColorOverride: null });
+  if (store.get().importMode !== 'blocks') store.set({ baseColorOverride: null });
   const s = store.get();
 
   if (s.importMode === 'image') {
@@ -953,6 +1091,14 @@ function reprocess() {
       store.set({ building: false, status: 'Error: ' + e.message });
       return;
     }
+  } else if (s.importMode === 'blocks') {
+    try {
+      store.set({ building: true, status: 'Generating blocks…' });
+      regionSet = parseBlockChain(s.blockSlots, currentFontId);
+    } catch (e: any) {
+      store.set({ building: false, status: 'Error: ' + e.message });
+      return;
+    }
   } else if (s.importMode === 'text') {
     try {
       store.set({ building: true, status: 'Generating Text…' });
@@ -965,11 +1111,22 @@ function reprocess() {
 
   if (!regionSet) return;
 
-  const palette: PaletteEntry[] = regionSet.regions.map((r, i) => ({
-    quantRgb: r.quantRgb,
-    filamentRgb: s.paletteOverrides[i] ?? r.quantRgb,
-    coverage: r.coverage,
-  }));
+  // Blocks print in three filaments (blocks / caps / legends), so every letter shares one
+  // palette entry instead of getting a swatch of its own.
+  const palette: PaletteEntry[] =
+    s.importMode === 'blocks'
+      ? [
+          {
+            quantRgb: regionSet.regions[0]?.quantRgb ?? ([247, 247, 245] as RGB),
+            filamentRgb: s.paletteOverrides[0] ?? regionSet.regions[0]?.quantRgb ?? ([247, 247, 245] as RGB),
+            coverage: 1,
+          },
+        ]
+      : regionSet.regions.map((r, i) => ({
+          quantRgb: r.quantRgb,
+          filamentRgb: s.paletteOverrides[i] ?? r.quantRgb,
+          coverage: r.coverage,
+        }));
   store.set({ palette });
 
   if (palette.length === 0) {
@@ -987,9 +1144,11 @@ function rebuild(quiet = false) {
   }
   const s = store.get();
 
+  const blocksMode = s.importMode === 'blocks';
   const regions: BuildRegion[] = [];
   regionSet.regions.forEach((r, i) => {
-    const baseColor = s.palette[i]?.filamentRgb ?? r.quantRgb;
+    // Every legend in a block chain shares palette slot 0 (one filament for all letters).
+    const baseColor = (blocksMode ? s.palette[0] : s.palette[i])?.filamentRgb ?? r.quantRgb;
     r.components.forEach((comp, j) => {
       const partName = `top-color-${i}-${j}`;
       regions.push({
@@ -1010,7 +1169,8 @@ function rebuild(quiet = false) {
   // deriveFrameColor). A frame the user pinned by clicking the model wins over it.
   const capBaseColor: RGB = s.baseColorOverride ?? deriveFrameColor(s);
 
-  const isText = s.importMode === 'text';
+  const isBlocks = blocksMode;
+  const isText = s.importMode === 'text' || isBlocks;
   const params: BuildParams = {
     baseShape: effectiveBaseShape,
     capWidthMm: s.capWidthMm,
@@ -1032,6 +1192,11 @@ function rebuild(quiet = false) {
     edgeSettings: s.edgeSettings,
     extrudeChamfer: s.extrudeChamfer,
     componentHeights: s.componentHeights,
+    blockOrientation: s.blockOrientation,
+    legendScale: s.legendScale,
+    legendBold: s.legendBold,
+    keychainEnd: s.keychainEnd,
+    partOverrides: s.partOverrides,
   };
 
   if (quiet) {
@@ -1041,7 +1206,11 @@ function rebuild(quiet = false) {
   } else {
     store.set({ building: true, status: 'Building clicker…' });
   }
-  worker.postMessage({ type: 'buildClicker', regions, outline: regionSet.outline, params });
+  if (isBlocks) {
+    worker.postMessage({ type: 'buildBlocks', regions, params });
+  } else {
+    worker.postMessage({ type: 'buildClicker', regions, outline: regionSet.outline, params });
+  }
 }
 
 // ---- Debounce ----
