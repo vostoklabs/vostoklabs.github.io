@@ -41,7 +41,7 @@ export interface PaletteEntry {
   coverage: number; // fraction of foreground pixels
 }
 
-export type BaseShapeKind = 'outline' | 'circle' | 'square' | 'hexagon' | 'heart' | 'star' | 'egg';
+export type BaseShapeKind = 'outline' | 'circle' | 'square' | 'rect' | 'hexagon' | 'heart' | 'star' | 'egg';
 export type ViewMode = 'assembled' | 'exploded' | 'section';
 
 /** Which interaction mode the viewport is in. */
@@ -130,6 +130,10 @@ export interface BuildParams {
    *  switch: +looser (opens the cross socket, easier to press on), −tighter. 0 = as
    *  authored. Only the XY footprint scales — Z is kept so the cap rest height is fixed. */
   stemTolerance: number;
+  /** Nudge (mm) of the design within a preset base shape. The shape grows to keep
+   *  containing it, so the artwork can sit off-centre (a heart reads better with its
+   *  design a little high). Ignored when the base follows the outline. */
+  imageOffset: { x: number; y: number };
   colorBleed: number; // tiny outward grow on each color so neighbors never leave a gap
   stepHeight: number; // mm per height level for raised color relief
   travel: number; // switch press travel the well must clear (~3.5–4 mm)

@@ -117,6 +117,7 @@ const store = createStore<UiState>({
   bodyColorRgb: [240, 240, 240] as RGB,
   paletteOverrides: [],
   baseColorOverride: null,
+  imageOffset: { x: 0, y: 0 },
   partOverrides: {},
   editMode: 'color',
   edgeSettings: [
@@ -565,6 +566,23 @@ const ui = createUi(sidebarLeft, sidebarRight, statusEl, {
     // and all extruded parts pick up the chamfer (buildClicker applies it per part).
     store.set({ extrudeChamfer: on });
     debouncedQuietRebuild();
+  },
+  onImageNudge: (dx, dy) => {
+    // Clamped to a sane range: past this the base shape has grown so much that the design
+    // is a speck in the corner, which is never what someone wants.
+    const o = store.get().imageOffset;
+    const lim = 25;
+    store.set({
+      imageOffset: {
+        x: Math.round(Math.min(lim, Math.max(-lim, o.x + dx)) * 10) / 10,
+        y: Math.round(Math.min(lim, Math.max(-lim, o.y + dy)) * 10) / 10,
+      },
+    });
+    debouncedRebuild();
+  },
+  onImageNudgeReset: () => {
+    store.set({ imageOffset: { x: 0, y: 0 } });
+    debouncedRebuild();
   },
   onSeparateLetters: (on) => {
     // Text only: re-trace the word so letters are either merged into one element (off)
@@ -1181,6 +1199,7 @@ function rebuild(quiet = false) {
     capProud: 4.0,
     tolerance: s.tolerance,
     stemTolerance: s.stemTolerance,
+    imageOffset: s.imageOffset,
     colorBleed: 0.12,
     stepHeight: 0.6,
     travel: 4.0,
@@ -1363,6 +1382,7 @@ function saveProject() {
       imageDepth: s.imageDepth,
       tolerance: s.tolerance,
       stemTolerance: s.stemTolerance,
+      imageOffset: s.imageOffset,
       switches: s.switches,
       keychain: s.keychain,
       smoothing: s.smoothing,
@@ -1413,6 +1433,7 @@ async function loadProject(file: File) {
       importMode: set.importMode ?? 'image',
       colorCount: set.colorCount ?? store.get().colorCount,
       baseShape: set.baseShape ?? store.get().baseShape,
+      imageOffset: set.imageOffset ?? { x: 0, y: 0 },
       capWidthMm: set.capWidthMm ?? store.get().capWidthMm,
       topThickness: set.topThickness ?? store.get().topThickness,
       imageDepth: set.imageDepth ?? store.get().imageDepth,

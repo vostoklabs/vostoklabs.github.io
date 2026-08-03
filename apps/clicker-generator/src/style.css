@@ -1958,6 +1958,17 @@ button.fil-chip:active {
   justify-content: center;
   margin: 0 auto;
 }
+/* Move-the-design pad: same keys, no rotation row, so it is one cell shorter. */
+.switch-pad.nudge-pad {
+  grid-template-rows: repeat(3, 40px);
+  grid-template-columns: repeat(3, 40px);
+  grid-template-areas:
+    ".    up    ."
+    "left ctr  right"
+    ".    down  .";
+}
+.nudge-pad .switch-pad-btn svg { width: 20px; height: 20px; }
+
 .switch-pad-btn,
 .switch-pad-center {
   display: flex;

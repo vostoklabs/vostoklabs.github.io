@@ -105,6 +105,17 @@ export function buildClicker(
   const scaleRings = (rings: Ring[]): Ring[] =>
     rings.map((r) => r.map(([x, y]) => [x * sR, y * sR] as [number, number]));
 
+  // Nudging the design only means something on a PRESET base — when the base follows the
+  // outline, the shape and the artwork are the same thing and moving one moves both.
+  const offX = isOutline ? 0 : (params.imageOffset?.x ?? 0);
+  const offY = isOutline ? 0 : (params.imageOffset?.y ?? 0);
+  /** Scaled rings, moved by the design nudge. Used for the ARTWORK only; the silhouette
+   *  that drives an outline base is left where it is. */
+  const placeRings = (rings: Ring[]): Ring[] =>
+    offX === 0 && offY === 0
+      ? scaleRings(rings)
+      : rings.map((r) => r.map(([x, y]) => [x * sR + offX, y * sR + offY] as [number, number]));
+
   const removeHoles = (cs: Section): Section => {
     if (sectionIsEmpty(cs)) return cs;
     
@@ -286,9 +297,13 @@ export function buildClicker(
     // a circumscribing radius (which clips the image on concave shapes like the star
     // or heart), we scale the shape up just enough that the whole image PLUS the
     // border frame fits inside it.
+    // A rectangle only makes sense if it has proportions, so it takes them from the
+    // artwork: a wide logo gets a wide plate instead of a square one with big empty sides.
+    const rectAspect = Math.min(3, Math.max(0.34, imgH > 0.01 ? imgW / imgH : 1));
     const genShape = (rr: number): Section => {
       switch (params.baseShape) {
         case 'square': return roundedRect(2 * rr, 2 * rr, 2 * rr * 0.22);
+        case 'rect': return roundedRect(2 * rr * rectAspect, 2 * rr, 2 * rr * 0.22);
         case 'hexagon': return makeHexagon(rr);
         case 'heart': return makeHeart(rr);
         case 'star': return makeStar(rr);
@@ -303,7 +318,14 @@ export function buildClicker(
     const halfH = Math.max(imgH / 2 + border, minCap / 2);
     const unit = genShape(1); // test the image rect against the r = 1 shape
     const fits = (k: number): boolean => {
-      const rect = track(CrossSection.square([(2 * halfW) / k, (2 * halfH) / k], true));
+      // The rect sits where the design sits, so a nudged design grows the shape just
+      // enough to keep covering it instead of spilling over the frame.
+      const rect = track(
+        track(CrossSection.square([(2 * halfW) / k, (2 * halfH) / k], true)).translate([
+          offX / k,
+          offY / k,
+        ]),
+      );
       const outside = track(rect.subtract(unit));
       return sectionIsEmpty(outside);
     };
@@ -513,7 +535,7 @@ export function buildClicker(
   const holesByLevel = new Map<number, Section>();
 
   for (const { r } of ordered) {
-    const validRings = scaleRings(r.rings).filter(ring => ring.length >= 3 && getRingArea(ring) > 0.001);
+    const validRings = placeRings(r.rings).filter(ring => ring.length >= 3 && getRingArea(ring) > 0.001);
     if (validRings.length === 0) continue;
     let cs: Section = simp(track(new CrossSection(validRings, 'NonZero')), 0.03);
     if (params.colorBleed > 0.001) cs = grow(cs, params.colorBleed);

@@ -48,6 +48,8 @@ export interface UiState {
   paletteOverrides: RGB[];
   /** Explicit cap-backing/frame color set by clicking it on the model (else derived). */
   baseColorOverride: RGB | null;
+  /** Nudge of the design within a preset base shape, mm. */
+  imageOffset: { x: number; y: number };
   /** Component-specific overrides (key: 'top-color-{colorIndex}-{compIndex}') */
   partOverrides: Record<string, RGB>;
   /** Current edit mode for the 3D viewport. */
@@ -142,6 +144,9 @@ export interface UiCallbacks {
   onExtrudeChamfer(on: boolean): void;
   /** Text mode: toggle splitting the word into per-letter parts. */
   onSeparateLetters(on: boolean): void;
+  /** Slide the design inside a preset base shape by dx/dy mm. */
+  onImageNudge(dx: number, dy: number): void;
+  onImageNudgeReset(): void;
   // ---- Letter blocks ----
   /** The whole chain changed (a chip was added or removed). */
   onBlockSlots(slots: BlockSlot[]): void;
@@ -300,6 +305,7 @@ export function createUi(
         <select id="shapeSelect">
           <option value="circle">Circle</option>
           <option value="square">Square</option>
+          <option value="rect">Rectangle</option>
           <option value="hexagon">Hexagon</option>
           <option value="heart">Heart</option>
           <option value="star">Star</option>
@@ -312,6 +318,27 @@ export function createUi(
           <input type="text" class="val" id="widthVal" />
         </div>
         <input type="range" id="width" min="20" max="70" step="1" />
+      </div>
+      <div class="field" id="imageNudgeField" style="display:none;">
+        <label>Move design ${tip('Slide the artwork around inside the base shape. The shape grows to keep covering it, so you can sit a design high in a heart or off to one side without it spilling over the frame.')}</label>
+        <div class="switch-pad nudge-pad" id="imageNudgePad">
+          <button type="button" class="switch-pad-btn pad-up" data-nudge="up" aria-label="Move design up">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+          </button>
+          <button type="button" class="switch-pad-btn pad-left" data-nudge="left" aria-label="Move design left">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+          </button>
+          <button type="button" class="switch-pad-center" id="imageNudgeReset" aria-label="Re-centre the design" title="Re-centre">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          </button>
+          <button type="button" class="switch-pad-btn pad-right" data-nudge="right" aria-label="Move design right">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </button>
+          <button type="button" class="switch-pad-btn pad-down" data-nudge="down" aria-label="Move design down">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+          </button>
+        </div>
+        <div class="switch-pad-readout" id="imageNudgeReadout">Centered</div>
       </div>
     </div>
 
@@ -1365,6 +1392,20 @@ export function createUi(
   });
   $('switchReset').addEventListener('click', () => cb.onSwitchReset());
 
+  // --- Move the design inside a preset base shape ---
+  const NUDGE_STEP = 0.5; // mm per press
+  $('imageNudgePad').addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-nudge]') as HTMLElement | null;
+    if (!btn) return;
+    switch (btn.dataset.nudge) {
+      case 'up': cb.onImageNudge(0, NUDGE_STEP); break;
+      case 'down': cb.onImageNudge(0, -NUDGE_STEP); break;
+      case 'left': cb.onImageNudge(-NUDGE_STEP, 0); break;
+      case 'right': cb.onImageNudge(NUDGE_STEP, 0); break;
+    }
+  });
+  $('imageNudgeReset').addEventListener('click', () => cb.onImageNudgeReset());
+
   // --- Switch count + active-switch chips + reset-all ---
   $('switchCount').addEventListener('click', (e) => {
     const t = (e.target as HTMLElement).closest('[data-count]') as HTMLElement | null;
@@ -2211,6 +2252,16 @@ export function createUi(
     if (outlineTab) outlineTab.style.display = state.importMode === 'icon' ? 'none' : '';
     const treatAsOutline = state.baseShape === 'outline' && state.importMode !== 'icon';
     $('shapeSelectField').style.display = treatAsOutline ? 'none' : 'block';
+    // Moving the design only applies to a preset shape: on an outline base the shape IS
+    // the design, so there is nothing to move it against.
+    const showNudge = !treatAsOutline && !isBlockMode;
+    $('imageNudgeField').style.display = showNudge ? '' : 'none';
+    if (showNudge) {
+      const { x, y } = state.imageOffset;
+      const signed = (v: number) => (v > 0 ? '+' : '') + v.toFixed(1);
+      $('imageNudgeReadout').textContent =
+        x === 0 && y === 0 ? 'Centered' : `${signed(x)}, ${signed(y)} mm`;
+    }
 
     // Blocks mode: the block shells are fixed CAD parts, so everything that shapes a
     // free-form clicker body (base style, size, keychain angle, backing thickness, legend
