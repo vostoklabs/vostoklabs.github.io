@@ -64,6 +64,12 @@ jobs:
           cp -r apps/keycap-generator/dist apps/hub/dist/SVG-keycap-generator
           cp -r apps/keycap-generator/dist apps/hub/dist/keycap
 
+      - name: Build Magnet Generator
+        run: pnpm build:magnet
+
+      - name: Copy Magnet Generator to Hub Dist
+        run: cp -r apps/magnet-generator/dist apps/hub/dist/magnet
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

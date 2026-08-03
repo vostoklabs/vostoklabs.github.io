@@ -79,11 +79,34 @@ export function buildThreeMF(parts: MagnetPart[]): Uint8Array {
     .map((p, i) => `<object id="${i + 2}" type="model" pid="1" pindex="${i}">${meshXml(p, minZ)}</object>`)
     .join('');
 
-  const firstWrapperId = parts.length + 2;
-  const comps = parts.map((_, i) => `<component objectid="${i + 2}"/>`).join('');
-  const wrapperObject = `<object id="${firstWrapperId}" type="model"><components>${comps}</components></object>`;
+  // One wrapper object per part GROUP. A fridge magnet is a single group, so
+  // this is the usual "one object, N parts". A slider is two separate physical
+  // pieces — fusing them into one object would leave the slicer unable to move
+  // or duplicate either half on its own.
+  const groups: { name: string; indices: number[] }[] = [];
+  const byGroup = new Map<string, number>();
+  parts.forEach((p, i) => {
+    let g = byGroup.get(p.group);
+    if (g === undefined) {
+      g = groups.length;
+      byGroup.set(p.group, g);
+      groups.push({ name: p.group === 'slider-mirror' ? 'slider-piece-2' : 'magnet', indices: [] });
+    }
+    groups[g].indices.push(i);
+  });
+  if (groups.length > 1) groups[0].name = 'slider-piece-1';
 
-  const buildItems = `<item objectid="${firstWrapperId}"/>`;
+  const wrapperIdFor = (g: number) => parts.length + 2 + g;
+  const wrapperObjects = groups
+    .map(
+      (g, i) =>
+        `<object id="${wrapperIdFor(i)}" type="model"><components>` +
+        g.indices.map((pi) => `<component objectid="${pi + 2}"/>`).join('') +
+        `</components></object>`,
+    )
+    .join('');
+
+  const buildItems = groups.map((_, i) => `<item objectid="${wrapperIdFor(i)}"/>`).join('');
 
   // Provenance / license identity. Well-known 3MF Core metadata names are shown
   // by Bambu Studio / Orca / Prusa; the vl:* names are namespaced per spec.
@@ -110,27 +133,33 @@ export function buildThreeMF(parts: MagnetPart[]): Uint8Array {
     `<resources>` +
     `<basematerials id="1">${baseMaterials}</basematerials>` +
     leafObjects +
-    wrapperObject +
+    wrapperObjects +
     `</resources>` +
     `<build>${buildItems}</build>` +
     `</model>`;
 
-  const partsCfg = parts
-    .map((p, i) =>
-      `<part id="${i + 2}" subtype="normal_part">` +
-      `<metadata key="name" value="${p.name}"/>` +
-      `<metadata key="extruder" value="${extruders[i]}"/>` +
-      `</part>`,
+  const objectsCfg = groups
+    .map(
+      (g, i) =>
+        `<object id="${wrapperIdFor(i)}">` +
+        `<metadata key="name" value="${esc(g.name)}"/>` +
+        `<metadata key="extruder" value="1"/>` +
+        g.indices
+          .map(
+            (pi) =>
+              `<part id="${pi + 2}" subtype="normal_part">` +
+              `<metadata key="name" value="${esc(parts[pi].name)}"/>` +
+              `<metadata key="extruder" value="${extruders[pi]}"/>` +
+              `</part>`,
+          )
+          .join('') +
+        `</object>`,
     )
     .join('');
   const modelSettings =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<config>` +
-    `<object id="${firstWrapperId}">` +
-    `<metadata key="name" value="magnet"/>` +
-    `<metadata key="extruder" value="1"/>` +
-    partsCfg +
-    `</object>` +
+    objectsCfg +
     `</config>`;
 
   const contentTypes =

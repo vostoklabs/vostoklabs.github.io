@@ -218,17 +218,20 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
     const askSliderLayout = () => {
       let picked = false;
       const layoutDialog = dialog({
-        title: 'How many magnets per side?',
+        title: 'How many magnets per half?',
         content: el('div', { className: 'mg-wizard' }, [
           el('p', {
             className: 'vl-hint',
-            text: 'Magnets are placed in a dice pattern. Pick 4 (corners) or 6 (two columns of three).',
+            text:
+              'Each half gets two columns of magnets running along the slide axis. ' +
+              'Every extra row is one more click you feel. Next you pick which magnet you own — ' +
+              'small discs work best, and ⌀6 × 3 mm is the classic. The body is sized to fit automatically.',
           }),
           el('div', { className: 'mg-wizard-options' }, [
             choiceCard(
               DICE4_ICON,
-              '4 magnets',
-              'Placed at the four corners — like a 4 on a die.',
+              '4 magnets · 2×2',
+              'The compact one. Short travel, a single firm click.',
               () => {
                 picked = true;
                 layoutDialog.close();
@@ -237,12 +240,22 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
             ),
             choiceCard(
               DICE6_ICON,
-              '6 magnets',
-              'Two columns of three — like a 6 on a die.',
+              '6 magnets · 2×3',
+              'The usual choice. Two clicks across a comfortable travel.',
               () => {
                 picked = true;
                 layoutDialog.close();
                 askSize('glue-on', 'slider', 6);
+              },
+            ),
+            choiceCard(
+              DICE6_ICON,
+              '8 magnets · 2×4',
+              'The long one. Three clicks and the strongest hold.',
+              () => {
+                picked = true;
+                layoutDialog.close();
+                askSize('glue-on', 'slider', 8);
               },
             ),
           ]),

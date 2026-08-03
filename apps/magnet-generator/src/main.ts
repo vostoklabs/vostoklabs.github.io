@@ -53,7 +53,7 @@ import type {
 
 /** What clicking on the model does. */
 type EditMode = 'color' | 'extrude' | 'magnet';
-import { FILAMENTS, MAGNET_PRESETS } from './types';
+import { FILAMENTS, MAGNET_PRESETS, sliderGridSpec, sliderMinBodySizeFor } from './types';
 
 const IMG_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
@@ -87,6 +87,14 @@ interface Settings {
   /** `userSet` marks a colour the user deliberately chose, so it survives a
    *  re-trace while an auto-detected one is refreshed from the new image. */
   palette: { quantRgb: RGB; filamentRgb: RGB; level: number; userSet?: boolean }[];
+  /** Per-shape colour overrides, keyed by part name (`inlay-<region>-<part>`).
+   *
+   *  A palette row is one *quantised colour*, and one quantised colour is
+   *  usually several disconnected shapes — the dog's face and its ear shadows
+   *  land in the same bucket. Recolouring from the sidebar should still move all
+   *  of them, but clicking one shape on the model should move only that shape,
+   *  so a click writes an override here instead of into the palette. */
+  componentColors: Record<string, RGB>;
   baseShape: BaseShapeKind;
   fitSizeMm: number;
   thickness: number;
@@ -119,7 +127,13 @@ interface Settings {
   productType: ProductType;
   sliderLayout: SliderLayout;
   sliderMirrorBlank: boolean;
+  /** Extra plastic between slider pockets, on top of the 2 mm minimum, mm. */
+  sliderGap: number;
 }
+
+/** A fidget slider is a pocket toy, not a fridge magnet — 70 mm is a coaster.
+ *  55 mm holds 8 ⌀6×3 magnets per half with the default spacing. */
+const SLIDER_DEFAULT_SIZE = 55;
 
 const DEFAULT_SETTINGS: Settings = {
   sourceName: '',
@@ -127,6 +141,7 @@ const DEFAULT_SETTINGS: Settings = {
   smoothing: 0.5,
   removeBg: true,
   palette: [],
+  componentColors: {},
   baseShape: 'outline',
   fitSizeMm: 70,
   thickness: 3,
@@ -149,13 +164,18 @@ const DEFAULT_SETTINGS: Settings = {
   backWall: 0.8,
   sheetHelperEnabled: false,
   magnetCount: 1,
-  pocketFit: 0.4,
+  // Added to the magnet's DIAMETER, not its radius: a ⌀6 magnet gets a ⌀6.2
+  // socket. 0.2 mm is a press fit on a well-tuned printer.
+  pocketFit: 0.2,
   pocketProfile: 'round',
   magnetPlacement: 'auto',
   magnets: [],
   productType: 'magnet',
-  sliderLayout: 4,
+  sliderLayout: 6,
   sliderMirrorBlank: false,
+  // Packed at the 2 mm printable minimum the pockets read as one solid block.
+  // 3 mm of plastic between them is what makes the array look deliberate.
+  sliderGap: 3,
 };
 
 const store = createStore<{
@@ -228,9 +248,14 @@ function minThickness(v: Settings): number {
  *  height raises the body with it rather than cutting a pocket that can't hold it. */
 function enforceFit(v: Settings): Settings {
   let out = v;
-  const min = minThickness(v);
+  // A slider is two magnet arrays facing each other — "magnetic sheet" has no
+  // meaning here, so a slider always carries real pockets.
+  if (out.productType === 'slider' && out.magnetMode === 'none') {
+    out = { ...out, magnetMode: 'glue-on' };
+  }
+  const min = minThickness(out);
   if (out.thickness < min) out = { ...out, thickness: min };
-  // Slider mode: body must be large enough to fit the dice pattern.
+  // Slider mode: the body must be long enough to hold the whole magnet array.
   if (out.productType === 'slider') {
     const minSize = sliderMinBodySize(out);
     if (out.fitSizeMm < minSize) out = { ...out, fitSizeMm: Math.ceil(minSize) };
@@ -238,20 +263,126 @@ function enforceFit(v: Settings): Settings {
   return out;
 }
 
-/** Minimum body longest-side to fit a slider's dice-pattern magnets. */
+/** The slider's magnet array for the current settings. Same function the
+ *  geometry uses, so the size floor the UI enforces is exactly the size the
+ *  builder needs — they used to compute it two different ways, and the UI's
+ *  answer was 0.4 mm short of the builder's, so no pocket was ever cut. */
+function sliderGrid(v: Settings) {
+  return sliderGridSpec({
+    layout: v.sliderLayout,
+    magnetShape: v.magnetShape,
+    magnetDiameter: v.magnetDiameter,
+    magnetX: v.magnetX,
+    magnetY: v.magnetY,
+    pocketFit: v.pocketFit,
+    gap: v.sliderGap,
+  });
+}
+
+/** Minimum body longest-side to fit a slider's magnet array in the chosen shape. */
 function sliderMinBodySize(v: Settings): number {
-  const POCKET_WALL = 2.0;
-  const magnetDim = v.magnetShape === 'disc'
-    ? v.magnetDiameter
-    : Math.max(v.magnetX, v.magnetY);
-  const effectiveDim = magnetDim + Math.max(0, v.pocketFit);
-  const spacing = effectiveDim + POCKET_WALL;
-  if (v.sliderLayout === 4) {
-    // 2×2: spacing + one magnet + 2× edge wall
-    return spacing + effectiveDim + 2 * POCKET_WALL;
+  return sliderMinBodySizeFor(v.baseShape, v.cornerRadius, sliderGrid(v));
+}
+
+/** The settings a slider needs regardless of how you got here. */
+function sliderDefaults(v: Settings): Settings {
+  return {
+    ...v,
+    productType: 'slider',
+    // Magnetic sheet has no meaning for a slider — it needs real pockets.
+    magnetMode: v.magnetMode === 'none' ? 'glue-on' : v.magnetMode,
+    magnetCount: v.sliderLayout,
+    magnetPlacement: 'auto',
+  };
+}
+
+/** Switching to a slider is the one moment the app already knows the design
+ *  probably can't hold a magnet array — an image outline is rarely a rectangle,
+ *  and a fridge magnet's size is set for a fridge. Rather than flip the product
+ *  and immediately throw a warning, offer the two fixes and let the user pick. */
+function switchToSlider() {
+  const base = sliderDefaults(s());
+  const minSize = sliderMinBodySize(base);
+  const target = Math.max(SLIDER_DEFAULT_SIZE, Math.ceil(minSize));
+  const isOutline = base.baseShape === 'outline';
+  const tooSmall = base.fitSizeMm < minSize;
+
+  // Picking an action closes the dialog, which fires onClose — so onClose must
+  // only supply the "changed nothing" default when no action ran. Same latch
+  // shape the wizard uses for its escape hatch.
+  let chosen = false;
+  const apply = (extra: Partial<Settings>) => {
+    patch({ ...base, ...extra });
+    rebuildSections();
+  };
+
+  if (!isOutline && !tooSmall) {
+    apply({});
+    return;
   }
-  // 2×3: height is the bottleneck
-  return 2 * spacing + effectiveDim + 2 * POCKET_WALL;
+
+  const reason = isOutline
+    ? `A slider's magnets sit in a rectangular grid, and your body is following the image outline. ` +
+      `That shape usually has nowhere to put ${base.sliderLayout} magnets with a 2 mm wall around each.`
+    : `A slider needs at least ${minSize.toFixed(0)} mm along the slide axis to fit ` +
+      `${base.sliderLayout} magnets per half. Yours is ${base.fitSizeMm} mm.`;
+
+  const d = dialog({
+    title: 'This design is too small for a slider',
+    content: el('div', { className: 'mg-wizard' }, [
+      el('p', { className: 'vl-hint', text: reason }),
+      el('p', { className: 'vl-hint', text: 'How do you want to fix it?' }),
+    ]),
+    onClose: () => {
+      if (!chosen) apply({});
+    },
+    actions: [
+      {
+        label: `Use a rounded rectangle at ${target} mm`,
+        primary: true,
+        onClick: () => {
+          chosen = true;
+          d.close();
+          apply({ baseShape: 'roundedRect', fitSizeMm: target });
+        },
+      },
+      {
+        label: `Keep this shape, resize to ${target} mm`,
+        onClick: () => {
+          chosen = true;
+          d.close();
+          apply({ fitSizeMm: target });
+        },
+      },
+    ],
+  });
+}
+
+/** Drop every per-shape override belonging to one palette row. */
+function dropOverridesForRegion(overrides: Record<string, RGB>, region: number): Record<string, RGB> {
+  const prefix = `inlay-${region}-`;
+  const out: Record<string, RGB> = {};
+  for (const [k, v] of Object.entries(overrides)) if (!k.startsWith(prefix)) out[k] = v;
+  return out;
+}
+
+/** Distinct colours the model asks for — one filament slot each, the same way
+ *  the 3MF exporter assigns them. Per-shape overrides can push this past the
+ *  palette count, and a 4-slot AMS is what most people are working with, so the
+ *  UI has to say when it's been passed rather than let the slicer be the one to
+ *  tell. Read from the settings the next build will use, not from the last mesh,
+ *  so it updates on the click rather than a build later. (A shape clipped away
+ *  entirely still counts here — it errs high, which is the safe direction.) */
+function filamentSlotCount(): number {
+  const v = s();
+  const seen = new Set<string>([v.bodyRgb.join(',')]);
+  regionSet?.regions.forEach((r, i) => {
+    const base = v.palette[i]?.filamentRgb ?? r.quantRgb;
+    r.components.forEach((_, j) => {
+      seen.add((v.componentColors[`inlay-${i}-${j}`] ?? base).join(','));
+    });
+  });
+  return seen.size;
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -582,22 +713,33 @@ function syncMagnetHandles() {
       return m ? [m.x, m.y] : p;
     });
   }
+  let rotations = report.rotations;
+  // A slider is two pieces on the plate, and the report only carries the first
+  // one's centres — mark up the second half too, or half the model looks empty.
+  if (v.productType === 'slider' && report.sliderOffsetX) {
+    const dx = report.sliderOffsetX;
+    positions = [...positions, ...positions.map((p) => [p[0] + dx, p[1]] as [number, number])];
+    rotations = [...rotations, ...rotations];
+  }
 
   viewer.setMagnetHandles({
     positions,
     magnetRadius: report.magnetRadius,
     outline: v.magnetShape === 'block' ? 'rect' : v.pocketProfile === 'hex' ? 'hex' : 'circle',
     size: [v.magnetX, v.magnetY],
-    rotations: report.rotations,
-    active: activeMagnet,
-    interactive,
+    rotations,
+    // Slider pockets come from the shared array, so there is nothing to drag.
+    active: v.productType === 'slider' ? -1 : activeMagnet,
+    interactive: interactive && v.productType !== 'slider',
   });
 
   if (interactive) {
     magnetHintText.textContent =
-      report.positions.length > 1
-        ? `Drag a magnet to move it · #${activeMagnet + 1} of ${report.positions.length} selected`
-        : 'Drag the magnet to move it, or click the shape to place it there';
+      v.productType === 'slider'
+        ? 'Slider magnets sit on a fixed pitch — both halves have to match, so they can’t be moved individually.'
+        : report.positions.length > 1
+          ? `Drag a magnet to move it · #${activeMagnet + 1} of ${report.positions.length} selected`
+          : 'Drag the magnet to move it, or click the shape to place it there';
   }
 }
 const syncExtrudePanel = () => {
@@ -670,13 +812,12 @@ viewer.onPartPick((index, clientX, clientY) => {
     viewer.highlightPart(index);
     if (regionIdx >= 0) {
       flashRow(regionIdx);
-      const rgb = s().palette[regionIdx]?.filamentRgb ?? part.colorRgb;
+      // Clicking a shape recolours THAT shape. The palette row keeps recolouring
+      // the whole bucket — that's what the sidebar swatch is for.
+      const partName = part.name;
+      const rgb = s().componentColors[partName] ?? s().palette[regionIdx]?.filamentRgb ?? part.colorRgb;
       showColorPopover(clientX, clientY, `#${rgbToHex(rgb)}`, (hex) => {
-        patch({
-          palette: s().palette.map((p, i) =>
-            i === regionIdx ? { ...p, filamentRgb: hexToRgb(hex), userSet: true } : p,
-          ),
-        });
+        patch({ componentColors: { ...s().componentColors, [partName]: hexToRgb(hex) } });
       });
     } else {
       showColorPopover(clientX, clientY, `#${rgbToHex(s().bodyRgb)}`, (hex) => patch({ bodyRgb: hexToRgb(hex) }));
@@ -955,7 +1096,10 @@ function openImport(name: string, getter: () => Promise<RgbaImage>) {
     })
     .catch((err) => {
       store.set({ building: false, status: '' });
-      toast('Could not read that image', { kind: 'error' });
+      // Carry the underlying reason. "Could not read that image" alone is
+      // unactionable and unreproducible after the fact.
+      const why = err instanceof Error ? err.message : String(err);
+      toast(`Could not read that image — ${why}`, { kind: 'error' });
       console.error(err);
     });
 }
@@ -1017,7 +1161,11 @@ function reprocess(refit = false) {
       level: clamp(prev?.level ?? 0, 0, MAX_LEVEL),
     };
   });
-  store.set({ settings: { ...cur, palette }, selectedRegions: [] });
+  // Per-shape overrides are keyed by `inlay-<region>-<part>`, and a re-trace
+  // renumbers those parts — a kept override would land on a different shape.
+  // Colour-count and smoothing changes re-trace too, so this can't be limited
+  // to new imports.
+  store.set({ settings: { ...cur, palette, componentColors: {} }, selectedRegions: [] });
   rebuild();
 }
 
@@ -1036,7 +1184,9 @@ function rebuild() {
     const level = v.palette[i]?.level ?? 0;
     r.components.forEach((comp, j) => {
       const partName = `inlay-${i}-${j}`;
-      regions.push({ filamentRgb: baseColor, coverage: r.coverage, rings: comp.rings, partName });
+      // A per-shape override wins over its palette row.
+      const color = v.componentColors[partName] ?? baseColor;
+      regions.push({ filamentRgb: color, coverage: r.coverage, rings: comp.rings, partName });
       componentHeights[partName] = level;
     });
   });
@@ -1070,6 +1220,7 @@ function rebuild() {
     productType: v.productType,
     sliderLayout: v.sliderLayout,
     sliderMirrorBlank: v.sliderMirrorBlank,
+    sliderGap: v.sliderGap,
   };
 
   buildInFlight = true;
@@ -1297,7 +1448,7 @@ function shapeSection(): HTMLElement {
 
     const minS = v.productType === 'slider' ? sliderMinBodySize(v) : 0;
     if (v.productType === 'slider') {
-      sizeNote.textContent = `Minimum ${minS.toFixed(1)} mm to fit ${v.sliderLayout} magnets.`;
+      sizeNote.textContent = `Minimum ${minS.toFixed(1)} mm to fit ${v.sliderLayout} magnets per half.`;
       sizeNote.classList.remove('hidden');
     } else {
       sizeNote.textContent = '';
@@ -1408,18 +1559,43 @@ function colorsSection(): HTMLElement {
             palette: s().palette.map((p, pi) =>
               pi === i ? { ...p, filamentRgb: hexToRgb(hex), userSet: true } : p,
             ),
+            // The row governs its whole bucket, so it also resets any shapes in
+            // that bucket the user had recoloured individually — otherwise the
+            // swatch would visibly change and half the model wouldn't follow.
+            componentColors: dropOverridesForRegion(s().componentColors, i),
           }),
         );
       });
       pal.append(row);
     });
-    pal.append(el('div', { className: 'hint model-recolor-tip', text: 'Tip: click any color on the 3D model to recolor it.' }));
+    const overrides = Object.keys(cur.componentColors).length;
+    if (overrides > 0) {
+      const reset = el('button', {
+        className: 'vl-btn vl-btn--ghost vl-btn--block',
+        text: `Reset ${overrides} recoloured shape${overrides === 1 ? '' : 's'}`,
+        attrs: { type: 'button', title: 'Put every individually recoloured shape back on its palette row' },
+        on: { click: () => patch({ componentColors: {} }) },
+      });
+      pal.append(reset);
+    }
+    const slots = filamentSlotCount();
+    if (slots > 4) {
+      pal.append(
+        el('p', {
+          className: 'mg-warn',
+          text: `This model uses ${slots} colours — more than a 4-slot AMS. Reuse a colour you already have, or the slicer will ask you to swap filament mid-print.`,
+        }),
+      );
+    }
+    pal.append(el('div', { className: 'hint model-recolor-tip', text: 'Tip: click any shape on the 3D model to recolor just that shape. The swatches above recolor every shape sharing that color.' }));
   };
 
   renderPalette();
-  let lastSig = JSON.stringify([s().palette, s().bodyRgb]);
+  // componentColors is in the signature so the reset button and the slot warning
+  // appear the moment a shape is recoloured on the model.
+  let lastSig = JSON.stringify([s().palette, s().bodyRgb, s().componentColors]);
   ownSub(() => {
-    const sig = JSON.stringify([s().palette, s().bodyRgb]);
+    const sig = JSON.stringify([s().palette, s().bodyRgb, s().componentColors]);
     if (sig === lastSig) return;
     lastSig = sig;
     renderPalette();
@@ -1485,13 +1661,11 @@ function magnetSection(): HTMLElement {
         { value: 'slider', label: 'Magnetic slider' },
       ],
       onChange: (val) => {
-        const next: Partial<Settings> = { productType: val };
         if (val === 'slider') {
-          next.magnetMode = 'glue-on';
-          next.magnetCount = v.sliderLayout;
-          next.magnetPlacement = 'auto';
+          switchToSlider();
+          return;
         }
-        patch(next);
+        patch({ productType: val });
         renderForm();
       },
     });
@@ -1555,7 +1729,9 @@ function magnetSection(): HTMLElement {
         onInput: (deg) => { setMagnetRotation(0, deg); },
       });
 
-      const content = [mode, modeHint('none')];
+      // The product selector has to stay on screen — without it, picking Sheet
+      // was a one-way door out of slider mode.
+      const content = [productType, mode, modeHint('none')];
       content.push(helperToggle);
       if (v.sheetHelperEnabled) {
         content.push(helperHint, helperDims, helperRotation);
@@ -1697,7 +1873,7 @@ function magnetSection(): HTMLElement {
         step: 0.05,
         value: v.pocketFit,
         unit: 'mm',
-        help: 'Extra clearance around the magnet. 0.4 mm suits most printers; drop it for a tighter grip.',
+        help: `Added to the magnet's ${v.magnetShape === 'disc' ? 'diameter' : 'width and length'}, not its radius — a ⌀6 magnet with 0.2 mm gets a ⌀6.2 socket. Raise it if your magnets won't go in, drop it toward 0 for a tighter grip.`,
         onInput: (val) => patch({ pocketFit: val }),
       }),
     );
@@ -1726,13 +1902,16 @@ function magnetSection(): HTMLElement {
 
     // --- Slider-specific controls ---
     const isSlider = v.productType === 'slider';
+    const grid = isSlider ? sliderGrid(v) : null;
 
     const sliderLayoutCtrl = isSlider ? segmentedControl<string>({
-      label: 'Magnet pattern',
+      label: 'Magnets per half',
       value: String(v.sliderLayout),
+      help: 'Two columns, stacked in rows along the slide axis. More rows = longer travel and more clicks.',
       options: [
-        { value: '4', label: '4 (dice corners)' },
-        { value: '6', label: '6 (two columns)' },
+        { value: '4', label: '4 · 2×2' },
+        { value: '6', label: '6 · 2×3' },
+        { value: '8', label: '8 · 2×4' },
       ],
       onChange: (val) => {
         const layout = Number(val) as SliderLayout;
@@ -1741,37 +1920,124 @@ function magnetSection(): HTMLElement {
       },
     }) : null;
 
+    // The pitch between rows IS the click distance, so this slider is the one
+    // control that changes how the finished toy feels in the hand. Packed at the
+    // 2 mm printable minimum the pockets read as one solid block.
+    const sliderGapCtrl = isSlider ? sliderRow({
+      label: 'Magnet spacing',
+      min: 0,
+      max: 12,
+      step: 0.5,
+      value: v.sliderGap,
+      unit: 'mm',
+      help: 'Plastic between the pockets, on top of the 2 mm minimum. Wider spacing means a longer throw between clicks — and a bigger body.',
+      onInput: (val) => {
+        patch({ sliderGap: val });
+        syncReport();
+      },
+    }) : null;
+
     const sliderBlankToggle = isSlider ? toggleSwitch({
       label: 'Blank second piece',
       checked: v.sliderMirrorBlank,
-      help: 'When on, the mirrored half has no image — just a plain body with magnet pockets.',
+      help: 'When on, the second half is a plain slab with magnet pockets — no image, no colour changes.',
       onChange: (on) => patch({ sliderMirrorBlank: on }),
     }) : null;
 
-    const sliderHint = isSlider ? el('p', {
-      className: 'vl-hint',
-      text: `Two pieces with ${v.sliderLayout} magnets each, placed in a dice pattern. Print both, insert magnets with opposing polarity, and slide them together.`,
+    // Slider mode drops "Sheet" — there is nothing to stick to — but hiding the
+    // choice entirely and silently forcing glue-on was its own confusion.
+    const sliderMode = isSlider ? segmentedControl<MagnetMode>({
+      label: 'How the magnets go in',
+      value: v.magnetMode === 'embedded' ? 'embedded' : 'glue-on',
+      options: [
+        { value: 'glue-on', label: 'Glue-on' },
+        { value: 'embedded', label: 'Embedded' },
+      ],
+      onChange: (val) => {
+        patch({ magnetMode: val });
+        renderForm();
+      },
     }) : null;
 
+    const sliderModeHint = isSlider ? el('p', {
+      className: 'vl-hint',
+      text: v.magnetMode === 'embedded'
+        ? 'Sealed under a thin wall — no glue, but that wall sits between the magnets and softens the click.'
+        : 'Pockets open on the sliding face. Glue each magnet in flush. This is what most sliders do.',
+    }) : null;
+
+    // Deliberately no numbers here — pitch, travel and click count live in the
+    // report below, which updates on every tick of the spacing slider.
+    const sliderHint = isSlider ? el('p', {
+      className: 'vl-hint',
+      text:
+        'Two identical pieces that slide along the long axis. Print both, drop the magnets in with ' +
+        'alternating polarity, and flip one over to assemble.',
+    }) : null;
+
+    // The one thing people get wrong when they assemble a slider, spelled out.
+    const sliderPolarity = isSlider ? el('details', { className: 'mg-details' }, [
+      el('summary', { text: 'How to insert the magnets' }),
+      el('div', { className: 'mg-details__body' }, [
+        el('p', {
+          className: 'vl-hint',
+          text:
+            'Both halves are the same print — you flip one over to assemble, so the image still reads the right way round.',
+        }),
+        el('p', {
+          className: 'vl-hint',
+          text:
+            'Polarity is the whole trick. Take a stack of magnets and drop them into each column one at a time, ' +
+            'flipping every second one so the poles alternate N-S-N-S up the column. Do both halves the same way. ' +
+            'That alternation is what makes it click instead of just grabbing.',
+        }),
+        el('p', {
+          className: 'vl-hint',
+          text: 'Glue each magnet flush with the face, let it cure, then rub the two faces together to break them in.',
+        }),
+      ]),
+    ]) : null;
+
+    // Real fidget sliders are built around small discs; a ⌀12 magnet makes a
+    // brick that snaps shut instead of sliding.
+    const sliderMagnetWarn =
+      isSlider && v.magnetShape === 'disc' && v.magnetDiameter > 8
+        ? el('p', {
+            className: 'mg-warn',
+            text: `⌀${v.magnetDiameter} mm is very strong for a slider — it will clamp rather than glide. ⌀5–8 mm is the usual range.`,
+          })
+        : null;
+
+    // Read top to bottom, the slider form now answers one question per block:
+    // what am I making → what magnet do I own → how is the array laid out →
+    // how do the magnets go in → how do I put it together.
     body.replaceChildren(
       productType,
-      // Slider mode: layout + mirror toggle instead of attachment mode + chips
-      ...(isSlider ? [
-        sliderHint!,
-        sliderLayoutCtrl!,
-        sliderBlankToggle!,
-      ] : [
-        mode,
-        modeHint(v.magnetMode),
-      ]),
+      ...(isSlider ? [sliderHint!] : [mode, modeHint(v.magnetMode)]),
       el('div', { className: 'mg-block' }, [
         el('span', { className: 'vl-control-label', text: 'Your magnet' }),
         shape,
         preset,
         dims,
+        ...(sliderMagnetWarn ? [sliderMagnetWarn] : []),
       ]),
-      // Magnet chips only for fridge magnet mode
-      ...(isSlider ? [] : [magnetsBlock]),
+      ...(isSlider
+        ? [
+            el('div', { className: 'mg-block' }, [
+              el('span', { className: 'vl-control-label', text: 'The magnet array' }),
+              sliderLayoutCtrl!,
+              sliderGapCtrl!,
+            ]),
+            el('div', { className: 'mg-block' }, [
+              el('span', { className: 'vl-control-label', text: 'Assembly' }),
+              sliderMode!,
+              sliderModeHint!,
+              sliderBlankToggle!,
+              sliderPolarity!,
+            ]),
+          ]
+        : // Magnet chips only for fridge magnet mode
+          [magnetsBlock]),
       tuningDetails,
       setupBtn,
     );
@@ -1850,7 +2116,34 @@ function magnetSection(): HTMLElement {
       fitReport.classList.remove('hidden');
       const cover = report ? report.coverThickness : v.thickness - v.magnetDepth;
       const placed = report?.placed ?? v.magnetCount;
-      rows.push(reportRow('Pocket', `${(report?.pocketDepth ?? v.magnetDepth).toFixed(1)} mm deep · ${placed} of ${v.magnetCount}`));
+      if (v.productType === 'slider') {
+        const g = sliderGrid(v);
+        const perHalf = report?.sliderPerHalf ?? placed;
+        const pitch = report?.sliderPitch ?? g.pitch;
+        const clicks = report?.sliderClicks ?? g.clicks;
+        const travel = report?.sliderTravel ?? g.travel;
+        rows.push(
+          reportRow('Magnets', perHalf === 0 ? 'none placed' : `${perHalf} per half · ${2 * perHalf} total`),
+        );
+        // Pitch and travel describe pockets that exist — don't quote a feel for a
+        // slider the builder just refused to cut.
+        if (perHalf > 0) {
+          rows.push(reportRow('Click every', `${pitch.toFixed(1)} mm`));
+          rows.push(reportRow('Travel', `${travel.toFixed(1)} mm · ${clicks} click${clicks === 1 ? '' : 's'}`));
+        }
+      } else {
+        rows.push(reportRow('Pocket', `${(report?.pocketDepth ?? v.magnetDepth).toFixed(1)} mm deep · ${placed} of ${v.magnetCount}`));
+      }
+      // The number to check against the magnet in your hand. Lives here rather
+      // than next to the Fit slider because this block re-renders on every tick.
+      rows.push(
+        reportRow(
+          'Socket',
+          v.magnetShape === 'disc'
+            ? `⌀${(v.magnetDiameter + v.pocketFit).toFixed(1)} mm for a ⌀${v.magnetDiameter} mm magnet`
+            : `${(v.magnetX + v.pocketFit).toFixed(1)} × ${(v.magnetY + v.pocketFit).toFixed(1)} mm for a ${v.magnetX} × ${v.magnetY} mm magnet`,
+        ),
+      );
       rows.push(reportRow('Over the magnet', `${cover.toFixed(1)} mm of body`));
       if (v.magnetMode === 'embedded') {
         const back = clamp(v.backWall, BACK_WALL_MIN, BACK_WALL_MAX);
@@ -1861,13 +2154,20 @@ function magnetSection(): HTMLElement {
           ...rows,
           el('p', {
             className: 'vl-hint',
-            text: `Add a pause at layer ${layer} in your slicer, drop the magnet in, and resume. It ends up sealed under ${cover.toFixed(1)} mm of body with ${back.toFixed(1)} mm against the fridge.`,
+            text: v.productType === 'slider'
+              ? `Add a pause at layer ${layer} in each piece, drop the magnets in — alternating polarity up each column — and resume. They end up sealed under ${back.toFixed(1)} mm on the sliding face.`
+              : `Add a pause at layer ${layer} in your slicer, drop the magnet in, and resume. It ends up sealed under ${cover.toFixed(1)} mm of body with ${back.toFixed(1)} mm against the fridge.`,
           }),
         );
       } else {
         fitReport.replaceChildren(
           ...rows,
-          el('p', { className: 'vl-hint', text: 'The pocket opens at the back — no pause needed. Glue the magnet in after printing.' }),
+          el('p', {
+            className: 'vl-hint',
+            text: v.productType === 'slider'
+              ? 'The pockets open on the back — that face is the sliding face. Glue each magnet in flush, alternating polarity up each column.'
+              : 'The pocket opens at the back — no pause needed. Glue the magnet in after printing.',
+          }),
         );
       }
     }
@@ -1899,6 +2199,14 @@ function magnetSection(): HTMLElement {
 
   const sec = step(1, 'Magnet', [body, fitReport, warnBox], true);
   sec.classList.add('mg-magnet-step');
+  // The step is the product, so it should say which product. "1 · Magnet" over a
+  // slider's controls is the small lie that makes the whole panel read wrong.
+  const summary = sec.querySelector('summary')!;
+  const syncTitle = () => {
+    summary.textContent = s().productType === 'slider' ? '1 · Slider' : '1 · Magnet';
+  };
+  syncTitle();
+  ownSub(syncTitle);
   return sec;
 }
 
@@ -1950,6 +2258,13 @@ async function runWizard() {
     }
   }
   patch(next);
+  // The wizard picks a product and a magnet but never a body, so a slider used
+  // to land on the 70 mm image outline and warn immediately. Run it through the
+  // same shape/size resolution the Product switch uses.
+  if (result.productType === 'slider') {
+    switchToSlider();
+    return;
+  }
   rebuildSections();
   if (result.mode !== 'none') setView('back');
 }

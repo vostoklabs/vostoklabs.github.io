@@ -14,6 +14,12 @@
 //               magnetDepth), the magnet drops in, and the rest of the body
 //               closes over it, fully enclosing the magnet.
 // Either way at least WALL_MIN of solid body is left above the magnet.
+//
+// Slider mode builds the same body twice, side by side on the plate. The two
+// halves are IDENTICAL rigid copies, both printed image-up / pockets-down: you
+// assemble by flipping one over, and a flip is a rotation, so the image on the
+// underside still reads correctly. Reflecting the second half instead would
+// print a mirror-image copy that no longer matches its partner.
 import type {
   BuildRegion,
   MagnetBuildParams,
@@ -22,9 +28,9 @@ import type {
   PartGroup,
   Ring,
   RGB,
-  ProductType,
   SliderLayout,
 } from '../types';
+import { sliderGridSpec, sliderMinBodySizeFor, POCKET_WALL_MM, SLIDER_PIECE_GAP } from '../types';
 import { getMarkSeed, markVoids, hardcodedVoids } from './identityMark';
 
 type Wasm = any;
@@ -33,7 +39,7 @@ type Section = any;
 
 const IMAGE_DEPTH = 0.8; // how deep the colored inlays sit in the top face
 const WALL_MIN = 0.8; // solid body always left above a pocket (toward the image face)
-const POCKET_WALL = 2.0; // min solid wall around each pocket (edge + neighbour safety)
+const POCKET_WALL = POCKET_WALL_MM; // min solid wall around each pocket (edge + neighbour safety)
 const COS30 = Math.cos(Math.PI / 6); // hex inradius / circumradius
 
 export function buildMagnet(
@@ -220,21 +226,21 @@ export function buildMagnet(
   const pW = plateBB.max[0] - plateBB.min[0];
   const pH = plateBB.max[1] - plateBB.min[1];
 
-  // --- Slider auto-size: compute minimum body to fit the dice pattern. ---
-  const computeSliderMinSize = (): number => {
-    if (params.productType !== 'slider') return 0;
-    const magnetDim = params.magnetShape === 'disc'
-      ? params.magnetDiameter
-      : Math.max(params.magnetX, params.magnetY);
-    const effectiveDim = magnetDim + Math.max(0, params.pocketFit);
-    const spacing = effectiveDim + POCKET_WALL + 0.1;
-    if (params.sliderLayout === 4) {
-      // 2×2 grid: need spacing + one magnet width + 2×POCKET_WALL edge
-      return spacing + effectiveDim + 2 * POCKET_WALL;
-    }
-    // 2×3 grid: height is the bottleneck
-    return 2 * spacing + effectiveDim + 2 * POCKET_WALL;
-  };
+  // --- Slider grid. One source of truth, shared with the UI's size floor. ---
+  const gridFor = (layout: SliderLayout) =>
+    sliderGridSpec({
+      layout,
+      magnetShape: params.magnetShape,
+      magnetDiameter: params.magnetDiameter,
+      magnetX: params.magnetX,
+      magnetY: params.magnetY,
+      pocketFit: params.pocketFit,
+      gap: params.sliderGap,
+    });
+  const computeSliderMinSize = (layout = params.sliderLayout): number =>
+    params.productType !== 'slider'
+      ? 0
+      : sliderMinBodySizeFor(params.baseShape, params.cornerRadius, gridFor(layout));
 
   const extrudeAt = (cs: Section, h: number, z: number): Solid => {
     if (sectionIsEmpty(cs)) {
@@ -299,6 +305,10 @@ export function buildMagnet(
 
   // --- Body slab, then remove the inlay holes so parts sit flush. ---
   let body: Solid = extrudeAt(plate, params.thickness, 0);
+  // A blank second slider piece has to be its OWN slab. Copying the carved body
+  // and dropping the inlays would leave the image behind as an empty recess.
+  const wantBlankTwin = params.productType === 'slider' && params.sliderMirrorBlank;
+  let blankBody: Solid | null = wantBlankTwin ? extrudeAt(plate, params.thickness, 0) : null;
   for (const [level, hole2D] of holesByLevel.entries()) {
     const shift = level * params.stepHeight;
     const bottomZ = params.thickness - IMAGE_DEPTH + Math.min(0, shift);
@@ -313,17 +323,22 @@ export function buildMagnet(
     if (radius >= 0.05) {
       const modBlock = createEdgeBevelBlock(plate, radius, params.thickness);
       if (modBlock) body = track(body.subtract(modBlock));
+      if (blankBody && modBlock) blankBody = track(blankBody.subtract(modBlock));
     }
   }
 
   // --- Magnet pockets (negative volumes from the back face). ---
   const pockets = placePockets();
-  for (const cut of pockets.cuts) body = track(body.subtract(cut));
+  for (const cut of pockets.cuts) {
+    body = track(body.subtract(cut));
+    if (blankBody) blankBody = track(blankBody.subtract(cut));
+  }
 
   // --- Covert identity mark: voids buried in the back-face wall. Pockets are
   //     already subtracted, and each void is only cut when ≥98% buried, so a
   //     void can never pierce a pocket or the silhouette. ---
   body = applyWatermark(body, fit);
+  if (blankBody) blankBody = applyWatermark(blankBody, fit);
 
   // --- Parts ---
   const parts: MagnetPart[] = [];
@@ -336,40 +351,41 @@ export function buildMagnet(
     }
   }
 
-  // --- Slider mirror: duplicate all parts, flip Z, offset in X. ---
+  // --- Slider second piece: a rigid copy, translated in X. ---
+  //
+  //  NOT a Z-flip and NOT a reflection. The two halves assemble by turning one
+  //  of them over, and turning something over is a rotation: the image on the
+  //  underside still reads correctly. A reflected twin would print as the mirror
+  //  image of its partner, and a Z-flipped one would print image-down with its
+  //  pockets facing the sky (and, in embedded mode, its pause layer inverted).
+  //  Both halves stay image-up / pockets-down, exactly like the single magnet.
   if (params.productType === 'slider') {
-    const mirrorParts: MagnetPart[] = [];
-    for (const p of parts) {
-      // Skip inlays if the mirror should be blank
-      if (params.sliderMirrorBlank && p.kind === 'inlay') continue;
-      const flipped = new Float32Array(p.vertProperties.length);
-      flipped.set(p.vertProperties);
-      const np = p.numProp;
-      // Flip Z: z' = thickness - z (mirrors back↔front)
-      // Offset X: x' = x + bodyWidth + 8 (side by side)
-      const xOffset = pW + 8;
-      for (let vi = 0; vi < flipped.length; vi += np) {
-        flipped[vi] += xOffset;           // x
-        flipped[vi + 2] = params.thickness - flipped[vi + 2]; // z
-      }
-      // Flipping Z reverses winding order — swap triangle vertex indices
-      const tris = new Uint32Array(p.triVerts.length);
-      for (let ti = 0; ti < tris.length; ti += 3) {
-        tris[ti] = p.triVerts[ti];
-        tris[ti + 1] = p.triVerts[ti + 2];
-        tris[ti + 2] = p.triVerts[ti + 1];
-      }
-      mirrorParts.push({
+    const xOffset = pW + SLIDER_PIECE_GAP;
+    const twinParts: MagnetPart[] = [];
+    const shift = (p: MagnetPart, name: string): MagnetPart => {
+      const verts = new Float32Array(p.vertProperties);
+      for (let vi = 0; vi < verts.length; vi += p.numProp) verts[vi] += xOffset;
+      return {
         kind: p.kind,
         group: 'slider-mirror' as PartGroup,
         colorRgb: p.colorRgb,
-        name: `mirror-${p.name}`,
-        numProp: np,
-        vertProperties: flipped,
-        triVerts: tris,
-      });
+        name,
+        numProp: p.numProp,
+        vertProperties: verts,
+        // Translation preserves orientation, so the winding is already correct.
+        triVerts: new Uint32Array(p.triVerts),
+      };
+    };
+    if (blankBody && !blankBody.isEmpty()) {
+      // Plain slab twin: same body, same pockets, no image at all.
+      twinParts.push(
+        shift(toPart(blankBody, 'body', 'magnet', params.bodyRgb, ''), 'piece2-magnet-body'),
+      );
+    } else {
+      for (const p of parts) twinParts.push(shift(p, `piece2-${p.name}`));
     }
-    parts.push(...mirrorParts);
+    parts.push(...twinParts);
+    pockets.report.sliderOffsetX = xOffset;
   }
 
   for (const o of trash) {
@@ -401,7 +417,7 @@ export function buildMagnet(
   }
 
   function placePockets(): { cuts: Solid[]; report: MagnetReport } {
-    const maxCount = params.productType === 'slider' ? 6 : 4;
+    const maxCount = params.productType === 'slider' ? 8 : 4;
     const requested = Math.max(1, Math.min(maxCount, Math.round(params.magnetCount)));
     const empty: MagnetReport = {
       requested,
@@ -534,30 +550,25 @@ export function buildMagnet(
     const pool = candidates();
     const dist2 = (a: [number, number], b: [number, number]) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
 
-    /** Fixed dice-face magnet positions for slider mode. */
-    const diceLayout = (layout: SliderLayout): [number, number][] => {
-      // S = center-to-center distance between adjacent magnets
-      // Add 0.1mm epsilon so the guard (radius + POCKET_WALL) doesn't exactly
-      // touch the adjacent pocket's footprint, avoiding false positive intersections.
-      const S = dim + POCKET_WALL + 0.1;
-      if (layout === 4) {
-        // Dice face 4: four corners
-        return [
-          [-S / 2, -S / 2],
-          [S / 2, -S / 2],
-          [-S / 2, S / 2],
-          [S / 2, S / 2],
-        ];
+    /** The slider's magnet array: `cols` columns across X, `rows` rows up the
+     *  slide axis (Y), centred on the body. The row pitch is the click distance,
+     *  so it is measured from the POCKET footprint — spacing it by the bare
+     *  magnet leaves the pockets' 2 mm guard bands overlapping and every layout
+     *  gets rejected. */
+    //  `dim + fitD` is the effective (post-shrink) pocket width, so the grid and
+    //  the pockets actually cut can never disagree about how much room a magnet
+    //  needs — which is what `sliderGridSpec` computes for the untouched magnet.
+    const sliderPitch = dim + fitD + POCKET_WALL + Math.max(0, params.sliderGap) + 0.05;
+    const sliderPositions = (layout: SliderLayout): [number, number][] => {
+      const cols = 2;
+      const rows = layout / 2;
+      const out: [number, number][] = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          out.push([(c - (cols - 1) / 2) * sliderPitch, (r - (rows - 1) / 2) * sliderPitch]);
+        }
       }
-      // Dice face 6: two columns of three
-      return [
-        [-S / 2, -S],
-        [S / 2, -S],
-        [-S / 2, 0],
-        [S / 2, 0],
-        [-S / 2, S],
-        [S / 2, S],
-      ];
+      return out;
     };
 
     /** Farthest-point sampling: magnet 1 goes to the most "central" spot, then
@@ -643,26 +654,42 @@ export function buildMagnet(
 
     const manual = params.magnetPlacement === 'manual';
 
-    // --- Slider mode: fixed dice-pattern placement, skip farthest-point sampling. ---
+    // --- Slider mode: a fixed magnet array, not farthest-point sampling. The
+    //     whole point is that both halves share one pitch, so the positions are
+    //     derived, never sampled. ---
     if (params.productType === 'slider') {
-      const positions = diceLayout(params.sliderLayout!);
-      const rotations = positions.map(() => 0);
-      // Verify all positions are legal
-      let taken: Section | null = null;
-      let allLegal = true;
-      for (let i = 0; i < positions.length; i++) {
-        if (!legal(positions[i], 0, taken)) { allLegal = false; break; }
-        const fp = placedAt(positions[i], 0);
-        taken = taken ? track(taken.add(fp)) : fp;
-      }
-      if (allLegal) {
+      const wanted = params.sliderLayout;
+      // Drop a row at a time rather than hand back a slider with no pockets at
+      // all — a 2×2 array still clicks, it just clicks once.
+      const ladder: SliderLayout[] = ([8, 6, 4] as SliderLayout[]).filter((n) => n <= wanted);
+      for (const layout of ladder) {
+        const positions = sliderPositions(layout);
+        let taken: Section | null = null;
+        let allLegal = true;
+        for (const pos of positions) {
+          if (!legal(pos, 0, taken)) {
+            allLegal = false;
+            break;
+          }
+          const fp = placedAt(pos, 0);
+          taken = taken ? track(taken.add(fp)) : fp;
+        }
+        if (!allLegal) continue;
+
+        if (layout < wanted) {
+          warnings.push(
+            `Only ${layout} of ${wanted} magnets per half fit — the body is too short along the slide axis. ` +
+              `Increase Size to at least ${computeSliderMinSize(wanted).toFixed(1)} mm, or use a smaller magnet.`,
+          );
+        }
+        const rows = layout / 2;
         const cutZ = backWall > 0 ? backWall : -0.02;
         const cutH = depth + (backWall > 0 ? 0 : 0.02);
         return {
           cuts: positions.map((pos) => extrudeAt(placedAt(pos, 0), cutH, cutZ)),
           report: {
-            requested: params.sliderLayout!,
-            placed: params.sliderLayout!,
+            requested: wanted,
+            placed: layout,
             pocketDepth: depth,
             coverThickness: Math.max(0, params.thickness - backWall - depth),
             backWall,
@@ -670,16 +697,27 @@ export function buildMagnet(
             positions,
             pocketRadius: circumR,
             magnetRadius: params.magnetShape === 'disc' ? dDia / 2 : Math.hypot(dX, dY) / 2,
-            rotations,
+            rotations: positions.map(() => 0),
             sliderMinSize: computeSliderMinSize(),
+            sliderPerHalf: layout,
+            sliderPitch,
+            sliderTravel: (rows - 1) * sliderPitch,
+            sliderClicks: rows - 1,
           },
         };
       }
-      const shapeHint = params.baseShape === 'outline' ? ' Try changing the Base shape to Rectangle.' : '';
+      const shapeHint =
+        params.baseShape === 'outline'
+          ? ' Try Base shape → Rounded rect, which gives the array a clean run.'
+          : '';
       warnings.push(
-        `The shape is too narrow to fit ${params.sliderLayout} magnets in a dice pattern. Try increasing the Size.${shapeHint}`,
+        `No magnet array fits this shape — a ${(2 * circumR).toFixed(1)} mm pocket needs at least ` +
+          `${computeSliderMinSize(4).toFixed(1)} mm of body. Increase Size or use a smaller magnet.${shapeHint}`,
       );
-      return { cuts: [], report: { ...empty, backWall, pocketRadius: circumR, sliderMinSize: computeSliderMinSize() } };
+      return {
+        cuts: [],
+        report: { ...empty, backWall, pocketRadius: circumR, sliderMinSize: computeSliderMinSize() },
+      };
     }
 
     for (let count = requested; count >= 1; count--) {

@@ -86,8 +86,17 @@ export type MagnetMode = 'none' | 'glue-on' | 'embedded';
 /** Whether we're making a single fridge magnet or a two-piece magnetic slider. */
 export type ProductType = 'magnet' | 'slider';
 
-/** Magnet count for slider dice-face pattern. */
-export type SliderLayout = 4 | 6;
+/** Magnets PER HALF for the slider's magnet array (total is twice this).
+ *  Always two columns, so 4 = 2×2, 6 = 2×3, 8 = 2×4. Rows run along the slide
+ *  axis (Y) — the row count is what sets how many detents you feel. */
+export type SliderLayout = 4 | 6 | 8;
+
+/** Min solid wall around a pocket (edge + neighbour). Shared by the geometry and
+ *  the UI's size floor so the two can never disagree about what fits. */
+export const POCKET_WALL_MM = 2.0;
+
+/** Gap between the two halves on the build plate, mm. */
+export const SLIDER_PIECE_GAP = 8;
 
 /** Magnet body type, in the language magnet shops use. */
 export type MagnetShapeKind = 'disc' | 'block';
@@ -111,7 +120,11 @@ export interface MagnetPreset {
 }
 
 export const MAGNET_PRESETS: MagnetPreset[] = [
+  // The small discs at the top are the sizes fidget sliders are built around —
+  // ⌀6×3 is the de-facto standard, ⌀5×3 gives a lighter click.
+  { id: 'd5x3', shape: 'disc', label: '⌀5 × 3 mm', diameter: 5, height: 3 },
   { id: 'd6x3', shape: 'disc', label: '⌀6 × 3 mm', diameter: 6, height: 3 },
+  { id: 'd6x2', shape: 'disc', label: '⌀6 × 2 mm', diameter: 6, height: 2 },
   { id: 'd8x3', shape: 'disc', label: '⌀8 × 3 mm', diameter: 8, height: 3 },
   { id: 'd10x2', shape: 'disc', label: '⌀10 × 2 mm', diameter: 10, height: 2 },
   { id: 'd10x3', shape: 'disc', label: '⌀10 × 3 mm', diameter: 10, height: 3 },
@@ -123,6 +136,107 @@ export const MAGNET_PRESETS: MagnetPreset[] = [
   { id: 'b20x5x2', shape: 'block', label: '20 × 5 × 2 mm', x: 20, y: 5, height: 2 },
   { id: 'b25x10x3', shape: 'block', label: '25 × 10 × 3 mm', x: 25, y: 10, height: 3 },
 ];
+
+/** The slider's magnet grid, derived from the magnet the user actually owns.
+ *
+ *  A fidget slider clicks because each half carries a row of magnets at a fixed
+ *  pitch with alternating polarity. Slide one half by one pitch and every facing
+ *  pair swaps from repel to attract — that snap is the detent. So the pitch IS
+ *  the click distance, and rows−1 is how many clicks the travel gives you.
+ *
+ *  Pitch is measured from the POCKET footprint (magnet + press-fit gap), not the
+ *  bare magnet: the pockets are what need the 2 mm wall between them. */
+export function sliderGridSpec(o: {
+  layout: SliderLayout;
+  magnetShape: MagnetShapeKind;
+  magnetDiameter: number;
+  magnetX: number;
+  magnetY: number;
+  pocketFit: number;
+  /** Extra plastic between pockets on top of the 2 mm printable minimum, mm.
+   *  Packed at 0 the array reads as one solid block; opening it up is what makes
+   *  the magnets look deliberate — and it lengthens the click. */
+  gap?: number;
+}) {
+  const bare = o.magnetShape === 'disc' ? o.magnetDiameter : Math.hypot(o.magnetX, o.magnetY);
+  const pocketDim = bare + Math.max(0, o.pocketFit);
+  // +0.05 keeps a pocket's guard band from exactly touching its neighbour's
+  // footprint, which the boolean would otherwise read as an intersection.
+  const pitch = pocketDim + POCKET_WALL_MM + Math.max(0, o.gap ?? 0) + 0.05;
+  const cols = 2;
+  const rows = o.layout / 2;
+  return {
+    cols,
+    rows,
+    pitch,
+    pocketDim,
+    /** How far the halves slide before the arrays run out, mm. */
+    travel: (rows - 1) * pitch,
+    /** Detents felt across the full travel. */
+    clicks: rows - 1,
+    /** Body extent needed across the columns (X), mm. */
+    minWidth: (cols - 1) * pitch + pocketDim + 2 * POCKET_WALL_MM,
+    /** Body extent needed along the slide axis (Y), mm. */
+    minLength: (rows - 1) * pitch + pocketDim + 2 * POCKET_WALL_MM,
+  };
+}
+
+/** Smallest body (longest side, mm) of `baseShape` that contains the slider's
+ *  magnet array plus its guard walls.
+ *
+ *  `minWidth`/`minLength` alone are the answer only for a true rectangle. A
+ *  circle has to swallow the array's diagonal, and a rounded rect clips exactly
+ *  the corners the outermost pockets want — quoting the rectangle figure for
+ *  those shapes promises a minimum the builder then refuses, which is worse than
+ *  no figure at all. Bisecting a containment test keeps one rule for every shape.
+ *
+ *  `outline` is unknowable without the silhouette; it falls back to the
+ *  rectangle figure, and the UI steers the user to a rounded rect instead. */
+export function sliderMinBodySizeFor(
+  baseShape: BaseShapeKind,
+  cornerRadius: number,
+  grid: { minWidth: number; minLength: number },
+): number {
+  const w = grid.minWidth / 2;
+  const h = grid.minLength / 2;
+  const contains = (fit: number): boolean => {
+    const a = fit / 2;
+    if (w > a || h > a) return false;
+    switch (baseShape) {
+      case 'circle':
+        return Math.hypot(w, h) <= a;
+      case 'hexagon': {
+        // makeHexagon() puts vertices at 30°, 90°, … — a pointy-top hexagon with
+        // circumradius `a`. That is the intersection of three slabs whose
+        // normals sit at 0°, 60° and 120°, each supported at the inradius. By
+        // symmetry only the array's (+w, +h) corner needs testing.
+        const inr = a * Math.cos(Math.PI / 6);
+        const support = (deg: number) =>
+          Math.abs(w * Math.cos((deg * Math.PI) / 180) + h * Math.sin((deg * Math.PI) / 180));
+        return support(0) <= inr && support(60) <= inr && support(120) <= inr;
+      }
+      case 'roundedRect': {
+        const r = Math.max(0, Math.min(cornerRadius, a));
+        const c = a - r;
+        if (w <= c || h <= c) return true;
+        return (w - c) ** 2 + (h - c) ** 2 <= r * r;
+      }
+      // 'square' rounds by a token 0.4 mm; 'rectangle' follows the image aspect,
+      // so its longest side is at least the rectangle figure.
+      default:
+        return true;
+    }
+  };
+  let lo = Math.max(grid.minWidth, grid.minLength);
+  if (contains(lo)) return lo;
+  let hi = lo * 2 + 4;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (contains(mid)) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
 
 /** Mesh payload (transferable). First 3 of each `numProp` stride are x,y,z. */
 export interface MeshData {
@@ -203,6 +317,8 @@ export interface MagnetBuildParams {
   // ---- Slider fields ----
   /** Whether this is a single fridge magnet or a two-piece slider. */
   productType: ProductType;
+  /** Slider: extra plastic between pockets on top of the 2 mm minimum, mm. */
+  sliderGap: number;
   /** Dice-face magnet pattern for sliders (4 corners or 6 two-column). */
   sliderLayout: SliderLayout;
   /** When true, the mirrored slider half has no inlays (plain body only). */
@@ -241,6 +357,18 @@ export interface MagnetReport {
   /** Computed minimum body size (longest side) to fit all slider magnets, mm.
    *  Only meaningful when productType is 'slider'. */
   sliderMinSize?: number;
+  /** Slider only: magnets PER HALF actually cut (total is twice this). */
+  sliderPerHalf?: number;
+  /** Slider only: centre-to-centre magnet pitch along the slide axis, mm.
+   *  This is the distance of one click. */
+  sliderPitch?: number;
+  /** Slider only: total slide travel, mm. */
+  sliderTravel?: number;
+  /** Slider only: detents felt across the travel. */
+  sliderClicks?: number;
+  /** Slider only: X distance from the first half to the second on the plate, mm.
+   *  The viewer needs it to draw handles on both pieces. */
+  sliderOffsetX?: number;
 }
 
 // ---- Worker messages ----

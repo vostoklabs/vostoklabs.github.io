@@ -14,6 +14,8 @@
     "build:clicker": "pnpm --filter clicker-generator build",
     "dev:keycap": "pnpm --filter keycap-generator dev",
     "build:keycap": "pnpm --filter keycap-generator build",
+    "dev:magnet": "pnpm --filter magnet-generator dev",
+    "build:magnet": "pnpm --filter magnet-generator build",
     "typecheck": "pnpm -r --if-present typecheck"
   }
 }
