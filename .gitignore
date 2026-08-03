@@ -45,3 +45,6 @@ packages/manifold-noeval/README.md
 **/blocks/**/*.3mf
 **/blocks.3mf
 *.3mf
+
+# Unignore public assets 3mf files
+!apps/*/public/**/*.3mf
