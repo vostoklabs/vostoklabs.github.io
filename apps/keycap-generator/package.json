@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/plates": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "fflate": "^0.8.2",
     "lucide": "^1.21.0",

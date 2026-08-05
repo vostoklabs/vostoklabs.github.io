@@ -1,0 +1,21 @@
+{
+  "name": "@vostok/fonts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fonts.css": "./src/fonts.css",
+    "./textLayout": "./src/textLayout.ts"
+  },
+  "scripts": {
+    "fetch-fonts": "node scripts/fetch-fonts.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "opentype.js": "^1.3.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

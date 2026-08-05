@@ -1,9 +1,11 @@
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
+import '@vostok/plates/plates.css';
 import { topbarLinks } from '@vostok/ui-kit';
 import './style.css';
 import { createStore } from './store/store';
 import { createViewer } from './viewer/viewer';
+import { mountPlatePicker } from '@vostok/plates';
 import { createUi, type UiState } from './ui/ui';
 import { loadFileToImage, type RgbaImage } from './image/decode';
 import { processImage } from './image/pipeline';
@@ -172,6 +174,9 @@ const sidebarLeft = document.getElementById('sidebar-left')!;
 const sidebarRight = document.getElementById('sidebar-right')!;
 const statusEl = document.getElementById('status')!;
 const viewer = createViewer(document.getElementById('app')!);
+
+// Build plate picker (top-right of the stage); the plate is shared across generators.
+mountPlatePicker(document.getElementById('viewport')!, viewer);
 
 // ---- Sync the 3D viewport to the active theme ----
 // index.html's bootstrap and the ui-kit sidebar-footer theme toggle both own

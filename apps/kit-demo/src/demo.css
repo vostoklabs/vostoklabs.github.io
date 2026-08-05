@@ -161,3 +161,15 @@ body {
   .kit-masthead { grid-template-columns: 1fr; }
   .kit-masthead__tools { justify-content: flex-start; }
 }
+
+/* The export module is sidebar chrome; showing it at the demo column's full
+   width makes its 2x2 action grid stretch into one wide row, which is not what
+   any generator looks like. Frame it at the real right-panel width. */
+.kit-sidebar-frame {
+  width: 310px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m, 10px);
+  overflow: hidden;
+  background: var(--panel);
+}

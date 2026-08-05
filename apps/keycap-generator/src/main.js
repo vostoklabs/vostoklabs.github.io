@@ -1,6 +1,9 @@
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
+import '@vostok/plates/plates.css';
 import { topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog } from '@vostok/ui-kit';
+import { mountPlatePicker, loadPlateChoice } from '@vostok/plates';
+import { createBuildPlate } from '@vostok/plates/three';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadKeycap } from './keycap.js';
@@ -122,21 +125,27 @@ const fill = new THREE.DirectionalLight(0x9fb6ff, 0.5);
 fill.position.set(-18, 10, -14);
 scene.add(fill);
 
-// Ground grid + background — same look as the clicker & keychain apps, and
-// theme-aware: brand-blue centre lines over grey grid on a dark/light backdrop.
-// 10 mm cells, large enough to sit well past any cap size (1u … spacebar).
-let grid = null;
+// Ground: a real Bambu build plate (or the plain grid) under the cap, shared
+// with every other generator. This scene is Y-up, so the plate is told which way
+// is up rather than being rotated here.
+const buildPlate = createBuildPlate(THREE, {
+  theme: document.documentElement.getAttribute('data-theme') || 'dark',
+  up: 'y',
+  gridSize: 400,
+  topZ: -0.06,
+});
+buildPlate.setChoice(loadPlateChoice());
+scene.add(buildPlate.object);
+
 function applyViewportTheme(theme) {
-  const isLight = theme === 'light';
-  renderer.setClearColor(isLight ? 0xf3f4f6 : 0x15171c);
-  if (grid) { scene.remove(grid); grid.geometry.dispose(); }
-  grid = new THREE.GridHelper(400, 40, isLight ? 0x2563eb : 0x5b9dff, isLight ? 0xd1d5db : 0x2f3440);
-  grid.renderOrder = -1;
-  // Draw the grid first and skip depth-writes so the opaque cap always wins.
-  (Array.isArray(grid.material) ? grid.material : [grid.material]).forEach((m) => { m.depthWrite = false; });
-  scene.add(grid);
+  renderer.setClearColor(theme === 'light' ? 0xf3f4f6 : 0x15171c);
+  buildPlate.setTheme(theme);
 }
 applyViewportTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+
+mountPlatePicker(document.getElementById('viewport'), {
+  setPlate: (choice) => buildPlate.setChoice(choice),
+});
 
 // Native keycap space is Z-up; rotate the display group so it looks right in Y-up.
 const group = new THREE.Group();
@@ -186,9 +195,16 @@ function resize() {
 }
 new ResizeObserver(resize).observe(viewport);
 
+// Height of the plate's top surface. This scene is Y-up, so "below the plate" is
+// a Y test, not the Z one the other generators use.
+const PLATE_TOP_Y = -0.06;
+
 (function animate() {
   requestAnimationFrame(animate);
   controls.update();
+  // Looking up from underneath, an opaque plate hides the cap completely. Fade it
+  // to a ghost rather than dropping it, so it never pops as you orbit past level.
+  buildPlate.setGhosted(camera.position.y <= PLATE_TOP_Y);
   renderer.render(scene, camera);
 })();
 
@@ -475,10 +491,16 @@ function selectLetter() {
   }
 }
 
+/** Each entry renders in its own typeface — scanning 30 font names set in the
+ *  same UI font tells you nothing about which one you actually want. */
 function addFontOption(font) {
   const option = document.createElement('option');
   option.value = font.id;
   option.textContent = font.name;
+  if (font.cssFamily) option.style.fontFamily = font.cssFamily;
+  if (font.cssWeight) option.style.fontWeight = font.cssWeight;
+  // Display faces vary wildly in x-height; a common size keeps the list scannable.
+  option.style.fontSize = '15px';
   $('fontSelect').appendChild(option);
 }
 

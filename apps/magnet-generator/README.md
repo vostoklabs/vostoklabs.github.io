@@ -47,6 +47,43 @@ Everything assumes **back face down, image face up** — that's how the model is
 built, exported and meant to be printed. No supports. The back stays flat because
 it's the face that meets the fridge, so edge bevels only touch the front rim.
 
+## Which source owns the design
+
+`activeSource` (`'image' | 'svg' | 'text'`) is the single authority, and
+`reprocess()` switches on it. It does **not** sniff whichever of
+`originalImage` / `svgText` / `textSource` happens to be non-null: that made the
+answer depend on the order of the if-chain and required every import path to
+remember to null the other three. It broke twice — importing an image while text
+was loaded silently re-laid-out the text.
+
+Because ownership is explicit, nothing is discarded when you switch. The tabs
+round-trip: leave Text for Image and your image comes back, with its palette
+intact.
+
+## Text as a source
+
+The Import Source panel has three tabs: **Image**, **SVG** and **Text**. Text
+uses the same 152 fonts, opentype loader and layout as the name keychain, all
+shared from `@vostok/fonts`.
+
+`src/image/text.ts` is the whole adapter. It takes glyph contours and applies the
+normalization every source shares — centre, scale so the longest side is 1, emit
+one region plus the union silhouette. From there nothing downstream knows it was
+text: base shape, size, magnet pockets, per-shape colours and slider mode all
+work unchanged.
+
+Two looks fall out of the existing Base shape control:
+
+- **Image outline** — the body hugs the letters (plus the frame margin), like a
+  keychain plate with no ring. The morphological closing in `buildMagnet` merges
+  letters that touch; pull **Letter spacing** negative to make them touch.
+- **A preset shape** — the letters are inlaid into a plate.
+
+One gotcha worth knowing if you touch `text.ts`: `pathCommandsToPolygons` already
+negates the font's Y-down coordinates, so text contours are **Y-up** like the
+image tracer's. `parseSvg` flips Y because raw SVG is Y-down — do not copy that
+line into the text path.
+
 ## Colours: rows vs shapes
 
 A palette row is one **quantised colour**, and one quantised colour is usually
@@ -69,9 +106,29 @@ Extrude level is still per-row, not per-shape.
 ## Press fit
 
 `pocketFit` is added to the magnet's **diameter**, not its radius — a ⌀6 magnet
-at the default 0.2 mm gets a ⌀6.2 mm socket. Blocks get it on each of width and
-length. The report states the resolved socket size; the sweep asserts the removed
-volume matches `π·((d + fit)/2)²·depth` so this can't silently become radial.
+at the default 0.2 mm gets a ⌀6.2 mm round socket. Blocks get it on each of width
+and length.
+
+**Round and hex do not get the same clearance.** A round pocket is sliced as a
+chord-approximated polygon and the extrusion pulls inward, so it prints undersize
+— the clearance is what buys that back. A hex pocket is six flat walls the slicer
+traces exactly, so it prints true and the same clearance lands as pure slop. A
+printed ⌀10 hex socket came out 0.2 mm loose across the flats *on top of* 1.78 mm
+of corner gap. So `ROUND_SHRINK_ALLOWANCE_MM` (0.2) is subtracted for hex:
+
+| profile | fit 0.2 | fit 0.5 |
+|---|---|---|
+| round ⌀6 | ⌀6.20 | ⌀6.50 |
+| hex ⌀6 | 6.00 across flats | 6.30 across flats |
+
+Raising the slider above the allowance still opens a hex pocket 1:1, so it
+remains a real fit control. The report states the resolved socket — both across
+flats and across corners for hex, since the flats are what grip and the corners
+are what you see. The sweep asserts all four numbers above.
+
+Corner gap is inherent to a hexagon: it is always `1/cos30` = 15.5% wider corner
+to corner than the magnet it holds. That is what leaves room for glue, and it is
+why `sliderGridSpec` spaces a hex array off the hexagon rather than the disc.
 
 ## The three attachment modes
 
@@ -129,11 +186,32 @@ fixes — rounded rect at the right size, or keep the shape and just resize —
 rather than flipping the product and throwing a warning. The first-run wizard
 routes through the same path.
 
-Both halves are **identical rigid copies**, printed side by side, image-up and
-pockets-down. You assemble by turning one over, and turning something over is a
-rotation, not a reflection — the image on the underside still reads correctly. A
-reflected or Z-flipped twin would print as the wrong part. The 3MF carries them
-as two separate objects so the slicer can arrange each half on its own.
+### Why the second piece is sometimes mirrored
+
+You assemble by turning one piece over, and **a flip about an in-plane axis maps
+a footprint to its mirror**. So the two silhouettes only stack flush if the
+second piece was built mirrored — otherwise an asymmetric outline overhangs its
+partner all the way round. That was a real print defect, not a theoretical one.
+
+But mirroring is only needed when the silhouette is asymmetric:
+
+- **Image outline** → mirrored. The trade-off is unavoidable: the mirrored half
+  also carries mirrored artwork. You cannot have both a flush profile and
+  un-reversed art on an asymmetric shape — they are opposite handednesses of the
+  same part. The UI says so.
+- **Any preset shape** (circle, square, rounded rect, rectangle, pointy-top
+  hexagon) → **rigid copy**. All are symmetric about both axes, so a flip already
+  lands them on themselves, and mirroring would needlessly reverse the artwork
+  inlaid on the plate.
+
+Either way both pieces print **image-up, pockets-down**, side by side. The mirror
+is in X; an earlier Z-flip put the art face down with the pockets facing the sky
+and inverted the embedded pause layer. Reflection reverses triangle winding, so
+that is fixed too. The sweep flips piece 2 back and asserts ≥97% of its back-face
+outline lands on piece 1 — it reports 87% without the mirror and 100% with.
+
+The 3MF carries the halves as two separate objects so the slicer can arrange each
+on its own.
 
 ## Not in v1
 

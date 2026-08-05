@@ -11,6 +11,14 @@
       "blurb": "Turn any image, logo, or custom text into a clicker fidget."
     },
     {
+      "id": "magnet",
+      "name": "Fridge Magnet & Fidget Slider",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/magnet/",
+      "blurb": "Turn any image into a printable fridge magnet — or a two-piece magnetic fidget slider that clicks as it slides."
+    },
+    {
       "id": "keycap",
       "name": "Custom Keycap Generator",
       "route": "both",
@@ -25,14 +33,6 @@
       "route": "both",
       "status": "live",
       "blurb": "Personalized plate-style name keychains with live font preview, pixel & script styles, multi-language, 1 to 3 colour layers, and AMS & no-AMS printing."
-    },
-    {
-      "id": "magnet",
-      "name": "Fridge Magnet & Fidget Slider",
-      "route": "app",
-      "status": "live",
-      "appUrl": "/magnet/",
-      "blurb": "Turn any image into a printable fridge magnet — or a two-piece magnetic fidget slider that clicks as it slides."
     },
     {
       "id": "large-box",

@@ -1,4 +1,4 @@
-import type { LineBox } from './geometry/textLayout';
+import type { LineBox } from '@vostok/fonts/textLayout';
 
 export interface BuildParams {
   name: string;

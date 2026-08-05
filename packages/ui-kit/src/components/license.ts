@@ -4,17 +4,18 @@ import { el } from '../dom';
 const fmt = (n: number) => `$${n.toLocaleString('en-US')}`;
 
 export interface LicenseModalOptions {
-  /** Green pill text at the top, e.g. '✓ Download started'. Pass null to hide. */
+  /** Green pill text at the top, e.g. 'Download started'. Pass null to hide. */
   badge?: string | null;
   onClose?: () => void;
 }
 
-/** The post-download license modal, same structure as the shipped clicker:
- *  green badge → "Free for personal use 🎉" → CC line → red commercial focal
- *  box (subscription CTA + lifetime alternative) → blue full-width "Got it". */
+/** The post-download license modal: green badge → "Free for personal use" → CC
+ *  line → red commercial focal box (subscription CTA) → blue full-width "Got it".
+ *
+ *  Deliberately emoji-free — this is the screen that asks people for money, and
+ *  it reads as more serious without them. */
 export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): void } {
   const s = BRAND.pricing.subscription;
-  const l = BRAND.pricing.lifetime;
   const previouslyFocused =
     document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
@@ -25,7 +26,7 @@ export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): voi
 
   const commercialTitle = el('div', { className: 'vl-commercial-title' });
   commercialTitle.append(
-    '💰 Want to ',
+    'Want to ',
     el('span', { className: 'vl-sell', text: 'sell' }),
     ' your prints?',
   );
@@ -39,19 +40,11 @@ export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): voi
     ` (or ${fmt(s.quarter)}/quarter, ${fmt(s.year)}/year), and it unlocks full commercial rights to ${s.covers}.`,
   );
 
-  const lifetimeLine = el('p', { className: 'vl-commercial-alt' });
-  lifetimeLine.append(
-    `Prefer to own it outright? Lifetime license from ${fmt(l.one)} one-time, `,
-    el('a', {
-      text: 'get in touch',
-      attrs: { href: BRAND.urls.kofi, target: '_blank', rel: 'noopener noreferrer' },
-    }),
-    '.',
-  );
-
+  // The lifetime option used to sit here behind a "get in touch" link. It is gone:
+  // one commercial CTA converts better than two, and the membership page covers it.
   const card = el('div', { className: 'vl-card', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'License' } }, [
-    ...(opts.badge === null ? [] : [el('div', { className: 'vl-badge', text: opts.badge ?? '✓ Download started' })]),
-    el('h2', { text: 'Free for personal use \u{1F389}' }),
+    ...(opts.badge === null ? [] : [el('div', { className: 'vl-badge', text: opts.badge ?? 'Download started' })]),
+    el('h2', { text: 'Free for personal use' }),
     ccLine,
     el('div', { className: 'vl-commercial' }, [
       commercialTitle,
@@ -61,7 +54,6 @@ export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): voi
         text: 'Get the commercial license →',
         attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
       }),
-      lifetimeLine,
     ]),
   ]);
 
@@ -116,7 +108,7 @@ export function licenseReminderToast(): { close(): void } {
 
   const toastCard = el('div', { className: 'vl-license-toast', attrs: { role: 'status' } }, [
     closeBtn,
-    el('div', { className: 'vl-license-toast-title', text: '✓ Download started' }),
+    el('div', { className: 'vl-license-toast-title', text: 'Download started' }),
     body,
     el('a', {
       className: 'vl-commercial-cta',
@@ -137,15 +129,20 @@ export interface LicenseNudgeOptions {
   generatorName?: string;
 }
 
-/** Inline hint for export paths, free tier line + link to open the full modal. */
+/** Inline hint for export paths: free-tier line + a direct link to the MakerWorld
+ *  commercial licence.
+ *
+ *  This is a sidebar aside, not a call to action — interrupting someone mid-edit
+ *  with a full modal to say the same thing the page already says is a worse trade
+ *  than just letting them open the licence page in a new tab. The modal still
+ *  fires on the export path, where it is actually earned. */
 export function licenseNudge(opts: LicenseNudgeOptions = {}): HTMLElement {
   const name = opts.generatorName ?? 'This generator';
   const hint = el('p', { className: 'vl-hint' });
-  const link = el('button', {
+  const link = el('a', {
     className: 'vl-link',
     text: 'Get a commercial license',
-    attrs: { type: 'button' },
-    on: { click: () => openCommercialModal() },
+    attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
   });
   hint.append(`${name} is free for personal use. Selling prints? `, link, '.');
   return hint;

@@ -37,11 +37,41 @@ export {
   helpTip,
   type ToggleOptions,
   type SliderOptions,
+  type ValueRow,
   type SegmentedOption,
   type SegmentedOptions,
   type SelectFieldOptions,
 } from './components/controls';
 export { dpad, type DpadOptions, type DpadHandle } from './components/dpad';
+export { section, collapsibleSection, type SectionOptions } from './components/section';
+export {
+  sourceCards,
+  dropZone,
+  uploadCta,
+  sampleGrid,
+  type SourceOption,
+  type SourceCards,
+  type SourceCardsOptions,
+  type DropZoneOptions,
+  type UploadCtaOptions,
+  type SampleItem,
+  type SampleGridOptions,
+} from './components/sources';
+export {
+  modeBar,
+  stagePanel,
+  stepper,
+  stageStatus,
+  type ModeOption,
+  type ModeBar,
+  type ModeBarOptions,
+  type StagePanel,
+  type StagePanelOptions,
+  type Stepper,
+  type StepperOptions,
+  type StageStatus,
+  type StatusKind,
+} from './components/stage';
 export { ICONS, svgEl } from './icons';
 export { el } from './dom';
 

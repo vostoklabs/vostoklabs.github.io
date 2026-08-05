@@ -30,7 +30,13 @@ import type {
   RGB,
   SliderLayout,
 } from '../types';
-import { sliderGridSpec, sliderMinBodySizeFor, POCKET_WALL_MM, SLIDER_PIECE_GAP } from '../types';
+import {
+  sliderGridSpec,
+  sliderMinBodySizeFor,
+  effectivePocketFit,
+  POCKET_WALL_MM,
+  SLIDER_PIECE_GAP,
+} from '../types';
 import { getMarkSeed, markVoids, hardcodedVoids } from './identityMark';
 
 type Wasm = any;
@@ -235,6 +241,7 @@ export function buildMagnet(
       magnetX: params.magnetX,
       magnetY: params.magnetY,
       pocketFit: params.pocketFit,
+      pocketProfile: params.pocketProfile,
       gap: params.sliderGap,
     });
   const computeSliderMinSize = (layout = params.sliderLayout): number =>
@@ -351,29 +358,55 @@ export function buildMagnet(
     }
   }
 
-  // --- Slider second piece: a rigid copy, translated in X. ---
+  // --- Slider second piece ---
   //
-  //  NOT a Z-flip and NOT a reflection. The two halves assemble by turning one
-  //  of them over, and turning something over is a rotation: the image on the
-  //  underside still reads correctly. A reflected twin would print as the mirror
-  //  image of its partner, and a Z-flipped one would print image-down with its
-  //  pockets facing the sky (and, in embedded mode, its pause layer inverted).
-  //  Both halves stay image-up / pockets-down, exactly like the single magnet.
+  //  You assemble by turning one piece over, and a flip about an in-plane axis
+  //  maps a footprint to its MIRROR. So for the two silhouettes to stack flush,
+  //  the second piece has to be built as the mirror of the first — otherwise an
+  //  asymmetric outline overhangs its partner all the way round.
+  //
+  //  Mirroring is only needed when the silhouette is asymmetric, i.e. when the
+  //  body follows the image. Every preset shape (circle, square, rounded rect,
+  //  rectangle, pointy-top hexagon) is symmetric about both axes, so a flip
+  //  already lands it on itself — and there we keep the rigid copy, because
+  //  mirroring would needlessly reverse the artwork inlaid on the plate.
+  //
+  //  This is a genuine trade-off, not an oversight: for an image-outline slider
+  //  the mirrored half also carries mirrored artwork. There is no way to have
+  //  both a flush profile and un-reversed art on an asymmetric shape — the two
+  //  requirements are opposite handednesses of the same part.
+  //
+  //  Either way BOTH pieces still print image-up / pockets-down. This is a
+  //  mirror in X, not the Z-flip that used to put the art face down.
   if (params.productType === 'slider') {
     const xOffset = pW + SLIDER_PIECE_GAP;
+    const mirrored = params.baseShape === 'outline';
     const twinParts: MagnetPart[] = [];
     const shift = (p: MagnetPart, name: string): MagnetPart => {
       const verts = new Float32Array(p.vertProperties);
-      for (let vi = 0; vi < verts.length; vi += p.numProp) verts[vi] += xOffset;
+      const np = p.numProp;
+      // The body is built centred on the origin, so negating X mirrors it about
+      // its own centre; then translate the whole piece clear of the first.
+      for (let vi = 0; vi < verts.length; vi += np) {
+        verts[vi] = (mirrored ? -verts[vi] : verts[vi]) + xOffset;
+      }
+      // Reflection reverses winding; a plain translation does not.
+      const tris = new Uint32Array(p.triVerts);
+      if (mirrored) {
+        for (let ti = 0; ti < tris.length; ti += 3) {
+          const b = tris[ti + 1];
+          tris[ti + 1] = tris[ti + 2];
+          tris[ti + 2] = b;
+        }
+      }
       return {
         kind: p.kind,
         group: 'slider-mirror' as PartGroup,
         colorRgb: p.colorRgb,
         name,
-        numProp: p.numProp,
+        numProp: np,
         vertProperties: verts,
-        // Translation preserves orientation, so the winding is already correct.
-        triVerts: new Uint32Array(p.triVerts),
+        triVerts: tris,
       };
     };
     if (blankBody && !blankBody.isEmpty()) {
@@ -434,7 +467,9 @@ export function buildMagnet(
     };
     if (params.magnetMode === 'none') return { cuts: [], report: { ...empty, requested: 0 } };
 
-    const fitD = Math.max(0, params.pocketFit);
+    // Round pockets print undersize and need the clearance; hex walls print
+    // true, so they take only what the user asked for above that allowance.
+    const fitD = effectivePocketFit(params.pocketFit, params.pocketProfile);
     const minExtent = Math.min(pW, pH);
     // Hard cap: a pocket never spans more than ~62% of the smaller extent, so the
     // watermark's back-face safe zone can never be squeezed out.
@@ -555,20 +590,57 @@ export function buildMagnet(
      *  so it is measured from the POCKET footprint — spacing it by the bare
      *  magnet leaves the pockets' 2 mm guard bands overlapping and every layout
      *  gets rejected. */
-    //  `dim + fitD` is the effective (post-shrink) pocket width, so the grid and
-    //  the pockets actually cut can never disagree about how much room a magnet
-    //  needs — which is what `sliderGridSpec` computes for the untouched magnet.
-    const sliderPitch = dim + fitD + POCKET_WALL + Math.max(0, params.sliderGap) + 0.05;
-    const sliderPositions = (layout: SliderLayout): [number, number][] => {
+    //  The pocket's own worst-case width, so the grid and the pockets actually
+    //  cut can never disagree about how much room a magnet needs — which is what
+    //  `sliderGridSpec` computes for the untouched magnet. A hex pocket spans
+    //  its corners, 15.5% wider than the disc it holds.
+    const sliderPocketDim =
+      params.magnetShape === 'disc' && params.pocketProfile === 'hex'
+        ? (dim + fitD) / COS30
+        : dim + fitD;
+    const sliderPitch = sliderPocketDim + POCKET_WALL + Math.max(0, params.sliderGap) + 0.05;
+    const sliderPositions = (layout: SliderLayout, ox = 0, oy = 0): [number, number][] => {
       const cols = 2;
       const rows = layout / 2;
       const out: [number, number][] = [];
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          out.push([(c - (cols - 1) / 2) * sliderPitch, (r - (rows - 1) / 2) * sliderPitch]);
+          out.push([
+            (c - (cols - 1) / 2) * sliderPitch + ox,
+            (r - (rows - 1) / 2) * sliderPitch + oy,
+          ]);
         }
       }
       return out;
+    };
+
+    /** The user's array offset, pulled back toward the centre until every pocket
+     *  is legal again. Dragging the matrix must never be able to push a pocket
+     *  through the body wall, and silently dropping to a smaller layout (what the
+     *  row ladder would otherwise do) would change the click count mid-drag. */
+    const fitSliderOffset = (layout: SliderLayout): [number, number] => {
+      const want = params.sliderArrayOffset ?? { x: 0, y: 0 };
+      if (!want.x && !want.y) return [0, 0];
+      const allLegal = (ox: number, oy: number): boolean => {
+        let taken: Section | null = null;
+        for (const pos of sliderPositions(layout, ox, oy)) {
+          if (!legal(pos, 0, taken)) return false;
+          const fp = placedAt(pos, 0);
+          taken = taken ? track(taken.add(fp)) : fp;
+        }
+        return true;
+      };
+      // Bisect on the fraction of the requested offset — one rule for every shape,
+      // and it lands the array against the wall instead of snapping back to centre.
+      if (allLegal(want.x, want.y)) return [want.x, want.y];
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 12; i++) {
+        const mid = (lo + hi) / 2;
+        if (allLegal(want.x * mid, want.y * mid)) lo = mid;
+        else hi = mid;
+      }
+      return [want.x * lo, want.y * lo];
     };
 
     /** Farthest-point sampling: magnet 1 goes to the most "central" spot, then
@@ -663,7 +735,8 @@ export function buildMagnet(
       // all — a 2×2 array still clicks, it just clicks once.
       const ladder: SliderLayout[] = ([8, 6, 4] as SliderLayout[]).filter((n) => n <= wanted);
       for (const layout of ladder) {
-        const positions = sliderPositions(layout);
+        const [offX, offY] = fitSliderOffset(layout);
+        const positions = sliderPositions(layout, offX, offY);
         let taken: Section | null = null;
         let allLegal = true;
         for (const pos of positions) {
@@ -703,6 +776,7 @@ export function buildMagnet(
             sliderPitch,
             sliderTravel: (rows - 1) * sliderPitch,
             sliderClicks: rows - 1,
+            sliderArrayOffset: { x: offX, y: offY },
           },
         };
       }

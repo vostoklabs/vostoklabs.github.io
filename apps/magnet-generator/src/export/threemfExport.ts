@@ -11,6 +11,7 @@
 //    it prints as-is with no flipping or rearrangement.
 import { zipSync, strToU8 } from 'fflate';
 import { BRAND } from '@vostok/brand';
+import { projectSettings, colorGroupXml, paletteOf, BBL_NS, BBL_VERSION_META } from '@vostok/export';
 import type { MagnetPart, RGB } from '../types';
 
 const f = (n: number): string => String(Math.round(n * 1e4) / 1e4);
@@ -108,12 +109,23 @@ export function buildThreeMF(parts: MagnetPart[]): Uint8Array {
 
   const buildItems = groups.map((_, i) => `<item objectid="${wrapperIdFor(i)}"/>`).join('');
 
+  // The filament slots the parts above ask for. `model_settings.config` only says
+  // WHICH slot each part wants — it does not create them, so a user with a single
+  // filament loaded had every part clamped back to slot 1 and the model arrived
+  // monochrome. Declaring the palette here makes it travel with the file.
+  const palette = paletteOf(
+    parts.map((p) => ({ color: p.colorRgb })),
+    extruders,
+  );
+  const colorGroup = colorGroupXml(palette, parts.length + 2 + groups.length);
+
   // Provenance / license identity. Well-known 3MF Core metadata names are shown
   // by Bambu Studio / Orca / Prusa; the vl:* names are namespaced per spec.
   const viteEnv: Record<string, string> = ((import.meta as unknown as { env?: Record<string, string> }).env) ?? {};
   const buildId = viteEnv.VITE_BUILD_ID ?? 'dev';
   const creationDate = new Date().toISOString().slice(0, 10);
   const metadata =
+    BBL_VERSION_META +
     `<metadata name="Title">Magnet</metadata>` +
     `<metadata name="Designer">Vostok Labs</metadata>` +
     `<metadata name="Application">Vostok Labs Magnet Generator</metadata>` +
@@ -128,12 +140,14 @@ export function buildThreeMF(parts: MagnetPart[]): Uint8Array {
     `<model unit="millimeter" xml:lang="en-US"` +
     ` xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"` +
     ` xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02"` +
+    ` xmlns:BambuStudio="${BBL_NS}"` +
     ` xmlns:vl="${VL_NS}">` +
     metadata +
     `<resources>` +
     `<basematerials id="1">${baseMaterials}</basematerials>` +
     leafObjects +
     wrapperObjects +
+    colorGroup +
     `</resources>` +
     `<build>${buildItems}</build>` +
     `</model>`;
@@ -198,6 +212,7 @@ export function buildThreeMF(parts: MagnetPart[]): Uint8Array {
       '_rels/.rels': strToU8(rels),
       '3D/3dmodel.model': strToU8(model),
       'Metadata/model_settings.config': strToU8(modelSettings),
+      'Metadata/project_settings.config': strToU8(projectSettings(palette)),
       'Metadata/vostok_labs.txt': strToU8(provenance),
     },
     { level: 6 },

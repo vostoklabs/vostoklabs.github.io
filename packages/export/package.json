@@ -1,0 +1,20 @@
+{
+  "name": "@vostok/export",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Shared model exporters: multi-part 3MF (Bambu/Orca filament slots), binary STL, OBJ.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

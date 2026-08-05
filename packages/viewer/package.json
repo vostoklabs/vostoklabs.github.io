@@ -1,0 +1,24 @@
+{
+  "name": "@vostok/viewer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The standard Vostok Labs 3D preview: Z-up CAD frame, PBR lighting, build plate, part picking.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vostok/plates": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/three": "^0.171.0",
+    "three": "^0.171.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  }
+}

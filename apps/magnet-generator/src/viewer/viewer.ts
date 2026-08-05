@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createBuildPlate, type BuildPlate } from '@vostok/plates/three';
+import { loadPlateChoice, type PlateChoice } from '@vostok/plates';
 import type { MagnetPart, RGB } from '../types';
 
 const FRAME_MUL = 2.2;
@@ -42,6 +44,8 @@ export interface Viewer {
   pickBodyPoint(clientX: number, clientY: number): [number, number] | null;
   /** Draw magnet markers over the model. Empty positions clears them. */
   setMagnetHandles(opts: MagnetHandleOptions): void;
+  /** Swap the floor the model stands on: a build plate, or the plain grid. */
+  setPlate(choice: PlateChoice): void;
   /** Which handle is under the pointer, or null. */
   handleAt(clientX: number, clientY: number): number | null;
   /** Suspend orbit while dragging a magnet. */
@@ -57,9 +61,9 @@ export interface Viewer {
   dispose(): void;
 }
 
-// The grid sits a hair BELOW the model's bottom face (z = 0) so the solid bottom
+// The floor sits a hair BELOW the model's bottom face (z = 0) so the solid bottom
 // occludes it cleanly — coplanar at z = 0 causes z-fighting.
-const GRID_GAP = 1.0;
+const FLOOR_GAP = 0.06;
 
 function partToGeometry(p: MagnetPart): THREE.BufferGeometry {
   const geo = new THREE.BufferGeometry();
@@ -110,32 +114,12 @@ export function createViewer(container: HTMLElement): Viewer {
   scene.add(key);
   scene.add(new THREE.AmbientLight(0xffffff, 0.2));
 
-  let gridZ = -20;
-  let grid: THREE.GridHelper | null = null;
-
-  function setGridVisible(on: boolean) {
-    if (grid) grid.visible = on;
-  }
-
-  function rebuildGrid(theme: string, z: number) {
-    if (grid) scene.remove(grid);
-    gridZ = z;
-    const accentColor = theme === 'dark' ? 0x5b9dff : 0x2563eb;
-    const gridColor = theme === 'dark' ? 0x2d3139 : 0xd1d5db;
-    grid = new THREE.GridHelper(300, 30, accentColor, gridColor);
-    grid.rotation.x = Math.PI / 2;
-    grid.position.z = gridZ;
-    grid.renderOrder = -1;
-    if (Array.isArray(grid.material)) {
-      grid.material.forEach((m) => {
-        m.depthWrite = false;
-      });
-    } else {
-      grid.material.depthWrite = false;
-    }
-    scene.add(grid);
-  }
-  rebuildGrid(currentTheme, gridZ);
+  // The floor: a Bambu build plate (default) or the plain reference grid, with
+  // the model resting on its top surface.
+  const floorZ = -FLOOR_GAP;
+  const buildPlate: BuildPlate = createBuildPlate(THREE, { theme: currentTheme, topZ: floorZ });
+  buildPlate.setChoice(loadPlateChoice());
+  scene.add(buildPlate.object);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -209,19 +193,45 @@ export function createViewer(container: HTMLElement): Viewer {
     }
 
     // Center X/Y; place the bottom face at z = 0 so the model sits on the grid.
+    // Measure from the ORIGIN, not from wherever the last build left the group: reset the
+    // offset and force the world matrices down the tree first. Box3.expandByObject reuses
+    // the parent's cached matrixWorld, so without this the box carries the previous
+    // build's offset and the new one stacks on top — the model slid left/right on the
+    // plate whenever a setting (magnet spacing, embedded ↔ glue-on) changed its extents.
+    root.position.set(0, 0, 0);
+    root.updateMatrixWorld(true);
     const box = new THREE.Box3().expandByObject(root);
     const center = box.getCenter(new THREE.Vector3());
     root.position.set(-center.x, -center.y, -box.min.z);
 
     const size = box.getSize(new THREE.Vector3());
     lastSize = size;
-    rebuildGrid(document.documentElement.getAttribute('data-theme') || 'dark', -GRID_GAP);
 
     syncHandles(); // root moved, so the handles have to follow
 
     const radius = Math.max(size.x, size.y, size.z);
-    const grew = framedRadius > 0 && (radius / framedRadius > 1.6 || radius / framedRadius < 0.62);
-    if (refit || framedRadius === 0 || grew) frame('iso');
+    if (refit || framedRadius === 0) {
+      frame('iso');
+      return;
+    }
+
+    // Editing a parameter must never move the camera in a way the user can feel.
+    // This used to re-frame to 'iso' once the radius crossed a 1.6x / 0.62x
+    // threshold, which both teleported the camera to a fixed angle (discarding
+    // the user's orbit) and fired as a single lurch part-way through a drag.
+    // Controls that barely change the outer size felt perfectly smooth; the ones
+    // that do — size, spacing, count — jumped. Now the angle is never touched and
+    // the distance only eases outward, and only while the model is outgrowing the
+    // frame, so every step of a drag gets a small proportional correction.
+    if (radius > framedRadius) {
+      const offset = camera.position.clone().sub(controls.target);
+      const needed = radius * FRAME_MUL + FRAME_PAD;
+      if (offset.length() < needed) {
+        camera.position.copy(controls.target).add(offset.setLength(needed));
+        controls.update();
+      }
+    }
+    framedRadius = radius;
   }
 
   /** Re-place the magnet markers after the model group moves. */
@@ -288,9 +298,10 @@ export function createViewer(container: HTMLElement): Viewer {
       onResize();
     }
     controls.update();
-    // The grid sits under the model; looking at the magnet side (from below) it
-    // would sit between the camera and the part, so drop it while we're under.
-    setGridVisible(camera.position.z > gridZ);
+    // The floor sits under the model; looking at the magnet side (from below) it
+    // would sit between the camera and the part. Fade it to a ghost rather than
+    // dropping it, so the plate never pops in and out as you orbit past level.
+    buildPlate.setGhosted(camera.position.z <= floorZ);
     renderer.render(scene, camera);
   })();
 
@@ -575,9 +586,20 @@ export function createViewer(container: HTMLElement): Viewer {
   /** In magnet mode, left-drag places magnets — it must NOT orbit. OrbitControls
    *  listens on the canvas and sees pointerdown before our stage handler, so we
    *  can't disable it reactively; instead we turn left-button rotate off up front.
-   *  Right-drag pans and the wheel still zooms. */
+   *
+   *  Everything else stays live. LEFT cannot be remapped to pan — it would fire
+   *  alongside the placement drag on the model — so panning stays on right-drag,
+   *  middle-drag and two-finger, and the wheel keeps zooming. Those are exactly
+   *  what `controls.enabled = false` used to take away along with orbit. */
   function setPlacementMode(on: boolean) {
     controls.enableRotate = !on;
+    controls.enablePan = true;
+    controls.enableZoom = true;
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE, // inert while enableRotate is false
+      MIDDLE: on ? THREE.MOUSE.PAN : THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN,
+    };
   }
   function setPartColor(index: number, rgb: RGB) {
     const m = materials[index] as THREE.MeshStandardMaterial | undefined;
@@ -602,6 +624,7 @@ export function createViewer(container: HTMLElement): Viewer {
     renderer.domElement.removeEventListener('pointerdown', onPointerDown);
     renderer.domElement.removeEventListener('pointerup', onPointerUp);
     clearGroup(root);
+    buildPlate.dispose();
     outlineMaterial.dispose();
     controls.dispose();
     pmrem.dispose();
@@ -610,7 +633,7 @@ export function createViewer(container: HTMLElement): Viewer {
   }
   function setTheme(theme: string) {
     scene.background = new THREE.Color(theme === 'dark' ? 0x15171c : 0xf3f4f6);
-    rebuildGrid(theme, gridZ);
+    buildPlate.setTheme(theme);
   }
 
   return {
@@ -618,6 +641,7 @@ export function createViewer(container: HTMLElement): Viewer {
     setView: frame,
     pickBodyPoint,
     setMagnetHandles,
+    setPlate: (choice) => buildPlate.setChoice(choice),
     handleAt,
     setOrbitEnabled,
     setPlacementMode,

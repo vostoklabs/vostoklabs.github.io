@@ -1,4 +1,5 @@
 import '@vostok/ui-kit/styles.css';
+import '@vostok/plates/plates.css';
 import './style.css';
 
 import {
@@ -29,6 +30,7 @@ import { processImage } from './image/pipeline';
 import { parseSvg } from './image/logo';
 import { SAMPLES } from './image/sample';
 import { createViewer, type Viewer, type ViewPreset } from './viewer/viewer';
+import { mountPlatePicker } from '@vostok/plates';
 import { downloadThreeMF } from './export/threemfExport';
 import { openMagnetWizard } from './ui/wizard';
 import { runImportWizard } from './ui/import-wizard';
@@ -53,12 +55,33 @@ import type {
 
 /** What clicking on the model does. */
 type EditMode = 'color' | 'extrude' | 'magnet';
-import { FILAMENTS, MAGNET_PRESETS, sliderGridSpec, sliderMinBodySizeFor } from './types';
+import {
+  FILAMENTS,
+  MAGNET_PRESETS,
+  sliderGridSpec,
+  sliderMinBodySizeFor,
+  effectivePocketFit,
+} from './types';
+import { unzipSync } from 'fflate';
+import {
+  FONTS,
+  type FontChoice,
+  FALLBACK_FONT_ID,
+  getFont,
+  parseFont,
+  registerCustomFont,
+  isFontSupported,
+  fontFamilyFor,
+  curatedFonts,
+} from '@vostok/fonts';
+import { buildTextRegionSet } from './image/text';
 
 const IMG_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
 const SVG_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
+const TEXT_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>';
 const UPLOAD_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
 
@@ -129,6 +152,17 @@ interface Settings {
   sliderMirrorBlank: boolean;
   /** Extra plastic between slider pockets, on top of the 2 mm minimum, mm. */
   sliderGap: number;
+  /** Translation of the whole slider magnet array from the body centre, mm. Both
+   *  halves share one array, so this is the only way a slider's pockets move. */
+  sliderArrayOffset: { x: number; y: number };
+
+  // ---- Text source ----
+  /** The line of text, when the Text tab is the import source. */
+  text: string;
+  /** Font id from the shared registry. */
+  textFont: string;
+  /** Tracking between glyphs, as a fraction of the em. Negative squashes. */
+  letterSpacing: number;
 }
 
 /** A fidget slider is a pocket toy, not a fridge magnet — 70 mm is a coaster.
@@ -176,6 +210,10 @@ const DEFAULT_SETTINGS: Settings = {
   // Packed at the 2 mm printable minimum the pockets read as one solid block.
   // 3 mm of plastic between them is what makes the array look deliberate.
   sliderGap: 3,
+  sliderArrayOffset: { x: 0, y: 0 },
+  text: 'Hello',
+  textFont: 'luckiest-guy',
+  letterSpacing: 0,
 };
 
 const store = createStore<{
@@ -224,6 +262,16 @@ let baseImage: RgbaImage | null = null;
 /** The last wizard settings, so re-opening keeps the user's tuning. */
 let preprocess: PreprocessParams = { ...DEFAULT_PREPROCESS };
 let svgText: string | null = null;
+/** Parsed fonts for the text source, kept so a re-trace doesn't refetch them. */
+let textSource: { font: any; fallbackFont: any } | null = null;
+/** Which source owns the design.
+ *
+ *  `reprocess()` switches on THIS rather than sniffing whichever of
+ *  originalImage / svgText / textSource happens to be non-null. Sniffing meant
+ *  every import had to remember to null the other three, and the answer also
+ *  depended on the order of the if-chain — importing an image while text was
+ *  still loaded silently re-laid-out the text instead. One variable decides. */
+let activeSource: ImportMode | null = null;
 let regionSet: RegionSet | null = null;
 let latestParts: MagnetPart[] = [];
 let downloads = 0;
@@ -233,6 +281,10 @@ let firstBuildDone = false;
 let activeMagnet = 0;
 /** Assigned by magnetSection(); lets the stage panel refresh the sidebar form. */
 let redrawMagnetSection: () => void = () => {};
+/** Assigned by importSourceSection(); lets the source tabs hide the controls that
+ *  only mean something for a raster/vector import. Declared up here because the
+ *  shell builds that section during module init, long before its own line runs. */
+let syncRemoveBg: (mode: ImportMode | null) => void = () => {};
 
 // ---------------------------------------------------------------------------
 // Fit rules
@@ -275,6 +327,7 @@ function sliderGrid(v: Settings) {
     magnetX: v.magnetX,
     magnetY: v.magnetY,
     pocketFit: v.pocketFit,
+    pocketProfile: v.pocketProfile,
     gap: v.sliderGap,
   });
 }
@@ -594,6 +647,10 @@ const viewer: Viewer = createViewer(stageContainer);
 const statusEl = el('p', { className: 'mg-status', text: 'Loading…' });
 shell.stage.append(statusEl);
 
+// --- Build plate picker (top-right of the stage). The chosen plate is shared
+//     across every generator. ---
+mountPlatePicker(shell.stage, viewer);
+
 // --- View switching (programmatic only — the visible bar is removed). ---
 const viewButtons = new Map<ViewPreset | 'fit', HTMLButtonElement>();
 const setView = (preset: ViewPreset) => {
@@ -656,7 +713,9 @@ const syncEditMode = () => {
   magnetHint.toggleAttribute('hidden', m !== 'magnet');
   // The magnet hint and the interaction hint share the bottom-center slot.
   shell.stage.querySelector('.vl-stage__hint')?.classList.toggle('hidden', m === 'magnet');
-  viewer.setOrbitEnabled(m !== 'magnet');
+  // Magnet mode only takes LEFT-drag away (that gesture places pockets). Pan and
+  // zoom must keep working, or there is no way to reach a pocket near the edge —
+  // `setOrbitEnabled(false)` used to kill the whole control, wheel included.
   viewer.setPlacementMode(m === 'magnet');
   syncMagnetHandles();
 };
@@ -728,15 +787,16 @@ function syncMagnetHandles() {
     outline: v.magnetShape === 'block' ? 'rect' : v.pocketProfile === 'hex' ? 'hex' : 'circle',
     size: [v.magnetX, v.magnetY],
     rotations,
-    // Slider pockets come from the shared array, so there is nothing to drag.
+    // A slider's pockets come from one shared array, so no single pocket is ever
+    // "the selected one" — the drag moves all of them together.
     active: v.productType === 'slider' ? -1 : activeMagnet,
-    interactive: interactive && v.productType !== 'slider',
+    interactive,
   });
 
   if (interactive) {
     magnetHintText.textContent =
       v.productType === 'slider'
-        ? 'Slider magnets sit on a fixed pitch — both halves have to match, so they can’t be moved individually.'
+        ? 'Drag to move the whole magnet array — both halves share one pitch, so they move together.'
         : report.positions.length > 1
           ? `Drag a magnet to move it · #${activeMagnet + 1} of ${report.positions.length} selected`
           : 'Drag the magnet to move it, or click the shape to place it there';
@@ -935,6 +995,15 @@ function enterMagnetMode() {
 }
 
 let draggingMagnet: number | null = null;
+/** Slider only: where the pointer grabbed the array, and the offset it started
+ *  from. The whole matrix moves by the delta between them. */
+let sliderDrag: { fromX: number; fromY: number; baseX: number; baseY: number } | null = null;
+
+/** A left-drag in Magnet mode that grabbed nothing is almost always someone trying
+ *  to spin the view. Left-drag is the placement gesture here, so orbit is off — say
+ *  so once per attempt rather than leaving the stage feeling frozen. */
+let orbitAttempt: { x: number; y: number } | null = null;
+let lastOrbitToast = 0;
 
 stageContainer.addEventListener('pointerdown', (e) => {
   if (store.get().editMode !== 'magnet' || e.button !== 0) return;
@@ -944,6 +1013,22 @@ stageContainer.addEventListener('pointerdown', (e) => {
   if (!isHelper && (!report || report.positions.length === 0)) return;
   const grabbed = viewer.handleAt(e.clientX, e.clientY);
   const point = viewer.pickBodyPoint(e.clientX, e.clientY);
+  if (grabbed === null && !point) orbitAttempt = { x: e.clientX, y: e.clientY };
+
+  // A slider's two halves have to stay on one shared pitch — that pitch IS the
+  // click. So a grab anywhere on the array drags the ENTIRE matrix, both halves
+  // together, rather than pulling one pocket (and its twin) out of formation.
+  if (v.productType === 'slider') {
+    if (grabbed === null && !point) return;
+    const anchor = point ?? viewer.pickBodyPoint(e.clientX, e.clientY);
+    if (!anchor) return;
+    const base = v.sliderArrayOffset ?? { x: 0, y: 0 };
+    sliderDrag = { fromX: anchor[0], fromY: anchor[1], baseX: base.x, baseY: base.y };
+    stageContainer.setPointerCapture(e.pointerId);
+    stageContainer.classList.add('mg-dragging');
+    return;
+  }
+
   if (grabbed !== null) {
     activeMagnet = grabbed;
   } else if (point) {
@@ -962,12 +1047,48 @@ stageContainer.addEventListener('pointerdown', (e) => {
 });
 
 stageContainer.addEventListener('pointermove', (e) => {
+  if (orbitAttempt) {
+    // Only a real drag counts — a plain click on the background is not an orbit.
+    if (Math.hypot(e.clientX - orbitAttempt.x, e.clientY - orbitAttempt.y) > 6) {
+      orbitAttempt = null;
+      if (Date.now() - lastOrbitToast > 6000) {
+        lastOrbitToast = Date.now();
+        toast(
+          'Orbit is off in Magnet mode — left-drag places pockets. Right-drag to pan, scroll to zoom, ' +
+            'or switch to Color or Extrude mode to rotate.',
+          { kind: 'info' },
+        );
+      }
+    }
+  }
+  if (sliderDrag) {
+    const point = viewer.pickBodyPoint(e.clientX, e.clientY);
+    if (!point) return;
+    patch({
+      sliderArrayOffset: {
+        x: round1(sliderDrag.baseX + (point[0] - sliderDrag.fromX)),
+        y: round1(sliderDrag.baseY + (point[1] - sliderDrag.fromY)),
+      },
+    });
+    return;
+  }
   if (draggingMagnet === null) return;
   const point = viewer.pickBodyPoint(e.clientX, e.clientY);
   if (point) moveMagnetTo(draggingMagnet, point[0], point[1]);
 });
 
 const endMagnetDrag = (e: PointerEvent) => {
+  orbitAttempt = null;
+  if (sliderDrag) {
+    sliderDrag = null;
+    stageContainer.classList.remove('mg-dragging');
+    if (stageContainer.hasPointerCapture(e.pointerId)) stageContainer.releasePointerCapture(e.pointerId);
+    // The builder clamps the offset at the body wall; adopt what it actually used
+    // so a drag past the edge stops there instead of banking up dead offset.
+    const applied = store.get().report?.sliderArrayOffset;
+    if (applied) patch({ sliderArrayOffset: { x: round1(applied.x), y: round1(applied.y) } });
+    return;
+  }
   if (draggingMagnet === null) return;
   draggingMagnet = null;
   stageContainer.classList.remove('mg-dragging');
@@ -1066,6 +1187,7 @@ async function loadDefaultImage() {
     preprocess = { ...DEFAULT_PREPROCESS };
     originalImage = baseImage;
     svgText = null;
+    activeSource = 'image';
     store.set({ settings: { ...s(), sourceName: first.name } });
     reprocess(true);
   } catch (err) {
@@ -1089,6 +1211,8 @@ function openImport(name: string, getter: () => Promise<RgbaImage>) {
           preprocess = p;
           originalImage = adjusted;
           svgText = null;
+          textSource = null;
+          activeSource = 'image';
           store.set({ settings: { ...s(), sourceName: name, removeBg: !p.keepBackground } });
           reprocess(true);
         },
@@ -1109,6 +1233,8 @@ async function importSvgFile(file: File) {
     svgText = await file.text();
     originalImage = null;
     baseImage = null;
+    textSource = null;
+    activeSource = 'svg';
     store.set({ settings: { ...s(), sourceName: file.name } });
     reprocess(true);
   } catch (err) {
@@ -1126,14 +1252,22 @@ function reprocess(refit = false) {
     if (firstBuildDone) resetHistory();
   }
   try {
-    if (originalImage) {
+    if (activeSource === 'text' && textSource) {
+      store.set({ building: true, status: 'Laying out text…' });
+      regionSet = buildTextRegionSet({
+        text: v.text,
+        font: textSource.font,
+        fallbackFont: textSource.fallbackFont,
+        letterSpacing: v.letterSpacing,
+      });
+    } else if (activeSource === 'image' && originalImage) {
       store.set({ building: true, status: 'Tracing image…' });
       regionSet = processImage(cloneImage(originalImage), v.colorCount, { removeBg: v.removeBg, smoothing: v.smoothing });
-    } else if (svgText) {
+    } else if (activeSource === 'svg' && svgText) {
       store.set({ building: true, status: 'Parsing SVG…' });
       regionSet = parseSvg(svgText, { removeBg: v.removeBg });
     } else {
-      store.set({ status: 'Import an image or SVG first.' });
+      store.set({ status: 'Import an image, SVG or text first.' });
       return;
     }
   } catch (err) {
@@ -1221,6 +1355,7 @@ function rebuild() {
     sliderLayout: v.sliderLayout,
     sliderMirrorBlank: v.sliderMirrorBlank,
     sliderGap: v.sliderGap,
+    sliderArrayOffset: v.sliderArrayOffset,
   };
 
   buildInFlight = true;
@@ -1257,6 +1392,173 @@ async function exportModel(formatId: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Text source
+// ---------------------------------------------------------------------------
+type ImportMode = 'image' | 'svg' | 'text';
+
+/** Make text the design's source (or re-trace it after an edit). Loads the font
+ *  once and keeps it, so typing doesn't refetch a .ttf on every keystroke. */
+async function applyTextSource(takeOver = false) {
+  const v = s();
+  if (!v.text.trim()) {
+    store.set({ status: 'Type something to put on the magnet.' });
+    return;
+  }
+  try {
+    const [font, fallbackFont] = await Promise.all([
+      getFont(v.textFont),
+      getFont(FALLBACK_FONT_ID).catch(() => null),
+    ]);
+    textSource = { font, fallbackFont };
+    // The image/SVG are deliberately kept in memory: `activeSource` decides who
+    // owns the design, so switching back to that tab restores it instead of
+    // leaving the user with an empty panel and a lost import.
+    activeSource = 'text';
+    store.set({ settings: { ...s(), sourceName: v.text } });
+    reprocess(takeOver);
+  } catch (err) {
+    store.set({ building: false, status: '' });
+    toast(`Could not load that font — ${err instanceof Error ? err.message : String(err)}`, { kind: 'error' });
+    console.error(err);
+  }
+}
+
+const debouncedTextRebuild = debounce(() => void applyTextSource(), 220);
+
+/** Searchable, category-filtered font picker with a live preview of the user's
+ *  own text. Ported from the keychain; the registry it reads is shared. */
+function openFontBrowser(currentId: string, sampleText: string, onPick: (id: string) => void) {
+  const categories = ['All', ...Array.from(new Set(FONTS.map((f) => f.category))).sort()];
+  let cat = 'All';
+  let search = '';
+
+  const list = el('div', { className: 'mg-fb__list' });
+  const searchInput = el('input', {
+    className: 'mg-fb__search',
+    attrs: { type: 'search', placeholder: `Search ${FONTS.length} fonts…`, 'aria-label': 'Search fonts' },
+  }) as HTMLInputElement;
+  const catRow = el('div', { className: 'mg-fb__cats' });
+
+  const render = () => {
+    const q = search.trim().toLowerCase();
+    const matches = FONTS.filter(
+      (f) =>
+        (cat === 'All' || f.category === cat) &&
+        (!q || f.label.toLowerCase().includes(q) || f.category.toLowerCase().includes(q)),
+    );
+    list.replaceChildren(
+      ...matches.map((f) => {
+        const row = el('button', {
+          className: `mg-fb__row${f.id === currentId ? ' active' : ''}`,
+          attrs: { type: 'button', 'data-font': f.id },
+        }, [
+          el('span', {
+            className: 'mg-fb__preview',
+            text: sampleText.slice(0, 12) || f.label,
+            attrs: { style: `font-family: ${fontFamilyFor(f.id)}` },
+          }),
+          el('span', { className: 'mg-fb__meta' }, [
+            el('span', { className: 'mg-fb__name', text: f.label }),
+            el('span', { className: 'mg-fb__cat', text: f.category }),
+          ]),
+        ]);
+        row.addEventListener('click', () => {
+          onPick(f.id);
+          modal.close();
+        });
+        return row;
+      }),
+    );
+    if (matches.length === 0) {
+      list.append(el('p', { className: 'vl-hint', text: 'No fonts match that search.' }));
+    }
+  };
+
+  for (const c of categories) {
+    const b = el('button', {
+      className: `mg-fb__cat-btn${c === cat ? ' active' : ''}`,
+      text: c,
+      attrs: { type: 'button' },
+    });
+    b.addEventListener('click', () => {
+      cat = c;
+      catRow.querySelectorAll('.mg-fb__cat-btn').forEach((x) => x.classList.toggle('active', x === b));
+      render();
+    });
+    catRow.append(b);
+  }
+  searchInput.addEventListener('input', () => {
+    search = searchInput.value;
+    render();
+  });
+  render();
+
+  const modal = dialog({
+    title: 'Browse fonts',
+    content: el('div', { className: 'mg-fb' }, [searchInput, catRow, list]),
+    actions: [{ label: 'Close' }],
+  });
+}
+
+/** Import a .ttf/.otf, or a .zip of them, and select the last one loaded. */
+async function importCustomFont(file: File, onLoaded: (id: string) => void) {
+  try {
+    const raw = await file.arrayBuffer();
+    const items: { name: string; buffer: ArrayBuffer }[] = [];
+    if (file.name.toLowerCase().endsWith('.zip')) {
+      const unzipped = unzipSync(new Uint8Array(raw));
+      for (const [name, data] of Object.entries(unzipped)) {
+        const lower = name.toLowerCase();
+        if (name.endsWith('/') || !(lower.endsWith('.ttf') || lower.endsWith('.otf'))) continue;
+        items.push({
+          name: name.split('/').pop() || name,
+          buffer: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
+        });
+      }
+      if (items.length === 0) {
+        toast('No .ttf or .otf files found in that zip.', { kind: 'error' });
+        return;
+      }
+    } else {
+      items.push({ name: file.name, buffer: raw });
+    }
+
+    let last = '';
+    let n = 0;
+    for (const item of items) {
+      try {
+        const parsed = parseFont(item.buffer);
+        const id = `custom-${Date.now()}-${n++}`;
+        registerCustomFont(id, parsed);
+        // Give the HTML preview the same face the geometry will use.
+        const style = document.createElement('style');
+        style.textContent = `@font-face { font-family: '${fontFamilyFor(id)}'; src: url('${URL.createObjectURL(new Blob([item.buffer]))}'); }`;
+        document.head.appendChild(style);
+        FONTS.unshift({
+          id,
+          label: item.name.replace(/\.[^/.]+$/, ''),
+          category: 'Custom',
+          curated: true,
+          subsets: ['latin', 'latin-ext', 'cyrillic', 'greek'],
+        });
+        last = id;
+      } catch (err) {
+        console.error(`Failed to load font ${item.name}:`, err);
+      }
+    }
+    if (!last) {
+      toast('Could not read that font file.', { kind: 'error' });
+      return;
+    }
+    toast(items.length > 1 ? `Imported ${items.length} fonts` : 'Font imported', { kind: 'ok' });
+    onLoaded(last);
+  } catch (err) {
+    toast('Could not read that font file.', { kind: 'error' });
+    console.error(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Right panel — Import Source
 // ---------------------------------------------------------------------------
 function importSourceSection(): HTMLElement {
@@ -1271,6 +1573,10 @@ function importSourceSection(): HTMLElement {
       <button class="import-card" data-mode="svg" type="button">
         <span class="card-icon">${SVG_ICON}</span>
         <span class="card-label">SVG</span>
+      </button>
+      <button class="import-card" data-mode="text" type="button">
+        <span class="card-icon">${TEXT_ICON}</span>
+        <span class="card-label">Text</span>
       </button>
     </div>
     <div id="imagePanel" class="mode-panel">
@@ -1292,6 +1598,18 @@ function importSourceSection(): HTMLElement {
         <input id="mgSvgUpload" type="file" accept=".svg,image/svg+xml" multiple />
       </label>
     </div>
+    <div id="textPanel" class="mode-panel" hidden>
+      <p class="hint-text">Type a word and pick a font. Base shape "Image outline" hugs the letters; the preset shapes put them on a plate.</p>
+      <input id="mgTextInput" class="mg-text-input" type="text" maxlength="24" aria-label="Magnet text" />
+      <div id="mgFontGrid" class="mg-font-grid"></div>
+      <button id="mgBrowseFonts" class="vl-btn vl-btn--secondary vl-btn--block" type="button"></button>
+      <label class="upload-cta mg-font-import">
+        <span>${UPLOAD_ICON}</span>
+        Import custom font (.ttf/.otf/.zip)
+        <input id="mgFontUpload" type="file" accept=".ttf,.otf,.zip" />
+      </label>
+      <div id="mgTextTuning"></div>
+    </div>
   `;
 
   const $ = <T extends HTMLElement>(sel: string) => sec.querySelector<T>(sel)!;
@@ -1302,16 +1620,35 @@ function importSourceSection(): HTMLElement {
   const file = $<HTMLInputElement>('#mgFile');
   const svgFile = $<HTMLInputElement>('#mgSvgUpload');
 
-  const setMode = (mode: 'image' | 'svg') => {
+  const textPanel = $('#textPanel');
+
+  const setMode = (mode: ImportMode) => {
     tabs.querySelectorAll('.import-card').forEach((b) => {
       b.classList.toggle('active', b.getAttribute('data-mode') === mode);
     });
     imagePanel.hidden = mode !== 'image';
     svgPanel.hidden = mode !== 'svg';
+    textPanel.hidden = mode !== 'text';
+    syncRemoveBg(mode);
   };
   tabs.addEventListener('click', (e) => {
     const t = (e.target as HTMLElement).closest('[data-mode]') as HTMLElement | null;
-    if (t) setMode(t.getAttribute('data-mode') === 'svg' ? 'svg' : 'image');
+    if (!t) return;
+    const mode = (t.getAttribute('data-mode') ?? 'image') as ImportMode;
+    setMode(mode);
+    if (mode === activeSource) return;
+    // Picking a tab switches the design back to that source when it still has
+    // one loaded. Nothing is discarded on the way out, so this round-trips.
+    if (mode === 'text') {
+      void applyTextSource(true);
+    } else if (mode === 'image' && originalImage) {
+      activeSource = 'image';
+      reprocess(true);
+    } else if (mode === 'svg' && svgText) {
+      activeSource = 'svg';
+      reprocess(true);
+    }
+    // No source of that kind yet — the panel is showing so the user can add one.
   });
 
   drop.addEventListener('click', () => file.click());
@@ -1359,20 +1696,96 @@ function importSourceSection(): HTMLElement {
     grid.append(item);
   }
 
+  // ---- Text source ----
+  const textInput = $<HTMLInputElement>('#mgTextInput');
+  const fontGrid = $('#mgFontGrid');
+  const browseBtn = $<HTMLButtonElement>('#mgBrowseFonts');
+  const fontUpload = $<HTMLInputElement>('#mgFontUpload');
+  const textTuning = $('#mgTextTuning');
+
+  textInput.value = s().text;
+  browseBtn.textContent = `Browse all ${FONTS.length} fonts →`;
+
+  const fontCard = (font: FontChoice): HTMLButtonElement => {
+    const supported = isFontSupported(font, s().text);
+    const btn = el('button', {
+      className: `mg-font-card${font.id === s().textFont ? ' active' : ''}${supported ? '' : ' unsupported'}`,
+      attrs: {
+        type: 'button',
+        'data-font': font.id,
+        title: supported ? font.label : `${font.label} (characters missing)`,
+      },
+    }, [
+      el('span', {
+        className: 'mg-font-card__sample',
+        text: s().text.slice(0, 6) || 'Abc',
+        attrs: { style: `font-family: ${fontFamilyFor(font.id)}` },
+      }),
+      el('span', { className: 'mg-font-card__name', text: font.label }),
+    ]) as HTMLButtonElement;
+    btn.addEventListener('click', () => {
+      patchImage({ textFont: font.id });
+      renderFontGrid();
+      void applyTextSource();
+    });
+    return btn;
+  };
+
+  // The active font is pinned first when it isn't curated, so a pick made in the
+  // browse-all modal stays visible in the grid.
+  const renderFontGrid = () => {
+    fontGrid.replaceChildren();
+    const active = FONTS.find((f) => f.id === s().textFont);
+    if (active && !active.curated) fontGrid.append(fontCard(active));
+    for (const f of curatedFonts()) fontGrid.append(fontCard(f));
+  };
+  renderFontGrid();
+
+  textInput.addEventListener('input', () => {
+    patchImage({ text: textInput.value });
+    renderFontGrid(); // samples and the "characters missing" flag follow the text
+    debouncedTextRebuild();
+  });
+
+  browseBtn.addEventListener('click', () => {
+    openFontBrowser(s().textFont, s().text, (id) => {
+      patchImage({ textFont: id });
+      renderFontGrid();
+      void applyTextSource();
+    });
+  });
+
+  fontUpload.addEventListener('change', () => {
+    const f = fontUpload.files?.[0];
+    if (f) void importCustomFont(f, (id) => {
+      patchImage({ textFont: id });
+      renderFontGrid();
+      void applyTextSource();
+    });
+    fontUpload.value = '';
+  });
+
+  // Letter spacing now lives in the left panel's Shape & size step, next to the
+  // other geometry controls.
+
   // Background removal sits with the import, same as the clicker. Re-tuning the
   // image is done by re-importing it — the wizard opens on every import, so a
   // separate "adjust" button is one control too many.
-  sec.append(
-    toggleSwitch({
-      label: 'Remove background',
-      checked: s().removeBg,
-      help: 'Drops a flat background so only the subject is traced. Turn off if your image is already cut out.',
-      onChange: (on) => {
-        patchImage({ removeBg: on });
-        debouncedReprocess();
-      },
-    }),
-  );
+  //
+  // Text is rendered as glyphs on nothing, so there is no background to drop —
+  // the toggle is meaningless in that mode and hides with it.
+  const removeBgRow = toggleSwitch({
+    label: 'Remove background',
+    checked: s().removeBg,
+    help: 'Drops a flat background so only the subject is traced. Turn off if your image is already cut out.',
+    onChange: (on) => {
+      patchImage({ removeBg: on });
+      debouncedReprocess();
+    },
+  });
+  sec.append(removeBgRow);
+  syncRemoveBg = (mode: ImportMode | null) => removeBgRow.toggleAttribute('hidden', mode === 'text');
+  syncRemoveBg(activeSource);
 
   return sec;
 }
@@ -1392,6 +1805,22 @@ function shapeSection(): HTMLElement {
     onInput: (v) => patch({ cornerRadius: v }),
   });
   const sizeNote = el('p', { className: 'vl-hint' });
+  // Letter spacing is a shape control, not an import control — it belongs here in
+  // the left settings panel with Size and Margin, not buried in the right-hand
+  // Import Source card. Only text designs have letters, so it hides otherwise.
+  const letterSpacingRow = sliderRow({
+    label: 'Letter spacing',
+    min: -0.15,
+    max: 0.4,
+    step: 0.01,
+    value: s().letterSpacing,
+    unit: 'em',
+    help: 'Tracking between letters, as a fraction of the font size. Negative pulls them together — useful when you want the letters to touch so the magnet prints as one piece.',
+    onInput: (val) => {
+      patchImage({ letterSpacing: val });
+      debouncedTextRebuild();
+    },
+  });
   const sizeRow = sliderRow({
     label: 'Size',
     min: 20,
@@ -1465,6 +1894,8 @@ function shapeSection(): HTMLElement {
             : '') +
           ` + ${COVER_MIN} mm cover.`;
     thicknessNote.classList.toggle('hidden', v.magnetMode === 'none');
+
+    letterSpacingRow.toggleAttribute('hidden', activeSource !== 'text');
   };
   syncVisibility();
   ownSub(syncVisibility);
@@ -1499,6 +1930,7 @@ function shapeSection(): HTMLElement {
       onInput: (v) => patch({ imageMargin: v }),
     }),
     cornerRow,
+    letterSpacingRow,
     toggleSwitch({
       label: 'Bevel the front edge',
       checked: s().bevelEdge,
@@ -1648,7 +2080,10 @@ function magnetSection(): HTMLElement {
 
   const renderForm = () => {
     const v = s();
-    const sig = [v.productType, v.magnetMode, v.magnetShape, v.magnetCount, v.magnetPlacement, v.sliderLayout, v.sliderMirrorBlank].join('|');
+    // baseShape is in here because it decides whether the slider's second piece
+    // is mirrored, and the assembly copy has to say which one you're getting.
+    // pocketProfile likewise changes the fit slider's help text.
+    const sig = [v.productType, v.magnetMode, v.magnetShape, v.magnetCount, v.magnetPlacement, v.sliderLayout, v.sliderMirrorBlank, v.baseShape, v.pocketProfile].join('|');
     if (sig === formSig) return;
     formSig = sig;
 
@@ -1873,7 +2308,9 @@ function magnetSection(): HTMLElement {
         step: 0.05,
         value: v.pocketFit,
         unit: 'mm',
-        help: `Added to the magnet's ${v.magnetShape === 'disc' ? 'diameter' : 'width and length'}, not its radius — a ⌀6 magnet with 0.2 mm gets a ⌀6.2 socket. Raise it if your magnets won't go in, drop it toward 0 for a tighter grip.`,
+        help: v.pocketProfile === 'hex' && v.magnetShape === 'disc'
+          ? "Added to the magnet's diameter, not its radius. Hex walls print true, so the first 0.2 mm is dropped — a round hole needs it to cancel shrinkage, a hex one doesn't, and keeping it just makes the socket loose. Raise this if your magnets won't go in."
+          : `Added to the magnet's ${v.magnetShape === 'disc' ? 'diameter' : 'width and length'}, not its radius — a ⌀6 magnet with 0.2 mm gets a ⌀6.2 socket. Raise it if your magnets won't go in, drop it toward 0 for a tighter grip.`,
         onInput: (val) => patch({ pocketFit: val }),
       }),
     );
@@ -1981,8 +2418,9 @@ function magnetSection(): HTMLElement {
       el('div', { className: 'mg-details__body' }, [
         el('p', {
           className: 'vl-hint',
-          text:
-            'Both halves are the same print — you flip one over to assemble, so the image still reads the right way round.',
+          text: v.baseShape === 'outline'
+            ? 'The second piece is built as a mirror of the first. Flipping a piece over mirrors its outline, so a mirrored twin is what makes the two silhouettes stack flush — the trade-off is that any lettering on the underside reads reversed. Switch Base shape to a preset if you want both faces to read the same way.'
+            : 'Both halves are the same print — the plate is symmetric, so flipping one over lands it exactly on the other and the artwork still reads the right way round on both faces.',
         }),
         el('p', {
           className: 'vl-hint',
@@ -2136,12 +2574,17 @@ function magnetSection(): HTMLElement {
       }
       // The number to check against the magnet in your hand. Lives here rather
       // than next to the Fit slider because this block re-renders on every tick.
+      const fit = effectivePocketFit(v.pocketFit, v.pocketProfile);
       rows.push(
         reportRow(
           'Socket',
-          v.magnetShape === 'disc'
-            ? `⌀${(v.magnetDiameter + v.pocketFit).toFixed(1)} mm for a ⌀${v.magnetDiameter} mm magnet`
-            : `${(v.magnetX + v.pocketFit).toFixed(1)} × ${(v.magnetY + v.pocketFit).toFixed(1)} mm for a ${v.magnetX} × ${v.magnetY} mm magnet`,
+          v.magnetShape !== 'disc'
+            ? `${(v.magnetX + fit).toFixed(1)} × ${(v.magnetY + fit).toFixed(1)} mm for a ${v.magnetX} × ${v.magnetY} mm magnet`
+            : v.pocketProfile === 'hex'
+              // Both numbers matter for a hex: the flats are what grip the
+              // magnet, the corners are what the socket looks like.
+              ? `${(v.magnetDiameter + fit).toFixed(2)} mm across flats · ${((v.magnetDiameter + fit) / Math.cos(Math.PI / 6)).toFixed(2)} across corners`
+              : `⌀${(v.magnetDiameter + fit).toFixed(2)} mm for a ⌀${v.magnetDiameter} mm magnet`,
         ),
       );
       rows.push(reportRow('Over the magnet', `${cover.toFixed(1)} mm of body`));
@@ -2355,11 +2798,14 @@ function rgbaToDataUrl(img: RgbaImage): string {
 }
 
 function saveProject() {
+  // Text needs no payload — the line, the font id and the tracking all live in
+  // settings, and the font itself comes from the bundled set on load.
+  const mode: ImportMode = activeSource ?? 'image';
   const project = {
     v: 2,
     settings: s(),
-    source: originalImage ? rgbaToDataUrl(originalImage) : svgText,
-    sourceMode: originalImage ? 'image' : 'svg',
+    source: mode === 'text' ? null : originalImage ? rgbaToDataUrl(originalImage) : svgText,
+    sourceMode: mode,
   };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(project)], { type: 'application/json' }));
@@ -2379,12 +2825,23 @@ async function loadProject(file: File) {
       magnets: project.settings.magnets ?? [],
     });
     store.set({ settings: loaded });
+    if (project.sourceMode === 'text') {
+      // A custom-imported font is gone once the tab closes; applyTextSource
+      // reports that rather than silently rendering the wrong face.
+      rebuildSections();
+      await applyTextSource(true);
+      toast('Project loaded', { kind: 'ok' });
+      return;
+    }
+    textSource = null;
     if (project.sourceMode === 'svg' && typeof project.source === 'string') {
       svgText = project.source;
       originalImage = null;
+      activeSource = 'svg';
     } else if (typeof project.source === 'string') {
       originalImage = await dataUrlToImage(project.source);
       svgText = null;
+      activeSource = 'image';
     }
     rebuildSections();
     reprocess(true);

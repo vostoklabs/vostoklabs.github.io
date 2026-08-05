@@ -40,7 +40,7 @@ export function showWhatsNew(opts: WhatsNewOptions): { close(): void } {
 
   const card = el('div', { className: 'vl-card', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': "What's new" } }, [
     el('div', { className: 'vl-badge vl-badge--accent', text: "What's new" }),
-    el('h2', { text: opts.title ?? 'Latest updates ✨' }),
+    el('h2', { text: opts.title ?? 'Latest updates' }),
     el('p', { text: opts.intro ?? 'A few improvements landed since your last visit:' }),
     list,
     el('div', { className: 'vl-whatsnew-foot' }, [

@@ -32,8 +32,43 @@ const BUILT_IN_FONTS = [
   ['droid-serif-bold', 'Droid Serif Bold', droidSerifBold],
 ];
 
+// The three.js built-ins are typeface JSON outlines — there is no web font to
+// load for them, so the dropdown falls back to the nearest generic family. It
+// still tells you serif from mono at a glance, which is the point.
+const BUILT_IN_CSS = {
+  'helvetiker-regular': 'sans-serif',
+  'helvetiker-bold': 'sans-serif',
+  'optimer-regular': 'sans-serif',
+  'optimer-bold': 'sans-serif',
+  'gentilis-regular': 'serif',
+  'gentilis-bold': 'serif',
+  'droid-sans-regular': 'sans-serif',
+  'droid-sans-bold': 'sans-serif',
+  'droid-sans-mono-regular': 'monospace',
+  'droid-serif-regular': 'serif',
+  'droid-serif-bold': 'serif',
+};
+
 for (const [id, name, data] of BUILT_IN_FONTS) {
-  FONT_OPTIONS.push({ id, name, font: fontLoader.parse(data) });
+  FONT_OPTIONS.push({
+    id,
+    name,
+    font: fontLoader.parse(data),
+    cssFamily: BUILT_IN_CSS[id] ?? 'sans-serif',
+    cssWeight: id.endsWith('-bold') ? '700' : '400',
+  });
+}
+
+/** Register a font with the CSS engine under `family` so the dropdown can render
+ *  its name in its own typeface. Failure is silent — a name in the UI font is a
+ *  cosmetic loss, and the 3D glyphs come from the parsed outlines either way. */
+function registerCssFace(family, source) {
+  try {
+    const face = new FontFace(family, source);
+    face.load().then((f) => document.fonts.add(f)).catch(() => {});
+  } catch {
+    /* no FontFace support — names stay in the UI font */
+  }
 }
 
 // Open-source TTFs bundled in public/fonts/ (SIL OFL 1.1 — see public/fonts/CREDITS.md).
@@ -70,7 +105,16 @@ export async function loadBundledFonts(onLoaded) {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.arrayBuffer();
       });
-      const option = { id: `bundled-${slug}`, name, font: fontLoader.parse(ttfLoader.parse(buf)) };
+      const family = `KC-${slug}`;
+      // The same bytes drive both the 3D outlines and the dropdown preview, so
+      // what you see in the list is exactly what gets extruded.
+      registerCssFace(family, buf.slice(0));
+      const option = {
+        id: `bundled-${slug}`,
+        name,
+        font: fontLoader.parse(ttfLoader.parse(buf)),
+        cssFamily: `'${family}', sans-serif`,
+      };
       FONT_OPTIONS.push(option);
       onLoaded?.(option);
     } catch (e) {
@@ -111,14 +155,25 @@ function pointsToContour(points, box) {
 
 export async function importFontFile(file) {
   const isJson = /\.json$/i.test(file.name);
-  const data = isJson ? JSON.parse(await file.text()) : ttfLoader.parse(await file.arrayBuffer());
+  const raw = isJson ? null : await file.arrayBuffer();
+  const data = isJson ? JSON.parse(await file.text()) : ttfLoader.parse(raw);
+  const id = uniqueFontId(file.name);
+  // A typeface JSON has no bytes a browser can render, so only real font files
+  // get a preview family.
+  let cssFamily = 'sans-serif';
+  if (raw) {
+    cssFamily = `'KC-${id}', sans-serif`;
+    registerCssFace(`KC-${id}`, raw.slice(0));
+  }
   const option = {
-    id: uniqueFontId(file.name),
+    id,
     name: fontNameFromData(data, file.name.replace(/\.[^.]+$/g, '')),
     font: fontLoader.parse(data),
     imported: true,
+    cssFamily,
   };
   FONT_OPTIONS.push(option);
+  await document.fonts.ready.catch(() => {});
   return option;
 }
 

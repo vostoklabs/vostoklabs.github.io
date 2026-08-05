@@ -15,8 +15,15 @@ export interface ToggleOptions {
   help?: string;
 }
 
+/** A control row that Load-project can push a value back into. Still an
+ *  HTMLElement, so existing `[toggleSwitch(...)]` usage is unchanged. */
+export type ValueRow<T> = HTMLElement & {
+  /** Set the displayed value. Does not fire the change handler unless `notify`. */
+  setValue(value: T, notify?: boolean): void;
+};
+
 /** A labelled iOS-style switch (green when on). Returns the whole row. */
-export function toggleSwitch(opts: ToggleOptions): HTMLElement {
+export function toggleSwitch(opts: ToggleOptions): ValueRow<boolean> {
   const input = el('input', { attrs: { type: 'checkbox' } });
   input.checked = opts.checked ?? false;
   input.addEventListener('change', () => opts.onChange?.(input.checked));
@@ -24,10 +31,15 @@ export function toggleSwitch(opts: ToggleOptions): HTMLElement {
   const label = el('span', { className: 'vl-switch-label', text: opts.label });
   if (opts.help) label.append(helpTip(opts.help));
 
-  return el('div', { className: 'vl-switch-row' }, [
+  const row = el('div', { className: 'vl-switch-row' }, [
     label,
     el('label', { className: 'vl-toggle' }, [input, el('span', { className: 'vl-knob' })]),
-  ]);
+  ]) as unknown as ValueRow<boolean>;
+  row.setValue = (value, notify = false) => {
+    input.checked = value;
+    if (notify) opts.onChange?.(value);
+  };
+  return row;
 }
 
 /* ---------------- Slider row ---------------- */
@@ -49,7 +61,7 @@ export interface SliderOptions {
 }
 
 /** Label + editable value box + range, kept in sync both directions. */
-export function sliderRow(opts: SliderOptions): HTMLElement {
+export function sliderRow(opts: SliderOptions): ValueRow<number> {
   const step = opts.step ?? 1;
   const fmt = opts.format ?? ((v: number) => (opts.unit ? `${v} ${opts.unit}` : String(v)));
 
@@ -77,11 +89,11 @@ export function sliderRow(opts: SliderOptions): HTMLElement {
   valBox.value = fmt(opts.value);
 
   let current = opts.value;
-  const commit = (v: number, syncRange = true) => {
+  const commit = (v: number, syncRange = true, notify = true) => {
     current = snap(v);
     if (syncRange) range.value = String(current);
     valBox.value = fmt(current);
-    opts.onInput?.(current);
+    if (notify) opts.onInput?.(current);
   };
 
   range.addEventListener('input', () => commit(Number(range.value), false));
@@ -93,10 +105,12 @@ export function sliderRow(opts: SliderOptions): HTMLElement {
   const labelEl = el('label', { text: opts.label });
   if (opts.help) labelEl.append(helpTip(opts.help));
 
-  return el('div', { className: 'vl-slider-row' }, [
+  const row = el('div', { className: 'vl-slider-row' }, [
     el('div', { className: 'vl-slider-head' }, [labelEl, valBox]),
     range,
-  ]);
+  ]) as unknown as ValueRow<number>;
+  row.setValue = (value, notify = false) => commit(value, true, notify);
+  return row;
 }
 
 /* ---------------- Segmented control ---------------- */

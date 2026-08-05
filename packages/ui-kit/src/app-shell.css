@@ -59,6 +59,18 @@
   gap: 10px;
 }
 
+/* `sidebarFooter()` already brings its own padding and top border. Handing it to
+   appShell's `footer:` slot nested it inside this one and the two stacked: 40px
+   of horizontal padding vanished from the content box, which is what squeezed
+   Save/Load/Help/Light out of their 2x2 grid into a stacked column while the
+   clicker — which mounts the same component unwrapped — kept the grid. Let the
+   inner component own the chrome when it is there. */
+.vl-panel__footer:has(> .vl-sidebar-footer) {
+  padding: 0;
+  gap: 0;
+  border-top: none;
+}
+
 /* Center stage — the 3D preview canvas mounts here. */
 .vl-stage {
   position: relative;
@@ -85,11 +97,14 @@
   z-index: 5;
 }
 
+/* Anchored bottom-RIGHT, not centred. The status line owns the bottom-left and
+   grows with its message; a centred pill sat directly in its path, and no
+   max-width on the status can avoid that at every stage width — the two are
+   independently positioned, so the only reliable fix is opposite corners. */
 .vl-stage__hint {
   position: absolute;
   bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: var(--space-4);
   margin: 0;
   background: color-mix(in srgb, var(--panel) 85%, transparent);
   backdrop-filter: blur(4px);
@@ -100,17 +115,30 @@
   color: var(--muted);
   pointer-events: none;
   user-select: none;
-  z-index: 5;
+  /* Below the status line's z-index: 5 — if a stage ever gets narrow enough to
+     force the two together, the message wins over the affordance reminder. */
+  z-index: 4;
   white-space: nowrap;
 }
 
-/* Denser section rhythm inside panels: flex + gap so controls never crowd,
-   matching the keychain (the reference). Sections still get the base hairline. */
+/* Too narrow for two bottom corners, and a device this size is very likely touch
+   anyway — where "hold left click to rotate" means nothing at all. */
+@media (max-width: 900px) {
+  .vl-stage__hint { display: none; }
+  .vl-stage-status { max-width: calc(100% - 2 * var(--space-4)); }
+}
+
+/* Section rhythm inside panels: flex + gap so controls never crowd. These are the
+   numbers the SHIPPED generators actually run at — the kit briefly carried a
+   tighter 15px/12px, which is why the clicker and magnet each grew a "parity"
+   override pinning them back to 22px/14px. New generators built from the template
+   inherited the tighter values and read visibly cramped next to the real ones, so
+   the default is the shipped rhythm and the overrides are now redundant. */
 .vl-app .vl-section {
-  padding: 15px 0;
+  padding: 22px 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 .vl-app .vl-section:first-of-type { padding-top: 2px; }
 .vl-app .vl-section > .vl-label { margin: 0 0 2px; }

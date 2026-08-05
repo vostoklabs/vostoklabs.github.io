@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createBuildPlate, type BuildPlate } from '@vostok/plates/three';
+import { loadPlateChoice, type PlateChoice } from '@vostok/plates';
 import type { ClickerPart, MeshData, RGB, SwitchPlacement, ViewMode } from '../types';
 import { MAKERLAB } from 'virtual:makerlab';
 
@@ -24,6 +26,8 @@ export interface Viewer {
   setSwitchPlacements(placements: SwitchPlacement[]): void;
   renderToPng(): Promise<Blob | null>;
   setTheme(theme: string): void;
+  /** Swap the floor the model stands on: a build plate, or the plain grid. */
+  setPlate(choice: PlateChoice): void;
   /** Register a callback fired when the user clicks a colored part of the model, or null if clicking empty space. */
   onPartPick(cb: (index: number | null, clientX: number, clientY: number, shiftKey: boolean) => void): void;
   /** Live-recolor a single part's material (no rebuild — geometry is unchanged). */
@@ -37,10 +41,10 @@ export interface Viewer {
   dispose(): void;
 }
 
-// The grid sits a hair BELOW the model's bottom face (which lands at z = 0) so the
+// The floor sits a hair BELOW the model's bottom face (which lands at z = 0) so the
 // solid bottom occludes it cleanly — coplanar at z = 0 causes z-fighting that bleeds
 // grid lines up through the lower body.
-const GRID_GAP = 1.0;
+const FLOOR_GAP = 0.06;
 
 function partToGeometry(p: ClickerPart): THREE.BufferGeometry {
   const geo = new THREE.BufferGeometry();
@@ -108,29 +112,12 @@ export function createViewer(container: HTMLElement): Viewer {
   scene.add(key);
   scene.add(new THREE.AmbientLight(0xffffff, 0.2));
 
-  let gridZ = -20;
-  let grid: THREE.GridHelper | null = null;
-
-  function rebuildGrid(theme: string, z: number) {
-    if (grid) scene.remove(grid);
-    gridZ = z;
-    const accentColor = theme === 'dark' ? 0x5b9dff : 0x2563eb;
-    const gridColor = theme === 'dark' ? 0x2d3139 : 0xd1d5db;
-    grid = new THREE.GridHelper(300, 30, accentColor, gridColor);
-    grid.rotation.x = Math.PI / 2;
-    grid.position.z = gridZ;
-    // Prevent grid lines from bleeding through model body:
-    // draw the grid first and skip depth-writes so opaque geometry always wins.
-    grid.renderOrder = -1;
-    if (Array.isArray(grid.material)) {
-      grid.material.forEach(m => { m.depthWrite = false; });
-    } else {
-      grid.material.depthWrite = false;
-    }
-    scene.add(grid);
-  }
-
-  rebuildGrid(currentTheme, gridZ);
+  // The floor: a Bambu build plate (default) or the plain reference grid, with
+  // the model resting on its top surface.
+  const floorZ = -FLOOR_GAP;
+  const buildPlate: BuildPlate = createBuildPlate(THREE, { theme: currentTheme, topZ: floorZ });
+  buildPlate.setChoice(loadPlateChoice());
+  scene.add(buildPlate.object);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -227,6 +214,12 @@ export function createViewer(container: HTMLElement): Viewer {
     // Center X/Y, but place the bottom of the assembly at z = 0 so it sits on the grid.
     root.position.set(0, 0, 0);
     capGroup.position.set(0, 0, 0);
+    // Box3.expandByObject only refreshes the object's OWN world matrix — it reuses the
+    // parent's cached one. Without this force-update, `root.matrixWorld` still holds the
+    // PREVIOUS build's offset, so every box below is measured in a stale frame and the
+    // new offset is computed on top of the old one. That is what made the model hop above
+    // the plate or sink into it on each rebuild (resize, shape change).
+    root.updateMatrixWorld(true);
     const box = new THREE.Box3().expandByObject(capGroup).expandByObject(bodyGroup);
     // Anchor on the BASE alone. The base is the part that defines where the model sits;
     // the caps and their legends ride on top of it and change shape constantly (a bolder
@@ -236,18 +229,16 @@ export function createViewer(container: HTMLElement): Viewer {
       ? new THREE.Box3().expandByObject(bodyGroup)
       : box;
     const center = anchor.getCenter(new THREE.Vector3());
-    // Shift X and Y to center, but shift Z so the bottom of the model lands at 0.
-    root.position.set(-center.x, -center.y, -anchor.min.z);
+    // X/Y from the base alone (stable while the legend changes), but Z from the FULL
+    // assembly: the cap skirt reaches down past the body bottom on some configurations,
+    // and anchoring Z on the body alone let that skirt hang through the build plate.
+    root.position.set(-center.x, -center.y, -Math.min(anchor.min.z, box.min.z));
 
     const size = box.getSize(new THREE.Vector3());
     bounds.copy(size);
     explodeOffset = size.z * 0.8 + 10;
     applyView();
 
-    // Drop the grid just under the model's bottom (which lands at z = 0) so the
-    // solid base occludes it instead of z-fighting with the coplanar bottom face.
-    const activeTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-    rebuildGrid(activeTheme, -GRID_GAP);
 
     if (!preserveCamera) {
       const radius = Math.max(size.x, size.y, size.z) * FRAME_MUL + FRAME_PAD;
@@ -385,6 +376,10 @@ export function createViewer(container: HTMLElement): Viewer {
       onResize();
     }
     controls.update();
+    // The floor sits under the model; from below it would sit between the camera
+    // and the part. Fade it to a ghost rather than dropping it, so the plate
+    // never pops in and out as you orbit past level.
+    buildPlate.setGhosted(camera.position.z <= floorZ);
     renderer.render(scene, camera);
   })();
 
@@ -532,6 +527,7 @@ export function createViewer(container: HTMLElement): Viewer {
     renderer.domElement.removeEventListener('pointerup', onPointerUp);
     clearGroup(capGroup);
     clearGroup(bodyGroup);
+    buildPlate.dispose();
     clearSwitchMeshes();
     switchGeometry?.dispose();
     switchMaterial?.dispose();
@@ -543,7 +539,7 @@ export function createViewer(container: HTMLElement): Viewer {
   function setTheme(theme: string) {
     const bgColor = theme === 'dark' ? 0x15171c : 0xf3f4f6;
     scene.background = new THREE.Color(bgColor);
-    rebuildGrid(theme, gridZ);
+    buildPlate.setTheme(theme);
   }
 
   return {
@@ -555,6 +551,7 @@ export function createViewer(container: HTMLElement): Viewer {
     setSwitchPlacements,
     renderToPng,
     setTheme,
+    setPlate: (choice) => buildPlate.setChoice(choice),
     onPartPick,
     setPartColor,
     highlightPart,

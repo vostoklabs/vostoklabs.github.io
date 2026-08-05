@@ -1,4 +1,5 @@
 import '@vostok/ui-kit/styles.css';
+import '@vostok/plates/plates.css';
 import './style.css';
 
 import {
@@ -18,26 +19,32 @@ import {
   sidebarFooter,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
-// @ts-ignore
-import * as opentype from 'opentype.js';
 import { unzipSync } from 'fflate';
 import { createViewer } from './viewer/viewer';
+import { mountPlatePicker } from '@vostok/plates';
 import { downloadThreeMF } from './export/threemfExport';
-import { FONTS, type FontChoice } from './generated-fonts';
+// Fonts, the opentype loader and the text-to-contours layout all live in
+// @vostok/fonts so every generator that puts type on a model shares one set.
+import {
+  FONTS,
+  type FontChoice,
+  getFont,
+  registerCustomFont,
+  parseFont,
+  isFontSupported,
+  fontFamilyFor,
+  curatedFonts as curatedFontsOf,
+  getHorizontalContours,
+  getVerticalContours,
+} from '@vostok/fonts';
 import type { GeometryResponse, PartMesh } from './types';
-import { getHorizontalContours, getVerticalContours } from './geometry/textLayout';
 import { noAmsPauses } from './geometry/noAms';
 
 type Layout = 'horizontal' | 'vertical';
 type LetterStyle = 'raised' | 'engraved';
 
-// Eagerly load all font asset URLs from the src/fonts/ folder (for opentype geometry).
-const fontUrls = (import.meta as any).glob('./fonts/*.ttf', { eager: true, import: 'default' }) as Record<string, string>;
-
-// The full font registry (id / label / category / curated) is generated from the fonts
-// folder — see generated-fonts.ts. Curated fonts show as instant cards; the rest live in
-// the "Browse all fonts" modal.
-const curatedFonts = FONTS.filter((f) => f.curated);
+// Curated fonts show as instant cards; the rest live in the "Browse all" modal.
+const curatedFonts = curatedFontsOf();
 
 const state = {
   name: 'Name',
@@ -156,12 +163,32 @@ const emojiGrid = el('div', { className: 'nk-emoji-grid', attrs: { style: 'displ
     const btn = el('button', { 
       className: 'nk-emoji-btn', 
       text: icon.char,
-      attrs: { title: icon.name, style: 'font-family: NK-icon-fallback;' } // Use the fallback font explicitly in UI
+      attrs: { title: icon.name, style: 'font-family: VL-icon-fallback;' } // Use the fallback font explicitly in UI
+    });
+    // Clicking the button blurs the text field, so the caret has to be captured
+    // on pointerdown — by click time document.activeElement is the button and the
+    // selection offsets are gone. Without this the symbol could only ever land at
+    // the very end of the line.
+    let target = nameInput;
+    let caret = { start: nameInput.value.length, end: nameInput.value.length };
+    btn.addEventListener('pointerdown', () => {
+      const active = document.activeElement === secondInput ? secondInput : nameInput;
+      target = active;
+      caret = {
+        start: active.selectionStart ?? active.value.length,
+        end: active.selectionEnd ?? active.value.length,
+      };
     });
     btn.addEventListener('click', () => {
-      const active = document.activeElement === secondInput ? secondInput : nameInput;
-      active.value += icon.char;
-      active.dispatchEvent(new Event('input'));
+      const { value } = target;
+      target.value = value.slice(0, caret.start) + icon.char + value.slice(caret.end);
+      // Leave the caret after what was just inserted so symbols can be typed in a
+      // row, and keep focus in the field the user was editing.
+      const next = caret.start + icon.char.length;
+      target.focus();
+      target.setSelectionRange(next, next);
+      caret = { start: next, end: next };
+      target.dispatchEvent(new Event('input'));
     });
     return btn;
   })
@@ -179,33 +206,6 @@ emojiToggle.addEventListener('click', () => {
 const fontGrid = el('div', { className: 'nk-font-grid' });
 const stage = el('section', { className: 'nk-stage' });
 const statusEl = el('div', { className: 'nk-status show', text: 'Loading worker...' });
-
-const fontCache = new Map<string, any>();
-const fontUrlsClean = Object.entries(fontUrls).reduce((acc, [k, v]) => {
-  const cleanKey = k.replace('./fonts/', '').replace('.ttf', '');
-  acc[cleanKey] = v;
-  return acc;
-}, {} as Record<string, string>);
-
-async function loadFont(fontId: string): Promise<any> {
-  const url = fontUrlsClean[fontId];
-  if (!url) {
-    if (fontId.startsWith('custom-')) throw new Error('Custom font is missing. Please import the .ttf/.otf file again.');
-    throw new Error(`Font url not resolved for ${fontId}`);
-  }
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`Fetch failed for font ${fontId}`);
-  return opentype.parse(await r.arrayBuffer());
-}
-
-async function getFont(fontId: string): Promise<any> {
-  let f = fontCache.get(fontId);
-  if (!f) {
-    f = await loadFont(fontId);
-    fontCache.set(fontId, f);
-  }
-  return f;
-}
 
 function showStatus(txt: string) {
   statusEl.textContent = txt;
@@ -514,22 +514,7 @@ function fontSampleText(): string {
   return t.length > 8 ? t.slice(0, 7) + '…' : t;
 }
 
-function getRequiredSubsets(text: string): string[] {
-  const subsets = new Set<string>();
-  for (const char of text) {
-    const code = char.charCodeAt(0);
-    if ((code >= 0x0400 && code <= 0x04FF) || (code >= 0x0500 && code <= 0x052F)) subsets.add('cyrillic');
-    else if (code >= 0x0370 && code <= 0x03FF) subsets.add('greek');
-    else if (code >= 0x0100 && code <= 0x024F) subsets.add('latin-ext');
-  }
-  return Array.from(subsets);
-}
 
-function isFontSupported(font: FontChoice, text: string): boolean {
-  if (!font.subsets) return true;
-  const required = getRequiredSubsets(text);
-  return required.every(req => font.subsets.includes(req) || font.subsets.includes(`${req}-ext`));
-}
 
 function makeFontCard(font: FontChoice): HTMLButtonElement {
   const text = state.name + (state.secondLine || '');
@@ -539,7 +524,7 @@ function makeFontCard(font: FontChoice): HTMLButtonElement {
     className: `nk-font-card${supported ? '' : ' unsupported'}`,
     attrs: { type: 'button', 'data-font': font.id, title: supported ? font.label : `${font.label} (Characters missing)` },
   }, [
-    el('span', { className: 'nk-font-card__sample', text: fontSampleText(), attrs: { style: `font-family: NK-${font.id}` } }),
+    el('span', { className: 'nk-font-card__sample', text: fontSampleText(), attrs: { style: `font-family: ${fontFamilyFor(font.id)}` } }),
     el('span', { className: 'nk-font-card__name', text: font.label }),
     ...(!supported ? [el('span', { className: 'nk-font-card__warn', text: '⚠' })] : [])
   ]) as HTMLButtonElement;
@@ -608,7 +593,7 @@ function openFontBrowser() {
       if (!entry.isIntersecting) continue;
       const row = entry.target as HTMLElement;
       const preview = row.querySelector<HTMLElement>('.nk-fb__preview');
-      if (preview) preview.style.fontFamily = `NK-${row.dataset.font}`;
+      if (preview) preview.style.fontFamily = `${fontFamilyFor(row.dataset.font!)}`;
       io.unobserve(row);
     }
   }, { root: list, rootMargin: '250px' });
@@ -634,7 +619,7 @@ function openFontBrowser() {
     matches.forEach((f, i) => {
       const preview = el('span', { className: 'nk-fb__preview', text: sample });
       // Eager-load the first screenful; lazy-load the rest as they scroll in.
-      if (i < 36) preview.style.fontFamily = `NK-${f.id}`;
+      if (i < 36) preview.style.fontFamily = `${fontFamilyFor(f.id)}`;
       const supported = isFontSupported(f, state.name + (state.secondLine || ''));
       const row = el('button', {
         className: `nk-fb__row${f.id === state.font ? ' active' : ''}${supported ? '' : ' unsupported'}`,
@@ -742,15 +727,15 @@ fileInput.addEventListener('change', async (e) => {
     for (const f of filesToProcess) {
       try {
         const fontName = f.name.replace(/\.[^/.]+$/, "");
-        const font = opentype.parse(f.buffer);
+        const font = parseFont(f.buffer);
         const fontId = `custom-${Date.now()}-${count++}`;
         
-        fontCache.set(fontId, font);
-        
+        registerCustomFont(fontId, font);
+
         const fontFileBlob = new Blob([f.buffer]);
         const fontUrl = URL.createObjectURL(fontFileBlob);
         const style = document.createElement('style');
-        style.textContent = `@font-face { font-family: 'NK-${fontId}'; src: url('${fontUrl}'); }`;
+        style.textContent = `@font-face { font-family: '${fontFamilyFor(fontId)}'; src: url('${fontUrl}'); }`;
         document.head.appendChild(style);
         
         const fontChoice = {
@@ -1037,6 +1022,9 @@ if (shared) {
 
 // Initialize 3D Viewer
 const viewer = createViewer(stage);
+
+// Build plate picker (top-right of the stage); the plate is shared across generators.
+mountPlatePicker(stage, viewer);
 renderFontGrid();
 updateControlsVisibility();
 

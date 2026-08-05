@@ -1,5 +1,5 @@
 import type { BuildParams } from '../types';
-import type { LineBox } from './textLayout';
+import type { LineBox } from '@vostok/fonts/textLayout';
 import { snapLayers } from './noAms';
 
 /** Helper to ensure clean Emscripten memory allocation and disposal. */

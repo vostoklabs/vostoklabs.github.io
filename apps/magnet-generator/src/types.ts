@@ -95,6 +95,25 @@ export type SliderLayout = 4 | 6 | 8;
  *  the UI's size floor so the two can never disagree about what fits. */
 export const POCKET_WALL_MM = 2.0;
 
+/** How much of `pocketFit` exists only to cancel round-hole shrinkage.
+ *
+ *  A round pocket is sliced as a chord-approximated polygon and the extrusion
+ *  pulls inward, so it prints undersize — the clearance buys that back. A hex
+ *  pocket is six flat walls the slicer traces exactly, so it prints true and the
+ *  same clearance lands as pure slop. Printed ⌀10 hex sockets came out 0.2 mm
+ *  loose across the flats on top of 1.78 mm of corner gap; subtracting this puts
+ *  the flats back on the magnet's nominal diameter.
+ *
+ *  Raising `pocketFit` above this still opens a hex pocket up, so the slider
+ *  keeps working as a fit control for printers that need it. */
+export const ROUND_SHRINK_ALLOWANCE_MM = 0.2;
+
+/** Clearance actually added to the magnet's size for a given pocket profile. */
+export function effectivePocketFit(pocketFit: number, profile: PocketProfile): number {
+  const fit = Math.max(0, pocketFit);
+  return profile === 'hex' ? Math.max(0, fit - ROUND_SHRINK_ALLOWANCE_MM) : fit;
+}
+
 /** Gap between the two halves on the build plate, mm. */
 export const SLIDER_PIECE_GAP = 8;
 
@@ -153,13 +172,22 @@ export function sliderGridSpec(o: {
   magnetX: number;
   magnetY: number;
   pocketFit: number;
+  /** Hex pockets are 15.5% wider corner-to-corner than the magnet they hold, so
+   *  the array has to be spaced off the hexagon, not the disc. */
+  pocketProfile?: PocketProfile;
   /** Extra plastic between pockets on top of the 2 mm printable minimum, mm.
    *  Packed at 0 the array reads as one solid block; opening it up is what makes
    *  the magnets look deliberate — and it lengthens the click. */
   gap?: number;
 }) {
+  const profile: PocketProfile = o.pocketProfile ?? 'round';
   const bare = o.magnetShape === 'disc' ? o.magnetDiameter : Math.hypot(o.magnetX, o.magnetY);
-  const pocketDim = bare + Math.max(0, o.pocketFit);
+  const fit = effectivePocketFit(o.pocketFit, profile);
+  // A hexagon inscribing the magnet spans (d + fit) / cos30 across its corners.
+  const pocketDim =
+    o.magnetShape === 'disc' && profile === 'hex'
+      ? (bare + fit) / Math.cos(Math.PI / 6)
+      : bare + fit;
   // +0.05 keeps a pocket's guard band from exactly touching its neighbour's
   // footprint, which the boolean would otherwise read as an intersection.
   const pitch = pocketDim + POCKET_WALL_MM + Math.max(0, o.gap ?? 0) + 0.05;
@@ -323,6 +351,11 @@ export interface MagnetBuildParams {
   sliderLayout: SliderLayout;
   /** When true, the mirrored slider half has no inlays (plain body only). */
   sliderMirrorBlank: boolean;
+  /** Slider: translation of the WHOLE magnet array away from the body centre, mm.
+   *  Both halves share one array, so a slider's magnets can never be moved one at
+   *  a time — the pitch is what makes it click. Dragging any pocket therefore
+   *  slides the entire matrix, and this is where that offset lives. */
+  sliderArrayOffset: { x: number; y: number };
 }
 
 export type MagnetPlacement = 'auto' | 'manual';
@@ -369,6 +402,11 @@ export interface MagnetReport {
   /** Slider only: X distance from the first half to the second on the plate, mm.
    *  The viewer needs it to draw handles on both pieces. */
   sliderOffsetX?: number;
+  /** Slider only: the array translation actually applied, mm. May be shorter than
+   *  the requested one when the drag ran the pockets into the body wall — the UI
+   *  writes it back so a drag that hits the edge stops there instead of banking up
+   *  offset the builder keeps throwing away. */
+  sliderArrayOffset?: { x: number; y: number };
 }
 
 // ---- Worker messages ----

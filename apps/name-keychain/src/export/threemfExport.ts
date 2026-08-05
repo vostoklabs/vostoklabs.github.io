@@ -1,5 +1,6 @@
 import { zipSync, strToU8 } from 'fflate';
 import { BRAND } from '@vostok/brand';
+import { projectSettings, colorGroupXml, paletteOf, BBL_NS, BBL_VERSION_META } from '@vostok/export';
 import type { PartMesh } from '../types';
 
 const f = (n: number): string => String(Math.round(n * 1e4) / 1e4);
@@ -72,10 +73,24 @@ export function buildThreeMF(parts: PartMesh[]): Uint8Array {
 
   const buildItems = `<item objectid="${firstWrapperId}"/>`;
 
+
+  // The filament slots the parts above ask for. `model_settings.config` only
+
+  // says WHICH slot each part wants — it does not create them, so a user with a
+
+  // single filament loaded had every part clamped to slot 1 and the model arrived
+
+  // monochrome. Declaring the palette makes it travel with the file.
+
+  const palette = paletteOf(parts.map((p) => ({ color: p.colorRgb })), extruders);
+
+  const colorGroup = colorGroupXml(palette, parts.length + 2 + 1);
+
   const creationDate = new Date().toISOString().slice(0, 10);
   
   // Embed CC commercial terms and provenance
   const metadata =
+    BBL_VERSION_META +
     `<metadata name="Title">Name Keychain</metadata>` +
     `<metadata name="Designer">Vostok Labs</metadata>` +
     `<metadata name="Application">Vostok Labs Name Keychain Generator</metadata>` +
@@ -89,12 +104,14 @@ export function buildThreeMF(parts: PartMesh[]): Uint8Array {
     `<model unit="millimeter" xml:lang="en-US"` +
     ` xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"` +
     ` xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02"` +
+    ` xmlns:BambuStudio="${BBL_NS}"` +
     ` xmlns:vl="${VL_NS}">` +
     metadata +
     `<resources>` +
     `<basematerials id="1">${baseMaterials}</basematerials>` +
     leafObjects +
     wrapperObject +
+    colorGroup +
     `</resources>` +
     `<build>${buildItems}</build>` +
     `</model>`;
@@ -152,6 +169,7 @@ export function buildThreeMF(parts: PartMesh[]): Uint8Array {
       '_rels/.rels': strToU8(rels),
       '3D/3dmodel.model': strToU8(model),
       'Metadata/model_settings.config': strToU8(modelSettings),
+      'Metadata/project_settings.config': strToU8(projectSettings(palette)),
       'Metadata/vostok_labs.txt': strToU8(provenance),
     },
     { level: 6 },

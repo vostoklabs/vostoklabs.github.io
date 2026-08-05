@@ -551,8 +551,12 @@
 
 /* ---------- Generator chrome: Save / Load / Help / Light-mode ---------- */
 .vl-project-actions { display: flex; flex-direction: column; gap: 8px; }
-.vl-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.vl-action-btn { font-size: 14px; padding: 9px 10px; }
+/* auto-fit, not a hard 1fr 1fr: on a narrower sidebar "Save project" wrapped to
+   two lines and the whole row grew to 57px while the same buttons sat at 38px in
+   the wider generators. Below ~120px per cell the pair stacks instead, which
+   keeps every action button one line tall everywhere. */
+.vl-action-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.vl-action-btn { font-size: 14px; padding: 9px 10px; white-space: nowrap; }
 .vl-theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 
 /* ---------- Sidebar sticky footer (export + project actions) ---------- */

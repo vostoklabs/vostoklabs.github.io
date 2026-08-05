@@ -11,6 +11,7 @@ import {
   showWhatsNew,
   supportLinks,
   exportPanel,
+  sidebarFooter,
   offlineDownloadButton,
   presetShareButton,
   readParamsFromHash,
@@ -290,14 +291,36 @@ app.append(
     }),
   ),
   entry(
+    'sidebarFooter()',
+    'Export module',
+    'The whole block every generator pins to the bottom of its right sidebar: the 3MF ' +
+      'export on top, then Save / Load / Help / theme. This is what to reach for — ' +
+      'exportPanel() below is only the format-button strip inside it.',
+    // Pinned to a real sidebar's width — at the demo column's full width the
+    // action grid stops wrapping to 2x2 and stops looking like what ships.
+    el('div', { className: 'kit-sidebar-frame' }, [
+      sidebarFooter({
+        // 3MF only, as shipped. STL carries neither the colours nor the part
+        // split, so offering it beside the real export is a downgrade, not a choice.
+        formats: [{ id: '3mf', label: '3MF' }],
+        onExport: async (id) => {
+          await new Promise((r) => setTimeout(r, 800));
+          toast(`Exported demo.${id}`, { kind: 'ok' });
+        },
+        onSave: () => toast('Project saved', { kind: 'ok' }),
+        onLoad: () => toast('Project loaded', { kind: 'ok' }),
+        onHelp: () => toast('Help dialog opens here'),
+        themeStorageKey: 'kit-demo-theme',
+      }),
+    ]),
+  ),
+  entry(
     'exportPanel()',
-    'Export panel',
-    'Format buttons that disable while an export runs and surface failures as toasts. The app owns the real export.',
+    'Export panel (the strip inside it)',
+    'Just the format buttons: they disable while an export runs and surface failures as ' +
+      'toasts. Use it directly only when you are building custom footer chrome.',
     exportPanel({
-      formats: [
-        { id: '3mf', label: '3MF' },
-        { id: 'stl', label: 'STL' },
-      ],
+      formats: [{ id: '3mf', label: '3MF' }],
       onExport: async (id) => {
         await new Promise((r) => setTimeout(r, 800));
         toast(`Exported demo.${id}`, { kind: 'ok' });

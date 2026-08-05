@@ -6,6 +6,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 // @ts-ignore
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { createBuildPlate, type BuildPlate } from '@vostok/plates/three';
+import { loadPlateChoice, type PlateChoice } from '@vostok/plates';
 
 interface PartMesh {
   name: string;
@@ -18,6 +20,8 @@ export interface Viewer {
   setParts(parts: PartMesh[], preserveCamera?: boolean): void;
   setPartColor(name: string, colorHex: string): void;
   setTheme(theme: 'dark' | 'light'): void;
+  /** Swap the floor the model stands on: a build plate, or the plain grid. */
+  setPlate(choice: PlateChoice): void;
   dispose(): void;
 }
 
@@ -51,24 +55,16 @@ export function createViewer(container: HTMLElement): Viewer {
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.3));
 
-  // Visual grid helper
-  let grid: THREE.GridHelper | null = null;
-  function rebuildGrid(theme: 'dark' | 'light', z: number) {
-    if (grid) scene.remove(grid);
-    const accentColor = theme === 'dark' ? 0x5b9dff : 0x2563eb;
-    const gridColor = theme === 'dark' ? 0x2f3440 : 0xd1d5db;
-    grid = new THREE.GridHelper(200, 20, accentColor, gridColor);
-    grid.rotation.x = Math.PI / 2;
-    grid.position.z = z;
-    grid.renderOrder = -1;
-    if (Array.isArray(grid.material)) {
-      grid.material.forEach((m: any) => { m.depthWrite = false; });
-    } else {
-      grid.material.depthWrite = false;
-    }
-    scene.add(grid);
-  }
-  rebuildGrid(currentTheme, -0.2);
+  // The floor: a Bambu build plate (default) or the plain reference grid, with
+  // the model resting on its top surface.
+  const floorZ = -0.06;
+  const buildPlate: BuildPlate = createBuildPlate(THREE, {
+    theme: currentTheme,
+    topZ: floorZ,
+    gridSize: 200,
+  });
+  buildPlate.setChoice(loadPlateChoice());
+  scene.add(buildPlate.object);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -142,6 +138,10 @@ export function createViewer(container: HTMLElement): Viewer {
 
       // Re-center assembly
       modelGroup.position.set(0, 0, 0);
+      // setFromObject reuses the PARENT's cached world matrix, so the reset above is not
+      // visible to it until the matrices are pushed down — otherwise the box is measured
+      // in the previous build's frame and the offsets compound.
+      modelGroup.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(modelGroup);
       const center = box.getCenter(new THREE.Vector3());
       const size = box.getSize(new THREE.Vector3());
@@ -166,7 +166,11 @@ export function createViewer(container: HTMLElement): Viewer {
 
     setTheme(theme: 'dark' | 'light') {
       scene.background = new THREE.Color(theme === 'dark' ? 0x15171c : 0xf3f4f6);
-      rebuildGrid(theme, -0.2);
+      buildPlate.setTheme(theme);
+    },
+
+    setPlate(choice: PlateChoice) {
+      buildPlate.setChoice(choice);
     },
 
     dispose() {
@@ -174,7 +178,7 @@ export function createViewer(container: HTMLElement): Viewer {
       window.removeEventListener('resize', handleResize);
       clearGroup(modelGroup);
       scene.remove(modelGroup);
-      if (grid) scene.remove(grid);
+      buildPlate.dispose();
       pmrem.dispose();
       renderer.dispose();
       renderer.domElement.remove();

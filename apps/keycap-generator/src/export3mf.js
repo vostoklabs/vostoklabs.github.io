@@ -1,4 +1,5 @@
 import { zipSync, strToU8 } from 'fflate';
+import { projectSettings, colorGroupXml, BBL_NS, BBL_VERSION_META } from '@vostok/export';
 import { weldPositions } from './meshUtils.js';
 
 // Round to keep the XML compact without losing print precision (1e-4 mm).
@@ -39,8 +40,26 @@ const color3mf = (hex) => '#' + hex.replace('#', '').toUpperCase() + 'FF';
  *  - Bambu/Orca ignore basematerials for filament assignment and read
  *    Metadata/model_settings.config instead, where each part maps to its extruder slot.
  */
+/** "#rrggbb" -> [r, g, b]. */
+const rgbOf = (hex) => {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+};
+
 export function buildThreeMF(parts) {
   const wrapperId = parts.length + 2; // parts use ids 2..N+1, wrapper is N+2
+
+  // The filament slots the parts ask for, densely indexed by (slot - 1).
+  // model_settings.config below only says WHICH slot a part wants; it does not
+  // create the slot. Someone with a single filament loaded therefore had both
+  // bodies clamped onto slot 1 and the keycap imported in one colour. Declaring
+  // the palette in project_settings.config is what carries the colours across.
+  const palette = [];
+  for (const p of parts) {
+    const i = Math.max(1, p.extruder) - 1;
+    if (!palette[i]) palette[i] = rgbOf(p.color);
+  }
+  for (let i = 0; i < palette.length; i++) if (!palette[i]) palette[i] = [255, 255, 255];
 
   const baseMaterials = parts
     .map((p) => `<base name="${p.name}" displaycolor="${color3mf(p.color)}"/>`)
@@ -54,11 +73,14 @@ export function buildThreeMF(parts) {
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<model unit="millimeter" xml:lang="en-US"` +
     ` xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"` +
-    ` xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">` +
+    ` xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02"` +
+    ` xmlns:BambuStudio="${BBL_NS}">` +
+    BBL_VERSION_META +
     `<resources>` +
     `<basematerials id="1">${baseMaterials}</basematerials>` +
     objects +
     `<object id="${wrapperId}" type="model"><components>${components}</components></object>` +
+    colorGroupXml(palette, wrapperId + 1) +
     `</resources>` +
     `<build><item objectid="${wrapperId}"/></build>` +
     `</model>`;
@@ -104,6 +126,7 @@ export function buildThreeMF(parts) {
       '_rels/.rels': strToU8(rels),
       '3D/3dmodel.model': strToU8(model),
       'Metadata/model_settings.config': strToU8(modelSettings),
+      'Metadata/project_settings.config': strToU8(projectSettings(palette)),
     },
     { level: 6 }
   );

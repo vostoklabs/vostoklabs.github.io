@@ -1,10 +1,9 @@
-@import './generated-fonts.css';
+@import '@vostok/fonts/fonts.css';
 
-/* @font-face for every bundled font (NK-<id>) is generated from the fonts folder. */
-@font-face {
-  font-family: 'NK-icon-fallback';
-  src: url('./fonts/icon-fallback.ttf') format('truetype');
-}
+/* Every bundled font, including VL-icon-fallback, now comes from @vostok/fonts
+   above. The local NK-icon-fallback rule that used to live here pointed at
+   ./fonts/, which moved into the shared package — a dead URL, which is why the
+   symbol picker rendered tofu boxes. */
 
 :root {
   background: var(--bg);
