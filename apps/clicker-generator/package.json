@@ -1,6 +1,6 @@
 {
   "name": "clicker-generator",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Browser-based image-to-clicker 3D model generator (3MF export, GitHub Pages).",

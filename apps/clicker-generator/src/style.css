@@ -5,7 +5,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 /* The topbar sits ABOVE .vl-app in the body flex column, so .vl-app must fill the
    REMAINING height, not a full 100dvh — otherwise its bottom (and the right sidebar
    footer's last row: Help / Light mode) is pushed off-screen. */
-main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
+main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; grid-template-rows: minmax(0, 1fr); }
 
 #viewport { position: relative; min-width: 0; height: 100%; background: #3a3f47; }
 #app { position: absolute; inset: 0; }

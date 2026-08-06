@@ -1,5 +1,5 @@
 import { zipSync, strToU8 } from 'fflate';
-import { projectSettings, colorGroupXml, BBL_NS, BBL_VERSION_META } from '@vostok/export';
+import { projectSettings, colorGroupXml, BBL_NS, BBL_VERSION_META, BBL_APPLICATION } from '@vostok/export';
 import { weldPositions } from './meshUtils.js';
 
 // Round to keep the XML compact without losing print precision (1e-4 mm).
@@ -74,8 +74,11 @@ export function buildThreeMF(parts) {
     `<model unit="millimeter" xml:lang="en-US"` +
     ` xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"` +
     ` xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02"` +
-    ` xmlns:BambuStudio="${BBL_NS}">` +
+    ` xmlns:bambu="${BBL_NS}"` +
+    ` xmlns:BambuStudio="${BBL_NS}"` +
+    ` xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06">` +
     BBL_VERSION_META +
+    `<metadata name="Application">${BBL_APPLICATION}</metadata>` +
     `<resources>` +
     `<basematerials id="1">${baseMaterials}</basematerials>` +
     objects +
@@ -111,6 +114,7 @@ export function buildThreeMF(parts) {
     `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
     `<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>` +
     `<Default Extension="config" ContentType="text/xml"/>` +
+    `<Override PartName="/Metadata/project_settings.config" ContentType="application/json"/>` +
     `</Types>`;
 
   const rels =
