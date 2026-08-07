@@ -530,9 +530,10 @@
   align-items: flex-start;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--accent-2);
   border-radius: var(--radius-field);
-  padding: 10px 30px 10px 11px;
+  /* No coloured left rail: the icon already carries the semantic colour, and a
+     uniform hairline keeps this in the flat sidebar language (base.css). */
+  padding: 10px 30px 10px 12px;
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--text);

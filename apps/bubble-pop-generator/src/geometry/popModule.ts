@@ -75,13 +75,13 @@ function classify(objs: RawObject[]) {
   if (Math.abs(spanXY(sleeve) - POP.outerDiameter) > tol) {
     throw new Error(
       `pop module: housing is ⌀${spanXY(sleeve).toFixed(2)}, expected ⌀${POP.outerDiameter}. ` +
-        'The CAD changed — re-measure it and update POP in types.ts before shipping.',
+        'The CAD changed. Re-measure it and update POP in types.ts before shipping.',
     );
   }
   if (Math.abs(spanZ(button) - POP.buttonHeight) > tol) {
     throw new Error(
       `pop module: button is ${spanZ(button).toFixed(2)} mm tall, expected ${POP.buttonHeight}. ` +
-        'The CAD changed — re-measure it and update POP in types.ts before shipping.',
+        'The CAD changed. Re-measure it and update POP in types.ts before shipping.',
     );
   }
   return { sleeve, button, beam };

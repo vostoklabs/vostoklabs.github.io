@@ -18,7 +18,7 @@ export interface PlateDef {
 
 function def(id: PlateId, name: string, printers: string): PlateDef {
   const mesh = PLATE_MESHES[id];
-  if (!mesh) throw new Error(`no mesh generated for plate "${id}" — run pnpm --filter @vostok/plates build-meshes`);
+  if (!mesh) throw new Error(`no mesh generated for plate "${id}" . Run pnpm --filter @vostok/plates build-meshes`);
   const size: [number, number] = [mesh.width, mesh.depth];
   const dims = `${Math.round(size[0])} × ${Math.round(size[1])} mm`;
   return { id, name, details: printers ? `${dims} · ${printers}` : dims, size, mesh };

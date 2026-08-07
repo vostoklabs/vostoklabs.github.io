@@ -31,6 +31,17 @@
         max-height: none;
         flex: 1 1 auto;
       }
+      /* app-shell.css defines two rows (auto + 1fr) for apps whose topbar sits
+         INSIDE .vl-app. Ours sits outside, so the three panels all land in row 1
+         and the 1fr row below them soaks up every spare pixel as blank space on a
+         tall screen. Collapse the template to the single row we actually use.
+         Scoped above the 760px breakpoint on purpose: below it app-shell stacks
+         the panels into four rows, and `main.vl-app` (0,1,1) would outrank that
+         `.vl-app` (0,1,0) rule even from inside its media query, collapsing the
+         mobile layout so the left panel loses its height. */
+      @media (min-width: 761px) {
+        main.vl-app { grid-template-rows: minmax(0, 1fr); }
+      }
       #viewport { position: relative; min-width: 0; overflow: hidden; background: #15171c; }
       #viewport canvas { display: block; width: 100%; height: 100%; }
       #busy {
@@ -221,12 +232,12 @@
       }
       .help-tip-bubble[hidden] { display: none; }
 
-      /* Stem fit: a distinct bordered card with a − [value] + stepper, so it doesn't read
-         as just another placement slider. */
+      /* Stem fit: a − [value] + stepper rather than a slider, since the useful
+         adjustments are discrete nudges. Set apart by a hairline separator, not a
+         boxed card — sidebar sections are flat here (ui-kit base.css). */
       .fit-block {
-        margin-top: 14px; padding: 11px 12px 12px;
-        background: var(--panel-2); border: 1px solid var(--line);
-        border-left: 3px solid var(--accent); border-radius: 8px;
+        margin-top: 14px; padding-top: 13px;
+        border-top: 1px solid var(--line);
       }
       .fit-head {
         font-family: var(--font-display);
@@ -552,11 +563,11 @@
         <ul class="whatsnew-list">
           <li>
             <span class="wn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
-            <span class="wn-body"><strong>Thocky profile</strong><span>A new keycap profile — pick it in the Keycap → Profile dropdown alongside Standard and Low.</span></span>
+            <span class="wn-body"><strong>Thocky profile</strong><span>A new keycap profile. Pick it in the Keycap → Profile dropdown alongside Standard and Low.</span></span>
           </li>
           <li>
             <span class="wn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
-            <span class="wn-body"><strong>Stem fit tolerance</strong><span>A new “Stem fit” slider under Placement &amp; size loosens or tightens how the stem grips the switch — nudge up if the cap is too tight, down if it's loose.</span></span>
+            <span class="wn-body"><strong>Stem fit tolerance</strong><span>A new “Stem fit” slider under Placement &amp; size loosens or tightens how the stem grips the switch. Nudge up if the cap is too tight, down if it's loose.</span></span>
           </li>
         </ul>
         <div class="modal-foot">

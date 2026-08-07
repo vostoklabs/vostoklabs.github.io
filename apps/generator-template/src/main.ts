@@ -110,7 +110,7 @@ const controls = {
   }),
   thickness: sliderRow({
     label: 'Thickness', min: 1, max: 10, step: 0.2, value: settings.thickness, unit: 'mm',
-    help: 'Every control takes an optional "?" tooltip — use it instead of a paragraph of hint text.',
+    help: 'Every control takes an optional "?" tooltip. Use it instead of a paragraph of hint text.',
     onInput: (v) => { settings.thickness = v; syncThickness(); triggerRebuild(); },
   }),
   radius: sliderRow({
@@ -173,7 +173,7 @@ const previewWrap = el('div', { className: 'tpl-preview-wrap hidden' }, [preview
 function acceptImage(src: string, label: string) {
   preview.src = src;
   previewWrap.classList.remove('hidden');
-  preview.onload = () => status.set(`Loaded ${label} — ${preview.naturalWidth} × ${preview.naturalHeight} px`);
+  preview.onload = () => status.set(`Loaded ${label} · ${preview.naturalWidth} × ${preview.naturalHeight} px`);
   preview.onerror = () => status.set(`Could not read ${label}`, 'error');
 }
 
@@ -317,7 +317,7 @@ const footer = sidebarFooter({
     }),
   onHelp: () =>
     dialog({
-      title: 'Generator Template — Help',
+      title: 'Generator Template help',
       content: 'Explain how to use your generator here. Keep it to the two or three things people get stuck on.',
       actions: [{ label: 'Got it', primary: true }],
     }),

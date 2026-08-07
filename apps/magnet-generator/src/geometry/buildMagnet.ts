@@ -484,7 +484,7 @@ export function buildMagnet(
     const dim = params.magnetShape === 'disc' ? dDia : Math.hypot(dX, dY);
     if (scale < 1) {
       warnings.push(
-        `The magnet is too big for this design — the pocket was shrunk to ${dim.toFixed(1)} mm. Increase Size to fit the real magnet.`,
+        `The magnet is too big for this design. The pocket was shrunk to ${dim.toFixed(1)} mm. Increase Size to fit the real magnet.`,
       );
     }
 
@@ -501,7 +501,7 @@ export function buildMagnet(
       depth = Math.max(0.4, depthMax);
       const needed = params.magnetDepth + backWall + WALL_MIN;
       warnings.push(
-        `The body is too thin for a ${params.magnetDepth.toFixed(1)} mm magnet — the pocket is only ${depth.toFixed(1)} mm deep and the magnet will stand proud. Set Thickness to at least ${needed.toFixed(1)} mm.`,
+        `The body is too thin for a ${params.magnetDepth.toFixed(1)} mm magnet. The pocket is only ${depth.toFixed(1)} mm deep and the magnet will stand proud. Set Thickness to at least ${needed.toFixed(1)} mm.`,
       );
     }
 
@@ -751,7 +751,7 @@ export function buildMagnet(
 
         if (layout < wanted) {
           warnings.push(
-            `Only ${layout} of ${wanted} magnets per half fit — the body is too short along the slide axis. ` +
+            `Only ${layout} of ${wanted} magnets per half fit. The body is too short along the slide axis. ` +
               `Increase Size to at least ${computeSliderMinSize(wanted).toFixed(1)} mm, or use a smaller magnet.`,
           );
         }
@@ -785,7 +785,7 @@ export function buildMagnet(
           ? ' Try Base shape → Rounded rect, which gives the array a clean run.'
           : '';
       warnings.push(
-        `No magnet array fits this shape — a ${(2 * circumR).toFixed(1)} mm pocket needs at least ` +
+        `No magnet array fits this shape. A ${(2 * circumR).toFixed(1)} mm pocket needs at least ` +
           `${computeSliderMinSize(4).toFixed(1)} mm of body. Increase Size or use a smaller magnet.${shapeHint}`,
       );
       return {
@@ -824,14 +824,14 @@ export function buildMagnet(
       if (clamped.length) {
         warnings.push(
           clamped.length === 1
-            ? `Magnet ${clamped[0]} was pulled back from where you put it — every pocket needs a 2 mm wall to the edge and to its neighbours.`
-            : `Magnets ${clamped.join(', ')} were pulled back from where you put them — every pocket needs a 2 mm wall to the edge and to its neighbours.`,
+            ? `Magnet ${clamped[0]} was pulled back from where you put it. Every pocket needs a 2 mm wall to the edge and to its neighbours.`
+            : `Magnets ${clamped.join(', ')} were pulled back from where you put them. Every pocket needs a 2 mm wall to the edge and to its neighbours.`,
         );
       }
 
       if (count < requested) {
         warnings.push(
-          `Only ${count} of ${requested} magnets fit — this shape has no room for more at ${(2 * circumR).toFixed(1)} mm each. Increase Size, use a smaller magnet, or lower the count.`,
+          `Only ${count} of ${requested} magnets fit. This shape has no room for more at ${(2 * circumR).toFixed(1)} mm each. Increase Size, use a smaller magnet, or lower the count.`,
         );
       }
       // Glue-on opens at z = 0: start the cutter just below the back face so the
@@ -858,7 +858,7 @@ export function buildMagnet(
     }
 
     warnings.push(
-      `No magnet pocket fits this design — a ${(2 * circumR).toFixed(1)} mm pocket needs more solid area than this shape has. Increase Size or use a smaller magnet.`,
+      `No magnet pocket fits this design. A ${(2 * circumR).toFixed(1)} mm pocket needs more solid area than this shape has. Increase Size or use a smaller magnet.`,
     );
     return { cuts: [], report: { ...empty, backWall, pocketRadius: circumR } };
   }

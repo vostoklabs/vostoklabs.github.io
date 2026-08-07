@@ -5,7 +5,17 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 /* The topbar sits ABOVE .vl-app in the body flex column, so .vl-app must fill the
    REMAINING height, not a full 100dvh — otherwise its bottom (and the right sidebar
    footer's last row: Help / Light mode) is pushed off-screen. */
-main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; grid-template-rows: minmax(0, 1fr); }
+main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
+/* app-shell.css defines two rows (auto + 1fr) for apps whose topbar sits INSIDE
+   .vl-app. Ours sits outside, so the three panels all land in row 1 and the 1fr row
+   below them soaks up every spare pixel as blank space on a tall screen. Collapse the
+   template to the single row we actually use. Scoped above the 760px breakpoint on
+   purpose: below it app-shell stacks the panels into four rows, and `main.vl-app`
+   (0,1,1) would outrank that `.vl-app` (0,1,0) rule even from inside its media query,
+   collapsing the mobile layout so the left panel loses its height. */
+@media (min-width: 761px) {
+  main.vl-app { grid-template-rows: minmax(0, 1fr); }
+}
 
 #viewport { position: relative; min-width: 0; height: 100%; background: #3a3f47; }
 #app { position: absolute; inset: 0; }

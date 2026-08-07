@@ -83,7 +83,7 @@ if (keycapFooter) {
     },
     onHelp: () => {
       dialog({
-        title: 'Keycap Legend Generator — Help',
+        title: 'Keycap Legend Generator help',
         content: document.createTextNode('Pick an icon or custom letter, customize size, depth, rotation, and stem clearance, then click Download 3MF to export a print-ready file for your slicer.'),
         actions: [{ label: 'Got it', primary: true }],
       });
@@ -398,11 +398,11 @@ async function doRegen() {
     if (Math.max(fp.w, fp.h) > room) {
       setStatus(`Heads up: legend (${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm) is larger than the top (~${room.toFixed(1)} mm) and will be clipped.`, 'warn');
     } else if (surfaceVariation > 0.4) {
-      setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm. Note: top is curved (${surfaceVariation.toFixed(1)} mm) — keep it small so it stays flush.`, 'warn');
+      setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm. Note: top is curved (${surfaceVariation.toFixed(1)} mm). Keep it small so it stays flush.`, 'warn');
     } else if ($('through').checked) {
       setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm · shine-through: legend + stem print in the legend filament (use transparent to light up).`);
     } else if ($('single').checked) {
-      setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm · single colour: legend engraved ${C.depth.get()} mm deep — prints in one filament.`);
+      setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm · single colour: legend engraved ${C.depth.get()} mm deep, prints in one filament.`);
     } else {
       setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm · ${C.depth.get()} mm deep.`);
     }
@@ -801,9 +801,9 @@ $('export').addEventListener('click', async () => {
     () => buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked),
     baseName,
     $('single').checked
-      ? 'Exported 3MF ✓  Single-colour cap with an engraved legend — one filament.'
+      ? 'Exported 3MF ✓  Single-colour cap with an engraved legend, one filament.'
       : 'Exported 3MF ✓  Open in your slicer and assign two filaments.',
-    'Two-colour keycap — made with the Keycap Legend Generator.'
+    'Two-colour keycap, made with the Keycap Legend Generator.'
   );
 });
 
@@ -825,7 +825,7 @@ $('exportBlank').addEventListener('click', async () => {
     makeParts,
     baseName,
     'Exported blank keycap ✓  Single-colour cap with no legend.',
-    'Blank keycap — made with the Keycap Legend Generator.'
+    'Blank keycap, made with the Keycap Legend Generator.'
   );
 });
 
@@ -844,7 +844,7 @@ function updateAlphabetAvailability() {
   alphabetBtn.disabled = !ok || running;
   alphabetHelp.textContent = ok
     ? 'Generates 26 keycaps (A–Z) in the current font & settings, zipped as 3MF files.'
-    : 'Full alphabet set is available for the 1u keycap only — switch size to 1u to enable.';
+    : 'Full alphabet set is available for the 1u keycap only. Switch size to 1u to enable.';
 }
 
 async function generateAlphabetSet() {
@@ -924,7 +924,7 @@ async function generateAlphabetSet() {
       a.download = `${baseName}.zip`;
       a.click();
       URL.revokeObjectURL(a.href);
-      setStatus('Exported full alphabet set ✓  26 keycaps (A–Z) zipped — open each 3MF in your slicer.');
+      setStatus('Exported full alphabet set ✓  26 keycaps (A–Z) zipped. Open each 3MF in your slicer.');
     }
   } catch (e) {
     console.error(e);
@@ -1228,7 +1228,7 @@ if (MAKERLAB) {
   }).then((ctx) => {
     if (!ctx) return;
     document.body.classList.add('makerlab');
-    console.log('[MakerLab] connected — capabilities:', ctx.capabilities.join(', '));
+    console.log('[MakerLab] connected, capabilities:', ctx.capabilities.join(', '));
   });
 }
 

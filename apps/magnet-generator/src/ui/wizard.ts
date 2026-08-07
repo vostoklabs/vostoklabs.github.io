@@ -140,7 +140,7 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
         content: el('div', { className: 'mg-wizard' }, [
           el('p', {
             className: 'vl-hint',
-            text: 'Pick the size you bought — the pocket is cut to match, plus a press-fit gap. Exact dimensions are editable afterwards.',
+            text: 'Pick the size you bought. The pocket is cut to match, plus a press-fit gap. Exact dimensions are editable afterwards.',
           }),
           segmentedControl<MagnetShapeKind>({
             options: [
@@ -197,7 +197,7 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
             choiceCard(
               GLUE_ICON,
               'Glue-on magnet',
-              'A pocket opens at the back — drop the magnet in and glue it. Strongest hold.',
+              'A pocket opens at the back. Drop the magnet in and glue it. Strongest hold.',
               () => pick(() => askSize('glue-on', 'magnet')),
             ),
             choiceCard(
@@ -224,7 +224,7 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
             className: 'vl-hint',
             text:
               'Each half gets two columns of magnets running along the slide axis. ' +
-              'Every extra row is one more click you feel. Next you pick which magnet you own — ' +
+              'Every extra row is one more click you feel. Next you pick which magnet you own, ' +
               'small discs work best, and ⌀6 × 3 mm is the classic. The body is sized to fit automatically.',
           }),
           el('div', { className: 'mg-wizard-options' }, [
@@ -280,7 +280,7 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
       content: el('div', { className: 'mg-wizard' }, [
         el('p', {
           className: 'vl-hint',
-          text: 'Pick your product — you can change it any time.',
+          text: 'Pick your product. You can change it any time.',
         }),
         el('div', { className: 'mg-wizard-options' }, [
           choiceCard(
@@ -292,7 +292,7 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
           choiceCard(
             SLIDER_ICON,
             'Magnetic slider',
-            'Two sliding pieces held together by magnets — a satisfying fidget widget.',
+            'Two sliding pieces held together by magnets. A satisfying fidget widget.',
             () => pick(() => askSliderLayout()),
           ),
         ]),

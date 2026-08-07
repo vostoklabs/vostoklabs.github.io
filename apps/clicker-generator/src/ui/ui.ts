@@ -1547,7 +1547,7 @@ export function createUi(
     wm.className = 'welcome-overlay';
     wm.innerHTML = `
       <div class="welcome-card">
-        <h2>Welcome to Clicker Generator 👋</h2>
+        <h2>Welcome to Clicker Generator</h2>
         <p>Turn any image, SVG, icon, or text into a multi-color 3D printable clicker, ready for Bambu Studio or PrusaSlicer.</p>
         <div class="welcome-steps">
           <div class="welcome-step">
@@ -1617,7 +1617,7 @@ export function createUi(
     wm.innerHTML = `
       <div class="welcome-card whats-new-card">
         <div class="whats-new-badge">What's new</div>
-        <h2>Latest updates ✨</h2>
+        <h2>Latest updates</h2>
         <p>A few improvements landed since your last visit:</p>
         <ul class="whats-new-list">
           <li>${check}<span><strong>Letter blocks</strong>: a new <em>Blocks</em> tab that turns a word into a row of snap-together blocks, each with its own MX switch and a real keycap with the letter printed into the top.</span></li>

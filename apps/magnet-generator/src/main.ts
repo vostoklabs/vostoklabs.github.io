@@ -593,7 +593,7 @@ function step(n: number, title: string, body: (HTMLElement | Node)[], open = fal
 // Chrome
 // ---------------------------------------------------------------------------
 const quality = qualityCallout({
-  html: `Print flat on the back face with the image up — no supports needed. Profiles and print notes are on <a href="${BRAND.urls.makerworld}" target="_blank" rel="noopener">MakerWorld</a>.`,
+  html: `Print flat on the back face with the image up, no supports needed. Profiles and print notes are on <a href="${BRAND.urls.makerworld}" target="_blank" rel="noopener">MakerWorld</a>.`,
   storageKey: 'magnet-generator-quality-callout',
 });
 
@@ -615,7 +615,7 @@ const shell = appShell({
     scroll: [
       generatorHeader({
         title: 'Image to Fridge Magnet',
-        description: 'Turn any image into a fridge magnet — flat back, glue-on or embedded magnet.',
+        description: 'Turn any image into a fridge magnet with a flat back, glue-on or embedded magnet.',
       }),
       ...(quality ? [quality] : []),
       // Magnet first and open: it's the whole point of this generator.
@@ -754,7 +754,7 @@ function syncMagnetHandles() {
     if (interactive) {
       magnetHintText.textContent =
         v.magnetMode === 'none'
-          ? 'This design uses magnetic sheet — there are no pockets to place.'
+          ? 'This design uses magnetic sheet, so there are no pockets to place.'
           : 'No magnet fits this design yet.';
     }
     return;
@@ -796,7 +796,7 @@ function syncMagnetHandles() {
   if (interactive) {
     magnetHintText.textContent =
       v.productType === 'slider'
-        ? 'Drag to move the whole magnet array — both halves share one pitch, so they move together.'
+        ? 'Drag to move the whole magnet array. Both halves share one pitch, so they move together.'
         : report.positions.length > 1
           ? `Drag a magnet to move it · #${activeMagnet + 1} of ${report.positions.length} selected`
           : 'Drag the magnet to move it, or click the shape to place it there';
@@ -1054,7 +1054,7 @@ stageContainer.addEventListener('pointermove', (e) => {
       if (Date.now() - lastOrbitToast > 6000) {
         lastOrbitToast = Date.now();
         toast(
-          'Orbit is off in Magnet mode — left-drag places pockets. Right-drag to pan, scroll to zoom, ' +
+          'Orbit is off in Magnet mode. Left-drag places pockets. Right-drag to pan, scroll to zoom, ' +
             'or switch to Color or Extrude mode to rotate.',
           { kind: 'info' },
         );
@@ -1223,7 +1223,7 @@ function openImport(name: string, getter: () => Promise<RgbaImage>) {
       // Carry the underlying reason. "Could not read that image" alone is
       // unactionable and unreproducible after the fact.
       const why = err instanceof Error ? err.message : String(err);
-      toast(`Could not read that image — ${why}`, { kind: 'error' });
+      toast(`Could not read that image: ${why}`, { kind: 'error' });
       console.error(err);
     });
 }
@@ -1418,7 +1418,7 @@ async function applyTextSource(takeOver = false) {
     reprocess(takeOver);
   } catch (err) {
     store.set({ building: false, status: '' });
-    toast(`Could not load that font — ${err instanceof Error ? err.message : String(err)}`, { kind: 'error' });
+    toast(`Could not load that font: ${err instanceof Error ? err.message : String(err)}`, { kind: 'error' });
     console.error(err);
   }
 }
@@ -1815,7 +1815,7 @@ function shapeSection(): HTMLElement {
     step: 0.01,
     value: s().letterSpacing,
     unit: 'em',
-    help: 'Tracking between letters, as a fraction of the font size. Negative pulls them together — useful when you want the letters to touch so the magnet prints as one piece.',
+    help: 'Tracking between letters, as a fraction of the font size. Negative pulls them together, useful when you want the letters to touch so the magnet prints as one piece.',
     onInput: (val) => {
       patchImage({ letterSpacing: val });
       debouncedTextRebuild();
@@ -1852,7 +1852,7 @@ function shapeSection(): HTMLElement {
     step: 0.1,
     value: s().thickness,
     unit: 'mm',
-    help: 'Body height. Never goes below what the magnet needs — the slider snaps back if you try.',
+    help: 'Body height. Never goes below what the magnet needs. The slider snaps back if you try.',
     // enforceFit() raises it back to the minimum; the sync below writes that
     // corrected value into the slider, so the user sees the floor immediately.
     onInput: (v) => patch({ thickness: v }),
@@ -2015,7 +2015,7 @@ function colorsSection(): HTMLElement {
       pal.append(
         el('p', {
           className: 'mg-warn',
-          text: `This model uses ${slots} colours — more than a 4-slot AMS. Reuse a colour you already have, or the slicer will ask you to swap filament mid-print.`,
+          text: `This model uses ${slots} colours, more than a 4-slot AMS. Reuse a colour you already have, or the slicer will ask you to swap filament mid-print.`,
         }),
       );
     }
@@ -2293,8 +2293,8 @@ function magnetSection(): HTMLElement {
           value: v.pocketProfile,
           help: 'Hex pockets print with flat walls (no round-hole shrinkage) and leave corner gaps for glue. Round matches the magnet exactly.',
           options: [
-            { value: 'round', label: 'Round — matches the magnet' },
-            { value: 'hex', label: 'Hex — easier to print, grips better' },
+            { value: 'round', label: 'Round, matches the magnet' },
+            { value: 'hex', label: 'Hex, easier to print, grips better' },
           ],
           onChange: (val) => patch({ pocketProfile: val as PocketProfile }),
         }),
@@ -2309,8 +2309,8 @@ function magnetSection(): HTMLElement {
         value: v.pocketFit,
         unit: 'mm',
         help: v.pocketProfile === 'hex' && v.magnetShape === 'disc'
-          ? "Added to the magnet's diameter, not its radius. Hex walls print true, so the first 0.2 mm is dropped — a round hole needs it to cancel shrinkage, a hex one doesn't, and keeping it just makes the socket loose. Raise this if your magnets won't go in."
-          : `Added to the magnet's ${v.magnetShape === 'disc' ? 'diameter' : 'width and length'}, not its radius — a ⌀6 magnet with 0.2 mm gets a ⌀6.2 socket. Raise it if your magnets won't go in, drop it toward 0 for a tighter grip.`,
+          ? "Added to the magnet's diameter, not its radius. Hex walls print true, so the first 0.2 mm is dropped. A round hole needs it to cancel shrinkage, a hex one doesn't, and keeping it just makes the socket loose. Raise this if your magnets won't go in."
+          : `Added to the magnet's ${v.magnetShape === 'disc' ? 'diameter' : 'width and length'}, not its radius. A ⌀6 magnet with 0.2 mm gets a ⌀6.2 socket. Raise it if your magnets won't go in, drop it toward 0 for a tighter grip.`,
         onInput: (val) => patch({ pocketFit: val }),
       }),
     );
@@ -2367,7 +2367,7 @@ function magnetSection(): HTMLElement {
       step: 0.5,
       value: v.sliderGap,
       unit: 'mm',
-      help: 'Plastic between the pockets, on top of the 2 mm minimum. Wider spacing means a longer throw between clicks — and a bigger body.',
+      help: 'Plastic between the pockets, on top of the 2 mm minimum. Wider spacing means a longer throw between clicks, and a bigger body.',
       onInput: (val) => {
         patch({ sliderGap: val });
         syncReport();
@@ -2377,7 +2377,7 @@ function magnetSection(): HTMLElement {
     const sliderBlankToggle = isSlider ? toggleSwitch({
       label: 'Blank second piece',
       checked: v.sliderMirrorBlank,
-      help: 'When on, the second half is a plain slab with magnet pockets — no image, no colour changes.',
+      help: 'When on, the second half is a plain slab with magnet pockets: no image, no colour changes.',
       onChange: (on) => patch({ sliderMirrorBlank: on }),
     }) : null;
 
@@ -2399,7 +2399,7 @@ function magnetSection(): HTMLElement {
     const sliderModeHint = isSlider ? el('p', {
       className: 'vl-hint',
       text: v.magnetMode === 'embedded'
-        ? 'Sealed under a thin wall — no glue, but that wall sits between the magnets and softens the click.'
+        ? 'Sealed under a thin wall. No glue, but that wall sits between the magnets and softens the click.'
         : 'Pockets open on the sliding face. Glue each magnet in flush. This is what most sliders do.',
     }) : null;
 
@@ -2419,8 +2419,8 @@ function magnetSection(): HTMLElement {
         el('p', {
           className: 'vl-hint',
           text: v.baseShape === 'outline'
-            ? 'The second piece is built as a mirror of the first. Flipping a piece over mirrors its outline, so a mirrored twin is what makes the two silhouettes stack flush — the trade-off is that any lettering on the underside reads reversed. Switch Base shape to a preset if you want both faces to read the same way.'
-            : 'Both halves are the same print — the plate is symmetric, so flipping one over lands it exactly on the other and the artwork still reads the right way round on both faces.',
+            ? 'The second piece is built as a mirror of the first. Flipping a piece over mirrors its outline, so a mirrored twin is what makes the two silhouettes stack flush. The trade-off is that any lettering on the underside reads reversed. Switch Base shape to a preset if you want both faces to read the same way.'
+            : 'Both halves are the same print. The plate is symmetric, so flipping one over lands it exactly on the other and the artwork still reads the right way round on both faces.',
         }),
         el('p', {
           className: 'vl-hint',
@@ -2442,7 +2442,7 @@ function magnetSection(): HTMLElement {
       isSlider && v.magnetShape === 'disc' && v.magnetDiameter > 8
         ? el('p', {
             className: 'mg-warn',
-            text: `⌀${v.magnetDiameter} mm is very strong for a slider — it will clamp rather than glide. ⌀5–8 mm is the usual range.`,
+            text: `⌀${v.magnetDiameter} mm is very strong for a slider. It will clamp rather than glide. ⌀5–8 mm is the usual range.`,
           })
         : null;
 
@@ -2488,7 +2488,7 @@ function magnetSection(): HTMLElement {
         ? 'A pocket opens at the back. Print it, drop the magnet in, glue it. Strongest hold.'
         : mode === 'embedded'
           ? 'Sealed inside. Your printer pauses once, you drop the magnet in, and it closes over.'
-          : 'Flat back, no pocket — stick the print onto adhesive magnetic sheet.';
+          : 'Flat back, no pocket. Stick the print onto adhesive magnetic sheet.';
     return el('p', { className: 'vl-hint', text });
   }
 
@@ -2592,13 +2592,13 @@ function magnetSection(): HTMLElement {
         const back = clamp(v.backWall, BACK_WALL_MIN, BACK_WALL_MAX);
         const pauseZ = back + (report?.pocketDepth ?? v.magnetDepth);
         const layer = Math.round(pauseZ / 0.2);
-        rows.push(reportRow('Pause at', `${pauseZ.toFixed(2)} mm — layer ${layer}`));
+        rows.push(reportRow('Pause at', `${pauseZ.toFixed(2)} mm, layer ${layer}`));
         fitReport.replaceChildren(
           ...rows,
           el('p', {
             className: 'vl-hint',
             text: v.productType === 'slider'
-              ? `Add a pause at layer ${layer} in each piece, drop the magnets in — alternating polarity up each column — and resume. They end up sealed under ${back.toFixed(1)} mm on the sliding face.`
+              ? `Add a pause at layer ${layer} in each piece, drop the magnets in (alternating polarity up each column) and resume. They end up sealed under ${back.toFixed(1)} mm on the sliding face.`
               : `Add a pause at layer ${layer} in your slicer, drop the magnet in, and resume. It ends up sealed under ${cover.toFixed(1)} mm of body with ${back.toFixed(1)} mm against the fridge.`,
           }),
         );
@@ -2608,8 +2608,8 @@ function magnetSection(): HTMLElement {
           el('p', {
             className: 'vl-hint',
             text: v.productType === 'slider'
-              ? 'The pockets open on the back — that face is the sliding face. Glue each magnet in flush, alternating polarity up each column.'
-              : 'The pocket opens at the back — no pause needed. Glue the magnet in after printing.',
+              ? 'The pockets open on the back, which is the sliding face. Glue each magnet in flush, alternating polarity up each column.'
+              : 'The pocket opens at the back, so no pause needed. Glue the magnet in after printing.',
           }),
         );
       }
@@ -2732,7 +2732,7 @@ function showHelp() {
     title: 'Image to Fridge Magnet',
     content: el('div', { className: 'mg-help' }, [
       el('p', { text: 'Import a PNG/JPG or an SVG, or pick a sample. The image is traced into color regions and carved into the front face; the back stays flat so it sits against the fridge.' }),
-      el('p', { text: 'Step 3 sets up the magnet. Glue-on cuts a pocket that opens at the back — print it, drop the magnet in, glue it. Embedded seals the magnet inside: your slicer pauses once at the layer we show you, you drop the magnet in, and the print closes over it. Magnetic sheet leaves the back flat with no pocket at all.' }),
+      el('p', { text: 'Step 3 sets up the magnet. Glue-on cuts a pocket that opens at the back: print it, drop the magnet in, glue it. Embedded seals the magnet inside: your slicer pauses once at the layer we show you, you drop the magnet in, and the print closes over it. Magnetic sheet leaves the back flat with no pocket at all.' }),
       el('p', { text: 'Use the Back view to check the pockets. The body is never allowed to be thinner than the magnet needs, and pockets always keep a 2 mm wall to the edge.' }),
       el('p', { text: 'Export 3MF for a color print (each color is its own part) or STL for a single solid.' }),
     ]),

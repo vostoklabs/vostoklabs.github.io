@@ -55,7 +55,7 @@ export function buildObjMtl(parts, { mtlFileName = 'model.mtl' } = {}) {
     .join('\n\n');
 
   const lines = [
-    '# Keycap Legend Generator — Vostok Labs',
+    '# Keycap Legend Generator - Vostok Labs',
     '# Units: millimetres. One `o` object per filament slot region.',
     `mtllib ${mtlFileName}`,
   ];

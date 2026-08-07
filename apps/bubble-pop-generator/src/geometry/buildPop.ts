@@ -377,12 +377,12 @@ export function buildPop(
 
   if (positions.length === 0) {
     warnings.push(
-      `No pop button fits this shape — a button needs a ${POP.outerDiameter} mm circle with a ` +
+      `No pop button fits this shape. A button needs a ${POP.outerDiameter} mm circle with a ` +
         `${SOCKET_WALL_MM} mm wall around it. Increase Size to about ${Math.ceil(minBodySize)} mm.`,
     );
   } else if (positions.length < requested) {
     warnings.push(
-      `Only ${positions.length} of ${requested} buttons fit — each one needs a ` +
+      `Only ${positions.length} of ${requested} buttons fit. Each one needs a ` +
         `${POP.outerDiameter} mm circle plus a ${SOCKET_WALL_MM} mm wall. Increase Size, lower the ` +
         `count, or reduce Button spacing.`,
     );
@@ -390,8 +390,8 @@ export function buildPop(
   if (clampedIdx.length) {
     warnings.push(
       clampedIdx.length === 1
-        ? `Button ${clampedIdx[0]} was pulled back from where you put it — every socket needs a ${SOCKET_WALL_MM} mm wall to the edge and to its neighbours.`
-        : `Buttons ${clampedIdx.join(', ')} were pulled back from where you put them — every socket needs a ${SOCKET_WALL_MM} mm wall to the edge and to its neighbours.`,
+        ? `Button ${clampedIdx[0]} was pulled back from where you put it. Every socket needs a ${SOCKET_WALL_MM} mm wall to the edge and to its neighbours.`
+        : `Buttons ${clampedIdx.join(', ')} were pulled back from where you put them. Every socket needs a ${SOCKET_WALL_MM} mm wall to the edge and to its neighbours.`,
     );
   }
 

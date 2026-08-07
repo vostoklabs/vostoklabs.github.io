@@ -7,7 +7,7 @@ import * as THREE from 'three';
 export async function loadKeycap(url = 'keycap.json') {
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`${url} not found — run \`npm run convert\` first.`);
+    throw new Error(`${url} not found. Run \`npm run convert\` first.`);
   }
   const data = await res.json();
 

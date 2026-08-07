@@ -196,7 +196,7 @@ const emojiGrid = el('div', { className: 'nk-emoji-grid', attrs: { style: 'displ
 
 const emojiToggle = el('button', { 
   className: 'vl-btn vl-btn--secondary nk-emoji-toggle',
-  text: '✨ Insert Symbol'
+  text: 'Insert Symbol'
 });
 emojiToggle.addEventListener('click', () => {
   const isHidden = emojiGrid.style.display === 'none';
@@ -977,7 +977,7 @@ const controlsRightExport = sidebarFooter({
   },
   onHelp: () => {
     dialog({
-      title: 'Name Keychain Generator — Help',
+      title: 'Name Keychain Generator help',
       content: el('div', {}, [
         el('p', { text: 'Type a name in the Text section, pick a font from the right panel, and customise the style, colours, and keyring options.' }),
         el('p', { text: 'When you\'re happy with the preview, click Export 3MF to download a print-ready file. Open the 3MF in your slicer (Bambu Studio, Orca, PrusaSlicer) and assign filament colours.' }),

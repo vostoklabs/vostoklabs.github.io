@@ -1282,14 +1282,14 @@ function showLicenseModal() {
   wm.innerHTML = `
     <div class="license-card">
       <div class="license-badge">✓ Download started</div>
-      <h2>Free for personal use 🎉</h2>
+      <h2>Free for personal use</h2>
       <p>
         This generator and the designs it creates are released under a
         <a href="${LICENSE_URL}" target="_blank" rel="noopener noreferrer">CC BY-NC-ND 4.0 license</a>.
         Print as many as you like for yourself, completely free.
       </p>
       <div class="license-commercial">
-        <div class="license-commercial-title">💰 Want to <span>sell</span> your prints?</div>
+        <div class="license-commercial-title">Want to <span>sell</span> your prints?</div>
         <p>
           If you plan to sell these as 3D-printed products, you need a
           <strong>commercial license membership</strong>, it's just
@@ -1506,6 +1506,6 @@ if (MAKERLAB) {
     onDisconnect: () => store.set({ status: 'Disconnected from the MakerLab host.' }),
   }).then((ctx) => {
     if (!ctx) return;
-    console.log('[MakerLab] connected — capabilities:', (ctx as Record<string, unknown>).capabilities);
+    console.log('[MakerLab] connected, capabilities:', (ctx as Record<string, unknown>).capabilities);
   });
 }

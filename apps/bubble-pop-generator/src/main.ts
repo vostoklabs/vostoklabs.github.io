@@ -202,7 +202,7 @@ worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
     building = false;
     store.set({ busy: false, status: 'Build failed.' });
     console.error(msg.message);
-    toast('Could not build the model — see the console.', { kind: 'error' });
+    toast('Could not build the model. See the console.', { kind: 'error' });
     return;
   }
   // parts
@@ -216,7 +216,7 @@ worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
     report: msg.report,
     status: msg.report.placed
       ? `${msg.report.placed} button${msg.report.placed === 1 ? '' : 's'} · ${msg.report.thickness} mm thick`
-      : 'No button fits — increase Size.',
+      : 'No button fits. Increase Size.',
   });
   // Manual placement always starts from what was actually built, so grabbing a
   // button never makes it jump somewhere else first.
@@ -740,7 +740,7 @@ const styleSection = collapsible('Style', false, [
     value: DEFAULTS.bevelSize,
     step: 0.1,
     unit: 'mm',
-    help: 'Only the top edge is bevelled — the bottom face prints against the plate and must stay square.',
+    help: 'Only the top edge is bevelled. The bottom face prints against the plate and must stay square.',
     onInput: (n) => {
       patch({ bevelSize: n });
       scheduleRebuild();
@@ -751,7 +751,7 @@ const styleSection = collapsible('Style', false, [
 const fitSection = collapsible('Fit', false, [
   el('p', { className: 'hint-text', text:
     `The socket is a fixed snap fit: ⌀${POP.outerDiameter} housing, ⌀${POP.boreDiameter} bore, ` +
-    `${POP.height} mm deep. Only the bore is adjustable — the spring beams and the snap bead are ` +
+    `${POP.height} mm deep. Only the bore is adjustable. The spring beams and the snap bead are ` +
     `part of the mechanism and are never scaled.` }),
   sliderRow({
     label: 'Button clearance',
@@ -881,7 +881,7 @@ function renderPalette() {
       className: slots.size > 4 ? 'mg-warn' : 'hint-text',
       text:
         slots.size > 4
-          ? `${slots.size} filaments — more than a 4-slot AMS can load without a swap.`
+          ? `${slots.size} filaments, more than a 4-slot AMS can load without a swap.`
           : `${slots.size} filament${slots.size === 1 ? '' : 's'}.`,
     }),
   );
@@ -921,7 +921,7 @@ function renderWarnings() {
 const quality = qualityCallout({
   html:
     'Print it as it comes out: <b>image face down, no supports</b>. The buttons print inside their ' +
-    'sockets — free them with a gentle press once the part is cool. Profiles and settings on ' +
+    'sockets. Free them with a gentle press once the part is cool. Profiles and settings on ' +
     `<a href="${BRAND.urls.makerworld}" target="_blank" rel="noopener">MakerWorld</a>.`,
   storageKey: 'bubblepop-quality-callout',
 });
@@ -976,7 +976,7 @@ const footer = sidebarFooter({
         'Pick a shape (or upload an image), choose how many pop buttons you want, and download the 3MF.\n\n' +
         'How it prints: the flat image face goes down on the plate, the buttons stand proud of the back, ' +
         'and everything prints in one go with no supports. The buttons are already sitting in their ' +
-        'sockets — press one after the print cools and it pops free.\n\n' +
+        'sockets. Press one after the print cools and it pops free.\n\n' +
         `Why the body is always ${POP.height} mm thick: that is the height of the snap-fit sleeve. ` +
         'Thinner and there is nothing for the button to click into.\n\n' +
         'If the buttons come out fused to the socket, raise Fit → Button clearance and re-print. ' +

@@ -67,7 +67,7 @@ export function buildObjMtl(parts: ClickerPart[], mtlFileName = 'clicker.mtl'): 
   };
 
   const lines: string[] = [
-    '# Clicker Generator — Vostok Labs',
+    '# Clicker Generator - Vostok Labs',
     '# Units: millimetres. One `o` object per colour region.',
     `mtllib ${mtlFileName}`,
   ];

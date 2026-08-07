@@ -491,7 +491,7 @@ export function buildBlocks(
     let letterBody: Solid | null = null;
 
     if (polys.length === 0) {
-      warnings.push(`Letter ${i + 1} has no printable outline — its cap is blank.`);
+      warnings.push(`Letter ${i + 1} has no printable outline. Its cap is blank.`);
     } else {
       try {
         let legend = track(new CrossSection(polys, 'NonZero'));

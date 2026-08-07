@@ -294,7 +294,7 @@ app.append(
     'sidebarFooter()',
     'Export module',
     'The whole block every generator pins to the bottom of its right sidebar: the 3MF ' +
-      'export on top, then Save / Load / Help / theme. This is what to reach for — ' +
+      'export on top, then Save / Load / Help / theme. This is what to reach for, ' +
       'exportPanel() below is only the format-button strip inside it.',
     // Pinned to a real sidebar's width — at the demo column's full width the
     // action grid stops wrapping to 2x2 and stops looking like what ships.
