@@ -76,17 +76,36 @@ function iconsManifestPlugin(isMakerWorld) {
 // (`vite --mode makerworld`) it resolves to the real SDK glue (src/makerlab/glue.js, which
 // pulls in the NDA SDK). In every other build it resolves to an inline no-op stub, so the
 // public site never depends on the SDK and builds fine without those gitignored files.
+//
+// `virtual:pro-pack` is the same seam for the paid Pro Pack (src/pro/). Both the SDK glue and
+// the Pro Pack sources are gitignored, so this indirection is what keeps `pnpm build` working
+// in a fresh public clone: without it, mount.js's static `./pro/panel.js` import is an
+// unresolved module and the build dies before the MAKERLAB dead-code pass ever runs.
 function makerlabPlugin(enabled) {
   const VIRTUAL_ID = 'virtual:makerlab';
   const STUB_ID = '\0virtual:makerlab-stub';
+  const PRO_ID = 'virtual:pro-pack';
+  const PRO_STUB_ID = '\0virtual:pro-pack-stub';
   const gluePath = resolve(__dirname, 'src/makerlab/glue.js');
+  const proPath = resolve(__dirname, 'src/pro/panel.js');
   return {
     name: 'makerlab',
     resolveId(id) {
       if (id === VIRTUAL_ID) return enabled ? gluePath : STUB_ID;
+      // Only reach for the real panel when it is actually present: the MakerWorld build is
+      // run from the full working tree, a public clone has no src/pro/ at all.
+      if (id === PRO_ID) return enabled && existsSync(proPath) ? proPath : PRO_STUB_ID;
       return null;
     },
     load(id) {
+      if (id === PRO_STUB_ID) {
+        // Same shape as the real panel so the call site needs no null check. It is never
+        // called in the public build (the branch is fenced behind MAKERLAB) — this exists so
+        // the module graph resolves.
+        return 'export function mountKeyboardSetPanel() {\n'
+          + '  return { refresh() {}, destroy() {} };\n'
+          + '}\n';
+      }
       if (id === STUB_ID) {
         return [
           'export const MAKERLAB = false;',
@@ -96,6 +115,16 @@ function makerlabPlugin(enabled) {
           'export const can = () => false;',
           'export async function sdkExport() { throw new Error("MakerLab SDK not available in this build"); }',
           'export async function sdkToast() {}',
+          // Paid features are MakerWorld-only: the public build never mounts their UI (it is
+          // fenced behind MAKERLAB), so these exist purely to keep the module shape identical
+          // and are hard-locked. Nothing here can grant access.
+          'export const PRO_PACK = "pro_pack";',
+          'export const isUnlocked = () => false;',
+          'export const paymentInfo = () => null;',
+          'export const isUserCancelled = () => false;',
+          'export async function ensureAccess() { return false; }',
+          'export const formatPrice = () => "";',
+          'export const currentPrice = () => null;',
         ].join('\n');
       }
       return null;

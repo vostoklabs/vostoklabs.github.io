@@ -1,0 +1,30 @@
+{
+  "name": "house-number",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "node src/geometry/outlines.check.mjs",
+    "check:build": "esbuild src/geometry/buildSign.check.mjs --bundle --platform=node --format=esm --external:manifold-3d --external:opentype.js --outfile=node_modules/.cache/buildSign.check.mjs --log-level=error && node node_modules/.cache/buildSign.check.mjs ../../packages/fonts/src/fonts/aldrich.ttf"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/fonts": "workspace:*",
+    "@vostok/plates": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
+    "@vostok/viewer": "workspace:*",
+    "manifold-3d": "^3.0.0",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.171.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "opentype.js": "^1.3.4"
+  }
+}

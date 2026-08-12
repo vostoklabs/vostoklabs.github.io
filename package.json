@@ -16,6 +16,8 @@
     "build:keycap": "pnpm --filter keycap-generator build",
     "dev:magnet": "pnpm --filter magnet-generator dev",
     "build:magnet": "pnpm --filter magnet-generator build",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev:housenumber": "pnpm --filter house-number dev",
+    "build:housenumber": "pnpm --filter house-number build"
   }
 }

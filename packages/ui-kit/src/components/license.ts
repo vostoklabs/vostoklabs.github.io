@@ -1,5 +1,6 @@
 import { BRAND } from '@vostok/brand';
 import { el } from '../dom';
+import { isDesktop, noopHandle, renderNothing } from '../host-env';
 
 const fmt = (n: number) => `$${n.toLocaleString('en-US')}`;
 
@@ -15,6 +16,7 @@ export interface LicenseModalOptions {
  *  Deliberately emoji-free — this is the screen that asks people for money, and
  *  it reads as more serious without them. */
 export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): void } {
+  if (isDesktop()) return noopHandle();
   const s = BRAND.pricing.subscription;
   const previouslyFocused =
     document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -91,6 +93,7 @@ export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): voi
 /** Corner reminder for subsequent downloads (red-bordered card, top right),
  *  the clicker's lighter-touch nudge after the first full modal. */
 export function licenseReminderToast(): { close(): void } {
+  if (isDesktop()) return noopHandle();
   const s = BRAND.pricing.subscription;
 
   const body = el('p');
@@ -137,6 +140,8 @@ export interface LicenseNudgeOptions {
  *  than just letting them open the licence page in a new tab. The modal still
  *  fires on the export path, where it is actually earned. */
 export function licenseNudge(opts: LicenseNudgeOptions = {}): HTMLElement {
+  // The desktop tier the user bought already answers this.
+  if (isDesktop()) return renderNothing();
   const name = opts.generatorName ?? 'This generator';
   const hint = el('p', { className: 'vl-hint' });
   const link = el('a', {

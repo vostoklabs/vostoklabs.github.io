@@ -131,10 +131,14 @@ export async function buildBodies(capGeom, meta, icon, opts) {
   }
 
   // Build the prism: start with fill contours (if any), then union in each stroke solid.
-  let prism = contours.length ? extrudePrism(contours, bottomZ, height) : null;
+  // `boldMM` grows the outline all round — a print concern more than a styling one, since a
+  // legend thinner than a couple of extrusion widths comes out ragged. Absent (0) by default,
+  // so the single-cap path is unchanged.
+  const bold = opts.boldMM || 0;
+  let prism = contours.length ? extrudePrism(contours, bottomZ, height, bold) : null;
 
   for (const sg of strokeGeoms) {
-    const strokeSolid = extrudeStrokeGeom(sg, bottomZ, height);
+    const strokeSolid = extrudeStrokeGeom(sg, bottomZ, height, bold);
     if (prism) {
       const united = prism.add(strokeSolid);
       prism.delete();

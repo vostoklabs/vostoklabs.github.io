@@ -1345,3 +1345,12 @@ details.section-collapsible[open] > summary {
 .mg-fb__meta { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
 .mg-fb__name { font-size: 12px; color: var(--text); }
 .mg-fb__cat { font-size: 10px; color: var(--muted); }
+
+/* Open-a-project list — desktop host only, where saved projects are real stored things
+   rather than a JSON file the user has to keep track of themselves. */
+.mg-project-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+.mg-project-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px; }
+.mg-project-thumb {
+  width: 48px; height: 48px; flex: 0 0 48px; object-fit: cover;
+  border-radius: 6px; background: var(--panel-2);
+}

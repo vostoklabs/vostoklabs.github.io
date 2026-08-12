@@ -131,6 +131,46 @@ importers:
         specifier: ^6.0.5
         version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
 
+  apps/house-number:
+    dependencies:
+      '@vostok/brand':
+        specifier: workspace:*
+        version: link:../../config
+      '@vostok/export':
+        specifier: workspace:*
+        version: link:../../packages/export
+      '@vostok/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
+      '@vostok/plates':
+        specifier: workspace:*
+        version: link:../../packages/plates
+      '@vostok/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
+      '@vostok/viewer':
+        specifier: workspace:*
+        version: link:../../packages/viewer
+      manifold-3d:
+        specifier: ^3.0.0
+        version: 3.5.1(@gltf-transform/core@4.4.1)(@gltf-transform/extensions@4.4.1)(@gltf-transform/functions@4.4.1)(esbuild-wasm@0.27.7)
+      three:
+        specifier: ^0.171.0
+        version: 0.171.0
+    devDependencies:
+      '@types/three':
+        specifier: ^0.171.0
+        version: 0.171.0
+      opentype.js:
+        specifier: ^1.3.4
+        version: 1.3.4
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.5
+        version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
+
   apps/hub:
     dependencies:
       '@vostok/brand':

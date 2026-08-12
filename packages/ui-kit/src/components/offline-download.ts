@@ -1,5 +1,6 @@
 import { el } from '../dom';
 import { ICONS, svgEl } from '../icons';
+import { isDesktop, renderNothing } from '../host-env';
 
 export interface OfflineDownloadOptions {
   /** URL of the single-file offline build (e.g. `offline/clicker.html`). */
@@ -11,6 +12,8 @@ export interface OfflineDownloadOptions {
 
 /** "Download the offline version" button: the keep-it-forever artifact. */
 export function offlineDownloadButton(opts: OfflineDownloadOptions): HTMLElement {
+  // This *is* the offline version.
+  if (isDesktop()) return renderNothing();
   const label = opts.label ?? 'Download offline version';
   const btn = el('a', {
     className: 'vl-btn',

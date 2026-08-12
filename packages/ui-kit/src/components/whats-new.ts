@@ -1,5 +1,6 @@
 import { el } from '../dom';
 import { ICONS, svgEl } from '../icons';
+import { isDesktop, noopHandle } from '../host-env';
 
 export interface WhatsNewItem {
   /** Bold lead-in, e.g. 'Sharper image tracing'. */
@@ -19,6 +20,8 @@ export interface WhatsNewOptions {
 /** "What's new" card, blue pill badge, checkmark list, don't-show-again +
  *  full-width "Got it →". Same structure as the shipped clicker. */
 export function showWhatsNew(opts: WhatsNewOptions): { close(): void } {
+  // Version news belongs to the host app's own release notes.
+  if (isDesktop()) return noopHandle();
   const list = el('ul', { className: 'vl-whatsnew-list' });
   for (const item of opts.items) {
     const span = el('span');

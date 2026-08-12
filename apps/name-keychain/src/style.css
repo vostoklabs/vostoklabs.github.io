@@ -358,3 +358,36 @@ body {
   background: var(--hover);
 }
 
+
+/* Saved-project list, desktop only.
+   The web build has no host and never opens this dialog, so these rules are inert there —
+   cheaper than a second stylesheet for four selectors. */
+.nk-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.nk-project-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+/* Fixed box rather than intrinsic size: the previews are whatever aspect ratio the
+   viewport happened to be, and a list that jitters row heights is unreadable. */
+.nk-project-thumb {
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: var(--radius-field, 6px);
+  background: var(--panel-2);
+  flex-shrink: 0;
+}

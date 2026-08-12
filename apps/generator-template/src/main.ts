@@ -307,8 +307,12 @@ const footer = sidebarFooter({
     else licenseReminderToast();
   },
   onSave: () => downloadJSON('tag-project.json', settings),
-  onLoad: (file) =>
-    loadJSON(file, (data) => {
+  // `sidebarFooter`'s onLoad hands back `File | undefined` — the picker can be dismissed
+  // with nothing chosen. Guarding is what every shipped generator does, and without it the
+  // template does not typecheck, which is a poor start for the thing everything is copied
+  // from.
+  onLoad: (file?: File) =>
+    file && loadJSON(file, (data) => {
       settings = coerceSettings(data);
       syncControls();
       syncColorInputs();

@@ -18,6 +18,24 @@ export function weldPositions(geom, tol = 1e-3) {
 }
 
 /**
+ * The transform that lays a profile out the way it has to be PRINTED, or null when the way
+ * it's modelled is already the way it prints.
+ *
+ * Model space is always Z-up so the legend pipeline can rely on it, but some profiles can't be
+ * printed that way — a Choc cap stands on its bottom rib, because its two stub stems won't
+ * survive printing flat. Keeping this in one place is what stops the preview (which rotates a
+ * group) and the exports (which bake it into the geometry) from disagreeing about where the
+ * cap sits.
+ */
+export function printMatrix(profile, meta) {
+  const rotDeg = profile?.printRotateX ?? 0;
+  if (!rotDeg) return null;
+  return new THREE.Matrix4()
+    .makeTranslation(0, 0, -meta.bbox.min[1]) // drop the lowest rib onto the plate
+    .multiply(new THREE.Matrix4().makeRotationX((rotDeg * Math.PI) / 180));
+}
+
+/**
  * Grow/shrink a switch stem's cross-section for fit tolerance, scaling each stem in XY
  * about ITS OWN centre so a multi-stem body (2u, spacebars) keeps every stem locked to its
  * 19.05 mm switch spacing — only the local cross gets looser (+) or tighter (−).
@@ -55,16 +73,24 @@ export function scaleStemComponentsXY(geom, tolMM) {
   for (const g of groups.values()) {
     g.cx = (g.minX + g.maxX) / 2;
     g.cy = (g.minY + g.maxY) / 2;
-    const dim = Math.max(g.maxX - g.minX, g.maxY - g.minY);
-    g.f = dim > 0.1 ? Math.max(0.5, (dim + tolMM) / dim) : 1;
+    // Per axis, not one factor taken from the widest side. A Cherry cross is square
+    // (7.8955 × 7.8955 on the Standard 1u), so one shared factor happened to open both axes
+    // by exactly tolMM — which is why this went unnoticed. A Kailh Choc stub is 1.60 × 3.40,
+    // and the shared factor gave its NARROW axis only 47% of the requested clearance, on the
+    // axis that actually grips the switch. Same arithmetic on a square stem, correct on a
+    // rectangular one.
+    const sx = g.maxX - g.minX;
+    const sy = g.maxY - g.minY;
+    g.fx = sx > 0.1 ? Math.max(0.5, (sx + tolMM) / sx) : 1;
+    g.fy = sy > 0.1 ? Math.max(0.5, (sy + tolMM) / sy) : 1;
   }
 
   const out = src.clone();
   const op = out.getAttribute('position');
   for (let v = 0; v < nv; v++) {
     const g = groups.get(find(v));
-    op.setX(v, g.cx + (pos[v * 3] - g.cx) * g.f);
-    op.setY(v, g.cy + (pos[v * 3 + 1] - g.cy) * g.f);
+    op.setX(v, g.cx + (pos[v * 3] - g.cx) * g.fx);
+    op.setY(v, g.cy + (pos[v * 3 + 1] - g.cy) * g.fy);
   }
   op.needsUpdate = true;
   out.computeVertexNormals();

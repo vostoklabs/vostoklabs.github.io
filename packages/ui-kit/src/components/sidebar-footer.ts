@@ -17,8 +17,8 @@ export interface SidebarFooterOptions {
 
   /** Serialize + download the current project. */
   onSave: () => void;
-  /** Load a project file the user picked. */
-  onLoad: (file: File) => void;
+  /** Load a project file the user picked (or undefined if desktop native picker should be used). */
+  onLoad: (file?: File) => void;
   /** Show help / intro dialog. Omit to hide the Help button. */
   onHelp?: () => void;
   /** Include the light/dark toggle (default true). */

@@ -33,6 +33,69 @@ function kd(hex) {
 const slug = (s) => s.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'part';
 
 /**
+ * An OBJ plate being written one part at a time.
+ *
+ * The single-cap export has every part in hand before it writes anything, but a keyboard set
+ * does not: it carves 61–87 caps one after another, and holding every finished body until the
+ * end would keep tens of megabytes of geometry alive for no reason. A writer lets the set
+ * builder append each cap the moment it's carved and dispose the geometry immediately.
+ *
+ * `materials` is shared across the plates of one artifact — a 3MF gets one MTL for the whole
+ * export, so every plate must name the same filament slots the same way.
+ *
+ * @param {{ mtlFileName?: string, materials?: Map<number, object> }} [opts]
+ */
+export function createObjWriter({ mtlFileName = 'model.mtl', materials = new Map() } = {}) {
+  const lines = [
+    '# Keycap Legend Generator - Vostok Labs',
+    '# Units: millimetres. One `o` object per filament slot region.',
+    `mtllib ${mtlFileName}`,
+  ];
+  // OBJ face indices are 1-based and run GLOBALLY across the file, so every object's
+  // indices shift by the number of vertices already written.
+  let vertexOffset = 0;
+
+  return {
+    materials,
+    /** @param {{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}} p */
+    add(p) {
+      // One material per filament slot. First part to claim a slot names and colours it.
+      if (!materials.has(p.extruder)) {
+        materials.set(p.extruder, { name: `filament${p.extruder}`, color: p.color, extruder: p.extruder });
+      }
+      // Manifold output is already a clean, indexed, watertight solid — use it as-is.
+      // Only weld when handed a non-indexed mesh (don't re-weld and risk false merges).
+      const g = p.geom.index ? p.geom : weldPositions(p.geom);
+      const pos = g.getAttribute('position').array;
+      const idx = g.getIndex().array;
+
+      lines.push(`o ${slug(p.name)}`);
+      lines.push(`usemtl ${materials.get(p.extruder).name}`);
+
+      for (let i = 0; i < pos.length; i += 3) {
+        lines.push(`v ${f(pos[i])} ${f(pos[i + 1])} ${f(pos[i + 2])}`);
+      }
+      for (let i = 0; i < idx.length; i += 3) {
+        const a = idx[i] + 1 + vertexOffset;
+        const b = idx[i + 1] + 1 + vertexOffset;
+        const c = idx[i + 2] + 1 + vertexOffset;
+        lines.push(`f ${a} ${b} ${c}`);
+      }
+
+      vertexOffset += pos.length / 3;
+    },
+    /** Nothing written yet — an empty plate must never be handed to the host. */
+    get isEmpty() { return vertexOffset === 0; },
+    get text() { return lines.join('\n') + '\n'; },
+  };
+}
+
+/** MTL text for a writer's (or several writers') shared material map. */
+export function mtlText(materials) {
+  return [...materials.values()].map((m) => `newmtl ${m.name}\nKd ${kd(m.color)}`).join('\n\n') + '\n';
+}
+
+/**
  * Build an OBJ (+ matching MTL) describing one print plate.
  *
  * @param {Array<{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}>} parts
@@ -42,52 +105,13 @@ const slug = (s) => s.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') |
  * @returns {{ obj: string, mtl: string, materials: Array<{name:string,color:string,extruder:number}> }}
  */
 export function buildObjMtl(parts, { mtlFileName = 'model.mtl' } = {}) {
-  // One material per filament slot. First part to claim a slot names and colours it.
-  const bySlot = new Map();
-  for (const p of parts) {
-    if (!bySlot.has(p.extruder)) {
-      bySlot.set(p.extruder, { name: `filament${p.extruder}`, color: p.color, extruder: p.extruder });
-    }
-  }
-
-  const mtl = [...bySlot.values()]
-    .map((m) => `newmtl ${m.name}\nKd ${kd(m.color)}`)
-    .join('\n\n');
-
-  const lines = [
-    '# Keycap Legend Generator - Vostok Labs',
-    '# Units: millimetres. One `o` object per filament slot region.',
-    `mtllib ${mtlFileName}`,
-  ];
-
-  // OBJ face indices are 1-based and run GLOBALLY across the file, so every object's
-  // indices shift by the number of vertices already written.
-  let vertexOffset = 0;
-
-  for (const p of parts) {
-    // Manifold output is already a clean, indexed, watertight solid — use it as-is.
-    // Only weld when handed a non-indexed mesh (don't re-weld and risk false merges).
-    const g = p.geom.index ? p.geom : weldPositions(p.geom);
-    const pos = g.getAttribute('position').array;
-    const idx = g.getIndex().array;
-
-    lines.push(`o ${slug(p.name)}`);
-    lines.push(`usemtl ${bySlot.get(p.extruder).name}`);
-
-    for (let i = 0; i < pos.length; i += 3) {
-      lines.push(`v ${f(pos[i])} ${f(pos[i + 1])} ${f(pos[i + 2])}`);
-    }
-    for (let i = 0; i < idx.length; i += 3) {
-      const a = idx[i] + 1 + vertexOffset;
-      const b = idx[i + 1] + 1 + vertexOffset;
-      const c = idx[i + 2] + 1 + vertexOffset;
-      lines.push(`f ${a} ${b} ${c}`);
-    }
-
-    vertexOffset += pos.length / 3;
-  }
-
-  return { obj: lines.join('\n') + '\n', mtl: mtl + '\n', materials: [...bySlot.values()] };
+  const writer = createObjWriter({ mtlFileName });
+  for (const p of parts) writer.add(p);
+  return {
+    obj: writer.text,
+    mtl: mtlText(writer.materials),
+    materials: [...writer.materials.values()],
+  };
 }
 
 /** UTF-8 ArrayBuffer of an OBJ plate — the `buffer` shape sdk.export() expects. */

@@ -1,10 +1,13 @@
 import { BRAND } from '@vostok/brand';
 import { el } from '../dom';
 import { ICONS, svgEl } from '../icons';
+import { isDesktop, renderNothing } from '../host-env';
 
 /** Ko-fi / MakerWorld / GitHub links as one styled row, URLs from @vostok/brand.
  *  Entries whose URL is still a TODO placeholder are skipped automatically. */
 export function supportLinks(): HTMLElement {
+  // Inside a desktop app these point at pages the user did not ask to visit.
+  if (isDesktop()) return renderNothing();
   const entries: [icon: string, label: string, url: string][] = [
     [ICONS.coffee, 'Ko-fi', BRAND.urls.kofi],
     [ICONS.zap, 'MakerWorld', BRAND.urls.makerworld],

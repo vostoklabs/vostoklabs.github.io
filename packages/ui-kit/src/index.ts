@@ -2,7 +2,7 @@
 // Import styles once per app:  import '@vostok/ui-kit/styles.css'
 
 export { toast, type ToastKind, type ToastOptions } from './components/toast';
-export { dialog, type DialogOptions, type DialogHandle, type DialogAction } from './components/dialog';
+export { dialog, closeAllDialogs, type DialogOptions, type DialogHandle, type DialogAction } from './components/dialog';
 export {
   licenseNudge,
   openCommercialModal,
@@ -27,6 +27,13 @@ export { showWhatsNew, maybeShowWhatsNew, type WhatsNewItem, type WhatsNewOption
 export { supportLinks } from './components/support-links';
 export { exportPanel, buildExportMetadata, type ExportFormat, type ExportPanelOptions } from './components/export-panel';
 export { captureCover, type RendererLike } from './components/cover-image';
+export {
+  FILAMENTS,
+  filamentRow,
+  contrastRatio,
+  luminance,
+  type FilamentRowOptions,
+} from './components/filament';
 export { offlineDownloadButton, type OfflineDownloadOptions } from './components/offline-download';
 export { encodeParamsToHash, readParamsFromHash, presetShareButton } from './components/preset-share';
 export {
@@ -74,5 +81,13 @@ export {
 } from './components/stage';
 export { ICONS, svgEl } from './icons';
 export { el } from './dom';
+
+// Web or desktop. Set once by the host app before any generator mounts; the chrome
+// components read it and render nothing when it is 'desktop'.
+export { setHostEnv, getHostEnv, isDesktop, renderNothing, noopHandle, type HostEnv } from './host-env';
+
+// The contract a desktop host fulfils for a generator. Type-only: a generator that
+// runs on the web never sees an implementation.
+export type { DesktopHost, HostFile, HostAsset, HostProject, MountFn } from './desktop-host';
 
 export const UI_KIT_VERSION = '0.1.0';

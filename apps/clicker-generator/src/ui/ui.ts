@@ -125,6 +125,14 @@ export interface UiCallbacks {
   onAiPrompt(): void;
   onSaveProject(): void;
   onLoadProject(file: File): void;
+  /**
+   * Open a stored project, when there is a host that stores them.
+   *
+   * On the desktop the kit's Load button hands us no file and expects the host's own picker
+   * to be opened instead — there is no file input in that story. Optional, so the web build
+   * simply does not provide it and keeps the file-input path.
+   */
+  onOpenFromHost?(): void;
   onBodyColor(hex: string): void;
 
   // New callbacks for vector modes
@@ -230,6 +238,17 @@ export function createUi(
   statusEl: HTMLElement,
   cb: UiCallbacks
 ) {
+  /**
+   * Everything this UI attaches outside the two sidebars it was handed.
+   *
+   * A browser tab never had to undo any of it. A desktop host does: the tooltip bubble, the
+   * modals and the popovers all live on <body>, and the drag-and-drop and hover handlers
+   * live on `window` and `document`. None of them is inside an element the host can clear,
+   * so each one has to be given back explicitly. `dispose()` on the returned object is what
+   * runs them.
+   */
+  const cleanups: (() => void)[] = [];
+
   // Small "?" help marker with a hover tooltip (tooltip itself is rendered to
   // <body> by the handler below so it is never clipped by the scrolling sidebar).
   const tip = (text: string) =>
@@ -732,7 +751,8 @@ export function createUi(
     formats: [{ id: '3mf', label: '3MF' }],
     onExport: () => cb.onExport(),
     onSave: () => cb.onSaveProject(),
-    onLoad: (f: File) => {
+    onLoad: (f?: File) => {
+      if (!f) { cb.onOpenFromHost?.(); return; }
       // Forward the picked file to the hidden project-file input, whose change
       // handler (below) calls cb.onLoadProject.
       const dt = new DataTransfer();
@@ -792,9 +812,11 @@ export function createUi(
     drop.classList.remove('over');
   });
 
-  // Global drag & drop for the whole window
-  window.addEventListener('dragover', (e) => e.preventDefault());
-  window.addEventListener('drop', (e) => {
+  // Global drag & drop for the whole window. On `window` rather than the drop zone so a
+  // file dropped anywhere else does not navigate the whole page to it — which also means
+  // it outlives this UI unless taken off again.
+  const onWindowDragover = (e: DragEvent) => e.preventDefault();
+  const onWindowDrop = (e: DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer?.files?.[0];
     if (!f) return;
@@ -805,6 +827,12 @@ export function createUi(
     } else if (f.type.startsWith('image/')) {
       cb.onUpload(f);
     }
+  };
+  window.addEventListener('dragover', onWindowDragover);
+  window.addEventListener('drop', onWindowDrop);
+  cleanups.push(() => {
+    window.removeEventListener('dragover', onWindowDragover);
+    window.removeEventListener('drop', onWindowDrop);
   });
 
   // Choose Sample Picker Modal
@@ -1504,6 +1532,7 @@ export function createUi(
   tipBubble.className = 'help-tip-bubble';
   tipBubble.hidden = true;
   document.body.appendChild(tipBubble);
+  cleanups.push(() => tipBubble.remove());
 
   const showTip = (marker: HTMLElement) => {
     const text = marker.getAttribute('data-tip');
@@ -1523,19 +1552,22 @@ export function createUi(
   };
   const hideTip = () => { tipBubble.hidden = true; };
 
-  document.addEventListener('mouseover', (e) => {
+  const onTipOver = (e: Event) => {
     const marker = (e.target as HTMLElement).closest('.help-tip') as HTMLElement | null;
     if (marker) showTip(marker);
-  });
-  document.addEventListener('mouseout', (e) => {
+  };
+  const onTipOut = (e: Event) => {
     if ((e.target as HTMLElement).closest('.help-tip')) hideTip();
-  });
-  document.addEventListener('focusin', (e) => {
-    const marker = (e.target as HTMLElement).closest('.help-tip') as HTMLElement | null;
-    if (marker) showTip(marker);
-  });
-  document.addEventListener('focusout', (e) => {
-    if ((e.target as HTMLElement).closest('.help-tip')) hideTip();
+  };
+  document.addEventListener('mouseover', onTipOver);
+  document.addEventListener('mouseout', onTipOut);
+  document.addEventListener('focusin', onTipOver);
+  document.addEventListener('focusout', onTipOut);
+  cleanups.push(() => {
+    document.removeEventListener('mouseover', onTipOver);
+    document.removeEventListener('mouseout', onTipOut);
+    document.removeEventListener('focusin', onTipOver);
+    document.removeEventListener('focusout', onTipOut);
   });
 
   // --- Welcome / intro modal ---
@@ -2506,6 +2538,22 @@ export function createUi(
     hexRgb, 
     showColorPopoverAt, 
     addUploadedSvg, 
+    /**
+     * Undoes everything this UI put outside its two sidebars.
+     *
+     * The selector sweep at the end is for the transient overlays — a colour popover, the
+     * welcome modal, a tutorial card — which each already remove themselves on close, but
+     * only if the user ever closes them. Unmounting mid-modal has to clear them too.
+     */
+    dispose: () => {
+      for (const fn of cleanups.reverse()) {
+        try { fn(); } catch { /* one failure must not strand the rest */ }
+      }
+      cleanups.length = 0;
+      for (const sel of ['.slot-editor', '.welcome-overlay', '.tutorial-card-container', '.license-overlay', '.license-toast']) {
+        document.querySelectorAll(sel).forEach((n) => n.remove());
+      }
+    },
     addFontOption: (font: FontOption) => { 
       addFontOption(font); 
       // Click the newly added font to select it

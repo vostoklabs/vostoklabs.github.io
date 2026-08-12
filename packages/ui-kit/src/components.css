@@ -111,8 +111,14 @@
   flex-direction: column;
   gap: 14px;
 }
+/* For grid content — a font specimen sheet, a gallery — rather than prose. Without it wide
+   content overflowed the 440px box instead of widening it. */
+.vl-dialog--wide { width: min(760px, 94vw); }
 .vl-dialog__title { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
 .vl-dialog > div { color: var(--muted); font-size: 15px; line-height: 1.55; }
+/* A grid child must be allowed to shrink inside the flex column, or its tracks size to the
+   widest card and push the whole dialog sideways. */
+.vl-dialog > div { min-width: 0; }
 .vl-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
 
 /* Pill badge (green "✓ Download started" / blue "WHAT'S NEW"). */
@@ -571,3 +577,87 @@
   gap: 12px;
   z-index: 5;
 }
+
+/* ---------- Select (a picker, not a number box) ---------- */
+
+/*
+ * `.vl-val` is a right-aligned, 82px, tabular-numeric field with the native appearance
+ * stripped — correct for a slider's value box, wrong for a `<select>`. Reusing it gave the
+ * generators a full-width dropdown with its text jammed against the right edge and no
+ * chevron at all, because `appearance: none` removes the arrow and nothing replaced it.
+ *
+ * `.vl-select` is the picker treatment: text reads from the left, and the chevron is an
+ * inline SVG in `background-image` (a data URI, so it costs no request and cannot 404).
+ * `currentColor` is not available inside a background image, so the stroke is the muted
+ * token's value written out; keep the two in step if the palette moves.
+ */
+.vl-select {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  padding: 7px 30px 7px 10px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%239aa3b2' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  text-overflow: ellipsis;
+}
+:root[data-theme="light"] .vl-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%236b7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.vl-select:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+/* The popup list itself is drawn by the OS; only its colours are ours to set. */
+.vl-select option { background: var(--panel); color: var(--text); }
+
+/* ---------- Filament swatches ---------- */
+
+.vl-swatch-row { padding: 6px 0; }
+
+.vl-swatches__label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+
+.vl-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(26px, 1fr));
+  gap: 6px;
+}
+
+/*
+ * A swatch is the colour, so the selected state cannot be a colour — a border in any hue is
+ * invisible against the swatches that share it, and white-on-white loses either way. It is a
+ * ring drawn OUTSIDE the chip via box-shadow, in the panel colour then the accent, so it
+ * reads at equal strength on every swatch including black and white.
+ */
+.vl-swatch {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: var(--radius-chip, 6px);
+  background: var(--swatch, transparent);
+  cursor: pointer;
+  transition: box-shadow 90ms ease, transform 90ms ease;
+}
+.vl-swatch:hover { transform: translateY(-1px); }
+.vl-swatch.is-on {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+.vl-swatch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+
+/* The custom-colour chip. Same footprint as a swatch so the grid stays even; the native
+   colour input's own well is stretched to fill it. */
+.vl-swatch--custom {
+  -webkit-appearance: none;
+  appearance: none;
+  overflow: hidden;
+}
+.vl-swatch--custom::-webkit-color-swatch-wrapper { padding: 0; }
+.vl-swatch--custom::-webkit-color-swatch { border: none; border-radius: inherit; }
+.vl-swatch--custom::-moz-color-swatch { border: none; border-radius: inherit; }

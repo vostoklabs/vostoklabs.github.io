@@ -2,6 +2,7 @@ import { BRAND } from '@vostok/brand';
 import { el } from '../dom';
 import { ICONS, svgEl } from '../icons';
 import { themeToggleButton } from './theme';
+import { isDesktop } from '../host-env';
 
 /* Shared chrome for every Vostok generator so they all look the same: a header
    (name + description + "Made by Vostok Labs"), an optional dismissable quality
@@ -30,21 +31,35 @@ export interface GeneratorHeaderOptions {
   description: string;
   /** Where "Made by Vostok Labs" links (default: the MakerWorld profile). */
   madeByUrl?: string;
+  /** Whether to hide the "Made by Vostok Labs" credit. */
+  hideCredit?: boolean;
 }
 
 /** Title + description + "Made by Vostok Labs" — the top of every generator sidebar. */
 export function generatorHeader(opts: GeneratorHeaderOptions): HTMLElement {
-  const credit = el('a', {
-    className: 'vl-credit-link',
-    attrs: { href: opts.madeByUrl ?? BRAND.urls.makerworld, target: '_blank', rel: 'noopener noreferrer' },
-  });
-  credit.append(parseSvg(VOSTOK_MARK), document.createTextNode('Vostok Labs'));
-
-  return el('div', { className: 'vl-app-header' }, [
+  const children: HTMLElement[] = [
     el('h1', { className: 'vl-app-title', text: opts.title }),
     el('p', { className: 'vl-app-subtitle', text: opts.description }),
-    el('p', { className: 'vl-app-credit' }, [document.createTextNode('Made by '), credit]),
-  ]);
+  ];
+
+  // Inside a desktop app the title and description still earn their place — they say which
+  // tool you are looking at. The credit does not. On the web it is how someone finds the
+  // other generators; in a bundled app the user already bought it from Vostok Labs, so the
+  // line is a byline repeated once per generator, and its link is a way out of the product.
+  //
+  // Decided here rather than at each call site on purpose: four generators passing
+  // `hideCredit: true` is four chances to forget, and the answer is a property of the host
+  // rather than of any one generator.
+  if (!opts.hideCredit && !isDesktop()) {
+    const credit = el('a', {
+      className: 'vl-credit-link',
+      attrs: { href: opts.madeByUrl ?? BRAND.urls.makerworld, target: '_blank', rel: 'noopener noreferrer' },
+    });
+    credit.append(parseSvg(VOSTOK_MARK), document.createTextNode('Vostok Labs'));
+    children.push(el('p', { className: 'vl-app-credit' }, [document.createTextNode('Made by '), credit]));
+  }
+
+  return el('div', { className: 'vl-app-header' }, children);
 }
 
 export interface QualityCalloutOptions {
@@ -101,8 +116,8 @@ function actionBtn(label: string, icon: string | null, onClick: () => void): HTM
 export interface ProjectActionsOptions {
   /** Serialize + download the current project. */
   onSave: () => void;
-  /** Load a project file the user picked. */
-  onLoad: (file: File) => void;
+  /** Load a project file the user picked (or undefined if desktop native picker should be used). */
+  onLoad: (file?: File) => void;
   /** Show the help/intro. Omit to hide the Help button. */
   onHelp?: () => void;
   /** Include the light/dark toggle (default true). */
@@ -126,11 +141,19 @@ export function projectActions(opts: ProjectActionsOptions): HTMLElement {
   });
 
   const save = actionBtn('Save project', ICONS.save, () => opts.onSave());
-  const load = actionBtn('Load project', ICONS.load, () => fileInput.click());
+  const load = actionBtn('Load project', ICONS.load, () => {
+    if (isDesktop()) {
+      opts.onLoad();
+    } else {
+      fileInput.click();
+    }
+  });
 
   const row2: HTMLElement[] = [];
   if (opts.onHelp) row2.push(actionBtn('Help', ICONS.help, () => opts.onHelp!()));
-  if (opts.theme ?? true) {
+  // No per-generator theme toggle on the desktop: the host app already has one, and two
+  // switches writing the same `data-theme` attribute is a bug waiting to be reported.
+  if ((opts.theme ?? true) && !isDesktop()) {
     row2.push(themeToggleButton({
       storageKey: opts.themeStorageKey,
       className: 'vl-btn vl-btn--secondary vl-action-btn',

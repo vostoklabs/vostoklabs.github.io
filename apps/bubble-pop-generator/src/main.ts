@@ -951,7 +951,10 @@ const footer = sidebarFooter({
     a.click();
     URL.revokeObjectURL(a.href);
   },
-  onLoad: (file) => {
+  onLoad: (file?: File) => {
+    // The kit's Load button hands a desktop host nothing, expecting the host's own picker.
+    // This generator is web-only, so there is nothing to fall back to — just don't read undefined.
+    if (!file) return;
     const r = new FileReader();
     r.onload = () => {
       try {

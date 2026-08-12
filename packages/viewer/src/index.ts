@@ -172,8 +172,31 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       root.add(mesh);
     }
 
+    // An empty build is a real state, not an error: a generator whose text field is
+    // momentarily blank calls this with no parts. Measuring it is what breaks the view.
+    // A fresh Box3 starts at min +Infinity / max -Infinity; `getCenter` guards for that
+    // and returns the origin, but `box.min.z` below is read raw, so the model group lands
+    // at z = -Infinity — and the *next* build measures against that and goes to NaN. The
+    // model then never comes back until reload. `framedRadius` is deliberately left alone:
+    // zeroing it makes the following build satisfy `framedRadius === 0` and hard-reset to
+    // iso, which is the camera jump this whole block exists to avoid.
+    if (parts.length === 0) {
+      lastSize.set(0, 0, 0);
+      return;
+    }
+
     // Centre X/Y and drop the bottom face to z = 0, so the model sits on the plate.
-    const box = new THREE.Box3().expandByObject(root);
+    //
+    // Measure from a zeroed, freshly-updated matrix. `expandByObject` calls
+    // `updateWorldMatrix(false, false)` on the group and then derives each child's world
+    // matrix from it, so the group's *previous* offset is still baked in — the box comes
+    // back in the last build's frame and the new offset stacks on the old one. With an
+    // off-centre model that makes `root.position` flip-flop between two values on every
+    // rebuild, so the model hops sideways on every keystroke. The four apps that carry
+    // their own viewer fixed this in 34224d7; this shared one was missed.
+    root.position.set(0, 0, 0);
+    root.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(root);
     const centre = box.getCenter(new THREE.Vector3());
     root.position.set(-centre.x, -centre.y, -box.min.z);
     lastSize = box.getSize(new THREE.Vector3());

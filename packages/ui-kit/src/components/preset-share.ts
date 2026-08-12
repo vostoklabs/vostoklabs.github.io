@@ -1,6 +1,7 @@
 import { el } from '../dom';
 import { ICONS, svgEl } from '../icons';
 import { toast } from './toast';
+import { isDesktop, renderNothing } from '../host-env';
 
 /* Share/bookmark exact generator configurations via the URL hash.
    Sellers keep links to their proven product configs; links shared in groups
@@ -46,6 +47,8 @@ export function presetShareButton(opts: {
   getParams: () => Record<string, unknown>;
   label?: string;
 }): HTMLElement {
+  // Sharing by URL hash makes no sense with no URL. Saved projects replace it.
+  if (isDesktop()) return renderNothing();
   const btn = el('button', {
     className: 'vl-btn',
     attrs: { type: 'button' },

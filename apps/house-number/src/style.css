@@ -1,0 +1,134 @@
+/* App-local styling only. Anything that could belong to a second generator belongs in
+   @vostok/ui-kit instead — two apps with their own idea of a row is how the catalogue
+   stops looking like one product. */
+
+/* The page frame. The kit styles `.vl-*` classes and deliberately never touches `body`, so
+   every app sets this itself — the same block is in generator-template, clicker, magnet and
+   name-keychain, and this generator was the one that shipped without it.
+
+   Leaving it out is not cosmetic. `.vl-btn` and the control rows use `font: inherit`, so
+   with no font-family on `body` every button, label, input and status line fell back to the
+   browser default — Times New Roman — while the few elements that name `--font-display`
+   outright (the title, section summaries, the stage label) kept Chakra Petch. That mix is
+   what made the panel read as a different product. The default `margin: 8px` also pushed
+   the page 16px past the viewport, putting a scrollbar on a layout built to fill it. */
+:root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.hn-stage-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* A text field wants the whole row — a house number is short but a street name is not. The
+   picker takes `.vl-select` from the kit and needs nothing here. */
+.hn-text {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  padding-left: 10px;
+}
+
+.vl-slider-head:has(.hn-text),
+.vl-slider-head:has(.hn-select) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+/* These captions used to be set at 12px muted while the slider labels beside them took the
+   kit default, so "First line" and "Font" read visibly smaller than "Margin" directly
+   below. Match the kit instead of inventing a second size. */
+.vl-slider-head:has(.hn-text) label,
+.vl-slider-head:has(.hn-select) label {
+  color: var(--muted);
+}
+
+.hn-wide {
+  width: 100%;
+  justify-content: center;
+}
+
+/* The example cards.
+ *
+ * Four square thumbnails at the panel's full width pushed the font picker entirely below
+ * the fold — you had to scroll to find out it existed. A sign is a wide, short object, so a
+ * square card was mostly empty anyway: a 4:3 tile packs the same picture into two thirds of
+ * the height and leaves the Font section visible without scrolling. */
+.vl-samples {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.vl-sample {
+  gap: 2px;
+  padding: 4px;
+}
+
+.vl-sample img {
+  background: var(--panel-2);
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+}
+
+.hn-examples + .vl-hint {
+  margin-top: 6px;
+}
+
+/* The results block: label on the left, value hard right, so the numbers line up. */
+.hn-report__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.hn-report__row strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Font picker. The grid and cards are `vl-font-*` from the kit; only the layout around
+   them is this app's, since the panel is narrow and the button sits under the grid. */
+.hn-fontpicker {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* The "All fonts" dialog: a search field that fills the width, over a taller grid. 155
+   cards is a lot to scroll, so the modal gets the room the sidebar cannot spare. */
+/* The dialog carries the width now (`wide: true`); this only stacks the search over the
+   grid. Asking for a min-width here is what pushed the cards out of the box. */
+.hn-font-modal {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.hn-font-search {
+  width: 100%;
+  text-align: left;
+  padding-left: 10px;
+}
+
+.hn-font-all {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  max-height: min(52vh, 460px);
+}
+
+.hidden {
+  display: none !important;
+}

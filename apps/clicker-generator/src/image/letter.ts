@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { FontLoader, Font } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TTFLoader } from 'three/examples/jsm/loaders/TTFLoader.js';
-import helvetikerRegular from 'three/examples/fonts/helvetiker_regular.typeface.json';
-import helvetikerBold from 'three/examples/fonts/helvetiker_bold.typeface.json';
+// Vendored rather than imported from `three/examples/fonts/`: three stopped shipping that
+// folder after 0.171, so the old imports break on any newer version. See typefaces/README.md.
+import helvetikerRegular from '../typefaces/helvetiker_regular.typeface.json';
+import helvetikerBold from '../typefaces/helvetiker_bold.typeface.json';
 import { LUCIDE_ICONS, buildSvg } from './lucideIcons';
 import { parseSvg } from './logo';
 import type { BlockSlot, RegionSet, Ring, RGB } from '../types';

@@ -2084,3 +2084,12 @@ button.fil-chip:active {
 #sidebar-left > .kc-credit-block .vl-credit-link { color: var(--muted); }
 #sidebar-left > .kc-credit-block .vl-credit-link:hover { color: var(--accent); }
 #sidebar-left > .kc-credit-block .vl-credit-logo { width: 12px; height: 12px; flex: 0 0 12px; }
+
+/* Open-a-project list — desktop host only, where saved projects are real stored things
+   rather than a JSON file the user has to keep track of themselves. */
+.ck-project-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+.ck-project-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px; }
+.ck-project-thumb {
+  width: 48px; height: 48px; flex: 0 0 48px; object-fit: cover;
+  border-radius: 6px; background: var(--panel-2);
+}

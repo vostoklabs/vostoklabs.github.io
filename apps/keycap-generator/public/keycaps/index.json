@@ -75,6 +75,36 @@
       ]
     },
     {
+      "id": "choc-v1",
+      "label": "Choc v1",
+      "default": "1u",
+      "print": "Print these standing on their side, as modelled, with supports for the switch stems. Printing face down works too and needs no supports, but the two stems snap off much more easily.",
+      "homingBump": false,
+      "shineThrough": false,
+      "maxDepth": 1,
+      "printRotateX": 90,
+      "keycaps": [
+        {
+          "id": "1u",
+          "label": "1u",
+          "file": "keycaps/choc-v1/1u.json",
+          "unit": 1
+        },
+        {
+          "id": "1_5u",
+          "label": "1.5u",
+          "file": "keycaps/choc-v1/1_5u.json",
+          "unit": 1.5
+        },
+        {
+          "id": "2u",
+          "label": "2u",
+          "file": "keycaps/choc-v1/2u.json",
+          "unit": 2
+        }
+      ]
+    },
+    {
       "id": "low-profile",
       "label": "Low profile",
       "default": "1u",

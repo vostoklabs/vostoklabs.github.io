@@ -142,10 +142,32 @@ export function measureLine(font: any, fallbackFont: any, text: string, size: nu
   return layoutLine(font, fallbackFont, text, size, 0, 0, letterSpacing).width;
 }
 
+/** Extras for callers that need more than "put line 2 under line 1". Optional throughout,
+ *  so every existing call keeps its exact behaviour. */
+export interface HorizontalOptions {
+  /**
+   * `line2` (default) moves only the second line, which is what the keychain wants — its
+   * first line is the name and must stay put against the keyring tab.
+   *
+   * `block` aligns **both** lines inside the block, the way a text editor does. A house
+   * sign needs this: its short line is usually the number, so aligning "the second line"
+   * left the number pinned and moved the street name, and the control looked broken from
+   * the only seat that matters — a user watching the big number not move.
+   */
+  alignMode?: 'line2' | 'block';
+  /**
+   * `below` (default) is a two-line block. `beside` puts line 2 on the same row as line 1,
+   * sharing a baseline, so a door plate can read `12 MEETING ROOM` with the number and the
+   * name at their own sizes. `lineSpacing` then means the gap between them, as a fraction
+   * of the smaller size.
+   */
+  placement?: 'below' | 'beside';
+}
+
 /**
- * Horizontal layout: line 1 (optionally line 2 below it). `lineSpacing` is the
- * baseline-to-baseline gap as a fraction of the two sizes summed. `align` sets how
- * the (usually shorter) second line sits under the first.
+ * Horizontal layout: line 1, optionally with line 2 below it or beside it. `lineSpacing` is
+ * the baseline-to-baseline gap as a fraction of the two sizes summed. `align` sets how the
+ * lines sit against each other — see `HorizontalOptions.alignMode`.
  */
 export function getHorizontalContours(
   font: any,
@@ -158,25 +180,52 @@ export function getHorizontalContours(
   align: 'left' | 'center' | 'right',
   lineSpacing: number,
   letterSpacing: number,
+  opts: HorizontalOptions = {},
 ): LayoutResult {
   const line2On = text2 !== '';
+  const alignMode = opts.alignMode ?? 'line2';
+  const beside = line2On && opts.placement === 'beside';
   const dy = (textSize + line2Size) * lineSpacing;
 
-  // Line 1
-  const y1 = line2On ? -dy / 2 : 0;
-  const l1 = layoutLine(font, fallbackFont, text, textSize, gap, y1, letterSpacing);
-  const line1Contours = l1.contours;
-
-  // Line 2, aligned under line 1.
+  let line1Contours: number[][][];
   let line2Contours: number[][][] = [];
-  if (line2On) {
-    const y2 = dy / 2;
-    let x2 = gap;
-    if (align !== 'left') {
-      const delta = l1.width - l2Width(font, fallbackFont, text2, line2Size, letterSpacing);
-      x2 = gap + (align === 'center' ? delta / 2 : delta);
+
+  if (beside) {
+    // One row. Both sit on the same baseline so the caps line up along the bottom, which is
+    // how a number and a room name read as one label rather than two stacked things; the
+    // gap between them scales with the smaller type, not with the whole block.
+    const l1 = layoutLine(font, fallbackFont, text, textSize, gap, 0, letterSpacing);
+    line1Contours = l1.contours;
+    const x2 = gap + l1.width + line2Size * Math.max(0.2, lineSpacing);
+    line2Contours = layoutLine(font, fallbackFont, text2, line2Size, x2, 0, letterSpacing).contours;
+  } else {
+    // Line 1
+    const y1 = line2On ? -dy / 2 : 0;
+    const l1 = layoutLine(font, fallbackFont, text, textSize, gap, y1, letterSpacing);
+    line1Contours = l1.contours;
+
+    if (line2On) {
+      const y2 = dy / 2;
+      const w2 = l2Width(font, fallbackFont, text2, line2Size, letterSpacing);
+
+      if (alignMode === 'block') {
+        // Both lines placed inside a block as wide as the wider of them, so whichever line
+        // is short is the one that visibly moves.
+        const blockW = Math.max(l1.width, w2);
+        const offset = (w: number) =>
+          align === 'left' ? 0 : align === 'center' ? (blockW - w) / 2 : blockW - w;
+        const shiftBy = offset(l1.width);
+        if (shiftBy !== 0) for (const poly of line1Contours) for (const pt of poly) pt[0] = pt[0]! + shiftBy;
+        line2Contours = layoutLine(font, fallbackFont, text2, line2Size, gap + offset(w2), y2, letterSpacing).contours;
+      } else {
+        let x2 = gap;
+        if (align !== 'left') {
+          const delta = l1.width - w2;
+          x2 = gap + (align === 'center' ? delta / 2 : delta);
+        }
+        line2Contours = layoutLine(font, fallbackFont, text2, line2Size, x2, y2, letterSpacing).contours;
+      }
     }
-    line2Contours = layoutLine(font, fallbackFont, text2, line2Size, x2, y2, letterSpacing).contours;
   }
 
   const contours = [...line1Contours, ...line2Contours];

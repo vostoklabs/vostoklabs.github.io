@@ -121,7 +121,13 @@ export function parseSvg(svgText) {
   if (!contours.length && !strokeGeoms.length) {
     throw new Error('No drawable paths found in this SVG.');
   }
-  return { contours, strokeGeoms, box };
+  // The viewBox is the icon's em. A curated icon family (lucide) draws every symbol optically
+  // sized on one grid, so a chevron is DELIBERATELY smaller than an arrow — normalising each
+  // one by its own ink box throws that away and makes them all the same height. Kept here so
+  // the keyboard set can scale by the grid; single-cap placement still uses the ink box, which
+  // is what direct manipulation of an arbitrary uploaded SVG should do.
+  const view = viewW > 0 && viewH > 0 ? { w: viewW, h: viewH } : null;
+  return { contours, strokeGeoms, box, view };
 }
 
 // Footprint (mm) the logo will occupy, for default sizing / overflow warnings.

@@ -1,17 +1,20 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TTFLoader } from 'three/examples/jsm/loaders/TTFLoader.js';
-import helvetikerRegular from 'three/examples/fonts/helvetiker_regular.typeface.json';
-import helvetikerBold from 'three/examples/fonts/helvetiker_bold.typeface.json';
-import optimerBold from 'three/examples/fonts/optimer_bold.typeface.json';
-import optimerRegular from 'three/examples/fonts/optimer_regular.typeface.json';
-import gentilisRegular from 'three/examples/fonts/gentilis_regular.typeface.json';
-import gentilisBold from 'three/examples/fonts/gentilis_bold.typeface.json';
-import droidSansRegular from 'three/examples/fonts/droid/droid_sans_regular.typeface.json';
-import droidSansBold from 'three/examples/fonts/droid/droid_sans_bold.typeface.json';
-import droidSansMonoRegular from 'three/examples/fonts/droid/droid_sans_mono_regular.typeface.json';
-import droidSerifRegular from 'three/examples/fonts/droid/droid_serif_regular.typeface.json';
-import droidSerifBold from 'three/examples/fonts/droid/droid_serif_bold.typeface.json';
+// Vendored rather than imported from `three/examples/fonts/`: three stopped shipping that
+// folder after 0.171, so the old imports break on any newer version. See typefaces/README.md.
+import helvetikerRegular from './typefaces/helvetiker_regular.typeface.json';
+import helvetikerBold from './typefaces/helvetiker_bold.typeface.json';
+import optimerBold from './typefaces/optimer_bold.typeface.json';
+import optimerRegular from './typefaces/optimer_regular.typeface.json';
+import gentilisRegular from './typefaces/gentilis_regular.typeface.json';
+import gentilisBold from './typefaces/gentilis_bold.typeface.json';
+import droidSansRegular from './typefaces/droid/droid_sans_regular.typeface.json';
+import droidSansBold from './typefaces/droid/droid_sans_bold.typeface.json';
+import droidSansMonoRegular from './typefaces/droid/droid_sans_mono_regular.typeface.json';
+import droidSerifRegular from './typefaces/droid/droid_serif_regular.typeface.json';
+import droidSerifBold from './typefaces/droid/droid_serif_bold.typeface.json';
+import { assetUrl } from './assets.js';
 
 const fontLoader = new FontLoader();
 const ttfLoader = new TTFLoader();
@@ -101,7 +104,7 @@ export async function loadBundledFonts(onLoaded) {
   bundledLoaded = true;
   for (const [slug, name] of BUNDLED_TTF) {
     try {
-      const buf = await fetch(`fonts/${slug}.ttf`).then((r) => {
+      const buf = await fetch(assetUrl(`fonts/${slug}.ttf`)).then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.arrayBuffer();
       });
@@ -142,6 +145,69 @@ function fontNameFromData(data, fallback) {
   return data.familyName || data.original_font_information?.fullName?.en || fallback;
 }
 
+/**
+ * The nominal size every legend is generated at. Nothing about it is magic — it is just the
+ * unit all the metrics below share, so ratios between them are exact whatever convention the
+ * font was built with.
+ */
+export const LEGEND_EM = 100;
+
+const metricsCache = new Map();
+
+/**
+ * Height of the tallest of `candidates` above the baseline, in LEGEND_EM units.
+ *
+ * Measured rather than read, because there is nothing to read: a typeface JSON's glyphs carry
+ * only `{ ha, x_min, x_max, o }` — no vertical bounds at all — and `data.boundingBox` is
+ * unusable for the bundled TTFs (TTFLoader hardcodes `resolution: 1000` and scales
+ * ascender/descender, but copies boundingBox straight from the font's `head` table, so it
+ * comes out in raw units and is off by 1.4–2.8×).
+ *
+ * three's `createPath` puts the baseline at exactly y = 0, so the top of an 'H' IS the cap
+ * height. It also SILENTLY substitutes `glyphs['?']` for a missing character — hence the
+ * explicit existence check, or a font without an 'H' would report the question mark's height.
+ */
+function probeTop(font, candidates) {
+  for (const ch of candidates) {
+    if (!font.data?.glyphs?.[ch]) continue;
+    let top = -Infinity;
+    try {
+      for (const shape of font.generateShapes(ch, LEGEND_EM)) {
+        for (const p of shape.extractPoints(8).shape) top = Math.max(top, p.y);
+      }
+    } catch {
+      continue; // '?' missing too — generateShapes throws inside toShapes()
+    }
+    if (Number.isFinite(top) && top > 0) return top;
+  }
+  return null;
+}
+
+function metricsForOption(option) {
+  const hit = metricsCache.get(option.id);
+  if (hit) return hit;
+
+  const data = option.font.data || {};
+  const res = data.resolution || 1000;
+  // ascender/descender ARE in resolution units in both the typeface JSON and TTFLoader's
+  // output. Their sum runs about 1.2 em in practice, which is enough to sanity-check a
+  // measurement — never enough to BE the measurement.
+  const stack = (Math.abs(data.ascender ?? 0) + Math.abs(data.descender ?? 0)) * LEGEND_EM / res;
+  const em = stack > 0 ? stack / 1.2 : LEGEND_EM;
+
+  const cap = probeTop(option.font, ['H', 'E', 'X', 'T', 'I', 'M', '0']);
+  const sane = cap && cap > 0.35 * em && cap < 1.1 * em;
+
+  const m = { em, capHeight: sane ? cap : 0.7 * em };
+  metricsCache.set(option.id, m);
+  return m;
+}
+
+/** Vertical metrics for a font, in the units parseLetter's contours come back in. */
+export function fontMetrics(fontId) {
+  return metricsForOption(FONT_OPTIONS.find((f) => f.id === fontId) || FONT_OPTIONS[0]);
+}
+
 function pointsToContour(points, box) {
   const contour = [];
   for (const point of points) {
@@ -178,11 +244,14 @@ export async function importFontFile(file) {
 }
 
 export function parseLetter(text, fontId, maxLen = 4) {
-  const value = Array.from((text || '').trim()).slice(0, maxLen).join('');
+  // Newlines are stripped rather than honoured: three breaks lines using a line height derived
+  // from data.boundingBox, which is wrong for every bundled TTF (see probeTop). Stacked
+  // legends are worth doing deliberately, not by accident.
+  const value = Array.from((text || '').replace(/[\r\n]+/g, ' ').trim()).slice(0, maxLen).join('');
   if (!value) throw new Error('Type a letter first.');
 
   const option = FONT_OPTIONS.find((font) => font.id === fontId) || FONT_OPTIONS[0];
-  const shapes = option.font.generateShapes(value, 100);
+  const shapes = option.font.generateShapes(value, LEGEND_EM);
   const contours = [];
   const box = new THREE.Box2(
     new THREE.Vector2(Infinity, Infinity),
@@ -205,5 +274,10 @@ export function parseLetter(text, fontId, maxLen = 4) {
     name: `${value}-${option.name}`,
     label: value,
     fontName: option.name,
+    // Carried so a caller that needs several legends to look like ONE typeface (the keyboard
+    // set) can scale them all by the font's cap height instead of each glyph's own box.
+    // pointsToContour negates y, so in `box` coordinates the baseline is 0 and the cap line
+    // is at -capHeight.
+    metrics: metricsForOption(option),
   };
 }

@@ -2,6 +2,7 @@ import { BRAND } from '@vostok/brand';
 import { el } from '../dom';
 import { ICONS, svgEl } from '../icons';
 import { themeToggleButton } from './theme';
+import { isDesktop, renderNothing } from '../host-env';
 
 export interface TopbarLinksOptions {
   /** This app's GitHub repo (defaults to the org). */
@@ -35,6 +36,8 @@ function linkBtn(
  *  "Donate:" + green MakerWorld boost + red Ko-fi on the right.
  *  Same structure and colors as the shipped clicker app. */
 export function topbarLinks(opts: TopbarLinksOptions = {}): HTMLElement {
+  // The host app owns its own chrome; a second nav bar inside it is noise.
+  if (isDesktop()) return renderNothing();
   const rightGroup = el('div', { className: 'vl-topbar-group' }, [
     el('span', { className: 'vl-donate-label', text: 'Donate:' }),
     linkBtn('mw', ICONS.zap, 'Boost on MakerWorld', opts.boostUrl ?? BRAND.urls.makerworld),

@@ -35,6 +35,14 @@
       "blurb": "Personalized plate-style name keychains with live font preview, pixel & script styles, multi-language, 1 to 3 colour layers, and AMS & no-AMS printing."
     },
     {
+      "id": "house-number",
+      "name": "House & Office Number Generator",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/house-number/",
+      "blurb": "Type a number, pick a plate, print a house or office sign that fits your door. Custom fonts, independent line sizes, and keyhole slots so no fixings show."
+    },
+    {
       "id": "large-box",
       "name": "Large Customizable Box",
       "route": "mw",

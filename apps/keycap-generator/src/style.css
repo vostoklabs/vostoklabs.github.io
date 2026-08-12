@@ -1,0 +1,511 @@
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: var(--fs-body); }
+      body {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+      }
+      /* The mount container owns the height.
+         This markup used to live in index.html with <header> and <main> as direct children
+         of <body>, so `main.vl-app { flex: 1 1 auto }` below was handed the remaining
+         viewport height by the body flex column. Moving the markup into template.js put a
+         container between them — #app on the web, a host-owned element in the desktop app —
+         and an unstyled block wrapper breaks that chain in both directions: `flex` means
+         nothing inside a block box, while the `min-height: 0; max-height: none` below still
+         cancels app-shell.css's 100dvh clamp. With no ceiling and no flex, the grid sizes to
+         its tallest panel (~981px of left-hand controls) and body{overflow:hidden} silently
+         clips the rest — which in the 844px MakerWorld iframe took the whole export footer
+         off-screen and left #viewport taller than the window, so the cap rendered low. */
+      .kc-root {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto; /* when the container is a flex item (the web page's body column) */
+        height: 100%;   /* when it isn't (a desktop host's own block element) */
+        min-height: 0;
+        overflow: hidden;
+      }
+      /* The topbar sits ABOVE .vl-app in the .kc-root flex column, so .vl-app must fill
+         the REMAINING height, not a full 100dvh — otherwise its bottom (and the
+         right sidebar footer's last row: Help / Light mode) is pushed off-screen. */
+      main.vl-app {
+        min-height: 0;
+        max-height: none;
+        flex: 1 1 auto;
+      }
+      /* app-shell.css defines two rows (auto + 1fr) for apps whose topbar sits
+         INSIDE .vl-app. Ours sits outside, so the three panels all land in row 1
+         and the 1fr row below them soaks up every spare pixel as blank space on a
+         tall screen. Collapse the template to the single row we actually use.
+         Scoped above the 760px breakpoint on purpose: below it app-shell stacks
+         the panels into four rows, and `main.vl-app` (0,1,1) would outrank that
+         `.vl-app` (0,1,0) rule even from inside its media query, collapsing the
+         mobile layout so the left panel loses its height. */
+      @media (min-width: 761px) {
+        main.vl-app { grid-template-rows: minmax(0, 1fr); }
+      }
+      #viewport { position: relative; min-width: 0; overflow: hidden; background: #15171c; }
+      #viewport canvas { display: block; width: 100%; height: 100%; }
+      #busy {
+        position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+        background: rgba(0,0,0,.6); padding: 6px 14px; border-radius: 20px;
+        font-size: 12px; color: var(--text); display: none;
+      }
+      .legend-section { display: flex; flex-direction: column; }
+      #iconPanel:not([hidden]) { display: flex; flex-direction: column; }
+      .section { border-top: 1px solid var(--line); padding: 14px 0; }
+      .section:first-of-type { border-top: none; padding-top: 0; }
+      .label { font-family: var(--font-display); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+      /* Source picker — the same import-card grid the magnet, clicker and bubble-pop
+         generators use for "where does the artwork come from", so switching between
+         tools doesn't mean relearning the control. */
+      .import-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+        gap: 10px; margin-bottom: 16px;
+      }
+      .import-card {
+        display: flex; align-items: center; gap: 8px;
+        background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+        padding: 8px 12px; cursor: pointer; color: var(--muted);
+        width: 100%; text-align: left; font: inherit;
+        transition: border-color .15s ease, background-color .15s ease, color .15s ease, transform .1s ease;
+      }
+      .import-card:hover {
+        border-color: var(--accent); color: var(--text);
+        background: color-mix(in srgb, var(--accent) 8%, var(--panel-2));
+      }
+      .import-card:active { transform: scale(0.98); }
+      .import-card.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+      .import-card .card-icon {
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; width: 20px; height: 20px;
+      }
+      .import-card .card-label { font-size: 14.5px; font-weight: 600; flex-grow: 1; }
+      .mode-panel[hidden] { display: none; }
+
+      .sublabel { font-family: var(--font-display); font-size: 11px; color: var(--muted); margin: 0 0 6px; letter-spacing: .3px; font-weight: 600; }
+      .hint-link { color: var(--accent); text-decoration: none; }
+      .hint-link:hover { text-decoration: underline; }
+      .hint-text {
+        font-size: 12px; color: var(--muted); margin: 0 0 10px; line-height: 1.4;
+      }
+      #uploadPanel:not([hidden]) { display: flex; flex-direction: column; }
+      #uploadGallery {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px;
+        max-height: 30vh; overflow-y: auto; align-content: start; padding-right: 4px;
+      }
+      #uploadGallery::-webkit-scrollbar { width: 8px; }
+      #uploadGallery::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+      #uploadGalleryEmpty {
+        grid-column: 1 / -1; padding: 12px; text-align: center;
+        color: var(--muted); font-size: 12px;
+        background: var(--panel-2); border: 1px dashed var(--line); border-radius: 8px;
+      }
+      #iconSearchWrap { position: relative; margin-bottom: 8px; }
+      #iconSearch {
+        width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+        color: var(--text); border-radius: 7px; padding: 8px 30px 8px 9px; font: inherit;
+      }
+      #iconSearchClear {
+        position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+        background: transparent; border: 0; color: var(--muted); font-size: 16px;
+        cursor: pointer; padding: 2px 6px; border-radius: 4px; display: none;
+      }
+      #iconSearchClear:hover { color: var(--text); background: var(--panel); }
+      #iconCount { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+      #gallery {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+        max-height: 42vh; overflow-y: auto; padding-right: 4px;
+        align-content: start;
+      }
+      #gallery::-webkit-scrollbar { width: 8px; }
+      #gallery::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+      .icon {
+        aspect-ratio: 1; background: var(--panel-2); border: 1px solid var(--line);
+        border-radius: 8px; padding: 8px; cursor: pointer; display: grid; place-items: center;
+        transition: border-color .12s, transform .12s;
+      }
+      .icon:hover { border-color: var(--accent); }
+      .icon.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+      .icon img { width: 100%; height: 100%; object-fit: contain; filter: invert(1); opacity: .9; }
+      #galleryMore {
+        grid-column: 1 / -1; padding: 8px; border-radius: 8px; cursor: pointer;
+        background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+        font: inherit; font-size: 12px;
+      }
+      #galleryMore:hover { color: var(--text); border-color: var(--accent); }
+      #galleryEmpty {
+        grid-column: 1 / -1; padding: 16px; text-align: center;
+        color: var(--muted); font-size: 12px;
+      }
+      .upload {
+        margin-top: 10px; display: inline-flex; gap: 6px; align-items: center;
+        font-size: 12px; color: var(--accent); cursor: pointer;
+      }
+      .upload input { display: none; }
+      .field .upload { margin-top: 0; }
+      .upload-cta {
+        margin-top: 4px; display: flex; align-items: center; justify-content: center;
+        gap: 8px; width: 100%; padding: 11px;
+        background: var(--accent); color: #08122a;
+        border: none; border-radius: 9px; cursor: pointer;
+        font: inherit; font-weight: 600; font-size: 14px;
+        transition: filter .12s;
+      }
+      .upload-cta:hover { filter: brightness(1.07); }
+      .upload-cta svg { width: 18px; height: 18px; flex: 0 0 18px; }
+      .upload-cta input { display: none; }
+
+      /* Placement rows: a fixed grid so label / slider / value / unit line up perfectly */
+      .prow {
+        display: grid;
+        grid-template-columns: 58px 1fr 46px 20px;
+        align-items: center; gap: 8px; margin-bottom: 9px;
+      }
+      .prow > label { color: var(--muted); font-size: 12px; }
+      .prow input[type=range] { width: 100%; min-width: 0; accent-color: var(--accent); }
+      .prow input[type=number] {
+        width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+        color: var(--text); border-radius: 6px; padding: 4px 5px; text-align: right;
+        /* Explicit 14px (not the 17.5px base): the value column is a fixed 46px sized
+           for this scale, so a larger inherited font clips values like "7.6"/"18.0". */
+        font-family: inherit; font-size: 14px; font-variant-numeric: tabular-nums;
+      }
+      .prow input[type=number]:disabled { opacity: .45; }
+      .prow .unit { font-size: 11px; color: var(--muted); }
+      .field { display: grid; gap: 6px; margin-bottom: 10px; }
+      .field label { color: var(--muted); font-size: 12px; }
+      .field input, .field select {
+        width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+        color: var(--text); border-radius: 7px; padding: 8px 9px;
+        /* 14px to match the rest of the compact control panel (the 17.5px base font
+           makes these dropdowns/inputs read oversized next to their labels). */
+        font-family: inherit; font-size: 14px;
+      }
+      .colors { display: flex; gap: 18px; }
+      .color { display: flex; align-items: center; gap: 8px; }
+      .color input[type=color] {
+        width: 34px; height: 28px; border: 1px solid var(--line); border-radius: 6px;
+        background: none; padding: 0; cursor: pointer;
+      }
+      /* iOS-style toggle switches (mirror / shine-through) */
+      .switch-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        margin-top: 12px;
+      }
+      .switch-row .switch-label { font-size: 12.5px; color: var(--text); }
+      .toggle { position: relative; display: inline-block; width: 40px; height: 23px; flex: 0 0 40px; cursor: pointer; }
+      .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+      .toggle .slider {
+        position: absolute; inset: 0; background: var(--line); border-radius: 999px;
+        transition: background .18s ease;
+      }
+      .toggle .slider::before {
+        content: ""; position: absolute; height: 19px; width: 19px; left: 2px; top: 2px;
+        background: #fff; border-radius: 50%; transition: transform .18s ease;
+        box-shadow: 0 1px 2px rgba(0,0,0,.45);
+      }
+      .toggle input:checked + .slider { background: var(--accent-2); }
+      .toggle input:checked + .slider::before { transform: translateX(17px); }
+      .toggle input:focus-visible + .slider { box-shadow: 0 0 0 2px var(--accent); }
+      .switch-block { margin-top: 12px; }
+      .switch-block .switch-row { margin-top: 0; }
+      .switch-help { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+
+      /* Inline "?" help badge — reveals its explanation in a hover/focus bubble so the
+         longer descriptions no longer take up permanent vertical space. */
+      .help-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 15px; height: 15px; margin-left: 6px; padding: 0; flex: 0 0 15px;
+        border: 1px solid var(--line); border-radius: 50%;
+        background: var(--panel-2); color: var(--muted);
+        font: inherit; font-size: 10px; font-weight: 700; line-height: 1;
+        cursor: help; vertical-align: middle; transition: color .12s, border-color .12s;
+      }
+      .help-badge:hover, .help-badge:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
+      /* Shared tooltip bubble (appended to <body> so the sidebar's overflow never clips it). */
+      .help-tip-bubble {
+        position: fixed; z-index: 200; max-width: 244px;
+        background: var(--panel-2); border: 1px solid var(--line);
+        color: var(--text); font-size: 12px; line-height: 1.45;
+        padding: 8px 10px; border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.55);
+        pointer-events: none;
+      }
+      .help-tip-bubble[hidden] { display: none; }
+
+      /* Stem fit: a − [value] + stepper rather than a slider, since the useful
+         adjustments are discrete nudges. Set apart by a hairline separator, not a
+         boxed card — sidebar sections are flat here (ui-kit base.css). */
+      .fit-block {
+        margin-top: 14px; padding-top: 13px;
+        border-top: 1px solid var(--line);
+      }
+      .fit-head {
+        font-family: var(--font-display);
+        font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+        color: var(--muted); margin-bottom: 9px; font-weight: 600;
+      }
+      .tol-stepper { display: flex; align-items: center; gap: 8px; }
+      .tol-btn {
+        flex: 0 0 auto; width: 40px; height: 32px; padding: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
+        color: var(--text); font-size: 19px; line-height: 1; cursor: pointer;
+        transition: border-color .12s, color .12s, background .12s;
+      }
+      .tol-btn:hover { border-color: var(--accent); color: var(--accent); }
+      .tol-btn:active { background: var(--panel-2); }
+      .tol-val {
+        flex: 1; text-align: center; font-size: 14px; color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+      .fit-help { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 9px 0 0; }
+      .fit-help strong { color: var(--text); }
+
+      /* Section header with an inline reset control */
+      .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+      .section-head .label { margin-bottom: 0; }
+      .reset-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 24px; height: 24px; padding: 0; flex: 0 0 auto;
+        background: transparent; border: 1px solid var(--line); border-radius: 6px;
+        color: var(--muted); cursor: pointer; transition: color .12s, border-color .12s;
+      }
+      .reset-btn:hover { color: var(--accent); border-color: var(--accent); }
+      .reset-btn:active { transform: rotate(-30deg); }
+      .reset-btn svg { width: 13px; height: 13px; }
+
+
+      #status { position: absolute; left: 14px; bottom: 32px; font-size: 12px; color: var(--muted); min-height: 16px; margin: 0; pointer-events: none; user-select: none; }
+      #status.warn { color: #e3b341; }
+      #status.err { color: #f0726a; }
+      .meta { position: absolute; left: 14px; bottom: 12px; font-size: 11px; color: var(--muted); margin: 0; pointer-events: none; user-select: none; }
+      /* The shared stage hint is a bottom-CENTER pill; the keycap keeps a live
+         status/meta readout in the bottom-left, so move the hint to the bottom-right
+         (its original corner) to keep the two from overlapping. */
+      #hint.vl-stage__hint { left: auto; right: 14px; transform: none; }
+      code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+
+      /* "What's new" modal — centered overlay shown on load until dismissed */
+      .modal-overlay {
+        position: fixed; inset: 0; z-index: 100;
+        background: rgba(0, 0, 0, .6); backdrop-filter: blur(2px);
+        display: flex; align-items: center; justify-content: center; padding: 20px;
+        animation: modalFade .16s ease;
+      }
+      .modal-overlay[hidden] { display: none; }
+      @keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+      .modal {
+        background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+        padding: 22px 22px 18px; width: 100%; max-width: 450px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, .55);
+      }
+      .modal h2 { margin: 0 0 3px; font-size: 18px; letter-spacing: .2px; }
+      .modal .modal-sub { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
+      .whatsnew-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 13px; }
+      .whatsnew-list li { display: flex; gap: 11px; align-items: flex-start; }
+      .whatsnew-list .wn-ico {
+        flex: 0 0 30px; width: 30px; height: 30px; border-radius: 8px;
+        background: var(--panel-2); border: 1px solid var(--line);
+        display: grid; place-items: center; color: var(--accent);
+      }
+      .whatsnew-list .wn-ico svg { width: 16px; height: 16px; }
+      .whatsnew-list .wn-body { font-size: 13px; line-height: 1.45; }
+      .whatsnew-list .wn-body strong { display: block; color: var(--text); margin-bottom: 1px; }
+      .whatsnew-list .wn-body span { color: var(--muted); }
+      .whatsnew-list .wn-body .wn-note { color: var(--accent-2); }
+      .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; }
+      .whatsnew-dismiss {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 12.5px; color: var(--muted); cursor: pointer; user-select: none;
+      }
+      .whatsnew-dismiss input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+      .modal-foot button.primary { width: auto; padding: 9px 20px; }
+
+      /* Bottom-left credit block (MakerLab build only — see main.js). Sits outside the
+         left panel's scroll area so it's pinned to the bottom corner, and is toned down
+         to a two-line muted footer rather than the top-of-sidebar intro header. */
+      #keycapCredit:empty { display: none; }
+      #keycapCredit .kc-credit-block {
+        flex: 0 0 auto; gap: 1px;
+        margin-bottom: 0; /* .vl-app-header's 4px would leave a strip under the panel */
+        padding: 9px 16px 11px;
+        border-top: 1px solid var(--line);
+        background: var(--panel);
+      }
+      #keycapCredit .vl-app-title {
+        font-size: 12px; font-weight: 600; letter-spacing: .2px;
+        color: var(--muted); margin: 0;
+      }
+      /* The description belongs to the onboarding header, not to a footer credit. */
+      #keycapCredit .vl-app-subtitle { display: none; }
+      #keycapCredit .vl-app-credit { font-size: 11.5px; margin: 0; }
+      #keycapCredit .vl-credit-link { color: var(--muted); }
+      #keycapCredit .vl-credit-link:hover { color: var(--accent); }
+      #keycapCredit .vl-credit-logo { width: 12px; height: 12px; flex: 0 0 12px; }
+
+
+      /* Open-a-project list — desktop host only, where saved projects are real stored
+         things rather than a JSON file the user has to keep track of themselves. */
+      .kc-project-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+      .kc-project-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px; }
+      .kc-project-thumb {
+        width: 48px; height: 48px; flex: 0 0 48px; object-fit: cover;
+        border-radius: 6px; background: var(--panel-2);
+      }
+
+      /* Per-profile print note (Choc: print on its side, with supports). Sits under the size
+         picker, in the same quiet register as the other help text — it is a fact about the
+         cap, not a warning, so it gets no icon and no dismiss. */
+      .profile-note {
+        margin: 10px 0 0; padding: 8px 10px;
+        font-size: 12px; line-height: 1.45; color: var(--muted);
+        border-left: 2px solid var(--accent); border-radius: 0 var(--radius-s) var(--radius-s) 0;
+        background: var(--panel-2);
+      }
+      .switch-row[hidden], .switch-block[hidden], .profile-note[hidden] { display: none; }
+
+      /* Keyboard set builder (MakerWorld build only). Reads as one more section, deliberately
+         — the paid part is a badge and a price in the button, not a differently-coloured box
+         with a lock on it. */
+      .kc-pro-badge {
+        font-family: var(--font-display); font-size: 10px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: .6px;
+        color: var(--accent); padding: 2px 6px; border-radius: var(--radius-s);
+        border: 1px solid var(--line); background: var(--panel-2);
+      }
+      .kc-pro .vl-btn--block { margin-top: 12px; }
+      .kc-pro .vl-btn--block + .vl-btn--block { margin-top: 8px; }
+      /* The kit's .vl-btn sets `display: inline-flex`, which outranks the UA [hidden] rule —
+         without this the Cancel button sits there permanently. Same trap the quality callout
+         hit. */
+      .kc-pro .vl-btn[hidden] { display: none; }
+
+      /* ---------------------------------------------------------------- keyboard set editor
+         A full-bleed workspace rather than a centred modal card: the whole point is to see a
+         whole keyboard, and a keyboard is wide. Fixed to the viewport so it covers the host's
+         iframe area completely, and z-indexed above the app's own overlays.
+
+         Every rule is scoped under .kc-editor. The kit's components set `display` on
+         .vl-btn (which outranks [hidden]) and on .vl-callout, so anything toggled in here
+         gets an explicit display:none rather than relying on the attribute. */
+      .kc-editor {
+        position: fixed; inset: 0; z-index: 60;
+        display: flex; flex-direction: column;
+        background: var(--bg); color: var(--text);
+      }
+      .kc-editor__head {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+      .kc-editor__title {
+        margin: 0; font-family: var(--font-display); font-size: 15px; font-weight: 600;
+        letter-spacing: .2px;
+      }
+      .kc-editor__close {
+        border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
+        width: 30px; height: 30px; border-radius: var(--radius-s); font-size: 18px;
+        line-height: 1; cursor: pointer;
+      }
+      .kc-editor__close:hover { color: var(--text); border-color: var(--accent); }
+
+      .kc-editor__body {
+        flex: 1 1 auto; min-height: 0;
+        display: grid; grid-template-columns: 240px minmax(0, 1fr) 300px;
+      }
+      .kc-editor__side, .kc-editor__keys {
+        min-height: 0; overflow-y: auto; padding: 14px 16px;
+        background: var(--panel); display: flex; flex-direction: column; gap: 2px;
+      }
+      .kc-editor__side { border-right: 1px solid var(--line); }
+      .kc-editor__keys { border-left: 1px solid var(--line); gap: 10px; }
+      .kc-editor__side .label, .kc-editor__keys .label { margin-top: 10px; }
+      .kc-editor__side .label:first-child { margin-top: 0; }
+
+      .kc-editor__stage { position: relative; min-width: 0; background: var(--bg); }
+      .kc-editor__stage canvas { display: block; width: 100%; height: 100%; }
+      .kc-editor__hint {
+        position: absolute; left: 12px; bottom: 10px; margin: 0; z-index: 1;
+        font-size: 11.5px; color: var(--muted); pointer-events: none;
+      }
+
+      .kc-editor__colors { display: flex; gap: 14px; padding: 4px 0 2px; }
+      .kc-editor__color { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+      .kc-editor__color input[type=color] {
+        width: 26px; height: 26px; padding: 0; border: 1px solid var(--line);
+        border-radius: var(--radius-s); background: none; cursor: pointer;
+      }
+      .kc-editor__note {
+        margin: 8px 0 0; padding: 8px 10px; font-size: 12px; line-height: 1.45;
+        color: var(--muted); background: var(--panel-2);
+        border-left: 2px solid var(--accent); border-radius: 0 var(--radius-s) var(--radius-s) 0;
+      }
+      .kc-editor__note[hidden] { display: none; }
+
+      /* Group chips. Bulk editing is by group rather than by a list of every key: a set is
+         specified as "alphas this size, modifiers a size down", and a scrolling list of 87
+         rows is a worse way to reach a cap than clicking the cap. */
+      .kc-editor__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+      .kc-editor__chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 5px 9px; cursor: pointer; font-family: inherit; font-size: 12.5px;
+        color: var(--muted); background: var(--panel-2);
+        border: 1px solid var(--line); border-radius: var(--radius-s);
+      }
+      .kc-editor__chip:hover { color: var(--text); }
+      .kc-editor__chip.is-active { color: var(--text); border-color: var(--accent); }
+      .kc-editor__chipCount { font-size: 11px; opacity: .65; }
+
+      .kc-editor__help { margin: 6px 0 2px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+      .kc-editor__actions { display: flex; gap: 8px; margin-top: 12px; }
+      .kc-editor__actions .vl-btn { flex: 1 1 0; }
+      /* Clears a group override and puts the control back to the board's value. */
+      .kc-editor__reset {
+        width: 20px; height: 20px; flex: 0 0 20px; padding: 0; cursor: pointer;
+        font-size: 13px; line-height: 1; color: var(--muted);
+        background: none; border: 1px solid var(--line); border-radius: var(--radius-s);
+      }
+      .kc-editor__reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .kc-editor__key { display: flex; flex-direction: column; gap: 2px; }
+      .kc-editor__modes { display: flex; gap: 6px; margin-bottom: 6px; }
+      .kc-editor__mode {
+        flex: 1 1 0; padding: 6px 0; cursor: pointer; font-family: inherit; font-size: 12.5px;
+        color: var(--muted); background: var(--panel-2);
+        border: 1px solid var(--line); border-radius: var(--radius-s);
+      }
+      .kc-editor__mode.is-active { color: var(--text); border-color: var(--accent); }
+      .kc-editor__legendInput { width: 100%; }
+      .kc-editor__check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-top: 8px; }
+
+      .kc-editor__icons {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 4px;
+        max-height: 180px; overflow-y: auto; margin-top: 6px; padding: 4px;
+        border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel-2);
+      }
+      .kc-editor__icon {
+        display: grid; place-items: center; aspect-ratio: 1; cursor: pointer; padding: 4px;
+        background: none; border: 1px solid transparent; border-radius: var(--radius-s);
+      }
+      .kc-editor__icon:hover { border-color: var(--line); }
+      .kc-editor__icon.is-active { border-color: var(--accent); }
+      .kc-editor__icon img { width: 100%; height: 100%; filter: var(--icon-filter, none); }
+
+      .kc-editor__foot {
+        flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+        padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel);
+      }
+      .kc-editor__status { flex: 1 1 auto; margin: 0; font-size: 12.5px; color: var(--muted); }
+      .kc-editor__status.err { color: var(--danger, #ff6b6b); }
+      .kc-editor__status.warn { color: var(--warn, #e0a300); }
+      .kc-editor__foot .vl-btn[hidden] { display: none; }
+
+      /* Narrow embeds (the host can size us down): drop the key list under the stage rather
+         than squeezing three columns into a phone. */
+      @media (max-width: 900px) {
+        .kc-editor__body { grid-template-columns: 1fr; grid-template-rows: auto minmax(220px, 1fr) auto; }
+        .kc-editor__side { border-right: none; border-bottom: 1px solid var(--line); }
+        .kc-editor__keys { border-left: none; border-top: 1px solid var(--line); }
+      }

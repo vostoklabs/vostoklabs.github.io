@@ -20,6 +20,7 @@ export const FONT_FAMILY_PREFIX = 'VL-';
 /** The CSS family name to preview `fontId` with. */
 export const fontFamilyFor = (fontId: string): string => `${FONT_FAMILY_PREFIX}${fontId}`;
 
+
 // Vite resolves this glob relative to THIS file, so it works from any app that
 // consumes the package as source. `import: 'default'` yields URLs, not bytes —
 // the fonts stay out of the JS bundle and are fetched only when used.
@@ -35,6 +36,9 @@ const fontUrlById: Record<string, string> = Object.entries(fontUrls).reduce(
   },
   {} as Record<string, string>,
 );
+
+/** Get the URL for a given font ID so the app can inject its own @font-face or use it directly. */
+export const getFontUrl = (fontId: string): string | undefined => fontUrlById[fontId];
 
 /** Fonts imported by the user at runtime, parsed and held in memory. */
 const customFonts = new Map<string, any>();

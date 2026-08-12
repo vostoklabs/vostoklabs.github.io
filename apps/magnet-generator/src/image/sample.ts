@@ -1,21 +1,33 @@
 // Bundled sample images, shipped as static assets under public/assets/media.
 // Selecting one loads the real PNG through the same path as a user upload.
 import { loadUrlToImage, type RgbaImage } from './decode';
+import { assetUrl } from '../assets';
 
-const BASE = import.meta.env.BASE_URL;
-const IMG_DIR = BASE + 'assets/media/images/';
+const imgDir = () => assetUrl('assets/media/images/');
 
 export interface SampleInfo {
   name: string;
   /** Thumbnail / preview URL (the asset itself). */
-  src: string;
+  readonly src: string;
   /** Decode the asset into an RgbaImage for the pipeline. */
   load: () => Promise<RgbaImage>;
 }
 
+/**
+ * `src` is a getter, not a string, and that is load-order rather than style.
+ *
+ * `SAMPLES` is built when this module is first imported. `mount()` sets the asset base
+ * after that — it cannot run earlier, because it is the thing doing the importing. A plain
+ * string would therefore capture the web default and every thumbnail inside a desktop host
+ * would point at a path that does not exist there. Reading it at use time is what makes the
+ * base the caller sets actually apply.
+ */
 function imageSample(file: string, name: string): SampleInfo {
-  const src = IMG_DIR + file;
-  return { name, src, load: () => loadUrlToImage(src) };
+  return {
+    name,
+    get src() { return imgDir() + file; },
+    load: () => loadUrlToImage(imgDir() + file),
+  };
 }
 
 export const SAMPLES: SampleInfo[] = [

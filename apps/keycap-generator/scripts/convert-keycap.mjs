@@ -29,6 +29,54 @@ const root = resolve(__dirname, '..');
 const stepDir = join(root, 'Step files of keycaps');
 const outDir = join(root, 'public', 'keycaps');
 
+// --- per-profile ingest tuning --------------------------------------------------------
+// Keyed by the id parseProfileName() derives from the folder name. A profile NOT listed here
+// takes the original code path verbatim, so every already-committed public/keycaps/**.json
+// stays bit-for-bit identical.
+//
+//   orient           'y-up' — the STEP is authored lying on its side with the cap height
+//                    along +Y (measured: the Choc shell spans Y 36.302..39.802 and the stubs
+//                    sit at Y 34.502..38.302, i.e. below it, so +Y is the top face). Rotated
+//                    +90° about X so +Y becomes +Z, then re-zeroed on the SHELL base.
+//   rimBandFraction  top-rim band as a fraction of cap height, instead of the flat 1.2 mm.
+//                    1.2 mm is ~10% of an 11.83 mm Cherry cap but 34% of a 3.50 mm Choc one,
+//                    where it reaches past the taper and reports the BASE footprint
+//                    (17.50×16.50) as the top face (really 15.90×14.90).
+//   flatTop          the cap top is a flat plane, so there is no dish to find.
+//   print            print guidance, passed through index.json to the UI.
+//   homingBump       false — the shared bump is modelled against the Cherry dish.
+//   shineThrough     false — see below.
+//
+// Choc shineThrough is OFF for a load-bearing reason, not a cosmetic one: shine-through
+// subtracts a full-height prism through the shell, and the two Choc stubs attach at only
+// ±2.85 mm from the cap centre, directly under the legend area. Leaving it on would cut the
+// stems clean off the cap for any reasonably sized legend.
+const PROFILE_TUNING = {
+  'choc-v1': {
+    orient: 'y-up',
+    rimBandFraction: 0.04, // 0.14 mm on a 3.50 mm cap — the flat plate only, clear of the fillet
+    maxDepth: 1.0, // the Choc top plate is exactly 1.50 mm; the stock 1.5 mm slider max would
+    //              carve straight through it (a hole, in single-colour recessed mode)
+    // Stand the cap on its bottom rib for printing: +90° about the model X axis. Applied to
+    // the PREVIEW and the EXPORT only — model space stays Z-up so the legend pipeline, the
+    // dish metadata and the size ceiling all keep working unchanged.
+    printRotateX: 90,
+    flatTop: true,
+    homingBump: false,
+    shineThrough: false,
+    print:
+      'Print these standing on their side, as modelled, with supports for the switch stems. ' +
+      'Printing face down works too and needs no supports, but the two stems snap off much more easily.',
+  },
+};
+
+// Convert ONE profile only, leaving the others' committed JSON untouched:
+//   node scripts/convert-keycap.mjs --only choc-v1
+// Without this, adding a profile rewrites all 34 committed mesh files, because
+// meta.generatedAt is a fresh timestamp on every run.
+const onlyArg = process.argv.indexOf('--only');
+const only = onlyArg > -1 ? process.argv[onlyArg + 1] : null;
+
 // --- locate the .stp/.step files, grouped by profile sub-folder ---
 const isStep = (f) => /\.(stp|step)$/i.test(f);
 let rootEntries;
@@ -131,7 +179,8 @@ const round = (n) => Math.round(n * 1e4) / 1e4;
 const occt = await occtimportjs();
 
 // Tessellate one STEP file and return { out, meta } ready to serialise.
-function convertStep(stepPath, stepFile) {
+// `tune` is the PROFILE_TUNING entry for this profile ({} for the untuned majority).
+function convertStep(stepPath, stepFile, tune = {}) {
   const buf = new Uint8Array(readFileSync(stepPath));
 
   // Fine tessellation so the dished top reads as smooth (chordal error 0.04 mm).
@@ -149,6 +198,20 @@ function convertStep(stepPath, stepFile) {
     positions: Array.from(mesh.attributes.position.array),
     indices: Array.from(mesh.index.array),
   }));
+
+  // Bring a side-authored profile into the Z-up convention every downstream step assumes,
+  // BEFORE anything is classified or measured. +90° about X: (x, y, z) -> (x, -z, y), so the
+  // cap height that was along +Y ends up along +Z with the top face still pointing up.
+  if (tune.orient === 'y-up') {
+    for (const b of bodies) {
+      const p = b.positions;
+      for (let i = 0; i < p.length; i += 3) {
+        const y = p[i + 1], z = p[i + 2];
+        p[i + 1] = -z;
+        p[i + 2] = y;
+      }
+    }
+  }
 
   // Classify bodies by XY footprint. The shell dwarfs every stem, so anything under a
   // quarter of the largest footprint is a stem (robust for 1 stem, N stems, spacebars).
@@ -169,6 +232,18 @@ function convertStep(stepPath, stepFile) {
       ` · shell ${shellParts.map((e) => e.fp.toFixed(0)).join('+')} mm²`
   );
 
+  // Re-zero on the SHELL base. Every existing profile lands with bbox.min[2] ≈ 0, and the app
+  // reads meta.topZ as the cap HEIGHT — it aims the orbit target at topZ/2, feeds it to the
+  // camera framing, and prints it as the third dimension. A rotated Choc cap otherwise sits at
+  // Z 36.302..39.802 and would report a 3.5 mm cap as 39.8 mm tall, floating 36 mm off the grid.
+  // Zero on the shell, not the whole model: the stubs hang 1.8 mm below the cap and must stay
+  // below Z = 0.
+  if (tune.orient) {
+    const baseZ = bboxOf(shell.positions).min[2];
+    for (let i = 2; i < shell.positions.length; i += 3) shell.positions[i] -= baseZ;
+    if (stem) for (let i = 2; i < stem.positions.length; i += 3) stem.positions[i] -= baseZ;
+  }
+
   // --- bounding box + top-surface metadata from the SHELL (units = mm, Z up) ---
   const { min, max } = bboxOf(shell.positions);
   const centerX = (min[0] + max[0]) / 2;
@@ -182,14 +257,22 @@ function convertStep(stepPath, stepFile) {
   const halfX = (max[0] - min[0]) / 2;
   const halfY = (max[1] - min[1]) / 2;
   const P = shell.positions;
+  // 1.2 mm is the historical band — about 10% of the 11.83 mm Standard cap, so it samples the
+  // dish opening. On a 3.50 mm Choc cap it is 34% of the whole cap and reaches past the taper,
+  // reporting the base footprint (17.50×16.50) as the top face when the real flat plate is
+  // 15.90×14.90. Profiles that opt in scale the band with their own height instead.
+  const rimBand = tune.rimBandFraction ? (max[2] - min[2]) * tune.rimBandFraction : 1.2;
   for (let i = 0; i < P.length; i += 3) {
     const x = P[i], y = P[i + 1], z = P[i + 2];
-    if (z >= topZ - 1.2) {
+    if (z >= topZ - rimBand) {
       if (x < rimMinX) rimMinX = x; if (x > rimMaxX) rimMaxX = x;
       if (y < rimMinY) rimMinY = y; if (y > rimMaxY) rimMaxY = y;
     }
-    // central 40% of the cap, upper half in Z -> find the dish's lowest point
-    if (Math.abs(x - centerX) < halfX * 0.4 && Math.abs(y - centerY) < halfY * 0.4 && z > (min[2] + max[2]) / 2) {
+    // central 40% of the cap, upper half in Z -> find the dish's lowest point.
+    // A flat-topped profile has no dish: the top plane tessellates from its boundary, so this
+    // scan finds no exterior vertex in the central window at all and instead latches onto the
+    // shell's inner ceiling — 1.5 mm inside a Choc cap. Skip it and leave dishBottomZ === topZ.
+    if (!tune.flatTop && Math.abs(x - centerX) < halfX * 0.4 && Math.abs(y - centerY) < halfY * 0.4 && z > (min[2] + max[2]) / 2) {
       if (z < dishBottomZ) dishBottomZ = z;
     }
   }
@@ -242,21 +325,33 @@ for (const { name, dir } of profileDirs) {
   mkdirSync(join(outDir, profileId), { recursive: true });
   console.log(`\nProfile "${name}"  ->  ${profileId} ("${profileLabel}")`);
 
+  const tune = PROFILE_TUNING[profileId] ?? {};
+  // With --only, other profiles are read back from disk rather than re-converted, so their
+  // committed JSON keeps its original timestamp and floats while index.json stays complete.
+  const skip = only && profileId !== only;
+
   const sizes = [];
   for (const stepFile of capFiles) {
     const info = parseKeycapName(stepFile);
-    console.log(`  Reading ${stepFile}  ->  ${info.id} ("${info.label}")`);
-    const { out } = convertStep(join(dir, stepFile), stepFile);
-    writeFileSync(join(outDir, profileId, `${info.id}.json`), JSON.stringify(out));
+    const outPath = join(outDir, profileId, `${info.id}.json`);
+    let out;
+    if (skip) {
+      out = JSON.parse(readFileSync(outPath, 'utf8'));
+      console.log(`  (keeping ${profileId}/${info.id}.json)`);
+    } else {
+      console.log(`  Reading ${stepFile}  ->  ${info.id} ("${info.label}")`);
+      ({ out } = convertStep(join(dir, stepFile), stepFile, tune));
+      writeFileSync(outPath, JSON.stringify(out));
+    }
     sizes.push({ ...info, file: `keycaps/${profileId}/${info.id}.json`, out });
   }
   sizes.sort(sortSizes);
   const profileDefault = (sizes.find((s) => s.id === '1u') || sizes[0]).id;
-  profiles.push({ id: profileId, label: profileLabel, default: profileDefault, sizes });
+  profiles.push({ id: profileId, label: profileLabel, default: profileDefault, sizes, tune });
 }
 
 // Convert the shared homing bump once (profile-independent), if present.
-if (homingFile) {
+if (homingFile && !only) {
   console.log(`\nReading ${homingFile}  ->  homing-bump (shared)`);
   const { out } = convertStep(join(stepDir, homingFile), homingFile);
   writeFileSync(join(outDir, 'homing-bump.json'), JSON.stringify(out));
@@ -269,10 +364,17 @@ const defaultProfile = profiles[0];
 
 const index = {
   defaultProfile: defaultProfile.id,
+  // Per-profile UI rules ride along here — spread conditionally so the three existing
+  // entries' JSON text is unchanged.
   profiles: profiles.map((p) => ({
     id: p.id,
     label: p.label,
     default: p.default,
+    ...(p.tune?.print ? { print: p.tune.print } : {}),
+    ...(p.tune?.homingBump === false ? { homingBump: false } : {}),
+    ...(p.tune?.shineThrough === false ? { shineThrough: false } : {}),
+    ...(p.tune?.maxDepth ? { maxDepth: p.tune.maxDepth } : {}),
+    ...(p.tune?.printRotateX ? { printRotateX: p.tune.printRotateX } : {}),
     keycaps: p.sizes.map(({ id, label, file, unit }) => ({ id, label, file, unit })),
   })),
 };

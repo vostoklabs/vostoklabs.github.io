@@ -132,10 +132,15 @@ export interface SegmentedOptions<T extends string = string> {
   help?: string;
 }
 
-/** A segmented (tab-style) picker. Exactly one option is active. */
+/** A segmented (tab-style) picker. Exactly one option is active.
+ *
+ *  Returns a `ValueRow` like every other control here, so Load-project can push
+ *  a saved value back into it. Widening the return type is backwards compatible:
+ *  a `ValueRow` is still an HTMLElement, so existing `[segmentedControl(...)]`
+ *  usage is unchanged. */
 export function segmentedControl<T extends string = string>(
   opts: SegmentedOptions<T>,
-): HTMLElement {
+): ValueRow<T> {
   const cols = opts.columns ?? opts.options.length;
   const root = el('div', {
     className: 'vl-tabs',
@@ -144,6 +149,16 @@ export function segmentedControl<T extends string = string>(
 
   let active = opts.value ?? opts.options[0]?.value;
   const buttons = new Map<T, HTMLButtonElement>();
+
+  /** Repaint the active tab. Shared by clicks and setValue so the two cannot
+   *  drift — a programmatic change has to look identical to a click. */
+  const paint = () => {
+    for (const [val, b] of buttons) {
+      const on = val === active;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', String(on));
+    }
+  };
 
   for (const opt of opts.options) {
     const btn = el('button', {
@@ -154,11 +169,7 @@ export function segmentedControl<T extends string = string>(
         click: () => {
           if (opt.value === active) return;
           active = opt.value;
-          for (const [val, b] of buttons) {
-            const on = val === active;
-            b.classList.toggle('active', on);
-            b.setAttribute('aria-selected', String(on));
-          }
+          paint();
           opts.onChange?.(active);
         },
       },
@@ -167,12 +178,24 @@ export function segmentedControl<T extends string = string>(
     root.append(btn);
   }
 
+  let outer = root;
   if (opts.label || opts.help) {
     const lab = el('span', { className: 'vl-control-label', text: opts.label ?? '' });
     if (opts.help) lab.append(helpTip(opts.help));
-    return el('div', { className: 'vl-control' }, [lab, root]);
+    outer = el('div', { className: 'vl-control' }, [lab, root]);
   }
-  return root;
+
+  const row = outer as unknown as ValueRow<T>;
+  // An unknown value is ignored rather than clearing the selection: a loaded
+  // project can carry an option this build no longer has, and a picker with
+  // nothing active is worse than one showing a stale-but-valid choice.
+  row.setValue = (value: T, notify = false) => {
+    if (!buttons.has(value) || value === active) return;
+    active = value;
+    paint();
+    if (notify) opts.onChange?.(value);
+  };
+  return row;
 }
 
 /* ---------------- Select field ---------------- */

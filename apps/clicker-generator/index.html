@@ -19,21 +19,11 @@
         document.documentElement.setAttribute('data-theme', theme);
       })();
     </script>
+    <!-- The generator's shell now lives in src/template.ts, because a desktop host mounts
+         this generator into an element rather than loading this page. See src/mount.ts. -->
   </head>
   <body>
-    <header id="topbar"></header>
-    <main class="vl-app">
-      <!-- The scrolling body is created inside by createUi(), so a pinned block (the
-           MakerLab credit) can sit in the bottom-left corner. Mirrors #sidebar-right. -->
-      <aside id="sidebar-left" class="vl-panel vl-panel--left"></aside>
-      <div id="viewport" class="vl-stage">
-        <p class="vl-stage__label">Live 3D Preview</p>
-        <div id="app"></div>
-        <div id="status">Booting…</div>
-        <p id="hint" class="vl-stage__hint">Hold left click to rotate, right click to pan, scroll to zoom.</p>
-      </div>
-      <aside id="sidebar-right" class="vl-panel vl-panel--right"></aside>
-    </main>
+    <div id="root"></div>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

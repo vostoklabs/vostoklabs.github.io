@@ -453,3 +453,79 @@ details.vl-section--collapsible[open] > summary {
   color: var(--error-text);
   border-color: color-mix(in srgb, var(--red) 45%, var(--line));
 }
+
+/* ---------- Font picker ---------- */
+
+/*
+ * Cards showing the user's own text set in each face.
+ *
+ * A `<select>` of 155 names is the wrong control for choosing a typeface: you cannot judge
+ * one from its name, and the thing that decides the choice — how it actually looks — stays
+ * invisible until you pick it. name-keychain worked this out first as `.nk-font-*`; this is
+ * that pattern promoted, so the second generator to want it did not copy the CSS. The
+ * keychain still carries its own copy and should move onto these classes when it is next
+ * touched.
+ */
+.vl-font-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  max-height: 210px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.vl-font-card {
+  min-height: 62px;
+  text-align: left;
+  padding: var(--space-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field, 8px);
+  background: var(--panel-2);
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: space-between;
+  overflow: hidden;
+}
+.vl-font-card:hover { border-color: var(--muted); }
+.vl-font-card.is-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* The sample is the point of the card, so it gets the room; the name is the caption. */
+.vl-font-card__sample {
+  display: block;
+  font-size: 1.55rem;
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  padding-right: 16px;
+}
+
+.vl-font-card__name {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+/* A face with no glyph for the current text is shown but flagged — hiding it would shrink
+   the list every time someone typed an accent, with no explanation. */
+.vl-font-card__warn {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 0.7rem;
+  color: var(--warn);
+}

@@ -55,11 +55,29 @@ export function creaseNormals(geom, creaseAngleDeg = 30) {
   return toCreasedNormals(geom, (creaseAngleDeg * Math.PI) / 180);
 }
 
+/**
+ * Fatten (or thin) a 2-D cross-section by `bold` mm all round.
+ *
+ * This is what a boldness control actually is on a carved legend: the outline grown outward,
+ * not a heavier typeface. It matters for printing rather than for looks — a stroke thinner
+ * than about two extrusion widths comes out flaky, and the thin faces in the bundled set
+ * (and every lucide icon, which is a 2/24 stroke) sit right at that edge.
+ *
+ * Round joins because letters have curves and a mitre would grow spikes off every corner.
+ * Takes ownership of `cs` and returns whichever section the caller should use.
+ */
+function embolden(cs, bold) {
+  if (!bold) return cs;
+  const grown = cs.offset(bold, 'Round', 2, 16);
+  cs.delete();
+  return grown;
+}
+
 // 2D contours -> vertical prism spanning bottomZ .. bottomZ + height.
 // NonZero fill matches SVG and cleanly unions any self-overlapping paths.
-export function extrudePrism(contours, bottomZ, height) {
+export function extrudePrism(contours, bottomZ, height, bold = 0) {
   const { CrossSection } = api;
-  const cs = new CrossSection(contours, 'NonZero');
+  const cs = embolden(new CrossSection(contours, 'NonZero'), bold);
   const solid = cs.extrude(height).translate([0, 0, bottomZ]);
   cs.delete();
   return solid;
@@ -75,7 +93,7 @@ export function extrudePrism(contours, bottomZ, height) {
  * the miter-join self-overlaps that pointsToStroke produces (which broke the previous
  * boundary-edge wall builder, where shared edges got count ≥ 2 and walls never closed).
  */
-export function extrudeStrokeGeom(flatGeom, bottomZ, height) {
+export function extrudeStrokeGeom(flatGeom, bottomZ, height, bold = 0) {
   const { CrossSection } = api;
 
   const pos = flatGeom.getAttribute('position');
@@ -104,7 +122,7 @@ export function extrudeStrokeGeom(flatGeom, bottomZ, height) {
     throw new Error('Stroke geometry produced no usable triangles.');
   }
 
-  const cs = new CrossSection(contours, 'NonZero');
+  const cs = embolden(new CrossSection(contours, 'NonZero'), bold);
   const solid = cs.extrude(height).translate([0, 0, bottomZ]);
   cs.delete();
   return solid;
