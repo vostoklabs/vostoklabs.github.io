@@ -45,10 +45,10 @@ import {
   sdkToast,
 } from 'virtual:makerlab';
 // Pro Pack (MakerWorld-only, paid). Imported statically so the MAKERLAB=false constant lets
-// the bundler drop the whole feature — panel, layouts and set builder — from the public build.
+// the bundler drop the whole feature — tabs, layouts and set builder — from the public build.
 // Through the same kind of virtual seam as the SDK above, because src/pro/ is gitignored: the
 // public build resolves this to a no-op stub and never needs those files to exist.
-import { mountKeyboardSetPanel } from 'virtual:pro-pack';
+import { mountProFeatures } from 'virtual:pro-pack';
 import './style.css';
 import { TEMPLATE } from './template.js';
 import { setAssetBase, assetUrl } from './assets.js';
@@ -115,6 +115,10 @@ export function mount(container, host) {
     }
   }
 
+  /** The footer's primary export button, once the footer exists. Relabelled per mode.
+   *  Declared before the footer is built — the block below assigns it. */
+  let exportBtn = null;
+
   const keycapFooter = $('keycapFooter');
   if (keycapFooter) {
     const footer = sidebarFooter({
@@ -147,6 +151,9 @@ export function mount(container, host) {
       footer.querySelector('.vl-action-row')?.remove();
     }
     keycapFooter.replaceWith(footer);
+    // The one primary action, whatever the mode. Set mode relabels it rather than adding a
+    // second export button somewhere else — there is one place to press to get a file.
+    exportBtn = footer.querySelector('.vl-export .vl-btn--primary');
   }
 
   const busyEl = $('busy');
@@ -416,6 +423,18 @@ export function mount(container, host) {
     updateStemMaterial();
   }
 
+  /**
+   * Tell everyone the value changed.
+   *
+   * `C.*.set()` and a direct `.checked =` assign the property, which fires nothing — fine when
+   * the only listener was this file's own `scheduleRegen`, and wrong the moment anything else
+   * is listening. A Pro mode watching these inputs is exactly that: without this, Reset
+   * placement silently moved the sliders and left the board drawn at the old numbers.
+   */
+  function announce(ids, type = 'input') {
+    for (const id of ids) $(id)?.dispatchEvent(new Event(type, { bubbles: true }));
+  }
+
   function resetPlacement() {
     C.size.set(DEFAULTS.size);
     C.depth.set(DEFAULTS.depth);
@@ -429,6 +448,8 @@ export function mount(container, host) {
     $('single').checked = DEFAULTS.single;
     $('homingBump').checked = DEFAULTS.homingBump;
     applyModeFlags();
+    announce(['size', 'depth', 'rot', 'offx', 'offy']);
+    announce(['mirror', 'through', 'single', 'homingBump'], 'change');
     scheduleRegen();
   }
 
@@ -437,6 +458,7 @@ export function mount(container, host) {
     $('logoColor').value = DEFAULTS.logoColor;
     capMat.color.set(DEFAULTS.capColor);
     logoMat.color.set(DEFAULTS.logoColor);
+    announce(['capColor', 'logoColor']);
   }
 
   function resetLegend() {
@@ -449,7 +471,7 @@ export function mount(container, host) {
 
   $('resetPlacement').addEventListener('click', resetPlacement);
   $('resetColors').addEventListener('click', resetColors);
-  $('resetLegend').addEventListener('click', resetLegend);
+  $('resetLegend').addEventListener('click', () => legendSink.reset());
 
   // ---------------------------------------------------------------- geometry
   function currentOpts() {
@@ -475,6 +497,8 @@ export function mount(container, host) {
   }
 
   async function doRegen() {
+    // A Pro mode owns the stage — the cap this would rebuild is hidden behind its board.
+    if (singleCapSuspended) return;
     if (!currentLegend || !meta || !shellGeometry) return;
     if (running) { scheduleRegen(); return; }
     running = true;
@@ -527,6 +551,40 @@ export function mount(container, host) {
     }
   }
 
+  // ---------------------------------------------------------------- legend sink
+  /**
+   * Where the right panel's legend picker writes.
+   *
+   * The picker — type cards, icon gallery, search, letter box, font list — is the same
+   * control in every mode; only its TARGET changes. On the single cap it drives the one
+   * legend. In the Pro keyboard set it drives whichever key or group is selected, and the
+   * gallery, the search and the font list all work exactly as they already did.
+   *
+   * Swapping a sink rather than building a second picker is what keeps the set mode looking
+   * like the rest of the app: there is only one legend picker, and it is this one.
+   *
+   * The four events are kept apart on purpose. They all mean "re-render this legend" on the
+   * single cap, so an earlier version routed the lot through one `letter()` — and that is
+   * destructive the moment the target is a SELECTION: changing the font fired the same call
+   * that types into a legend, which wrote the letter box's contents onto every selected key.
+   */
+  const singleCapSink = {
+    icon: (name, getText, el) => { void selectIcon(el, getText, name); },
+    /** The user typed in the letter box. */
+    letter: () => selectLetter(),
+    /** The user picked a different font — same legend, different shapes. */
+    font: () => selectLetter(),
+    /** The user clicked one of the Icon / SVG / Letter cards. */
+    typeChanged: (mode) => {
+      if (mode === 'letter') selectLetter();
+      else if (lastIconSelection) {
+        void selectIcon(lastIconSelection.el, lastIconSelection.getText, lastIconSelection.name);
+      }
+    },
+    reset: () => resetLegend(),
+  };
+  let legendSink = singleCapSink;
+
   // ---------------------------------------------------------------- icons
   async function selectIcon(el, getText, name) {
     container.querySelectorAll('.icon.active').forEach((n) => n.classList.remove('active'));
@@ -551,8 +609,15 @@ export function mount(container, host) {
     img.src = thumbUrl;
     img.alt = name;
     el.appendChild(img);
-    el.addEventListener('click', () => selectIcon(el, getText, name));
+    el.addEventListener('click', () => legendSink.icon(name, getText, el));
     return el;
+  }
+
+  /** Mark one gallery tile as the chosen one. Used by every sink, including the set's. */
+  function markActiveIcon(name) {
+    for (const tile of container.querySelectorAll('.icon')) {
+      tile.classList.toggle('active', name != null && tile.title === name);
+    }
   }
 
   function setLegendMode(mode) {
@@ -564,11 +629,10 @@ export function mount(container, host) {
     $('uploadPanel').hidden = mode !== 'upload';
     $('letterPanel').hidden = mode !== 'letter';
 
-    if (mode === 'letter') {
-      selectLetter();
-    } else if (lastIconSelection) {
-      selectIcon(lastIconSelection.el, lastIconSelection.getText, lastIconSelection.name);
-    }
+    // Through the sink: on the single cap this re-renders the legend in the new type, and in a
+    // Pro mode it does nothing but show the panel — picking a type is not the same as choosing
+    // a legend, and acting on it would stamp the letter box over everything selected.
+    legendSink.typeChanged(mode);
   }
 
   // Bigger caps fit longer legends; 1u stays at 4 characters, scaling up with the unit.
@@ -621,8 +685,9 @@ export function mount(container, host) {
   $('iconMode').addEventListener('click', () => setLegendMode('icon'));
   $('uploadMode').addEventListener('click', () => setLegendMode('upload'));
   $('letterMode').addEventListener('click', () => setLegendMode('letter'));
-  $('letterText').addEventListener('input', selectLetter);
-  $('fontSelect').addEventListener('change', selectLetter);
+  $('letterText').addEventListener('input', () => legendSink.letter());
+  // NOT legendSink.letter(): a font change must never be mistaken for typing a legend.
+  $('fontSelect').addEventListener('change', () => legendSink.font());
 
   $('fontUpload').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -935,6 +1000,10 @@ export function mount(container, host) {
   }
 
   $('export').addEventListener('click', async () => {
+    // The footer's primary button is the same button in every mode. When a Pro mode owns the
+    // stage it owns this too — the keyboard set generates a board, not the cap behind it — so
+    // it gets first refusal before the single-cap path runs.
+    if (await proPanel?.handleExport?.()) return;
     if (!lastBodies) return;
     const legendSlug = (currentLegend?.name || 'legend').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
     const baseName = `keycap-${legendSlug}${profileSlug() ? '-' + profileSlug() : ''}`;
@@ -1252,6 +1321,52 @@ export function mount(container, host) {
     return currentProfile.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   }
 
+  // ------------------------------------------------- stage handover
+  /**
+   * Who is drawing into the viewport: this generator's single cap, or a Pro mode with a
+   * scene of its own (the keyboard set's board).
+   *
+   * Handing the stage over is four things that must happen together, which is why it is one
+   * function rather than four the caller has to remember: stop the render loop, hide the
+   * canvas, stop rebuilding a cap nobody can see, and drop the one-cap readout. Getting the
+   * third wrong is the expensive one — every slider move would run a full CSG rebuild behind
+   * the board, competing with it for the same Manifold instance.
+   */
+  let singleCapSuspended = false;
+  function setStageOwner(owner) {
+    const pro = owner === 'pro';
+    singleCapSuspended = pro;
+    setPaused(pro);
+    renderer.domElement.style.display = pro ? 'none' : '';
+    const metaEl = $('meta');
+    if (metaEl) metaEl.hidden = pro; // describes one cap; meaningless for a board
+    if (!pro) {
+      resize();       // the viewport may have been resized while we weren't watching it
+      scheduleRegen();
+    }
+  }
+
+  // ------------------------------------------------- mode visibility
+  /**
+   * Controls that only make sense one cap at a time.
+   *
+   * The Pro keyboard set reuses this whole panel, so rather than a second sidebar it hides
+   * the handful of controls a board has no answer for: the size dropdown (a board's widths
+   * are per key), the A–Z batch (a different feature), the blank-cap export (one cap), and
+   * the homing bump (chosen per key there, not for all sixty-one).
+   */
+  let singleOnlyVisible = true;
+  function applyModeVisibility() {
+    const show = singleOnlyVisible;
+    for (const id of ['kcUnitField', 'alphabetBlock', 'exportBlank']) {
+      const node = $(id);
+      if (node) node.hidden = !show;
+    }
+    const bumpRow = $('homingBumpRow');
+    // Two independent reasons to hide it; the profile's is not the mode's to overwrite.
+    if (bumpRow) bumpRow.hidden = !show || currentProfile?.homingBump === false;
+  }
+
   // ------------------------------------------------- per-profile capabilities
   // Not every profile is a Cherry-style cap with a dished top and a cross stem, and a few
   // controls only make sense on one that is. The rules ride along on the profile entry in
@@ -1261,10 +1376,11 @@ export function mount(container, host) {
   function applyProfileCaps(profile) {
     // Homing bump: one shared mesh, positioned by constants hardcoded to the Standard 1u cap
     // and shaped for its dish. It has no business on a flat 3.5 mm Choc top.
-    const bumpRow = $('homingBumpRow');
-    if (bumpRow) {
+    // Visibility is shared with the mode rules (set mode picks the bump per key), so it is
+    // decided in one place rather than fought over by two.
+    if ($('homingBumpRow')) {
       const allowed = profile?.homingBump !== false;
-      bumpRow.hidden = !allowed;
+      applyModeVisibility();
       if (!allowed && $('homingBump').checked) {
         $('homingBump').checked = false;
         scheduleRegen();
@@ -1333,10 +1449,58 @@ export function mount(container, host) {
   /** The edited keyboard set, so it rides along in Save/Load like any other setting. */
   let keyboardSet = null;
   if (MAKERLAB) {
-    const proHost = container.querySelector('.vl-panel--left .vl-panel__scroll');
-    if (proHost) {
-      proPanel = mountKeyboardSetPanel(proHost, {
+    if ($('kcModeTabs')) {
+      proPanel = mountProFeatures({
         container,
+        // The shell's own anchors. The Pro modes render INTO these rather than into an
+        // overlay of their own, which is the whole point: one set of panels, one look.
+        hosts: {
+          tabs: $('kcModeTabs'),
+          profileExtra: $('kcProfileExtra'),
+          placementExtra: $('kcPlacementExtra'),
+          legendExtra: $('kcLegendExtra'),
+          viewport,
+        },
+        /** What the shell lets a mode change about itself. */
+        shell: {
+          /** Hide the one-cap-only controls (size dropdown, A–Z, blank export, homing). */
+          setSingleOnlyVisible: (v) => { singleOnlyVisible = v; applyModeVisibility(); },
+          setStageOwner,
+          /** Retarget the right panel's legend picker. Null restores the single cap. */
+          setLegendSink: (sink) => { legendSink = sink ?? singleCapSink; },
+          /** The picker's own controls, so a sink can show the selected key's legend. */
+          legendUI: {
+            setType: setLegendMode,
+            markActiveIcon,
+            get letterText() { return $('letterText').value; },
+            set letterText(v) { $('letterText').value = v; },
+            get fontId() { return $('fontSelect').value; },
+            set fontId(v) { $('fontSelect').value = v; },
+            setLetterMaxLength: (n) => { $('letterText').maxLength = n; },
+          },
+          /** Relabel the one primary action for the active mode. */
+          setExportLabel: (text) => { if (exportBtn) exportBtn.textContent = text; },
+          /** Subscribe to shell inputs by id. Returns an unsubscribe. */
+          onShellEvent: (ids, type, fn) => {
+            const nodes = ids.map((id) => $(id)).filter(Boolean);
+            for (const n of nodes) n.addEventListener(type, fn);
+            return () => { for (const n of nodes) n.removeEventListener(type, fn); };
+          },
+          /**
+           * Show these values on the shell's own placement controls WITHOUT announcing them.
+           * A mode calls this when the thing being edited changes (a different key selected),
+           * which is a display update — announcing it would echo straight back as an edit.
+           */
+          setPlacementValues: ({ size, depth, rot, offx, offy }) => {
+            if (size != null) C.size.set(size);
+            if (depth != null) C.depth.set(depth);
+            if (rot != null) C.rot.set(rot);
+            if (offx != null) C.offx.set(offx);
+            if (offy != null) C.offy.set(offy);
+          },
+          /** The single cap's Size ceiling is that cap's top; a board needs its own. */
+          setSizeRange: (max) => { C.size.setMax(max); },
+        },
         setMainPaused: setPaused,
         getSavedSet: () => keyboardSet,
         onSetChanged: (set) => { keyboardSet = set; },
@@ -1596,7 +1760,7 @@ export function mount(container, host) {
   // Shows on every visit until the user ticks "Don't show this again". Bump
   // WHATS_NEW_VERSION whenever the notes change so the popup resurfaces for everyone.
   (function initWhatsNew() {
-    const WHATS_NEW_VERSION = '2026-07-thocky-stem';
+    const WHATS_NEW_VERSION = '2026-08-choc-v1';
     const KEY = 'keycap_whatsnew_dismissed';
     const overlay = $('whatsNew');
     // Not on the desktop. Release notes belong to the app that was released, and inside a

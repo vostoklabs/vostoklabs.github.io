@@ -13,9 +13,10 @@
     {
       "id": "magnet",
       "name": "Fridge Magnet & Fidget Slider",
-      "route": "app",
+      "route": "both",
       "status": "live",
       "appUrl": "/magnet/",
+      "mwUrl": "https://makerworld.com/en/models/3137555",
       "blurb": "Turn any image into a printable fridge magnet — or a two-piece magnetic fidget slider that clicks as it slides."
     },
     {

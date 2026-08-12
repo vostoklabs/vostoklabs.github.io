@@ -99,11 +99,11 @@ function makerlabPlugin(enabled) {
     },
     load(id) {
       if (id === PRO_STUB_ID) {
-        // Same shape as the real panel so the call site needs no null check. It is never
+        // Same shape as the real module so the call sites need no null checks. It is never
         // called in the public build (the branch is fenced behind MAKERLAB) — this exists so
         // the module graph resolves.
-        return 'export function mountKeyboardSetPanel() {\n'
-          + '  return { refresh() {}, destroy() {} };\n'
+        return 'export function mountProFeatures() {\n'
+          + '  return { refresh() {}, destroy() {}, async handleExport() { return false; } };\n'
           + '}\n';
       }
       if (id === STUB_ID) {

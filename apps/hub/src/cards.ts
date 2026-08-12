@@ -5,15 +5,6 @@ import { BRAND } from '@vostok/brand';
 import { el } from '@vostok/ui-kit';
 import type { Generator, SellerTool } from './registry';
 
-function statusBadge(status: string): HTMLElement {
-  const isLive = status === 'live';
-  const badge = el('span', {
-    className: `hub-badge ${isLive ? 'hub-badge--live' : 'hub-badge--soon'}`,
-    text: isLive ? 'Live' : 'Coming Soon',
-  });
-  return badge;
-}
-
 function cardThumb(gen: Generator | SellerTool): HTMLElement {
   const wrapper = el('div', { className: 'hub-card__thumb' });
 
@@ -35,93 +26,79 @@ function cardThumb(gen: Generator | SellerTool): HTMLElement {
   return wrapper;
 }
 
-/** Render a single generator card — identical appearance for all generators. */
-export function generatorCard(gen: Generator): HTMLElement {
+// A non-clickable footer slot for tools that aren't shipped yet. It keeps the
+// card's structure identical to a live one so footers line up across a row.
+function comingSoonAction(): HTMLElement {
+  return el('span', {
+    className: 'vl-btn vl-btn--secondary hub-card__action hub-card__action--soon',
+    text: 'Coming Soon',
+    attrs: { 'aria-disabled': 'true' },
+  });
+}
+
+// Every card is thumb → title → blurb → footer, with the title and blurb
+// holding a fixed two-line box, so the action row sits at the same height on
+// every card regardless of how long its name or description is.
+function cardShell(item: Generator | SellerTool, actions: HTMLElement[]): HTMLElement {
   const card = el('div', { className: 'hub-card' });
+  card.append(cardThumb(item));
 
-  card.append(cardThumb(gen));
+  const footer = el('div', { className: 'hub-card__footer' }, actions);
 
-  const body = el('div', { className: 'hub-card__body' });
-  body.append(
-    el('div', { className: 'hub-card__head' }, [
-      el('h3', { className: 'hub-card__name', text: gen.name }),
-      statusBadge(gen.status),
-    ]),
-    el('p', { className: 'hub-card__blurb', text: gen.blurb }),
-  );
-
-  // Action footer only for live cards. For coming-soon ones the status badge
-  // already says so, so we don't repeat it in a redundant footer line.
-  if (gen.status === 'live') {
-    // Spacer pushes the footer to the bottom of the card.
-    body.append(el('div', { className: 'hub-card__spacer' }));
-    const footer = el('div', { className: 'hub-card__footer' });
-
-    // Build action button(s) based on route.
-    if (gen.route === 'app' || gen.route === 'both') {
-      const url = gen.external
-        ? gen.appUrl ?? '#'
-        : gen.appUrl ?? `/${gen.id}/`;
-      const btn = el('a', {
-        className: 'vl-btn vl-btn--primary hub-card__action',
-        text: 'Open App',
-        attrs: {
-          href: url,
-          ...(gen.external ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
-        },
-      });
-      footer.append(btn);
-    }
-
-    if (gen.route === 'mw' || gen.route === 'both') {
-      const mwUrl = gen.mwUrl && !gen.mwUrl.startsWith('TODO')
-        ? gen.mwUrl
-        : BRAND.urls.makerworld;
-      const btn = el('a', {
-        className: `vl-btn ${gen.route === 'mw' ? 'vl-btn--primary' : 'vl-btn--secondary'} hub-card__action`,
-        text: 'MakerWorld',
-        attrs: { href: mwUrl, target: '_blank', rel: 'noopener noreferrer' },
-      });
-      footer.append(btn);
-    }
-
-    body.append(footer);
-  }
+  const body = el('div', { className: 'hub-card__body' }, [
+    el('h3', { className: 'hub-card__name', text: item.name }),
+    el('p', { className: 'hub-card__blurb', text: item.blurb }),
+    el('div', { className: 'hub-card__spacer' }),
+    footer,
+  ]);
 
   card.append(body);
   return card;
 }
 
+/** Render a single generator card — identical appearance for all generators. */
+export function generatorCard(gen: Generator): HTMLElement {
+  if (gen.status !== 'live') return cardShell(gen, [comingSoonAction()]);
+
+  const actions: HTMLElement[] = [];
+
+  if (gen.route === 'app' || gen.route === 'both') {
+    const url = gen.external
+      ? gen.appUrl ?? '#'
+      : gen.appUrl ?? `/${gen.id}/`;
+    actions.push(el('a', {
+      className: 'vl-btn vl-btn--primary hub-card__action',
+      text: 'Open App',
+      attrs: {
+        href: url,
+        ...(gen.external ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
+      },
+    }));
+  }
+
+  if (gen.route === 'mw' || gen.route === 'both') {
+    const mwUrl = gen.mwUrl && !gen.mwUrl.startsWith('TODO')
+      ? gen.mwUrl
+      : BRAND.urls.makerworld;
+    actions.push(el('a', {
+      className: `vl-btn ${gen.route === 'mw' ? 'vl-btn--primary' : 'vl-btn--secondary'} hub-card__action`,
+      text: 'MakerWorld',
+      attrs: { href: mwUrl, target: '_blank', rel: 'noopener noreferrer' },
+    }));
+  }
+
+  return cardShell(gen, actions);
+}
+
 /** Render a seller-tool card — same visual style, simpler actions. */
 export function sellerToolCard(tool: SellerTool): HTMLElement {
-  const card = el('div', { className: 'hub-card' });
-
-  card.append(cardThumb(tool));
-
-  const body = el('div', { className: 'hub-card__body' });
-  body.append(
-    el('div', { className: 'hub-card__head' }, [
-      el('h3', { className: 'hub-card__name', text: tool.name }),
-      statusBadge(tool.status),
-    ]),
-    el('p', { className: 'hub-card__blurb', text: tool.blurb }),
-  );
-
-  // Action footer only when the tool is live and has somewhere to go; otherwise
-  // the "Coming Soon" badge already carries the status.
-  if (tool.status === 'live' && tool.appUrl) {
-    body.append(el('div', { className: 'hub-card__spacer' }));
-    const footer = el('div', { className: 'hub-card__footer' });
-    footer.append(
-      el('a', {
+  const action = tool.status === 'live' && tool.appUrl
+    ? el('a', {
         className: 'vl-btn vl-btn--primary hub-card__action',
         text: 'Open Tool',
         attrs: { href: tool.appUrl },
-      }),
-    );
-    body.append(footer);
-  }
+      })
+    : comingSoonAction();
 
-  card.append(body);
-  return card;
+  return cardShell(tool, [action]);
 }

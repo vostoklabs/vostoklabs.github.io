@@ -404,13 +404,21 @@
   flex: 1;
 }
 
+/* Title and blurb each occupy a fixed two-line box so the action row lands at
+   the same height on every card in a row, however long the copy is. */
 .hub-card__name {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 17px;
+  line-height: 1.3;
   letter-spacing: 0.2px;
   margin: 0;
   color: var(--text);
+  min-height: calc(2 * 1.3em);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .hub-card__blurb {
@@ -418,6 +426,7 @@
   color: var(--muted);
   font-size: 14px;
   line-height: 1.45;
+  min-height: calc(2 * 1.45em);
   /* Clamp to 2 lines. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -430,53 +439,12 @@
   flex: 1;
 }
 
-/* Card footer: status badge + action button(s). */
+/* Card footer: one or two equal-width action buttons. */
 .hub-card__footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: stretch;
   gap: var(--space-2);
   margin-top: var(--space-2);
-}
-
-
-/* ==========================================================================
-   6. STATUS BADGE - small pill
-   ========================================================================== */
-
-.hub-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  padding: 3px 10px;
-  border-radius: var(--radius-pill);
-  white-space: nowrap;
-  line-height: 1;
-}
-
-/* Live: accent color pill. */
-.hub-badge--live {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
-}
-
-/* Live dot indicator. */
-.hub-badge--live::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-/* Coming Soon: muted pill. */
-.hub-badge--soon {
-  background: color-mix(in srgb, var(--muted) 12%, transparent);
-  color: var(--muted);
 }
 
 
@@ -856,20 +824,21 @@
    10. ADDITIONAL CARD DETAILS
    ========================================================================== */
 
-/* Card header: name + status badge side-by-side. */
-.hub-card__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-/* Card action buttons: fill available width when alone. */
+/* Card action buttons: share the footer width evenly, one or two of them. */
 .hub-card__action {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
   text-align: center;
   font-size: 14px;
+  white-space: nowrap;
+}
+
+/* Not-yet-shipped slot: holds the footer's shape without inviting a click. */
+.hub-card__action--soon {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.65;
 }
 
 /* Placeholder thumbnail when no image is available. */

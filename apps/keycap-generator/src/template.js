@@ -21,6 +21,11 @@ export const TEMPLATE = `
         <div class="vl-panel__scroll">
         <div id="keycapAppHeader"></div>
 
+        <!-- Mode tabs. Empty here and filled at runtime by the Pro Pack, which is a
+             MakerWorld-build-only module — the public build leaves this empty and it
+             renders nothing, so there is one shell rather than two. -->
+        <div id="kcModeTabs"></div>
+
         <!-- mw:strip:start — this callout points users off-platform to a MakerWorld model
              page, which the host doesn't want surfaced inside the embed. main.js removes it
              at runtime too, but stripping the markup here keeps it from flashing before the
@@ -38,10 +43,12 @@ export const TEMPLATE = `
           <label for="profileSelect">Profile</label>
           <select id="profileSelect" aria-label="Keycap profile"></select>
         </div>
-        <div class="field">
+        <div class="field" id="kcUnitField">
           <label for="unitSelect">Size</label>
           <select id="unitSelect" aria-label="Keycap size"></select>
         </div>
+        <!-- Mode-specific controls belonging to this section (see #kcModeTabs). -->
+        <div id="kcProfileExtra"></div>
         <!-- Per-profile print note, filled from index.json. Deliberately NOT inside an
              mw:strip fence: that fence exists to keep an off-platform LINK out of the embed
              (see the quality callout above). This carries no link, and the embed is exactly
@@ -69,6 +76,8 @@ export const TEMPLATE = `
           <input id="depthNum" type="number" step="0.05" />
           <span class="unit">mm</span>
         </div>
+        <!-- Mode-specific controls belonging to this section (see #kcModeTabs). -->
+        <div id="kcPlacementExtra"></div>
         <div class="prow">
           <label for="rot">Rotation</label>
           <input id="rot" type="range" min="-180" max="180" step="1" value="0" />
@@ -159,6 +168,9 @@ export const TEMPLATE = `
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             </button>
           </div>
+          <!-- Mode-specific controls belonging to this section (see #kcModeTabs). Sits above
+               the type cards because in set mode it says WHICH key the cards are editing. -->
+          <div id="kcLegendExtra"></div>
           <div class="import-grid" role="tablist" aria-label="Legend type">
             <button id="iconMode" class="import-card active" type="button">
               <span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg></span>
@@ -205,7 +217,7 @@ export const TEMPLATE = `
                 <input id="fontUpload" type="file" accept=".ttf,.otf,.json,font/ttf,font/otf,application/json" />
               </label>
             </div>
-            <div class="switch-block">
+            <div class="switch-block" id="alphabetBlock">
               <button id="alphabetSet" class="vl-btn vl-btn--secondary vl-btn--block" type="button" style="margin-top:8px;">Get full alphabet set (A–Z)</button>
               <p class="switch-help" id="alphabetHelp">Generates 26 keycaps (A–Z) in the current font &amp; settings, zipped as 3MF files.</p>
             </div>
@@ -233,6 +245,10 @@ export const TEMPLATE = `
         <h2 id="whatsNewTitle">What's new</h2>
         <p class="modal-sub">A few additions since you were last here:</p>
         <ul class="whatsnew-list">
+          <li>
+            <span class="wn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 11h.01M10 11h.01M14 11h.01M18 11h.01"/></svg></span>
+            <span class="wn-body"><strong>Choc v1 profile</strong><span>Low-profile caps for Kailh Choc v1 switches, in 1u, 1.5u and 2u. Pick “Choc v1” in the Keycap → Profile dropdown. Print them standing on their side, as modelled, with supports for the stems — there's a note in the panel to remind you.</span></span>
+          </li>
           <li>
             <span class="wn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
             <span class="wn-body"><strong>Thocky profile</strong><span>A new keycap profile. Pick it in the Keycap → Profile dropdown alongside Standard and Low.</span></span>
