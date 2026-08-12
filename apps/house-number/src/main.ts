@@ -246,6 +246,10 @@ const controls = {
       { value: 'above', label: 'Above' }, { value: 'below', label: 'Below' },
       { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' },
     ],
+    // Two rows of two. Four across fits the sidebar by a couple of pixels, which is not the
+    // same as fitting it — and the pairs read better stacked anyway: above/below is one
+    // decision, left/right is the other.
+    columns: 2,
     value: params.linePlacement,
     help: 'Left and right put both on one row — "12 MEETING ROOM" — each at its own size.',
     onChange: (v) => { params.linePlacement = v; syncVisibility(); triggerRebuild(); },
@@ -256,6 +260,7 @@ const controls = {
     label: 'Align',
     options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Centre' }, { value: 'right', label: 'Right' }],
     value: params.align,
+    help: 'Places the text across the plate, and — with two stacked lines — against each other.',
     onChange: (v) => { params.align = v; triggerRebuild(); },
   }),
   /*
@@ -356,8 +361,10 @@ const controls = {
   // so its width follows its height and no margin could ever bring it in.
   plateWidth: sliderRow({
     label: 'Plate width', min: 0, max: 250, step: 1, value: params.plateWidth, unit: 'mm',
-    help: '0 sizes it from the text.',
-    onInput: (v) => { params.plateWidth = v; triggerRebuild(); },
+    help: '0 sizes it from the text. Set one and Align decides where the text sits on it.',
+    // Taking the width off auto is what gives the text room to be aligned within, so this is
+    // one of the handful of controls that changes which OTHER controls can bite.
+    onInput: (v) => { params.plateWidth = v; syncVisibility(); triggerRebuild(); },
   }),
   plateHeight: sliderRow({
     label: 'Plate height', min: 0, max: 250, step: 1, value: params.plateHeight, unit: 'mm',
@@ -527,9 +534,18 @@ function syncVisibility() {
   show(controls.text2, !stacked);
   show(controls.line2Size, twoLines);
   show(controls.linePlacement, twoLines);
-  // Exactly one of the two alignment controls is live at a time — see `vAlign` above.
   const sideBySide = isSideBySide(params.linePlacement);
-  show(controls.align, twoLines && !sideBySide);
+  /*
+   * `align` has two jobs and used to be shown for only one of them.
+   *
+   * Stacked, it places the two lines against each other — which needs two lines, and is why it
+   * was gated on that. It ALSO places the text across the plate whenever the plate is wider
+   * than the text needs, and that is the case a single line cares about: give a plate an
+   * explicit width and "align it left" is a perfectly ordinary thing to want. Shown whenever
+   * either job is live, and still hidden when neither is, so it never sits there inert.
+   */
+  const roomToSlide = hasPlate && params.plateWidth > 0;
+  show(controls.align, !stacked && ((twoLines && !sideBySide) || roomToSlide));
   show(controls.vAlign, twoLines && sideBySide);
   show(controls.lineSpacing, twoLines);
   show(controls.stackSpacing, stacked);

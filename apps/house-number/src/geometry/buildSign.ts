@@ -236,11 +236,26 @@ export function buildSign(
          * fills in over line 2, which is the opposite of a knockout. What is wanted is
          * `line1 ∪ (bar − line2)`, so line 2 exists only as the void in the fill.
          */
+        /*
+         * Split on BOTH axes, which is the whole of "the band makes the number vanish".
+         *
+         * The test was Y alone — fine while the only two-line layout was one line stacked over
+         * another, and wrong the moment the lines could share a row. Side by side they occupy
+         * the same band of Y, so every glyph came back as line 2: `line1` was empty, the number
+         * was never unioned back in, and subtracting it from a bar it sits outside removed
+         * nothing. The number was not hidden behind the band, it was simply not in the model.
+         *
+         * A glyph belongs to line 2 when its centre is inside line 2's box, in x and in y.
+         * That is what the boxes are for, and it is right for every placement.
+         */
         const box2 = textLines[1]!;
         const inLine2 = (loop: number[][]) => {
+          const xs = loop.map((p) => p[0]!);
           const ys = loop.map((p) => p[1]!);
-          const mid = (Math.min(...ys) + Math.max(...ys)) / 2;
-          return mid >= box2.minY - 0.5 && mid <= box2.maxY + 0.5;
+          const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+          const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+          return cx >= box2.minX - 0.5 && cx <= box2.maxX + 0.5
+              && cy >= box2.minY - 0.5 && cy <= box2.maxY + 0.5;
         };
         const line1 = contours.filter((l) => !inLine2(l));
         const line2 = contours.filter(inLine2);
@@ -313,14 +328,6 @@ export function buildSign(
       }
     }
 
-    // Centre the text on the origin so the plate can be centred too. `getHorizontalContours`
-    // already centres vertically; horizontally it starts at the caller's gap.
-    const tx = -(textBox.minX + textBox.maxX) / 2;
-    const ty = -(textBox.minY + textBox.maxY) / 2;
-    const textCentred = keep(textCS.translate([tx, ty]));
-    /** The same glyphs as plain polygons, in the model's frame — for bridges and hole clearance. */
-    const centredContours = contours.map((loop) => loop.map((p) => [p[0]! + tx, p[1]! + ty] as number[]));
-
     // A frame is a wall standing inside the outline, so it eats clearance the same way the
     // margin does and has to be part of the size the plate is solved for.
     const frameH = params.frameFollowsText ? params.textThickness : params.frameHeight;
@@ -376,6 +383,34 @@ export function buildSign(
     if (params.plateWidth > 0 && params.plateWidth < minW) {
       warnings.push(`Width raised to ${minW.toFixed(0)} mm — the text needs it.`);
     }
+
+    /*
+     * Centre the text on the origin, then slide it into whatever room the plate has spare.
+     *
+     * The centring is why the plate can be centred too, and until now it was the ONLY thing
+     * that ever happened: `align` reached `getHorizontalContours`, where it places the two
+     * lines against each other inside their own block, and no further. So on a single line it
+     * had nothing to move and was hidden, and the case a user actually means by "align it
+     * left" — one line on a plate they have given an explicit width — simply could not be
+     * expressed. The text sat dead centre of a 200 mm plate whatever the control said.
+     *
+     * The spare room is `width - autoW` and not `width/2 - clearance - halfText`, and that
+     * matters on every shape with a curved or cut corner: `plateSizeFor` has already solved
+     * the shape-aware perpendicular clearance, so the difference between the plate you asked
+     * for and the plate the text needs is exactly the room there is to move within. Sliding by
+     * half of it puts the text on its margin and no closer, on a pill and a plaque as much as
+     * on a rectangle.
+     */
+    const slackX = params.shape === 'none' ? 0 : Math.max(0, width - autoW);
+    const alignShift = params.align === 'left' ? -slackX / 2
+      : params.align === 'right' ? slackX / 2
+        : 0;
+
+    const tx = -(textBox.minX + textBox.maxX) / 2 + alignShift;
+    const ty = -(textBox.minY + textBox.maxY) / 2;
+    const textCentred = keep(textCS.translate([tx, ty]));
+    /** The same glyphs as plain polygons, in the model's frame — for bridges and hole clearance. */
+    const centredContours = contours.map((loop) => loop.map((p) => [p[0]! + tx, p[1]! + ty] as number[]));
     /*
      * If it does not fit straight on, TURN it — do not just complain.
      *

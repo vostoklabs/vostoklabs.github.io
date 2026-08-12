@@ -1318,5 +1318,149 @@ console.log('overall size');
      coerceSettings({ text: '12' }).scale === 1);
 }
 
+/*
+ * The band, on a row as well as stacked.
+ *
+ * The knockout split the glyphs by Y alone — fine while the only two-line layout was one line
+ * over another, and wrong the moment they could share a row. Side by side both lines occupy
+ * the same band of Y, so every glyph came back as line 2: the number was never unioned back
+ * in, and subtracting it from a bar it sits outside removed nothing. It did not go behind the
+ * band, it left the model. Measured on the ink, because "it builds" was true throughout.
+ */
+console.log('the band keeps the number');
+{
+  const inkArea = (r) => {
+    const part = r.parts.find((p) => p.name === 'text');
+    if (!part) return 0;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < part.vertProperties.length; i += 3) {
+      lo = Math.min(lo, part.vertProperties[i]);
+      hi = Math.max(hi, part.vertProperties[i]);
+    }
+    return hi - lo;
+  };
+
+  /*
+   * The Office door template's own proportions, and they are the assertion.
+   *
+   * A Y-only split misclassifies a line-1 glyph exactly when line 1's centre falls inside
+   * line 2's band — which on a shared baseline means whenever line 2 is at least half the
+   * height of line 1. At the 60/18 mm default it is not, and the bug hides; at Office door's
+   * 30/15 it is, which is where it was found. A first pass at this check used 30/12 and
+   * passed cleanly with the bug reinstated, which is worth more than the check itself.
+   *
+   * Small type also for a second reason: at 60/18 this sign is wider than the 240 mm bed, so
+   * the build turns it to fit, and a rotated part has a different x span for a reason that has
+   * nothing to do with the band.
+   */
+  const SMALL = { text: '12', text2: 'MEETING ROOM', textSize: 30, line2Size: 15, padding: 6 };
+  for (const placement of ['below', 'above', 'left', 'right']) {
+    const band = build({ ...SMALL, divider: 'band', linePlacement: placement });
+    const plain = build({ ...SMALL, divider: 'none', linePlacement: placement });
+    ok(`${placement}: nothing rotated, so the span is comparable`,
+       band.warnings.length === 0 && plain.warnings.length === 0,
+       JSON.stringify([...plain.warnings, ...band.warnings]));
+    // The bar only ever ADDS material around line 2, so the text body must reach at least as
+    // far as it did without it. Losing the number showed up here as a 24 mm collapse.
+    ok(`${placement}: the band does not eat the first line`,
+       inkArea(band) >= inkArea(plain) - 0.01,
+       `text spans ${inkArea(plain).toFixed(1)} mm without the band, ${inkArea(band).toFixed(1)} with it`);
+    ok(`${placement}: the band still knocks the second line out`,
+       (band.tris.text ?? 0) > 0 && band.parts.length >= 2);
+  }
+
+  // ...and the knockout is still a knockout: more letters in the bar means more interior edge.
+  const few = build({ ...SMALL, text2: 'II', divider: 'band', linePlacement: 'right' });
+  const many = build({ ...SMALL, divider: 'band', linePlacement: 'right' });
+  ok('on a row the type is a void in the fill, not a filled slab',
+     (many.tris.text ?? 0) > (few.tris.text ?? 0) * 1.4,
+     `"II" ${few.tris.text} tris vs "MEETING ROOM" ${many.tris.text}`);
+
+  /*
+   * Swept across the size ratio, because the misclassification is a function of it.
+   *
+   * One pair of sizes tests one point on a curve. Line 2 anywhere from a third to the full
+   * height of line 1 crosses the threshold where a Y-only split starts swallowing line 1, so
+   * the sweep is what makes this a check on the rule rather than on one template.
+   */
+  // A short second line, so the whole ratio can be swept without any of it reaching the bed
+  // limit — the turn-to-fit rotation is the one thing that makes an x span incomparable, and
+  // it is asserted against rather than assumed.
+  for (const line2Size of [10, 15, 20, 25, 30]) {
+    for (const placement of ['left', 'right']) {
+      const over = { ...SMALL, text2: 'ROOM', line2Size, linePlacement: placement };
+      const b = build({ ...over, divider: 'band' });
+      const p = build({ ...over, divider: 'none' });
+      const still = b.warnings.length === 0 && p.warnings.length === 0;
+      ok(`${placement} at ${line2Size}/30 mm keeps both lines`,
+         still && inkArea(b) >= inkArea(p) - 0.01,
+         still ? `${inkArea(p).toFixed(1)} mm -> ${inkArea(b).toFixed(1)} mm`
+           : `sign left the bed, so the spans are not comparable: ${JSON.stringify([...p.warnings, ...b.warnings])}`);
+    }
+  }
+
+  // The template the report came from, exactly as it ships.
+  const office = PRESETS.find((x) => x.id === 'office');
+  const asShipped = build({ ...office.patch, divider: 'band' });
+  const noBand = build({ ...office.patch, divider: 'none' });
+  ok('Office door with a band keeps its number',
+     inkArea(asShipped) >= inkArea(noBand) - 0.01,
+     `${inkArea(noBand).toFixed(1)} mm -> ${inkArea(asShipped).toFixed(1)} mm`);
+}
+
+/*
+ * Aligning ONE line, which was not possible at all.
+ *
+ * `align` reached the text layout, where it places two lines against each other inside their
+ * own block — so with a single line it had nothing to move and was hidden. The case a user
+ * means by "align it left" is one line on a plate they have given a width, and the text sat
+ * dead centre of it whatever the control said.
+ */
+console.log('aligning the text on its plate');
+{
+  const inkX = (r) => {
+    const part = r.parts.find((p) => p.name === 'text');
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < part.vertProperties.length; i += 3) {
+      lo = Math.min(lo, part.vertProperties[i]);
+      hi = Math.max(hi, part.vertProperties[i]);
+    }
+    return { lo, hi, mid: (lo + hi) / 2 };
+  };
+
+  const wide = { text: '12', text2: '', plateWidth: 200, shape: 'rect' };
+  const l = inkX(build({ ...wide, align: 'left' }));
+  const c = inkX(build({ ...wide, align: 'center' }));
+  const r = inkX(build({ ...wide, align: 'right' }));
+  ok('a single line moves left, centre and right on a wide plate',
+     l.mid < c.mid - 20 && c.mid < r.mid - 20,
+     `centres ${l.mid.toFixed(1)} / ${c.mid.toFixed(1)} / ${r.mid.toFixed(1)} mm`);
+  ok('centre is still centred', Math.abs(c.mid) < 0.01, `${c.mid.toFixed(3)}`);
+  ok('and the two ends are mirror images', Math.abs(l.mid + r.mid) < 0.01,
+     `${l.mid.toFixed(2)} vs ${r.mid.toFixed(2)}`);
+
+  // The margin is the limit: aligned hard left, the text stops exactly on it and no closer.
+  const params = { ...DEFAULTS, ...wide, align: 'left' };
+  const built = build({ ...wide, align: 'left' });
+  ok('aligning never pushes the text past its own margin',
+     l.lo >= -built.size.width / 2 + params.padding - 0.4,
+     `text starts ${l.lo.toFixed(2)} mm, plate edge ${(-built.size.width / 2).toFixed(2)}, margin ${params.padding}`);
+
+  // On an auto-sized plate there is no room, so it must change nothing rather than crop.
+  const autoL = inkX(build({ text: '12', text2: '', align: 'left' }));
+  const autoR = inkX(build({ text: '12', text2: '', align: 'right' }));
+  ok('an auto-sized plate has no room to align within, and does not pretend to',
+     Math.abs(autoL.mid - autoR.mid) < 0.01);
+
+  // Every shape solves its own clearance, so every shape has to respect it when sliding.
+  for (const shape of ['rect', 'rounded', 'pill', 'plaque']) {
+    const b = build({ text: '12', text2: '', shape, plateWidth: 200, align: 'left', padding: 12 });
+    const x = inkX(b);
+    ok(`${shape}: the text stays inside its margin when aligned left`,
+       x.lo >= -b.size.width / 2 + 12 - 0.5,
+       `text starts ${x.lo.toFixed(2)} mm on a ${b.size.width.toFixed(0)} mm plate`);
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
