@@ -64,10 +64,21 @@ body {
  * Four square thumbnails at the panel's full width pushed the font picker entirely below
  * the fold — you had to scroll to find out it existed. A sign is a wide, short object, so a
  * square card was mostly empty anyway: a 4:3 tile packs the same picture into two thirds of
- * the height and leaves the Font section visible without scrolling. */
-.vl-samples {
+ * the height and leaves the Font section visible without scrolling.
+ *
+ * Eight templates put it back below the fold, so the grid scrolls in its own right — the
+ * same treatment `.vl-font-grid` already gets in the kit, and for the same reason: a picker
+ * that grows without bound pushes the next section off the panel.
+ *
+ * A card is 120 px, so the cap is a row and a half: the second row is cut through the middle
+ * of a thumbnail, which reads as "there is more here" in a way a clean edge never does. Two
+ * whole rows (246 px) fit, and look like the end of the list. */
+.hn-examples .vl-samples {
   grid-template-columns: repeat(2, 1fr);
   gap: 6px;
+  max-height: 186px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
 }
 
 .vl-sample {
@@ -81,8 +92,18 @@ body {
   object-fit: contain;
 }
 
-.hn-examples + .vl-hint {
-  margin-top: 6px;
+/* The right panel holds two pickers and nothing else, and the kit's section rhythm — 22px of
+   section padding, 22px of body padding, then 22px on the next section — put 66px of empty
+   panel between the templates and the Font heading. That rhythm is right for a column of
+   labelled controls, where the gap is what separates one decision from the next; here the two
+   sections are both grids with a heading, and the gap just pushes the second one off the fold.
+   Halved, and only in this panel — the left sidebar keeps the kit's spacing. */
+.vl-panel--right .vl-section {
+  padding: 12px 0;
+}
+
+.vl-panel--right .vl-section__body {
+  padding-bottom: 0;
 }
 
 /* The results block: label on the left, value hard right, so the numbers line up. */

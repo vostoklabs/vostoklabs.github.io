@@ -14,17 +14,69 @@ export type MountKind = 'screws' | 'keyhole' | 'tape';
 
 export type Align = 'left' | 'center' | 'right';
 
+/** How the two lines sit against each other on a shared row. See `SignParams.vAlign`. */
+export type VAlign = 'top' | 'middle' | 'bottom';
+
 export type Orientation = 'horizontal' | 'vertical';
 
 /**
- * Where the second line goes relative to the first.
+ * Which side of the first line the second one goes on.
  *
- * `below` is a two-line sign. `beside` puts them on one line at their own sizes, which is
- * what a door plate usually wants — `12 MEETING ROOM`, the number large and the room name
- * small, on a single row. That is not the same as typing both into one field: a single field
- * can only have one type size.
+ * `below` and `above` stack them. `left` and `right` put them on one row at their own sizes,
+ * which is what a door plate usually wants — `12 MEETING ROOM`, the number large and the room
+ * name small, on a single row. That is not the same as typing both into one field: a single
+ * field can only have one type size.
+ *
+ * All four, not the two it shipped with. A sign is a rectangle and the second line can go on
+ * any edge of the first; offering half of them meant a street name over the number, or a unit
+ * letter before it, simply could not be typed. `beside` was the old name for `right`.
  */
-export type LinePlacement = 'below' | 'beside';
+export type LinePlacement = 'above' | 'below' | 'left' | 'right';
+
+/**
+ * True when the two lines share a row rather than stacking.
+ *
+ * The divider, the plateless bridge and the alignment controls all fork on this and not on
+ * any one placement value — writing `=== 'right'` in four files is how `left` would quietly
+ * get the stacked treatment in three of them.
+ */
+export const isSideBySide = (p: LinePlacement): boolean => p === 'left' || p === 'right';
+
+/**
+ * The same sign with `scale` folded into every in-plane dimension.
+ *
+ * Applied once at the seam where geometry is computed — the layout call, the worker payload
+ * and the example cards — rather than being threaded through `buildSign`. That way everything
+ * downstream of it, the plate solver, the warnings and the millimetre readouts, goes on
+ * working in real millimetres and has no idea a size control exists.
+ *
+ * Listed out longhand on purpose. Which fields scale is a design decision per field, not a
+ * pattern a loop over "everything measured in mm" could get right: `chamfer` and `bridgeWidth`
+ * are millimetres and must NOT scale, because a bevel and a stencil tie are sized by the
+ * nozzle rather than by the sign.
+ */
+export function atScale(p: SignParams): SignParams {
+  const s = p.scale;
+  if (!Number.isFinite(s) || Math.abs(s - 1) < 1e-6) return p;
+  return {
+    ...p,
+    textSize: p.textSize * s,
+    line2Size: p.line2Size * s,
+    lineThickness: p.lineThickness * s,
+    lineOverhang: p.lineOverhang * s,
+    lineLength: p.lineLength * s,
+    lineOffset: p.lineOffset * s,
+    cornerRadius: p.cornerRadius * s,
+    padding: p.padding * s,
+    plateWidth: p.plateWidth * s,
+    plateHeight: p.plateHeight * s,
+    bandWidth: p.bandWidth * s,
+    panelInset: p.panelInset * s,
+    frameWidth: p.frameWidth * s,
+    mountInset: p.mountInset * s,
+    mountOffsetY: p.mountOffsetY * s,
+  };
+}
 
 /**
  * What sits between the two text blocks.
@@ -55,12 +107,38 @@ export interface SignParams {
   /** Line 1. Not necessarily a number, which is why the label says "First line". */
   text: string;
   text2: string;
+  /**
+   * One multiplier over the whole sign's footprint. 1 = as designed.
+   *
+   * Every dimension that decides how big the sign is on the wall was individually adjustable
+   * and nothing moved them together, so "the same sign, but bigger" meant dragging the type
+   * size, the margin, the corner radius, the rule and the hole inset by hand and hoping the
+   * proportions survived. A template is a set of proportions; this is the control that lets
+   * you keep them.
+   *
+   * **In-plane only** — see `atScale` for exactly which fields ride it. Thickness, text depth
+   * and the bevel are printing decisions with their own millimetre ranges, and a screw is
+   * 4.5 mm whatever size the sign is; scaling those would turn a 3x sign into a 24 mm slab
+   * that no longer fits its own screws.
+   */
+  scale: number;
   textSize: number;
   /** Independent of `textSize` — the single most-requested missing feature. */
   line2Size: number;
   linePlacement: LinePlacement;
-  /** How the lines sit against each other, and — with a fixed plate width — on the plate. */
+  /** Stacked only: how the lines sit against each other, and — with a fixed plate width — on
+   *  the plate. On one row both lines are placed by their own widths, so this has nothing to
+   *  move; `vAlign` is the question that replaces it there. */
   align: Align;
+  /**
+   * Side-by-side only: whether the second line sits on the first's baseline, against its cap
+   * height, or halfway up.
+   *
+   * `bottom` is the shared baseline the row is laid out on. Its own control rather than more
+   * options on `align`, because the two axes are never both live: stacked, only `align` can
+   * move anything; on one row, only this can.
+   */
+  vAlign: VAlign;
   /** Horizontal only: baseline gap as a fraction of the two sizes summed. */
   lineSpacing: number;
   /**
@@ -119,6 +197,18 @@ export interface SignParams {
   /** How far the text stands proud of the face, or how deep it is cut into it. */
   textThickness: number;
   relief: Relief;
+  /**
+   * Ties across an engraved counter, so the middle of an `0` cannot drop out.
+   *
+   * Not always wanted, and that is the point of the switch. Engraved straight into the plate
+   * the legend is cut clean through, so the islands inside an `0` or an `8` are attached to
+   * nothing and the ties are the only thing holding them — take them away and they fall out.
+   * Engraved into an **inset panel** the plate behind is left whole, so each island lands on
+   * it and prints fused to it: the ties are then two visible scars across a numeral, paying
+   * for a problem that does not exist. Hence a setting rather than a rule, on by default and
+   * off in the panel template.
+   */
+  bridgesOn: boolean;
   /** Width of the ties that hold a stencilled counter in place. */
   bridgeWidth: number;
 
@@ -153,6 +243,16 @@ export interface SignParams {
    * needs — the holes ended up pinned to the far ends with no way to bring them in.
    */
   mountInset: number;
+  /**
+   * Moves the fixings up or down the plate, in mm from the middle.
+   *
+   * Two screw holes were nailed to the horizontal centreline and keyhole slots to a fixed
+   * height near the top, so on a tall sign there was no way to hang it from anywhere else —
+   * and no way to move a slot off the back of the numeral it was cutting into. Positive is
+   * up. Clamped against the real outline, so it can be dragged to the end without ever
+   * biting the edge.
+   */
+  mountOffsetY: number;
   countersink: boolean;
 
   /* ── Colour ── */
@@ -165,10 +265,12 @@ export interface SignParams {
 export const DEFAULTS: SignParams = {
   text: '12',
   text2: '',
+  scale: 1,
   textSize: 60,
   line2Size: 18,
   linePlacement: 'below',
   align: 'center',
+  vAlign: 'bottom',
   lineSpacing: 0.55,
   stackSpacing: 1.15,
   letterSpacing: 0,
@@ -181,6 +283,7 @@ export const DEFAULTS: SignParams = {
   lineLength: 0,
   lineOffset: 0,
   relief: 'raised',
+  bridgesOn: true,
   bridgeWidth: 1.6,
 
   band: 'none',
@@ -191,7 +294,9 @@ export const DEFAULTS: SignParams = {
   panelOn: false,
   panelInset: 10,
   panelHeight: 2,
-  panelColor: '#7a5230',
+  // Grey, not the wood brown it shipped with. The card drew the panel as a neutral board and
+  // the model printed it brown, so the two templates disagreed about what the same feature is.
+  panelColor: '#8c8c90',
 
   shape: 'rounded',
   cornerRadius: 6,
@@ -210,6 +315,7 @@ export const DEFAULTS: SignParams = {
   mountHoleDia: 4.5,
   mountFourHoles: false,
   mountInset: 10,
+  mountOffsetY: 0,
   countersink: true,
 
   plateColor: '#161616',
@@ -222,6 +328,20 @@ export const DEFAULTS: SignParams = {
  * which people do, so it is a warning and never a clamp.
  */
 export const MAX_PLATE_MM = 240;
+
+/**
+ * The strip of plate reserved at each end for screw holes, in mm. A **constant**.
+ *
+ * There has to be one: with no allowance the holes land on the text, and `nudgeClear` can only
+ * push them as far as the plate goes. But it must not be a function of the fixings, and it was
+ * `mountHoleDia * 2.5` — so dragging the screw diameter from 2 mm to 8 mm grew the plate by
+ * 30 mm, and turning on four holes added the same strip to the height. The plate is sized from
+ * the text; a wider screw is a wider screw, not a bigger sign.
+ *
+ * 11.25 mm is what the old expression gave at the shipped 4.5 mm screw, so every existing sign
+ * comes out at exactly the size it did.
+ */
+export const SCREW_HOLE_ROOM_MM = 11.25;
 
 /* ── Worker protocol ─────────────────────────────────────────────────────────── */
 

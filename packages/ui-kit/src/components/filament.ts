@@ -80,11 +80,21 @@ export function filamentRow(opts: FilamentRowOptions): ValueRow<string> {
       }));
     }
 
-    // The custom chip sits last and shows the current colour, so an off-palette value is
-    // visible as a selection rather than as nothing at all.
+    /*
+     * The custom chip appears only when there is an off-palette colour for it to hold.
+     *
+     * It used to sit at the end of every row unconditionally, and at fifteen chips in a
+     * fourteen-column grid that put a lone block on a second row underneath the palette,
+     * painted in the colour that was already ringed above it. It reads as a duplicate of the
+     * selection, and it was reported as one. The escape hatch still cannot be dropped — a
+     * saved project or a shared link can carry any hex, and a picker that could not represent
+     * it would open showing nothing selected — so it appears exactly when it is doing that
+     * job, holding a value the palette has no chip for.
+     */
     custom.value = value;
-    custom.classList.toggle('is-on', !known.has(value));
-    swatches.append(custom);
+    const offPalette = !known.has(value);
+    custom.classList.toggle('is-on', offPalette);
+    if (offPalette) swatches.append(custom);
   }
 
   function set(hex: string, notify = true) {

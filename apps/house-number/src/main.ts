@@ -18,14 +18,14 @@ import {
   getHorizontalContours, getVerticalContours,
 } from '@vostok/fonts';
 import {
-  DEFAULTS, type SignParams, type PlateShape, type MountKind, type Align,
-  type Orientation, type LinePlacement,
+  DEFAULTS, atScale, isSideBySide, type SignParams, type PlateShape, type MountKind,
+  type Align, type VAlign, type Orientation, type LinePlacement,
 } from './types';
 import type { GeometryRequest, GeometryResponse, PartMesh } from './types';
 import { applyPreset, coerceSettings, PRESETS } from './state';
 import { textRow, selectRow } from './controls';
 import { fontPicker } from './fontPicker';
-import { platePreviewSvg } from './previews';
+import { platePreviewSvg, type PreviewTheme } from './previews';
 
 /* ── 1 · State ──────────────────────────────────────────────────────────────── */
 
@@ -115,22 +115,25 @@ async function rebuild(refit = false) {
   try {
     const font = await getFont(params.fontId);
     const fallback = font;
+    // The overall size is folded in here and nowhere else: the layout, the worker and the
+    // cards all take real millimetres, so nothing downstream has to know the control exists.
+    const p = atScale(params);
     // `stackSpacing`, not `lineSpacing`. The two functions read the number differently —
     // horizontally it is a fraction of the two sizes summed, vertically a multiplier on one
     // character's step — so the horizontal 0.55 came out as a 28.6 mm step under a 52.8 mm
     // glyph and the digits overlapped by 46% of their height. Letter spacing is deliberately
     // no longer fed in either: it is horizontal tracking, and adding it to the vertical step
     // made the one control that says "Letter spacing" the only escape from that overlap.
-    const contours = params.orientation === 'vertical'
-      ? getVerticalContours(font, fallback, text, params.textSize, params.stackSpacing, 0)
+    const contours = p.orientation === 'vertical'
+      ? getVerticalContours(font, fallback, text, p.textSize, p.stackSpacing, 0)
       : getHorizontalContours(
-          font, fallback, text, params.text2.trim(),
-          params.textSize, params.line2Size, 0, params.align,
-          params.lineSpacing, params.letterSpacing,
+          font, fallback, text, p.text2.trim(),
+          p.textSize, p.line2Size, 0, p.align,
+          p.lineSpacing, p.letterSpacing,
           // `block`, so alignment moves whichever line is shorter. Under the keychain's
           // `line2` default the short line is usually the number, which stayed pinned while
           // the street name slid — so the control looked like it did nothing.
-          { alignMode: 'block', placement: params.linePlacement },
+          { alignMode: 'block', placement: p.linePlacement, vAlign: p.vAlign },
         );
 
     const req: GeometryRequest = {
@@ -138,7 +141,7 @@ async function rebuild(refit = false) {
       textContours: contours.contours,
       // The line is placed between the laid-out lines, and only this side has the font.
       textLines: contours.lines,
-      params: { ...params },
+      params: { ...p },
     };
     worker.postMessage(req);
   } catch (err) {
@@ -198,6 +201,23 @@ const controls = {
     // Alignment and line spacing only mean anything once there is a second line to place.
     onInput: (v) => { params.text2 = v; syncVisibility(); triggerRebuild(); },
   }),
+  /*
+   * One handle on how big the sign is, above the controls that decide its proportions.
+   *
+   * Everything that sets the footprint was individually adjustable and nothing moved them
+   * together, so "the same sign, but bigger" meant dragging the type size, the margin, the
+   * corner radius, the rule and the hole inset by hand and hoping the proportions survived.
+   * A template is a set of proportions; this is what they are drawn at. Shown as a percentage
+   * because a bare "1.40" invites the question "1.40 what".
+   */
+  scale: sliderRow({
+    label: 'Overall size', min: 0.25, max: 4, step: 0.05, value: params.scale,
+    format: (v) => `${Math.round(v * 100)}%`,
+    help: 'Scales the whole sign — type, plate, margins and fixing positions together. '
+        + 'Thickness, text depth and screw size are printing decisions and keep their own '
+        + 'millimetres.',
+    onInput: (v) => { params.scale = v; triggerRebuild(); },
+  }),
   // "Number height" read as how far the number stands off the plate. It is the cap height
   // of the type — a size. The depth control below is the one that is a height, and it used
   // to be called "Text height", so the two labels were the wrong way round.
@@ -217,11 +237,17 @@ const controls = {
     value: params.orientation,
     onChange: (v) => { params.orientation = v; syncVisibility(); triggerRebuild(); },
   }),
+  // All four sides. Two of them — above, and to the left — simply could not be typed before,
+  // so a street name over the number or a unit letter in front of it was not a sign this
+  // generator could make.
   linePlacement: segmentedControl<LinePlacement>({
     label: 'Second line',
-    options: [{ value: 'below', label: 'Below' }, { value: 'beside', label: 'Beside' }],
+    options: [
+      { value: 'above', label: 'Above' }, { value: 'below', label: 'Below' },
+      { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' },
+    ],
     value: params.linePlacement,
-    help: 'Beside puts both on one row — "12 MEETING ROOM" — each at its own size.',
+    help: 'Left and right put both on one row — "12 MEETING ROOM" — each at its own size.',
     onChange: (v) => { params.linePlacement = v; syncVisibility(); triggerRebuild(); },
   }),
   // Aligns both lines within the block, so whichever is shorter is the one that moves.
@@ -231,6 +257,25 @@ const controls = {
     options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Centre' }, { value: 'right', label: 'Right' }],
     value: params.align,
     onChange: (v) => { params.align = v; triggerRebuild(); },
+  }),
+  /*
+   * The other axis, and the one that had no control at all.
+   *
+   * Stacked, "Align" is left/centre/right and there is nothing vertical to decide — the line
+   * spacing places them. On one row it is the reverse: both lines are placed by their own
+   * advance widths, so "Align" has nothing to move, and the live question is whether the small
+   * line sits on the big one's baseline, against its cap height, or halfway up. Two controls
+   * rather than one with four options, because only ever one of them can bite.
+   */
+  vAlign: segmentedControl<VAlign>({
+    label: 'Align',
+    options: [
+      { value: 'top', label: 'Top' }, { value: 'middle', label: 'Middle' },
+      { value: 'bottom', label: 'Bottom' },
+    ],
+    value: params.vAlign,
+    help: 'Bottom sits the second line on the first one\'s baseline.',
+    onChange: (v) => { params.vAlign = v; triggerRebuild(); },
   }),
   letterSpacing: sliderRow({
     label: 'Letter spacing', min: -0.1, max: 0.5, step: 0.01, value: params.letterSpacing,
@@ -347,6 +392,26 @@ const controls = {
         + 'as a cut, in one colour.',
     onChange: (v) => { params.relief = v; syncVisibility(); triggerRebuild(); },
   }),
+  // Engraving cuts clean through the face, so the middle of an 0 or an 8 is attached to
+  // nothing. The ties were unconditional, which is right on a bare plate and wrong on a
+  // panel — there the plate behind catches the island, and the ties are two scars across
+  // the numeral paying for a problem that does not exist.
+  bridgesOn: toggleSwitch({
+    label: 'Stencil ties', checked: params.bridgesOn,
+    help: 'Narrow bridges that stop the middle of an 0 or an 8 dropping out. Needed when the '
+        + 'text is cut right through the plate; not when it is cut into a panel, because the '
+        + 'plate behind holds it.',
+    onChange: (v) => { params.bridgesOn = v; syncVisibility(); triggerRebuild(); },
+  }),
+  // `bridgeWidth` has existed since the ties did and has never had a control, so the one
+  // number that decides whether a tie is a hairline that snaps or a bar across the numeral
+  // was reachable only by hand-editing a saved project.
+  bridgeWidth: sliderRow({
+    label: 'Tie width', min: 0.4, max: 6, step: 0.1, value: params.bridgeWidth, unit: 'mm',
+    format: (v) => v.toFixed(1),
+    help: 'Two extrusion widths (about 0.8 mm) is the least that prints reliably.',
+    onInput: (v) => { params.bridgeWidth = v; triggerRebuild(); },
+  }),
   band: selectRow<SignParams['band']>({
     label: 'Edge band', value: params.band,
     options: [
@@ -427,6 +492,15 @@ const controls = {
     help: 'How far each hole sits in from the edge of the plate.',
     onInput: (v) => { params.mountInset = v; triggerRebuild(); },
   }),
+  // The pair was pinned to the horizontal centreline and the keyhole row to a fixed height,
+  // so a tall sign could only ever be hung from its middle — and a slot cutting into the back
+  // of the numeral could not be moved off it at all.
+  mountOffsetY: sliderRow({
+    label: 'Hole height', min: -120, max: 120, step: 0.5, value: params.mountOffsetY, unit: 'mm',
+    help: 'Moves the fixings up or down. 0 is the middle for screws, and the usual hanging '
+        + 'height for keyholes. Clamped to the plate.',
+    onInput: (v) => { params.mountOffsetY = v; triggerRebuild(); },
+  }),
   mountFourHoles: toggleSwitch({
     label: 'Four holes', checked: params.mountFourHoles,
     help: 'One near each corner, instead of two on the centreline. Worth it on a wide plate.',
@@ -453,7 +527,10 @@ function syncVisibility() {
   show(controls.text2, !stacked);
   show(controls.line2Size, twoLines);
   show(controls.linePlacement, twoLines);
-  show(controls.align, twoLines && params.linePlacement === 'below');
+  // Exactly one of the two alignment controls is live at a time — see `vAlign` above.
+  const sideBySide = isSideBySide(params.linePlacement);
+  show(controls.align, twoLines && !sideBySide);
+  show(controls.vAlign, twoLines && sideBySide);
   show(controls.lineSpacing, twoLines);
   show(controls.stackSpacing, stacked);
   // A band is sized by the text it holds, so length, overhang and position do not apply.
@@ -484,11 +561,19 @@ function syncVisibility() {
 
   // Relief needs a face to cut into.
   show(controls.relief, hasPlate);
+  // Ties only exist inside an engraved cut; raised and inlaid text is held by the face it
+  // stands on or fills.
+  show(controls.bridgesOn, hasPlate && params.relief === 'recessed');
+  show(controls.bridgeWidth, hasPlate && params.relief === 'recessed' && params.bridgesOn);
 
   // Every mounting option needs a plate to cut.
   show(controls.mount, hasPlate);
   show(controls.mountHoleDia, hasPlate && (params.mount === 'screws' || params.mount === 'keyhole'));
-  show(controls.mountInset, hasPlate && params.mount === 'screws');
+  // The inset drives the keyhole spread too now, so it is live for both mountings.
+  show(controls.mountInset, hasPlate && (params.mount === 'screws' || params.mount === 'keyhole'));
+  // Four holes go to the corners; there is no row to raise.
+  show(controls.mountOffsetY, hasPlate
+    && (params.mount === 'keyhole' || (params.mount === 'screws' && !params.mountFourHoles)));
   show(controls.mountFourHoles, hasPlate && params.mount === 'screws');
 
   // A swatch for a part that does not exist is a live control with nothing to do.
@@ -504,9 +589,11 @@ function syncControls() {
   controls.text.setValue(params.text);
   controls.text2.setValue(params.text2);
   fonts.refresh(params.fontId);
+  controls.scale.setValue(params.scale);
   controls.textSize.setValue(params.textSize);
   controls.line2Size.setValue(params.line2Size);
   controls.align.setValue(params.align);
+  controls.vAlign.setValue(params.vAlign);
   controls.linePlacement.setValue(params.linePlacement);
   controls.orientation.setValue(params.orientation);
   controls.letterSpacing.setValue(params.letterSpacing);
@@ -518,6 +605,8 @@ function syncControls() {
   controls.lineOverhang.setValue(params.lineOverhang);
   controls.lineOffset.setValue(params.lineOffset);
   controls.relief.setValue(params.relief);
+  controls.bridgesOn.setValue(params.bridgesOn);
+  controls.bridgeWidth.setValue(params.bridgeWidth);
   controls.band.setValue(params.band);
   controls.bandWidth.setValue(params.bandWidth);
   controls.panelOn.setValue(params.panelOn);
@@ -538,6 +627,7 @@ function syncControls() {
   controls.mount.setValue(params.mount);
   controls.mountHoleDia.setValue(params.mountHoleDia);
   controls.mountInset.setValue(params.mountInset);
+  controls.mountOffsetY.setValue(params.mountOffsetY);
   controls.mountFourHoles.setValue(params.mountFourHoles);
   syncVisibility();
   syncColourInputs();
@@ -592,7 +682,7 @@ const fontUploadBtn = el('button', {
 const examplesGrid = el('div', { className: 'hn-examples' });
 
 /**
- * Repaints the four cards for the current font, text and colours.
+ * Repaints the cards for the current font, text and theme.
  *
  * Needs the parsed face, which is async, so this is called after every successful build
  * rather than once at startup — that is also what keeps a card showing *your* number in
@@ -606,11 +696,17 @@ async function paintExamples() {
     return; // The build path reports font failures; a blank card is not worth a second toast.
   }
 
+  // The cards are baked SVG data URIs behind `<img src>`, so a CSS variable cannot reach
+  // inside them the way it reaches the card they sit on. The theme has to be read here and
+  // painted in — see the observer at the foot of this file for the repaint.
+  const theme: PreviewTheme =
+    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+
   const grid = sampleGrid({
     items: PRESETS.map((p) => ({
       id: p.id,
       label: p.label,
-      src: platePreviewSvg(applyPreset(params, p.patch), font),
+      src: platePreviewSvg(applyPreset(params, p.patch), font, theme),
     })),
     onPick: (item) => {
       const preset = PRESETS.find((p) => p.id === item.id);
@@ -620,13 +716,21 @@ async function paintExamples() {
       triggerRebuild(true);
     },
   });
-  examplesGrid.replaceChildren(grid);
-}
 
-const examplesHint = el('p', {
-  className: 'vl-hint',
-  text: 'Keeps your text, font and colours.',
-});
+  /*
+   * Keep the reader where they were.
+   *
+   * The grid scrolls now, and every build repaints it by throwing the old one away — so
+   * picking *Inset panel* from the second row rebuilt the model, repainted the cards, and
+   * snapped the list back to *House*, leaving the user looking at a template they did not
+   * choose. The cards are pictures of the current text and font, so they have to be repainted;
+   * where the list is scrolled to is the user's, not the repaint's.
+   */
+  const before = examplesGrid.querySelector('.vl-samples')?.scrollTop ?? 0;
+  examplesGrid.replaceChildren(grid);
+  const after = examplesGrid.querySelector('.vl-samples');
+  if (after && before > 0) after.scrollTop = before;
+}
 
 /* ── 6 · Colours ────────────────────────────────────────────────────────────── */
 
@@ -842,12 +946,12 @@ const shell = appShell({
        */
       section({
         title: '1 · Text',
-        body: [controls.text, controls.text2, controls.textSize, controls.line2Size,
-               controls.letterSpacing],
+        body: [controls.text, controls.text2, controls.scale, controls.textSize,
+               controls.line2Size, controls.letterSpacing],
       }),
       section({
         title: '2 · Layout',
-        body: [controls.orientation, controls.linePlacement, controls.align,
+        body: [controls.orientation, controls.linePlacement, controls.align, controls.vAlign,
                controls.lineSpacing, controls.stackSpacing,
                controls.divider, controls.lineThickness, controls.lineLength,
                controls.lineOverhang, controls.lineOffset],
@@ -864,12 +968,13 @@ const shell = appShell({
       collapsibleSection({
         title: '4 · Relief',
         open: false,
-        body: [controls.relief, controls.textThickness],
+        body: [controls.relief, controls.textThickness, controls.bridgesOn, controls.bridgeWidth],
       }),
       collapsibleSection({
         title: '5 · Mounting',
         open: false,
-        body: [controls.mount, controls.mountHoleDia, controls.mountInset, controls.mountFourHoles],
+        body: [controls.mount, controls.mountHoleDia, controls.mountInset, controls.mountOffsetY,
+               controls.mountFourHoles],
       }),
       // Colour sits with the parameters, not with the inputs. It is something the user is
       // *making* — and it is where magnet and name-keychain both put it.
@@ -888,7 +993,7 @@ const shell = appShell({
   // which is the split the template's layout map describes.
   right: {
     scroll: [
-      section({ title: 'Start from an example', body: [examplesGrid, examplesHint] }),
+      section({ title: 'Start from an example', body: [examplesGrid] }),
       section({ title: 'Font', body: [fonts.root, fontUploadBtn, fontUpload] }),
     ],
     footer: [footer],
@@ -904,3 +1009,14 @@ renderReport(null, 0);
 
 const viewer = createViewer(stageCanvas, {});
 mountPlatePicker(stageCanvas, viewer);
+
+/*
+ * The example cards follow the theme toggle.
+ *
+ * They are data-URI SVGs, so the `--panel-2` they sit on flips underneath them while the ink
+ * baked into the picture does not — which is how *Street, no plate* ended up as dark glyphs
+ * on a dark card with no plate behind them to be seen against. The viewer keeps its own
+ * observer for the same reason (`observeTheme` in @vostok/viewer); this is the cards' one.
+ */
+new MutationObserver(() => void paintExamples())
+  .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

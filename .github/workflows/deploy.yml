@@ -70,6 +70,32 @@ jobs:
       - name: Copy Magnet Generator to Hub Dist
         run: cp -r apps/magnet-generator/dist apps/hub/dist/magnet
 
+      - name: Build House Number Generator
+        run: pnpm build:housenumber
+
+      - name: Copy House Number Generator to Hub Dist
+        run: cp -r apps/house-number/dist apps/hub/dist/house-number
+
+      # Every generator the hub links to has to exist under the path generators.json gives it,
+      # or the card is a 404 — which is exactly what shipped: the app was written, the registry
+      # entry was added, and nothing here ever built it. Cheap to assert, and it fails the
+      # deploy instead of the visitor.
+      - name: Check every app route the hub links to exists
+        run: |
+          node -e '
+            const fs = require("fs");
+            const reg = JSON.parse(fs.readFileSync("generators.json", "utf8"));
+            const missing = reg.generators
+              .filter((g) => g.status === "live" && g.appUrl && !g.external)
+              .map((g) => g.appUrl.replace(/^\/|\/$/g, ""))
+              .filter((p) => !fs.existsSync(`apps/hub/dist/${p}/index.html`));
+            if (missing.length) {
+              console.error("No build at: " + missing.join(", "));
+              process.exit(1);
+            }
+            console.log("All app routes present.");
+          '
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

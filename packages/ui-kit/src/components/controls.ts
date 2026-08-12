@@ -142,9 +142,12 @@ export function segmentedControl<T extends string = string>(
   opts: SegmentedOptions<T>,
 ): ValueRow<T> {
   const cols = opts.columns ?? opts.options.length;
+  // `minmax(0, 1fr)`, not `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, and that `auto` floors
+  // every column at its own min-content width — so a four-option control in a 333 px sidebar
+  // could not shrink and simply ran off the panel with the last option clipped in half.
   const root = el('div', {
     className: 'vl-tabs',
-    attrs: { role: 'tablist', style: `grid-template-columns: repeat(${cols}, 1fr)` },
+    attrs: { role: 'tablist', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr))` },
   });
 
   let active = opts.value ?? opts.options[0]?.value;

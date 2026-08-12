@@ -13,11 +13,12 @@
  */
 import {
   plateOutline, keyhole, keyholePositions, bboxOf, plateSizeFor, signedArea,
-  screwHolePositions, screwHolePositions4, circle, ccw, fitAngleFor, nudgeClear,
-  lineContour, labelBarContour, bandContour, glyphReach, stencilBridges,
+  screwHolePositions, screwHolePositions4, circle, ccw, fitAngleFor, nudgeClear, pullInside,
+  distanceToContours,
+  lineContour, labelBarContour, bandContour, glyphReach, stencilBridges, counterCount,
 } from './outlines';
 import type { SignParams, LineBox } from '../types';
-import { MAX_PLATE_MM } from '../types';
+import { MAX_PLATE_MM, SCREW_HOLE_ROOM_MM, isSideBySide } from '../types';
 
 type Keep = <M extends { delete(): void }>(m: M) => M;
 
@@ -223,7 +224,7 @@ export function buildSign(
      * thickness control inert and grew the bar into the glyphs.
      */
     if (params.divider !== 'none') {
-      const beside = params.linePlacement === 'beside';
+      const beside = isSideBySide(params.linePlacement);
 
       if (params.divider === 'band' && textLines.length >= 2) {
         /*
@@ -344,23 +345,21 @@ export function buildSign(
 
     /*
      * Screw holes need room of their own, or they land under the text — but a FIXED strip,
-     * deliberately not one that tracks the inset.
+     * deliberately not one that tracks anything the user can drag.
      *
-     * Making the allowance follow the inset was self-defeating: the plate grew by exactly as
+     * Making the allowance follow the *inset* was self-defeating: the plate grew by exactly as
      * much as the inset moved the hole, so the hole stayed pinned 4.5 mm from the text at
-     * every inset from 5 mm to 60 mm and the control did nothing at all. A constant strip at
-     * each end gives the inset somewhere to move within, and `nudgeClear` further down stops
-     * a hole ever reaching the glyphs.
-     *
-     * Four holes go to the corners, so they need the strip on BOTH axes; two sit on the
-     * horizontal centreline and only need it at the ends.
+     * every inset from 5 mm to 60 mm and the control did nothing at all. Making it follow the
+     * *diameter* was the same mistake wearing a different hat, and visible: dragging the screw
+     * size from 2 mm to 8 mm grew the sign by 30 mm. And the strip was added to the HEIGHT as
+     * well the moment four holes were switched on, so a toggle about where the fixings go
+     * silently resized the plate. None of that is the plate's business — it is sized from the
+     * text. `nudgeClear` and `pullInside` are what keep a hole off the glyphs and inside the
+     * outline, and they work at any diameter.
      */
-    const holeRoom = params.mount === 'screws' && params.shape !== 'none'
-      ? params.mountHoleDia * 2.5
-      : 0;
-    const vHoleRoom = params.mountFourHoles ? holeRoom : 0;
+    const holeRoom = params.mount === 'screws' && params.shape !== 'none' ? SCREW_HOLE_ROOM_MM : 0;
     const autoW = plateSizeFor(textBox, clearance + holeRoom, params.shape, params.cornerRadius).width;
-    const autoH = plateSizeFor(textBox, clearance + vHoleRoom, params.shape, params.cornerRadius).height;
+    const autoH = plateSizeFor(textBox, clearance, params.shape, params.cornerRadius).height;
 
     /*
      * An explicit size wins, but never below what the text needs.
@@ -416,9 +415,11 @@ export function buildSign(
         // plate is much wider than the text needs, so a margin-derived inset pinned the holes
         // to the far ends with no way to bring them in.
         const inset = Math.max(params.mountInset, frameOn ? params.frameWidth + params.mountHoleDia : 0);
+        // Four holes go to the corners and have nowhere to be moved to; the offset is the
+        // row's, so it applies to the pair only.
         const wanted = params.mountFourHoles
           ? screwHolePositions4(width, height, params.mountHoleDia, inset)
-          : screwHolePositions(width, height, params.mountHoleDia, inset);
+          : screwHolePositions(width, height, params.mountHoleDia, inset, params.mountOffsetY);
         if (wanted.length === 0) {
           warnings.push('The plate is too small for screw holes at this inset. Reduce the inset, or add margin.');
         }
@@ -444,24 +445,35 @@ export function buildSign(
          * detail, it is the sign hanging crooked. Solving them together keeps the pattern
          * symmetric by construction and still clears the worst-placed hole.
          */
+        const axis = params.mountFourHoles ? 'radial' : 'x';
         let push = 0;
         let stuck = false;
         for (const p of wanted) {
-          const { at, clear } = nudgeClear(centred, p, params.mountHoleDia / 2, outline);
+          const { at, clear } = nudgeClear(centred, p, params.mountHoleDia / 2, outline, axis);
           if (!clear) stuck = true;
           push = Math.max(push, Math.hypot(at[0] - p[0], at[1] - p[1]));
         }
 
+        let pulled = false;
         for (const [px, py] of wanted) {
           const len = Math.hypot(px, py) || 1;
-          const hx = px + (px / len) * push;
-          const hy = py + (py / len) * push;
+          const ux = axis === 'x' ? Math.sign(px) || 1 : px / len;
+          const uy = axis === 'x' ? 0 : py / len;
+          // The row can now be dragged up a shape whose width varies with height, so a
+          // position that was inside the plate at the centreline may be past the cap once
+          // raised. Nothing used to catch that and the plate exported with a notch in it.
+          const [hx, hy] = pullInside(
+            outline, [px + ux * push, py + uy * push], params.mountHoleDia / 2,
+          );
+          if (Math.abs(hx - px - ux * push) > 0.05 || Math.abs(hy - py - uy * push) > 0.05) pulled = true;
           const holeCS = keep(new CrossSection([ccw(circle(hx, hy, params.mountHoleDia / 2))], 'Positive'));
           plateCS = keep(plateCS.subtract(holeCS));
         }
 
         if (stuck) {
           warnings.push('A screw hole is tight against the text. Add margin, or reduce the hole inset.');
+        } else if (pulled) {
+          warnings.push('A screw hole was pulled back inside the plate — it would have broken the edge there.');
         } else if (push > 0.25) {
           warnings.push(`Screw holes moved out ${push.toFixed(1)} mm to clear the text.`);
         }
@@ -527,10 +539,66 @@ export function buildSign(
           );
         }
 
-        // Hung from the top edge, and the entry sits low enough that the slot above it stays
-        // inside the plate: the sign drops by `travel`, so that much material has to be there.
-        const ky = height / 2 - clearance - travel;
-        for (const kx of keyholePositions(width)) {
+        /*
+         * Hung from the top edge, and the entry sits low enough that the slot above it stays
+         * inside the plate: the sign drops by `travel`, so that much material has to be there.
+         *
+         * `mountOffsetY` moves that row, and the clamp is what makes the control safe rather
+         * than merely present — the slot rises by `travel` past its entry, so the ceiling is
+         * the plate's own top minus the travel and minus a wall, not the top of the plate.
+         */
+        const wall = Math.max(1.5, headDia * 0.5);
+        const topRoom = height / 2 - travel - headDia / 2 - wall;
+        const lowRoom = -(height / 2 - headDia / 2 - wall);
+        const wantedY = height / 2 - clearance - travel + params.mountOffsetY;
+        const ky = Math.min(Math.max(wantedY, lowRoom), Math.max(lowRoom, topRoom));
+
+        const kxs = keyholePositions(width, headDia, params.mountInset);
+        /*
+         * A slot that lands on the legend used to fail in silence, and that is the whole of
+         * "this is not usable".
+         *
+         * Two different failures wear the same face, and only one of them is a failure.
+         *
+         * Engraved, the legend is a void cut right through the plate, so a pocket behind it
+         * opens straight into the letters — the sign is a colander and nothing said so. That
+         * is always wrong and always worth saying.
+         *
+         * Raised or inlaid, the pocket only thins the material the letters stand on, and how
+         * much is left is the entire question. Warning on the overlap alone was too strict and
+         * the House template proved it: a 70 mm numeral fills its own plate, so no slot can
+         * avoid it at any inset or height, and the plate still keeps 1.8 mm over the pocket
+         * with 2 mm of raised numeral on top of that. A template that trips its generator's
+         * own warning is a bug in the warning. So measure the face that is actually left, and
+         * say so only when it is thin — four 0.4 mm layers being where it starts to crack.
+         *
+         * Measured against the real outlines, not the text's bounding box: a slot sitting in
+         * the gap between a 1 and a 2 is fine and would fail a box test.
+         */
+        const bite = Math.max(headDia / 2, params.mountHoleDia) + 0.5;
+        const fouled = kxs.some((kx) => {
+          for (let s = 0; s <= 8; s++) {
+            const y = ky + (travel * s) / 8;
+            if (distanceToContours(centredContours, kx, y) < bite) return true;
+          }
+          return false;
+        });
+        /** Plate left between the back of the pocket and the face the text stands on. */
+        const faceOverPocket = params.plateThickness - depth;
+        const THIN_FACE_MM = 1.6;
+        if (fouled && recessed) {
+          warnings.push(
+            'A keyhole slot runs into the engraved legend — it would open through the face. '
+            + 'Move it with Hole inset or Hole height, or raise the text instead of engraving it.',
+          );
+        } else if (fouled && faceOverPocket < THIN_FACE_MM) {
+          warnings.push(
+            `A keyhole slot sits behind the text with only ${faceOverPocket.toFixed(1)} mm of plate `
+            + `over it. Thicken the plate, or move the slot with Hole inset or Hole height.`,
+          );
+        }
+
+        for (const kx of kxs) {
           const k = keyhole(kx, ky, headDia, params.mountHoleDia, travel);
           const cut = (shape: number[][][], from: number, to: number) => {
             for (const loop of shape) {
@@ -619,7 +687,31 @@ export function buildSign(
         // No counters means no ties, and manifold will not build a CrossSection from an empty
         // polygon list — "12" has no enclosed shape at all, so the guard is the common case
         // rather than the edge one.
-        const ties = stencilBridges(centredContours, params.bridgeWidth);
+        //
+        // Nor when the user has turned them off: cut into a panel the islands land on the
+        // whole plate below and print fused to it, so the ties hold up nothing. See
+        // `bridgesOn` in types.ts.
+        const ties = params.bridgesOn ? stencilBridges(centredContours, params.bridgeWidth) : [];
+
+        /*
+         * Turning them off on a BARE plate is a different matter, and it used to say nothing.
+         *
+         * The cut goes right through, so every enclosed island — the middle of an `0`, both
+         * middles of an `8`, the eye of an `e` — is attached to nothing and drops out. The
+         * model was still watertight and the readout still counted two parts, so the first
+         * sign of it was a crescent lying on the build plate. On a panel there is a whole
+         * plate behind to catch them, which is the case the switch exists for and the one
+         * case that needs no warning.
+         */
+        if (!params.bridgesOn && !panelOn) {
+          const loose = counterCount(centredContours);
+          if (loose > 0) {
+            warnings.push(
+              `${loose} enclosed shape${loose === 1 ? '' : 's'} — the middle of a 0, 8 or e — `
+              + `will drop out of the cut. Turn Stencil ties on, or put the text on an inset panel.`,
+            );
+          }
+        }
         const bridged = ties.length > 0
           ? keep(textCentred.subtract(keep(new CrossSection(ties, 'Positive'))))
           : textCentred;
@@ -686,11 +778,31 @@ export function buildSign(
     if (params.shape === 'none') {
       // Individual glyphs, each its own body — the "single numbers for unit doors" case.
       // `decompose` splits the union back into the pieces that do not touch.
-      const pieces = (textPlaced.decompose() as any[]) ?? [textPlaced];
+      const all = (textPlaced.decompose() as any[]) ?? [textPlaced];
+
+      /*
+       * Slivers are not pieces, and counting them as such made the Street template lie.
+       *
+       * `bevelExtrude` unions a scaled top cap onto the base sharing 0.005 mm of z, and that
+       * near-coincident face leaves manifold holding the odd zero-thickness scrap: on `108`
+       * in Anton, a four-triangle sheet 0.43 x 1.69 mm across, flat at a single z, of exactly
+       * zero volume. The sign is one welded piece and the readout said "2 separate pieces —
+       * they print unattached", while the 3MF carried a phantom object into the slicer.
+       *
+       * The cutoff is a printability one rather than an epsilon: a body under a nozzle-width
+       * cube of material cannot be printed as a part whatever it is, so it is boolean noise
+       * and is dropped rather than named, counted or exported.
+       */
+      const MIN_PIECE_MM3 = 0.4 * 0.4 * 0.4;
+      const pieces = all.filter((piece) => {
+        const solid = keep(piece);
+        try { return solid.volume() >= MIN_PIECE_MM3; } catch { return true; }
+      });
+
       pieces.forEach((piece, i) => {
         parts.push({
           name: `glyph-${i + 1}`,
-          ...meshOf(keep(piece)),
+          ...meshOf(piece),
           colorRgb: hexToRgb(params.textColor),
         });
       });

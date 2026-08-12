@@ -7,15 +7,17 @@
  * contributing nothing at all. Per-part counts make that visible in one line.
  */
 import Module from 'manifold-3d';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import opentype from 'opentype.js';
 
 import { buildSign } from './buildSign.ts';
 import {
-  plateOutline, plateSizeFor, screwHolePositions, nudgeClear, distanceToContours, lineContour, screwHolePositions4, stencilBridges,
+  plateOutline, plateSizeFor, screwHolePositions, nudgeClear, distanceToContours, lineContour,
+  screwHolePositions4, stencilBridges, counterCount, keyholePositions,
 } from './outlines.ts';
-import { DEFAULTS } from '../types.ts';
+import { DEFAULTS, SCREW_HOLE_ROOM_MM, atScale } from '../types.ts';
+import { coerceSettings, PRESETS } from '../state.ts';
 import { getHorizontalContours, getVerticalContours } from '../../../../packages/fonts/src/textLayout.ts';
 
 const fontPath = process.argv[2]
@@ -42,7 +44,7 @@ function layoutFor(params) {
         font, font, params.text, params.text2,
         params.textSize, params.line2Size, 0, params.align,
         params.lineSpacing, params.letterSpacing,
-        { alignMode: 'block', placement: params.linePlacement },
+        { alignMode: 'block', placement: params.linePlacement, vAlign: params.vAlign },
       );
 }
 
@@ -240,7 +242,7 @@ console.log('the margin holds on the real text');
 console.log('second line beside');
 {
   const below = build({ text: '12', text2: 'MEETING ROOM', linePlacement: 'below' });
-  const beside = build({ text: '12', text2: 'MEETING ROOM', linePlacement: 'beside' });
+  const beside = build({ text: '12', text2: 'MEETING ROOM', linePlacement: 'right' });
   ok('beside is wider than below', beside.size.width > below.size.width * 1.3,
      `${below.size.width.toFixed(0)} -> ${beside.size.width.toFixed(0)} mm`);
   ok('beside is shorter than below', beside.size.height < below.size.height,
@@ -256,13 +258,13 @@ console.log('second line beside');
    * a sign taller until it passes the big one.
    */
   const boxOf = (line2Size) =>
-    layoutFor({ ...DEFAULTS, text: '12', text2: 'MEETING ROOM', linePlacement: 'beside', line2Size }).lines[1];
+    layoutFor({ ...DEFAULTS, text: '12', text2: 'MEETING ROOM', linePlacement: 'right', line2Size }).lines[1];
   const small = boxOf(18), large = boxOf(28);
   ok('the second line keeps its own size when beside',
      large.maxY - large.minY > (small.maxY - small.minY) * 1.4,
      `line 2 ink height ${(small.maxY - small.minY).toFixed(1)} -> ${(large.maxY - large.minY).toFixed(1)} mm`);
   ok('both lines share a baseline when beside',
-     Math.abs(boxOf(18).minY - layoutFor({ ...DEFAULTS, text: '12', text2: 'MEETING ROOM', linePlacement: 'beside' }).lines[0].minY) < 40,
+     Math.abs(boxOf(18).minY - layoutFor({ ...DEFAULTS, text: '12', text2: 'MEETING ROOM', linePlacement: 'right' }).lines[0].minY) < 40,
      'line 2 sits on the same row as line 1');
 }
 
@@ -285,7 +287,7 @@ console.log('screw holes clear the text');
   const params = { ...DEFAULTS, mount: 'screws', text: '12', padding: 8 };
   const layout = layoutFor(params);
   const clearance = params.padding;
-  const holeRoom = params.mountHoleDia * 2.5;
+  const holeRoom = SCREW_HOLE_ROOM_MM;
   const { width } = plateSizeFor(layout.box, clearance + holeRoom, params.shape, params.cornerRadius);
   const { height } = plateSizeFor(layout.box, clearance, params.shape, params.cornerRadius);
   const cx = (layout.box.minX + layout.box.maxX) / 2;
@@ -360,7 +362,7 @@ console.log('screw hole placement');
   const holeX = (mountInset) => {
     const params = { ...DEFAULTS, mount: 'screws', mountInset, text: '12' };
     const layout = layoutFor(params);
-    const holeRoom = params.mountHoleDia * 2.5;
+    const holeRoom = SCREW_HOLE_ROOM_MM;
     const { width } = plateSizeFor(layout.box, params.padding + holeRoom, params.shape, params.cornerRadius);
     const { height } = plateSizeFor(layout.box, params.padding, params.shape, params.cornerRadius);
     const pos = screwHolePositions(width, height, params.mountHoleDia, mountInset);
@@ -385,9 +387,9 @@ console.log('screw hole placement');
   for (const four of [false, true]) {
     const params = { ...DEFAULTS, mount: 'screws', mountFourHoles: four, mountInset: 22, text: '12' };
     const layout = layoutFor(params);
-    const holeRoom = params.mountHoleDia * 2.5;
+    const holeRoom = SCREW_HOLE_ROOM_MM;
     const { width } = plateSizeFor(layout.box, params.padding + holeRoom, params.shape, params.cornerRadius);
-    const { height } = plateSizeFor(layout.box, params.padding + (four ? holeRoom : 0), params.shape, params.cornerRadius);
+    const { height } = plateSizeFor(layout.box, params.padding, params.shape, params.cornerRadius);
     const cx = (layout.box.minX + layout.box.maxX) / 2;
     const cy = (layout.box.minY + layout.box.maxY) / 2;
     const centred = layout.contours.map((l) => l.map((p) => [p[0] - cx, p[1] - cy]));
@@ -415,7 +417,7 @@ console.log('screw hole placement');
   for (const inset of [3, 8, 15, 25, 40, 60]) {
     const params = { ...DEFAULTS, mount: 'screws', mountInset: inset, text: '12' };
     const layout = layoutFor(params);
-    const holeRoom = params.mountHoleDia * 2.5;
+    const holeRoom = SCREW_HOLE_ROOM_MM;
     const { width } = plateSizeFor(layout.box, params.padding + holeRoom, params.shape, params.cornerRadius);
     const { height } = plateSizeFor(layout.box, params.padding, params.shape, params.cornerRadius);
     const cx = (layout.box.minX + layout.box.maxX) / 2;
@@ -509,7 +511,7 @@ console.log('line');
   ok('the Street preset welds into one piece', preset.parts.length === 1, `${preset.parts.length} pieces`);
 
   // Beside placement turns the bar into a vertical divider — the "10 | RYDAL DRIVE" look.
-  const divider = build({ text: '10', text2: 'RYDAL DRIVE', linePlacement: 'beside', divider: 'line' });
+  const divider = build({ text: '10', text2: 'RYDAL DRIVE', linePlacement: 'right', divider: 'line' });
   ok('a vertical divider builds when the lines sit side by side',
      (divider.tris.text ?? 0) > 0 && divider.parts.length >= 2);
 
@@ -824,27 +826,140 @@ console.log('stencil bridges');
    * the count is identical at 0.6 mm and at 5 mm and would "pass" whatever the code did.
    */
   const layout = layoutFor({ ...DEFAULTS, text: '8' });
-  const widthOf = (w) => {
-    const [tie] = stencilBridges(layout.contours, w);
-    const xs = tie.map((p) => p[0]);
-    return Math.max(...xs) - Math.min(...xs);
+  /** A tie is a rectangle at an arbitrary angle now, so measure its sides, not its box. */
+  const sidesOf = (tie) => {
+    const side = (a, b) => Math.hypot(tie[b][0] - tie[a][0], tie[b][1] - tie[a][1]);
+    const s = [side(0, 1), side(1, 2)].sort((m, n) => m - n);
+    return { width: s[0], length: s[1] };
   };
+  const widthOf = (w) => sidesOf(stencilBridges(layout.contours, w)[0]).width;
   ok('the tie is exactly as wide as asked',
      Math.abs(widthOf(1.6) - 1.6) < 0.01 && Math.abs(widthOf(4) - 4) < 0.01,
      `1.6 -> ${widthOf(1.6).toFixed(2)}, 4 -> ${widthOf(4).toFixed(2)}`);
-  // An "8" has two counters, so two ties; a "1" has none and needs none.
-  // Two ties per counter — one above, one below. A single tie holds the island fine and
-  // looks like damage; every stencil alphabet ties symmetrically.
-  ok('two ties per counter, and none where there is no counter',
-     stencilBridges(layout.contours, 1.6).length === 4
+  // An "8" has two counters and a "1" has none, whatever the tie shape.
+  ok('at least one tie per counter, and none where there is no counter',
+     stencilBridges(layout.contours, 1.6).length >= 2
      && stencilBridges(layoutFor({ ...DEFAULTS, text: '1' }).contours, 1.6).length === 0,
-     `"8" has 2 counters -> ${stencilBridges(layout.contours, 1.6).length} ties (want 4)`);
+     `"8" -> ${stencilBridges(layout.contours, 1.6).length} ties`);
+
+  /*
+   * The tie takes the SHORTEST way out, which is the whole of "they ruin letter e".
+   *
+   * The old ties ran from the counter's centre past the top and the bottom of the glyph's
+   * bounding box, so on an `e` — whose eye sits above a thin crossbar with the field a
+   * millimetre away through it — the tie was the full cap height of the letter and cut it in
+   * half. The assertion is not "is there a tie" but "is it short": no tie may be longer than
+   * the glyph it crosses, and on an `e` it should be a small fraction of it.
+   */
+  for (const [ch, limit] of [['e', 0.45], ['8', 0.75], ['0', 0.75], ['a', 0.6]]) {
+    const l = layoutFor({ ...DEFAULTS, text: ch, textSize: 60 });
+    const capH = l.box.maxY - l.box.minY;
+    const ties = stencilBridges(l.contours, 1.6);
+    const longest = Math.max(0, ...ties.map((t) => sidesOf(t).length));
+    ok(`"${ch}": the tie crosses the stroke rather than the whole letter`,
+       ties.length > 0 && longest < capH * limit,
+       `longest tie ${longest.toFixed(1)} mm against a ${capH.toFixed(1)} mm glyph `
+       + `(limit ${(capH * limit).toFixed(1)})`);
+  }
+
+  // A small counter gets one tie, not a symmetric pair — two nicks in a 16 mm eye is just
+  // two nicks. A big one is wide enough to carry the pair that reads as deliberate.
+  const small = stencilBridges(layoutFor({ ...DEFAULTS, text: 'e', textSize: 16 }).contours, 1.6);
+  const big = stencilBridges(layoutFor({ ...DEFAULTS, text: '0', textSize: 90 }).contours, 1.6);
+  ok('a small counter is tied once and a large one twice',
+     small.length === 1 && big.length === 2, `small ${small.length}, large ${big.length}`);
+
+  // And the counter census the warning is written from.
+  for (const [text, n] of [['8', 2], ['0', 1], ['1', 0], ['12', 0], ['e', 1], ['808', 5]]) {
+    const found = counterCount(layoutFor({ ...DEFAULTS, text }).contours);
+    ok(`"${text}" has ${n} enclosed shape${n === 1 ? '' : 's'}`, found === n, `found ${found}`);
+  }
+
+  /*
+   * ...and the switch that turns them off, which is only defensible where the plate catches
+   * the islands.
+   *
+   * On a bare plate the cut goes right through, so removing the ties really does drop the
+   * counters — three bodies where there was one. That is the failure the ties exist to
+   * prevent, and asserting it is what stops the switch quietly becoming a no-op. On a
+   * PANELLED plate the same cut stops at the panel: the islands sit on a plate that is still
+   * whole, so they print fused to it and the ties are two scars paying for nothing.
+   */
+  const bare = build({ text: '8', relief: 'recessed', plateThickness: 5, bridgesOn: false });
+  ok('without ties, a cut-through stencil drops its counters',
+     bodies(bare.parts.find((p) => p.name === 'plate')) === 3,
+     `${bodies(bare.parts.find((p) => p.name === 'plate'))} bodies`);
+
+  const panelled = build({
+    text: '8', relief: 'recessed', plateThickness: 5,
+    panelOn: true, panelInset: 8, panelHeight: 2.5, bridgesOn: false,
+  });
+  ok('in a panel the plate behind is left whole to catch them',
+     bodies(panelled.parts.find((p) => p.name === 'plate')) === 1,
+     `${bodies(panelled.parts.find((p) => p.name === 'plate'))} plate bodies`);
+  ok('and the panel is the layer that carries the loose islands',
+     bodies(panelled.parts.find((p) => p.name === 'panel')) === 3,
+     `${bodies(panelled.parts.find((p) => p.name === 'panel'))} panel bodies`);
+}
+
+/*
+ * A "piece" has to be something you could print.
+ *
+ * `bevelExtrude` unions a scaled top cap onto the base sharing 0.005 mm of z, and that
+ * near-coincident face occasionally leaves manifold holding a zero-thickness scrap. On the
+ * Street template with `108` set in Anton it was a four-triangle sheet 0.43 x 1.69 mm across,
+ * flat at a single z, of exactly zero volume — and `decompose` counted it, so a sign welded
+ * into ONE piece reported "2 separate pieces — they print unattached" and the 3MF carried a
+ * phantom object into the slicer. The invariant is the general one, not the one font.
+ */
+console.log('loose pieces are real pieces');
+{
+  const anton = fileURLToPath(new URL('../../../../packages/fonts/src/fonts/anton.ttf', import.meta.url));
+  const faces = [['the check font', font]];
+  if (existsSync(anton)) faces.push(['Anton', opentype.parse(readFileSync(anton).buffer)]);
+
+  const STREET = {
+    shape: 'none', divider: 'line', lineThickness: 6, lineOverhang: 8,
+    textSize: 70, line2Size: 16, lineSpacing: 0.62, letterSpacing: 0.08,
+    text2: 'STREET NAME', mount: 'tape', align: 'center',
+  };
+
+  for (const [name, face] of faces) {
+    for (const text of ['12', '108', '80', '308']) {
+      const params = { ...DEFAULTS, ...STREET, text };
+      const layout = getHorizontalContours(
+        face, face, params.text, params.text2,
+        params.textSize, params.line2Size, 0, params.align,
+        params.lineSpacing, params.letterSpacing,
+        { alignMode: 'block', placement: params.linePlacement, vAlign: params.vAlign },
+      );
+      const r = buildSign(wasm, layout.contours, params, layout.lines);
+      ok(`${name} "${text}": the Street template welds into one piece`,
+         r.parts.length === 1 && !r.warnings.some((w) => /unattached/.test(w)),
+         `${r.parts.length} parts, ${JSON.stringify(r.warnings)}`);
+
+      // Nothing emitted may be a zero-volume sheet — that is the actual defect, and it would
+      // survive a piece count that happened to come out right for some other reason.
+      for (const p of r.parts) {
+        const v = p.vertProperties, t = p.triVerts;
+        let vol = 0;
+        for (let i = 0; i < t.length; i += 3) {
+          const a = t[i] * 3, b = t[i + 1] * 3, c = t[i + 2] * 3;
+          vol += (v[a] * (v[b + 1] * v[c + 2] - v[c + 1] * v[b + 2])
+                - v[a + 1] * (v[b] * v[c + 2] - v[c] * v[b + 2])
+                + v[a + 2] * (v[b] * v[c + 1] - v[c] * v[b + 1])) / 6;
+        }
+        ok(`${name} "${text}": ${p.name} has real volume`, Math.abs(vol) > 0.064,
+           `${vol.toFixed(4)} mm3 in ${t.length / 3} triangles`);
+      }
+    }
+  }
 }
 
 /* Oversize signs get turned to fit rather than a lecture. */
 console.log('bed fit');
 {
-  const big = build({ text: '12', text2: 'A VERY LONG STREET NAME', linePlacement: 'beside', textSize: 40 });
+  const big = build({ text: '12', text2: 'A VERY LONG STREET NAME', linePlacement: 'right', textSize: 40 });
   const turned = big.warnings.some((w) => /Turned \d+°/.test(w));
   const refused = big.warnings.some((w) => /larger than a .* bed at any angle/.test(w));
   ok('an oversize sign is either turned to fit or honestly refused', turned || refused,
@@ -889,6 +1004,318 @@ console.log('alignment');
   ok('alignment does not change the plate size',
      Math.max(...widths) - Math.min(...widths) < 0.05,
      widths.map((w) => w.toFixed(2)).join(' / '));
+}
+
+/*
+ * All four sides for the second line, not the two it shipped with.
+ *
+ * A sign is a rectangle and the second line can go on any edge of the first; offering only
+ * `below` and `beside` meant a street name OVER the number, or a unit letter in front of it,
+ * was not a sign this generator could make. Each assertion measures where line 2 actually
+ * landed relative to line 1, because "it builds" is true of a placement that silently fell
+ * back to `below`.
+ */
+console.log('second line, four ways');
+{
+  const boxes = (placement) => {
+    const l = layoutFor({ ...DEFAULTS, text: '12', text2: 'ELM STREET', linePlacement: placement });
+    return { one: l.lines[0], two: l.lines[1] };
+  };
+  const midY = (b) => (b.minY + b.maxY) / 2;
+  const midX = (b) => (b.minX + b.maxX) / 2;
+
+  const below = boxes('below');
+  ok('below puts line 2 under line 1', midY(below.two) < midY(below.one),
+     `${midY(below.one).toFixed(1)} vs ${midY(below.two).toFixed(1)}`);
+
+  const above = boxes('above');
+  ok('above puts line 2 over line 1', midY(above.two) > midY(above.one),
+     `${midY(above.one).toFixed(1)} vs ${midY(above.two).toFixed(1)}`);
+
+  /*
+   * ...and the two are mirror images, not one of them quietly falling back to the other.
+   *
+   * Measured on the GAP between the ink boxes, not on their centres. The two lines are set at
+   * different sizes, so centre-to-centre differs from side to side by half the difference in
+   * cap height — a real 29 mm at 60/18 mm — and a mirror test on centres fails a layout that
+   * is a perfect mirror.
+   */
+  const gapBelow = below.one.minY - below.two.maxY;
+  const gapAbove = above.two.minY - above.one.maxY;
+  ok('above is the mirror of below, not a repeat of it', Math.abs(gapAbove - gapBelow) < 0.05,
+     `gap below ${gapBelow.toFixed(2)} mm, gap above ${gapAbove.toFixed(2)} mm`);
+
+  const right = boxes('right');
+  ok('right puts line 2 after line 1', right.two.minX > right.one.maxX - 0.01,
+     `line 1 ends ${right.one.maxX.toFixed(1)}, line 2 starts ${right.two.minX.toFixed(1)}`);
+
+  const left = boxes('left');
+  ok('left puts line 2 before line 1', left.two.maxX < left.one.minX + 0.01,
+     `line 2 ends ${left.two.maxX.toFixed(1)}, line 1 starts ${left.one.minX.toFixed(1)}`);
+
+  ok('left and right are the same row, not a stack',
+     Math.abs(midY(left.two) - midY(left.one) - (midY(right.two) - midY(right.one))) < 0.05);
+
+  for (const placement of ['above', 'below', 'left', 'right']) {
+    const r = build({ text: '12', text2: 'ELM STREET', linePlacement: placement });
+    ok(`${placement} builds a plate and text`, (r.tris.plate ?? 0) > 0 && (r.tris.text ?? 0) > 0);
+    const d = build({ text: '12', text2: 'ELM STREET', linePlacement: placement, divider: 'line' });
+    ok(`${placement} takes a divider`, (d.tris.text ?? 0) > (r.tris.text ?? 0),
+       `${r.tris.text} -> ${d.tris.text}`);
+  }
+
+  // A project saved before `right` was called `right`.
+  ok('a saved `beside` opens as `right`',
+     coerceSettings({ linePlacement: 'beside' }).linePlacement === 'right',
+     coerceSettings({ linePlacement: 'beside' }).linePlacement);
+}
+
+/*
+ * The cross-axis alignment, which had no control at all.
+ *
+ * Stacked, `align` moves the lines left and right and there is nothing vertical to decide. On
+ * one row it is the reverse — both lines are placed by their own advance widths, so `align`
+ * has nothing to move and the live question is whether the small line sits on the big one's
+ * baseline, against its cap height, or halfway up. There was no way to ask it.
+ */
+console.log('second line alignment on a row');
+{
+  const line2 = (vAlign) => layoutFor({
+    ...DEFAULTS, text: '12', text2: 'ROOM', textSize: 60, line2Size: 16,
+    linePlacement: 'right', vAlign,
+  }).lines[1];
+  const one = layoutFor({
+    ...DEFAULTS, text: '12', text2: 'ROOM', textSize: 60, line2Size: 16, linePlacement: 'right',
+  }).lines[0];
+
+  const bottom = line2('bottom'), middle = line2('middle'), top = line2('top');
+  ok('bottom keeps the shared baseline', Math.abs(bottom.minY - one.minY) < 0.6,
+     `line 2 foot ${bottom.minY.toFixed(2)} vs line 1 ${one.minY.toFixed(2)}`);
+  ok('top lines the caps up', Math.abs(top.maxY - one.maxY) < 0.05,
+     `line 2 top ${top.maxY.toFixed(2)} vs line 1 ${one.maxY.toFixed(2)}`);
+  ok('middle centres it', Math.abs((middle.minY + middle.maxY) / 2 - (one.minY + one.maxY) / 2) < 0.05);
+  ok('the three are genuinely different', bottom.minY < middle.minY && middle.minY < top.minY,
+     `${bottom.minY.toFixed(1)} / ${middle.minY.toFixed(1)} / ${top.minY.toFixed(1)}`);
+
+  // Stacked, it must change nothing — the control is hidden there and must also be inert.
+  const a = build({ text: '12', text2: 'ELM STREET', vAlign: 'top' });
+  const b = build({ text: '12', text2: 'ELM STREET', vAlign: 'bottom' });
+  ok('vertical alignment is inert when the lines are stacked',
+     Math.abs(a.size.height - b.size.height) < 0.01);
+}
+
+/*
+ * Engraving with the ties off used to say nothing at all, which is how a crescent ends up
+ * lying loose on the build plate.
+ */
+console.log('the dropped-counter warning');
+{
+  const fires = (over) => build({ text: 'street', relief: 'recessed', textSize: 40, ...over })
+    .warnings.some((w) => /drop out/.test(w));
+  ok('engraving counters with no ties and no panel warns', fires({ bridgesOn: false }),
+     JSON.stringify(build({ text: 'street', relief: 'recessed', textSize: 40, bridgesOn: false }).warnings));
+  ok('...and says nothing once the ties are on', !fires({ bridgesOn: true }));
+  ok('...nor when a panel is there to catch them',
+     !fires({ bridgesOn: false, panelOn: true, panelInset: 8, panelHeight: 2.5 }));
+  ok('...nor for text with no enclosed shape at all',
+     !build({ text: '12', relief: 'recessed', bridgesOn: false }).warnings.some((w) => /drop out/.test(w)));
+}
+
+/*
+ * Mounting you can place.
+ *
+ * Two screw holes were nailed to the horizontal centreline and keyhole slots to a fixed 28%
+ * of the width, so a tall sign could only be hung from its middle and a slot cutting into the
+ * back of the numeral could not be moved off it at all — it just failed, quietly.
+ */
+console.log('mounting placement');
+{
+  const rowY = (offset, shape = 'rect') => {
+    const params = { ...DEFAULTS, mount: 'screws', shape, text: '12', mountOffsetY: offset };
+    const layout = layoutFor(params);
+    const holeRoom = SCREW_HOLE_ROOM_MM;
+    const { width } = plateSizeFor(layout.box, params.padding + holeRoom, shape, params.cornerRadius);
+    const { height } = plateSizeFor(layout.box, params.padding, shape, params.cornerRadius);
+    return { pos: screwHolePositions(width, height, params.mountHoleDia, params.mountInset, offset), height };
+  };
+  const flat = rowY(0), up = rowY(12), down = rowY(-12);
+  ok('the hole row moves up and down',
+     up.pos[0][1] - flat.pos[0][1] > 11 && flat.pos[0][1] - down.pos[0][1] > 11,
+     `${down.pos[0][1].toFixed(1)} / ${flat.pos[0][1].toFixed(1)} / ${up.pos[0][1].toFixed(1)}`);
+  ok('and stays level', up.pos.every((p) => Math.abs(p[1] - up.pos[0][1]) < 1e-9));
+  ok('a wild offset is clamped to the plate rather than obeyed',
+     Math.abs(rowY(500).pos[0][1]) < rowY(500).height / 2,
+     `y ${rowY(500).pos[0][1].toFixed(1)} on a ${rowY(500).height.toFixed(1)} mm plate`);
+
+  // The offset must reach the model, and the plate must survive it: on a pill the width falls
+  // away with height, so a hole that fitted on the centreline is out in the air once raised.
+  for (const shape of ['rect', 'rounded', 'pill', 'plaque']) {
+    for (const offset of [0, 10, 25, -25, 120]) {
+      const r = build({ mount: 'screws', shape, text: '12', mountOffsetY: offset, plateHeight: 90 });
+      const plate = r.parts.find((p) => p.name === 'plate');
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 1; i < plate.vertProperties.length; i += 3) {
+        lo = Math.min(lo, plate.vertProperties[i]);
+        hi = Math.max(hi, plate.vertProperties[i]);
+      }
+      // A hole that broke the outline would fuse with the outside and the plate would stop
+      // being as tall as it was asked to be.
+      ok(`${shape} at ${offset} mm keeps its outline`,
+         Math.abs((hi - lo) - r.size.height) < 0.5 && (r.tris.plate ?? 0) > 0,
+         `plate spans ${(hi - lo).toFixed(2)} mm, size says ${r.size.height.toFixed(2)}`);
+    }
+  }
+
+  /*
+   * The plate is sized from the TEXT, and nothing about the fixings may move it.
+   *
+   * `holeRoom` was `mountHoleDia * 2.5`, so dragging the screw size from 2 mm to 8 mm grew the
+   * sign by 30 mm, and the same strip was added to the height the moment four holes were
+   * switched on — a toggle about where the fixings go silently resizing the plate. Both were
+   * reported. The strip itself has to stay, or the holes land on the glyphs; it just has to be
+   * a constant.
+   */
+  const sized = (over) => { const r = build({ mount: 'screws', text: '12', ...over }); return `${r.size.width.toFixed(2)}x${r.size.height.toFixed(2)}`; };
+  const byDia = [2, 3, 4.5, 6, 8].map((mountHoleDia) => sized({ mountHoleDia }));
+  ok('the screw diameter does not resize the plate', new Set(byDia).size === 1, byDia.join(' / '));
+  ok('nor does the four-hole toggle',
+     sized({ mountFourHoles: false }) === sized({ mountFourHoles: true }),
+     `${sized({ mountFourHoles: false })} vs ${sized({ mountFourHoles: true })}`);
+  ok('nor does the hole inset, height or countersink',
+     new Set([sized({ mountInset: 3 }), sized({ mountInset: 55 }), sized({ mountOffsetY: 30 })]).size === 1,
+     [sized({ mountInset: 3 }), sized({ mountInset: 55 }), sized({ mountOffsetY: 30 })].join(' / '));
+  /*
+   * ...and an existing sign must come out at exactly the size it always did.
+   *
+   * The constant is the old expression evaluated at the shipped 4.5 mm screw, so this compares
+   * the new build against the width the old formula would have produced. Making a control
+   * inert is a fix; quietly resizing every sign already saved is not.
+   */
+  const asShipped = plateSizeFor(
+    layoutFor({ ...DEFAULTS, text: '12' }).box,
+    DEFAULTS.padding + DEFAULTS.mountHoleDia * 2.5, DEFAULTS.shape, DEFAULTS.cornerRadius,
+  ).width;
+  ok('a sign saved before the change opens the same size',
+     Math.abs(build({ mount: 'screws', text: '12' }).size.width - asShipped) < 0.01,
+     `${build({ mount: 'screws', text: '12' }).size.width.toFixed(2)} vs ${asShipped.toFixed(2)} mm`);
+
+  // Keyholes answer to the same inset the screws do, instead of a fixed fraction of the width.
+  const spread = (inset) => keyholePositions(160, 9.9, inset);
+  ok('the keyhole inset moves the slots',
+     spread(10)[1] - spread(40)[1] > 25,
+     `inset 10 -> ${spread(10)[1].toFixed(1)}, 40 -> ${spread(40)[1].toFixed(1)}`);
+  ok('and never puts one through the edge',
+     spread(0.5)[1] <= 160 / 2 - 9.9 / 2 - 9.9 * 0.6 + 1e-6, `${spread(0.5)[1].toFixed(2)}`);
+  ok('no inset keeps the shipped proportion, so an existing hole plan is unchanged',
+     Math.abs(keyholePositions(160, 9.9, 0)[1] - 160 * 0.28) < 1e-6);
+
+  const keyY = (offset) => build({
+    mount: 'keyhole', text: '12', plateThickness: 6, plateHeight: 120, mountOffsetY: offset,
+  });
+  ok('a keyhole build survives being moved to either end',
+     [0, 40, -40, 200, -200].every((o) => (keyY(o).tris.plate ?? 0) > 0));
+
+  /*
+   * The slot landing on the legend, which is the failure that was silent.
+   *
+   * Engraved, the legend is a void cut right through, so a pocket behind it opens through the
+   * face — the sign is a colander. Nothing said so.
+   */
+  const fouled = build({
+    mount: 'keyhole', relief: 'recessed', text: '888', textSize: 70, padding: 4,
+    plateThickness: 6, mountOffsetY: -30,
+  });
+  ok('a keyhole running into the engraved legend says so',
+     fouled.warnings.some((w) => /keyhole slot/i.test(w)), JSON.stringify(fouled.warnings));
+  const clear = build({ mount: 'keyhole', text: '12', textSize: 40, padding: 22, plateThickness: 6 });
+  ok('...and a slot clear of it stays quiet',
+     !clear.warnings.some((w) => /keyhole slot/i.test(w)), JSON.stringify(clear.warnings));
+
+  /*
+   * Raised text is the case that must NOT warn on overlap alone.
+   *
+   * A big numeral fills its own plate, so no inset or height can put a slot anywhere but
+   * behind it — that is normal for a keyhole sign and the pocket is behind the face, not
+   * through it. What matters is the plate left over the pocket, and warning without measuring
+   * it made the House template trip its own generator's warning.
+   */
+  const thin = build({ mount: 'keyhole', text: '12', textSize: 70, padding: 14, plateThickness: 4 });
+  ok('a thin plate behind raised text warns',
+     thin.warnings.some((w) => /keyhole slot sits behind/i.test(w)), JSON.stringify(thin.warnings));
+  const thick = build({ mount: 'keyhole', text: '12', textSize: 70, padding: 14, plateThickness: 7 });
+  ok('...and a plate with material to spare does not',
+     !thick.warnings.some((w) => /keyhole slot sits behind/i.test(w)), JSON.stringify(thick.warnings));
+}
+
+/*
+ * Every template has to build clean.
+ *
+ * The House preset shipped tripping the generator's own keyhole warning, and before that its
+ * own thin-plate one — twice, because nothing ever asserted that a starting point starts
+ * clean. A template is the first thing a user clicks; a warning on it reads as "this tool is
+ * broken", not as advice.
+ */
+console.log('the templates start clean');
+{
+  for (const preset of PRESETS) {
+    const r = build({ ...preset.patch, text: preset.patch.text2 ? '12' : '12' });
+    ok(`${preset.label} builds without a warning`, r.warnings.length === 0,
+       JSON.stringify(r.warnings));
+    ok(`${preset.label} emits geometry`,
+       r.parts.length > 0 && r.parts.every((p) => p.triVerts.length > 0),
+       r.parts.map((p) => `${p.name}:${p.triVerts.length / 3}`).join(' '));
+  }
+}
+
+/*
+ * One handle on how big the sign is.
+ *
+ * Everything that sets the footprint was individually adjustable and nothing moved them
+ * together, so "the same sign, but bigger" meant dragging five sliders and hoping. The
+ * assertion is that it is a genuine scale — the footprint tracks it linearly and the
+ * PROPORTIONS do not move — and that the printing dimensions deliberately stay put.
+ */
+console.log('overall size');
+{
+  const at = (scale, over = {}) => {
+    const params = atScale({ ...DEFAULTS, text: '12', text2: 'ELM STREET', ...over, scale });
+    const layout = layoutFor(params);
+    return buildSign(wasm, layout.contours, params, layout.lines);
+  };
+
+  const one = at(1), half = at(0.5), twice = at(2);
+  ok('the footprint tracks the size',
+     Math.abs(twice.size.width - one.size.width * 2) < 0.05
+     && Math.abs(half.size.width - one.size.width / 2) < 0.05,
+     `${half.size.width.toFixed(1)} / ${one.size.width.toFixed(1)} / ${twice.size.width.toFixed(1)} mm`);
+  ok('and the proportions do not move',
+     Math.abs(twice.size.width / twice.size.height - one.size.width / one.size.height) < 1e-3,
+     `${(one.size.width / one.size.height).toFixed(4)} vs ${(twice.size.width / twice.size.height).toFixed(4)}`);
+
+  // Thickness, text depth, the bevel and the screw are printing decisions, not proportions:
+  // scaling them would make a 3x sign a 24 mm slab that no longer fits its own screws.
+  const zOf = (r) => {
+    const plate = r.parts.find((p) => p.name === 'plate');
+    let hi = -Infinity;
+    for (let i = 2; i < plate.vertProperties.length; i += 3) hi = Math.max(hi, plate.vertProperties[i]);
+    return hi;
+  };
+  ok('thickness is not swept along with it', Math.abs(zOf(twice) - zOf(one)) < 0.02,
+     `${zOf(one).toFixed(2)} vs ${zOf(twice).toFixed(2)} mm`);
+  ok('nor is the screw', atScale({ ...DEFAULTS, scale: 3 }).mountHoleDia === DEFAULTS.mountHoleDia);
+  ok('nor the bevel or the stencil tie, which are sized by the nozzle',
+     atScale({ ...DEFAULTS, scale: 3 }).chamfer === DEFAULTS.chamfer
+     && atScale({ ...DEFAULTS, scale: 3 }).bridgeWidth === DEFAULTS.bridgeWidth);
+
+  ok('every template survives being scaled either way',
+     PRESETS.every((p) => [0.3, 1, 2.5].every((s) => {
+       const r = at(s, p.patch);
+       return r.parts.length > 0 && r.parts.every((q) => q.triVerts.length > 0);
+     })));
+
+  // A project saved before the control existed has no `scale`, and must open unchanged.
+  ok('a project saved before the control opens at its own size',
+     coerceSettings({ text: '12' }).scale === 1);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

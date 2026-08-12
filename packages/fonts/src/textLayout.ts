@@ -156,12 +156,26 @@ export interface HorizontalOptions {
    */
   alignMode?: 'line2' | 'block';
   /**
-   * `below` (default) is a two-line block. `beside` puts line 2 on the same row as line 1,
+   * Which side of line 1 line 2 goes on.
+   *
+   * `below` (default) and `above` stack the two lines; `left` and `right` put them on one row
    * sharing a baseline, so a door plate can read `12 MEETING ROOM` with the number and the
-   * name at their own sizes. `lineSpacing` then means the gap between them, as a fraction
-   * of the smaller size.
+   * name at their own sizes. On one row `lineSpacing` means the gap between them, as a
+   * fraction of the smaller size.
+   *
+   * `beside` is the old name for `right` and still resolves to it — name-keychain passes it,
+   * and a saved project can carry it.
    */
-  placement?: 'below' | 'beside';
+  placement?: 'below' | 'above' | 'left' | 'right' | 'beside';
+  /**
+   * How the two lines sit against each other on a shared row. Ignored when stacked.
+   *
+   * `bottom` (default) is the shared baseline the row is laid out on, which is what "sitting
+   * on the same line" means to a reader and what keeps a descender hanging where it should.
+   * `top` and `middle` measure the ink instead, for a small line set against the cap height
+   * of a large one.
+   */
+  vAlign?: 'top' | 'middle' | 'bottom';
 }
 
 /**
@@ -184,29 +198,74 @@ export function getHorizontalContours(
 ): LayoutResult {
   const line2On = text2 !== '';
   const alignMode = opts.alignMode ?? 'line2';
-  const beside = line2On && opts.placement === 'beside';
+  const placement = opts.placement === 'beside' ? 'right' : (opts.placement ?? 'below');
+  const side = line2On && (placement === 'left' || placement === 'right');
   const dy = (textSize + line2Size) * lineSpacing;
 
   let line1Contours: number[][][];
   let line2Contours: number[][][] = [];
 
-  if (beside) {
+  if (side) {
     // One row. Both sit on the same baseline so the caps line up along the bottom, which is
     // how a number and a room name read as one label rather than two stacked things; the
     // gap between them scales with the smaller type, not with the whole block.
-    const l1 = layoutLine(font, fallbackFont, text, textSize, gap, 0, letterSpacing);
-    line1Contours = l1.contours;
-    const x2 = gap + l1.width + line2Size * Math.max(0.2, lineSpacing);
-    line2Contours = layoutLine(font, fallbackFont, text2, line2Size, x2, 0, letterSpacing).contours;
+    const sep = line2Size * Math.max(0.2, Math.abs(lineSpacing));
+    const w1 = measureLine(font, fallbackFont, text, textSize, letterSpacing);
+    const w2 = measureLine(font, fallbackFont, text2, line2Size, letterSpacing);
+    const leftFirst = placement === 'left';
+    line1Contours = layoutLine(
+      font, fallbackFont, text, textSize, leftFirst ? gap + w2 + sep : gap, 0, letterSpacing,
+    ).contours;
+    line2Contours = layoutLine(
+      font, fallbackFont, text2, line2Size, leftFirst ? gap : gap + w1 + sep, 0, letterSpacing,
+    ).contours;
+
+    /*
+     * The cross-axis alignment, and it only exists on this branch.
+     *
+     * Stacked, "align" means left/centre/right and `align` already does it. On one row that
+     * control has nothing to move — both lines are placed by their own advance widths — and
+     * the question becomes the other one: does the small line sit on the big one's baseline,
+     * against its cap height, or halfway up. There was no answer to that at all, so a room
+     * name beside a 45 mm numeral could only ever sit on the floor.
+     */
+    const vAlign = opts.vAlign ?? 'bottom';
+    if (vAlign !== 'bottom') {
+      const b1 = bboxOf(line1Contours);
+      const b2 = bboxOf(line2Contours);
+      const shiftY = vAlign === 'top'
+        ? b1.maxY - b2.maxY
+        : (b1.minY + b1.maxY) / 2 - (b2.minY + b2.maxY) / 2;
+      if (shiftY !== 0) for (const poly of line2Contours) for (const pt of poly) pt[1] = pt[1]! + shiftY;
+    }
   } else {
-    // Line 1
-    const y1 = line2On ? -dy / 2 : 0;
+    /*
+     * Stacked, and the two directions get there differently on purpose.
+     *
+     * `below` places each line straight at its own baseline, exactly as it always has. That
+     * matters more than the symmetry would suggest: `pathCommandsToPolygons` rounds to three
+     * decimals, so laying a line out flat and shifting it afterwards rounds *before* the shift
+     * and lands a micron off where laying it out at its final baseline does. A micron is
+     * nothing to a printer and everything to "did this change any existing sign" — measured
+     * across 1620 layouts, this is the difference between a worst-case delta of 0.001 mm and
+     * of exactly zero.
+     *
+     * `above` cannot do that, because its separation is not known until both lines exist.
+     * `lineSpacing` is a BASELINE separation, and a baseline separation only reads the same
+     * from both sides when the taller line is the one on top: with a 60 mm number over an
+     * 18 mm street name it leaves a 30 mm gap, and the same two lines the other way up let the
+     * number's own 43 mm of cap height eat the whole separation — measured at 0.89 mm, with
+     * the divider that belongs between them welded to both. So `above` lays both out flat,
+     * measures the ink, and solves for the separation that reproduces `below`'s gap.
+     */
+    const stackedAbove = line2On && placement === 'above';
+    const y1 = line2On && !stackedAbove ? -dy / 2 : 0;
     const l1 = layoutLine(font, fallbackFont, text, textSize, gap, y1, letterSpacing);
     line1Contours = l1.contours;
 
     if (line2On) {
-      const y2 = dy / 2;
       const w2 = l2Width(font, fallbackFont, text2, line2Size, letterSpacing);
+      let x2 = gap;
 
       if (alignMode === 'block') {
         // Both lines placed inside a block as wide as the wider of them, so whichever line
@@ -216,14 +275,21 @@ export function getHorizontalContours(
           align === 'left' ? 0 : align === 'center' ? (blockW - w) / 2 : blockW - w;
         const shiftBy = offset(l1.width);
         if (shiftBy !== 0) for (const poly of line1Contours) for (const pt of poly) pt[0] = pt[0]! + shiftBy;
-        line2Contours = layoutLine(font, fallbackFont, text2, line2Size, gap + offset(w2), y2, letterSpacing).contours;
-      } else {
-        let x2 = gap;
-        if (align !== 'left') {
-          const delta = l1.width - w2;
-          x2 = gap + (align === 'center' ? delta / 2 : delta);
-        }
-        line2Contours = layoutLine(font, fallbackFont, text2, line2Size, x2, y2, letterSpacing).contours;
+        x2 = gap + offset(w2);
+      } else if (align !== 'left') {
+        const delta = l1.width - w2;
+        x2 = gap + (align === 'center' ? delta / 2 : delta);
+      }
+      const y2 = stackedAbove ? 0 : dy / 2;
+      line2Contours = layoutLine(font, fallbackFont, text2, line2Size, x2, y2, letterSpacing).contours;
+
+      if (stackedAbove) {
+        const b1 = bboxOf(line1Contours);
+        const b2 = bboxOf(line2Contours);
+        // Solved so that `gapAbove === gapBelow`; see the note above for the derivation.
+        const sep = dy + (b1.minY + b1.maxY) - (b2.minY + b2.maxY);
+        for (const poly of line1Contours) for (const pt of poly) pt[1] = pt[1]! - sep / 2;
+        for (const poly of line2Contours) for (const pt of poly) pt[1] = pt[1]! + sep / 2;
       }
     }
   }

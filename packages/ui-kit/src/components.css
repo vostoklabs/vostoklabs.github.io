@@ -255,18 +255,26 @@
   border-radius: var(--radius-btn);
   padding: 5px;
 }
+/* Horizontal padding here is only ever min-content sizing: the button is a full-width grid
+   cell with centred text, so trimming it changes nothing about how a two-option control looks
+   and is the difference between four options fitting a sidebar and overflowing it. `min-width`
+   and the ellipsis are the backstop for a translation nobody sized for. */
 .vl-tab {
   border: 0;
   border-radius: var(--radius-chip);
   background: transparent;
   color: var(--muted);
-  padding: 9px 10px;
+  padding: 9px 6px;
   cursor: pointer;
   font: inherit;
   font-size: 15px;
   transition: background 0.12s, color 0.12s;
   text-align: center;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .vl-tab.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 .vl-tab:hover:not(.active) { color: var(--text); background: rgba(255, 255, 255, 0.03); }

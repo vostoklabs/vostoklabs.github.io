@@ -8,15 +8,16 @@
  * not.
  */
 import {
-  DEFAULTS, type SignParams, type PlateShape, type MountKind, type Align,
+  DEFAULTS, type SignParams, type PlateShape, type MountKind, type Align, type VAlign,
   type Orientation, type LinePlacement, type Divider, type Relief, type BandEdge,
 } from './types';
 
 const SHAPES: PlateShape[] = ['rounded', 'rect', 'pill', 'plaque', 'none'];
 const MOUNTS: MountKind[] = ['tape', 'screws', 'keyhole'];
 const ALIGNS: Align[] = ['left', 'center', 'right'];
+const VALIGNS: VAlign[] = ['top', 'middle', 'bottom'];
 const ORIENTATIONS: Orientation[] = ['horizontal', 'vertical'];
-const PLACEMENTS: LinePlacement[] = ['below', 'beside'];
+const PLACEMENTS: LinePlacement[] = ['above', 'below', 'left', 'right'];
 const DIVIDERS: Divider[] = ['none', 'line', 'band'];
 const RELIEFS: Relief[] = ['raised', 'recessed', 'inlay'];
 const BAND_EDGES: BandEdge[] = ['none', 'top', 'bottom', 'left', 'right'];
@@ -45,10 +46,17 @@ export function coerceSettings(raw: unknown): SignParams {
     // UI limit; the plate auto-sizes and the size warning handles anything genuinely too big.
     text: str(o.text, DEFAULTS.text, 24),
     text2: str(o.text2, DEFAULTS.text2, 24),
+    // Absent from every project saved before the control existed, and 1 is "as designed" —
+    // so an old file opens at exactly the size it was drawn at.
+    scale: num(o.scale, DEFAULTS.scale, 0.25, 4),
     textSize: num(o.textSize, DEFAULTS.textSize, 10, 200),
     line2Size: num(o.line2Size, DEFAULTS.line2Size, 6, 80),
-    linePlacement: oneOf(o.linePlacement, PLACEMENTS, DEFAULTS.linePlacement),
+    // `beside` was what `right` is called now; a project saved under the old pair must open
+    // as the same sign.
+    linePlacement: oneOf(o.linePlacement === 'beside' ? 'right' : o.linePlacement,
+                         PLACEMENTS, DEFAULTS.linePlacement),
     align: oneOf(o.align, ALIGNS, DEFAULTS.align),
+    vAlign: oneOf(o.vAlign, VALIGNS, DEFAULTS.vAlign),
     lineSpacing: num(o.lineSpacing, DEFAULTS.lineSpacing, 0.3, 1.2),
     stackSpacing: num(o.stackSpacing, DEFAULTS.stackSpacing, 0.8, 2),
     letterSpacing: num(o.letterSpacing, DEFAULTS.letterSpacing, -0.1, 0.5),
@@ -74,6 +82,9 @@ export function coerceSettings(raw: unknown): SignParams {
     lineOffset: num(o.lineOffset, DEFAULTS.lineOffset, -60, 60),
     // `textStyle` was the earlier name, and had no `inlay`.
     relief: oneOf(o.relief ?? o.textStyle, RELIEFS, DEFAULTS.relief),
+    // Ties were unconditional before this field existed, so a project saved without one has
+    // to open with them on or its engraved sign would come back a different model.
+    bridgesOn: typeof o.bridgesOn === 'boolean' ? o.bridgesOn : DEFAULTS.bridgesOn,
     bridgeWidth: num(o.bridgeWidth, DEFAULTS.bridgeWidth, 0.4, 6),
 
     band: oneOf(o.band, BAND_EDGES, DEFAULTS.band),
@@ -114,6 +125,7 @@ export function coerceSettings(raw: unknown): SignParams {
     mountHoleDia: num(o.mountHoleDia, DEFAULTS.mountHoleDia, 2, 8),
     mountFourHoles: typeof o.mountFourHoles === 'boolean' ? o.mountFourHoles : DEFAULTS.mountFourHoles,
     mountInset: num(o.mountInset, DEFAULTS.mountInset, 3, 60),
+    mountOffsetY: num(o.mountOffsetY, DEFAULTS.mountOffsetY, -120, 120),
     countersink: typeof o.countersink === 'boolean' ? o.countersink : DEFAULTS.countersink,
 
     plateColor: colour(o.plateColor, DEFAULTS.plateColor),
@@ -139,44 +151,40 @@ export const PRESETS: Array<{ id: string; label: string; patch: Partial<SignPara
     label: 'House',
     // A big number on a soft-cornered plate, hung on keyholes so no fixings show.
     //
-    // 6 mm, not the 4 mm default: a keyhole has to swallow a screw head, which needs about
+    // 7 mm, not the 4 mm default: a keyhole has to swallow a screw head, which needs about
     // 3 mm behind the face plus a face left to read. At 4 mm this preset tripped the
     // generator's own thin-plate warning — a template that warns about itself is a bug in
     // the template, not advice.
+    //
+    // 6 was enough for the head and marginal for the face: a 70 mm numeral fills this plate,
+    // so the slots sit behind it whatever the inset, and 6 mm left 1.8 mm of plate over the
+    // pocket. 7 makes it 2.1 mm and puts the template comfortably clear of the line rather
+    // than balanced on it.
     patch: {
       textSize: 70, padding: 14, shape: 'rounded', cornerRadius: 10,
-      mount: 'keyhole', plateThickness: 6, text2: '',
-    },
-  },
-  {
-    id: 'mailbox',
-    label: 'Mailbox',
-    // Deliberately a different silhouette from House, not just a smaller one: a squared
-    // plate with a frame, at a size that fits a mailbox flap. The two used to read as the
-    // same card at thumbnail scale because both were a plain dark rounded rectangle.
-    patch: {
-      textSize: 30, padding: 7, shape: 'rect', cornerRadius: 0, mount: 'tape', text2: '',
-      frameOn: true, frameWidth: 2, letterSpacing: 0.08,
+      mount: 'keyhole', plateThickness: 7, text2: '',
     },
   },
   {
     id: 'office',
     label: 'Office door',
     // Number and room name on ONE row at their own sizes — the case `linePlacement: beside`
-    // exists for, and what an office plate actually looks like.
+    // exists for, and what an office plate actually looks like. A room name, not a street:
+    // the placeholder said STREET NAME on the one template that is explicitly indoors.
     patch: {
       textSize: 30, line2Size: 15, padding: 9, shape: 'plaque', cornerRadius: 6,
-      mount: 'tape', text2: 'STREET NAME', linePlacement: 'beside', frameOn: true, frameWidth: 2,
+      mount: 'tape', text2: 'MEETING ROOM', linePlacement: 'right', frameOn: true, frameWidth: 2,
     },
   },
   {
     id: 'apartment',
     label: 'Apartment',
     // Screw-mounted, so the plate carries visible holes at each end. An explicit width, so
-    // the pill is a proportioned capsule rather than whatever its own cap radius dictates.
+    // the pill is a proportioned capsule rather than whatever its own cap radius dictates —
+    // 80 mm, which is a door-side unit plate rather than the half-metre slab 120 gave.
     patch: {
       textSize: 45, padding: 10, shape: 'pill', cornerRadius: 0, mount: 'screws',
-      mountHoleDia: 4.5, mountInset: 12, plateWidth: 120, text2: '',
+      mountHoleDia: 4.5, mountInset: 12, plateWidth: 80, text2: '',
     },
   },
 
@@ -220,14 +228,37 @@ export const PRESETS: Array<{ id: string; label: string; patch: Partial<SignPara
   {
     id: 'panel',
     label: 'Inset panel',
-    // The "6" reference: a dark plate, a wood board raised on it, and the numeral cut clean
+    // The "6" reference: a dark plate, a board raised on it, and the numeral cut clean
     // THROUGH the board so the dark plate shows in it. No frame — the plate's own margin is
     // the surround, exactly as the photo has it. Engraved rather than inlaid, because the
     // numeral is a void with the backing colour behind, not a filled inlay.
+    //
+    // `bridgesOn: false`, and this is the template that motivated the switch: the cut stops
+    // at the panel, so the island inside an `0` lands on the whole plate below and prints
+    // fused to it. Ties here hold up nothing and read as two scars across the numeral.
     patch: {
       shape: 'rounded', cornerRadius: 4, padding: 14, plateThickness: 5, text2: '',
-      panelOn: true, panelInset: 8, panelHeight: 2.5, panelColor: '#7a5230',
-      relief: 'recessed', textSize: 70, mount: 'tape',
+      panelOn: true, panelInset: 8, panelHeight: 2.5, panelColor: '#8c8c90',
+      relief: 'recessed', bridgesOn: false, textSize: 70, mount: 'tape',
+    },
+  },
+
+  /*
+   * Last, because it is the one nobody arrives looking for.
+   *
+   * A mailbox plate is a small plain rectangle — the least distinctive card in the grid and
+   * the narrowest use — so it sits after the designs people come here to copy rather than
+   * second, where it was pushing them below the fold.
+   */
+  {
+    id: 'mailbox',
+    label: 'Mailbox',
+    // Deliberately a different silhouette from House, not just a smaller one: a squared
+    // plate with a frame, at a size that fits a mailbox flap. The two used to read as the
+    // same card at thumbnail scale because both were a plain dark rounded rectangle.
+    patch: {
+      textSize: 30, padding: 7, shape: 'rect', cornerRadius: 0, mount: 'tape', text2: '',
+      frameOn: true, frameWidth: 2, letterSpacing: 0.08,
     },
   },
 ];
@@ -235,15 +266,18 @@ export const PRESETS: Array<{ id: string; label: string; patch: Partial<SignPara
 /**
  * A preset, resolved against a clean slate but keeping what the user has made their own.
  *
- * The number, the font and the two colours survive — those are the user's, and having them
- * reset would make the examples feel like they throw work away. Everything else comes from
- * `DEFAULTS` plus the patch, so the result is the same whatever was set before.
+ * The number, the font, the two colours and the overall size survive — those are the user's,
+ * and having them reset would make the examples feel like they throw work away. A template is
+ * a set of proportions, and the size control is what those proportions are drawn at, so the
+ * two are orthogonal by construction: switching template must not resize the sign. Everything
+ * else comes from `DEFAULTS` plus the patch, so the result is the same whatever was set before.
  */
 export function applyPreset(current: SignParams, patch: Partial<SignParams>): SignParams {
   return coerceSettings({
     ...DEFAULTS,
     text: current.text,
     fontId: current.fontId,
+    scale: current.scale,
     plateColor: current.plateColor,
     textColor: current.textColor,
     ...patch,

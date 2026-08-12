@@ -137,16 +137,24 @@ export function plateOutline(
 }
 
 /**
- * Where the screws go: one near each end, on the horizontal centreline.
+ * Where the screws go: one near each end, on a row the user places.
  *
  * Inset by `inset` from the plate edge, and never closer to the edge than the hole's own
  * radius plus a wall — a hole that breaks the outline is the failure people photograph.
+ *
+ * `offsetY` moves the row up or down. The pair used to be nailed to the horizontal
+ * centreline with a comment claiming that was "still the strongest place to hang it from",
+ * which is true of a short plate and false of a tall one — a two-line sign hung from its
+ * middle pivots about the screws and the bottom edge swings off the wall. It is also simply
+ * not the generator's decision: the holes have to line up with what is already in the
+ * plaster. Clamped to the plate so it can be dragged without ever cutting the edge.
  */
 export function screwHolePositions(
   plateWidth: number,
   plateHeight: number,
   holeDia: number,
   inset: number,
+  offsetY = 0,
 ): Array<[number, number]> {
   const minWall = holeDia * 0.75;
   const maxInset = plateWidth / 2 - holeDia / 2 - minWall;
@@ -156,10 +164,9 @@ export function screwHolePositions(
   // proper hole or it is dropped.
   const x = Math.min(Math.max(inset, minWall), maxInset);
   if (!(x > WELD) || maxInset < minWall) return [];
-  // Vertically centred: on a tall two-line sign the centreline is still the strongest
-  // place to hang it from, and it keeps the pair symmetric about both axes.
-  void plateHeight;
-  return [[-(plateWidth / 2 - x - holeDia / 2), 0], [plateWidth / 2 - x - holeDia / 2, 0]];
+  const room = Math.max(0, plateHeight / 2 - holeDia / 2 - minWall);
+  const y = Math.min(Math.max(offsetY, -room), room);
+  return [[-(plateWidth / 2 - x - holeDia / 2), y], [plateWidth / 2 - x - holeDia / 2, y]];
 }
 
 export function screwHoles(
@@ -167,9 +174,46 @@ export function screwHoles(
   plateHeight: number,
   holeDia: number,
   inset: number,
+  offsetY = 0,
 ): Shape2D {
-  return screwHolePositions(plateWidth, plateHeight, holeDia, inset)
+  return screwHolePositions(plateWidth, plateHeight, holeDia, inset, offsetY)
     .map(([x, y]) => ccw(circle(x, y, holeDia / 2)));
+}
+
+/**
+ * Pulls a hole back inside the outline when its requested spot would break the edge.
+ *
+ * `nudgeClear` only ever pushes a hole *outward*, away from the text, and stops when the
+ * outline gets close. That is the right move on a rectangle, where every position the sliders
+ * can reach is inside the plate. It is not enough once the row can be moved vertically on a
+ * shape whose width varies with height: on a pill or a rounded plate, a hole at the far end of
+ * the centreline is comfortably inside, and the same hole raised 20 mm is out in the air past
+ * the cap. Nothing pulled it back, so the sign exported with a notch bitten out of its edge.
+ */
+export function pullInside(
+  plate: Shape2D,
+  hole: [number, number],
+  radius: number,
+): [number, number] {
+  if (plate.length === 0) return hole;
+  const wall = radius * 0.75;
+  const need = radius + wall;
+  const len = Math.hypot(hole[0], hole[1]);
+  if (len < WELD) return hole;
+  const ux = hole[0] / len, uy = hole[1] / len;
+  // Distance to the outline is unsigned, so a point well outside the plate reads as "miles
+  // from the edge" exactly like one at the centre does. The containment test is what tells
+  // the two apart, and without it this would happily leave a hole floating off the plate.
+  const fits = (x: number, y: number) =>
+    plate.every((loop, k) => (k === 0 ? pointInPoly(loop, x, y) : !pointInPoly(loop, x, y)))
+    && distanceToContours(plate, x, y) >= need;
+
+  for (let step = 0; step <= 400; step++) {
+    const s = step * 0.25;
+    if (s > len) break;
+    if (fits(hole[0] - ux * s, hole[1] - uy * s)) return [hole[0] - ux * s, hole[1] - uy * s];
+  }
+  return [0, 0];
 }
 
 /** A laid-out line's ink box. Mirrors `LineBox` in types.ts, kept local so this file has
@@ -381,6 +425,96 @@ function pointInPoly(poly: Contour, px: number, py: number): boolean {
 }
 
 /**
+ * A point guaranteed to be inside `loop`, not merely inside its bounding box.
+ *
+ * The bbox centre is right for a `0` and wrong for anything crescent-shaped, and "is this
+ * loop a counter" is decided from this point — so a bad point silently misfiles a hole as a
+ * solid. Falls back to scanning a few horizontal lines and taking the middle of the widest
+ * span that is genuinely inside.
+ */
+function interiorPoint(loop: Contour): [number, number] {
+  const b = bboxOf([loop]);
+  const cx = (b.minX + b.maxX) / 2;
+  const cy = (b.minY + b.maxY) / 2;
+  if (pointInPoly(loop, cx, cy)) return [cx, cy];
+
+  for (const f of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]) {
+    const y = b.minY + (b.maxY - b.minY) * f;
+    const xs: number[] = [];
+    for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+      const p = loop[j]!, q = loop[i]!;
+      if ((p[1]! > y) !== (q[1]! > y)) {
+        xs.push(p[0]! + ((y - p[1]!) * (q[0]! - p[0]!)) / (q[1]! - p[1]!));
+      }
+    }
+    xs.sort((m, n) => m - n);
+    let widest = 0;
+    let at = cx;
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const span = xs[k + 1]! - xs[k]!;
+      if (span > widest) { widest = span; at = (xs[k]! + xs[k + 1]!) / 2; }
+    }
+    if (widest > 1e-6) return [at, y];
+  }
+  return [cx, cy];
+}
+
+/**
+ * A point just inside `loop`, hugging its own boundary.
+ *
+ * This is the point the "is this loop a hole" question has to be asked at, and asking it at
+ * the middle of the loop instead is a real bug that shipped: the centre of a `0`'s **outer**
+ * contour sits squarely inside the `0`'s counter, so the outer came back as contained by one
+ * other loop — odd — and was filed as a counter itself. Every ring glyph therefore grew a
+ * second, spurious pair of ties, and `counterCount` reported two enclosed shapes in a `0`.
+ *
+ * A point a hundredth of a millimetre inside the boundary cannot be inside anything nested
+ * within this loop, because nested loops are strictly interior and nowhere near the edge.
+ */
+function rimPoint(loop: Contour): [number, number] {
+  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+    const a = loop[j]!, b = loop[i]!;
+    const ex = b[0]! - a[0]!, ey = b[1]! - a[1]!;
+    const len = Math.hypot(ex, ey);
+    if (len < 1e-6) continue;
+    const mx = (a[0]! + b[0]!) / 2, my = (a[1]! + b[1]!) / 2;
+    const nx = -ey / len, ny = ex / len;
+    for (const s of [0.01, 0.05, 0.2]) {
+      if (pointInPoly(loop, mx + nx * s, my + ny * s)) return [mx + nx * s, my + ny * s];
+      if (pointInPoly(loop, mx - nx * s, my - ny * s)) return [mx - nx * s, my - ny * s];
+    }
+  }
+  return interiorPoint(loop);
+}
+
+/**
+ * Which loops contain a point. Odd means the point is in a hole; even means it is solid.
+ *
+ * Containment rather than winding, because `@vostok/fonts` flips Y on the way out of opentype
+ * and that reverses every loop — signed area is not a reliable "is this a hole" test here.
+ */
+function holdersOf(contours: Shape2D, skip: number, px: number, py: number): number[] {
+  const out: number[] = [];
+  for (let j = 0; j < contours.length; j++) {
+    if (j !== skip && pointInPoly(contours[j]!, px, py)) out.push(j);
+  }
+  return out;
+}
+
+/** True when this loop is an enclosed hole in the shape rather than an outer boundary. */
+function isCounter(contours: Shape2D, i: number): boolean {
+  const [px, py] = rimPoint(contours[i]!);
+  return holdersOf(contours, i, px, py).length % 2 === 1;
+}
+
+/** How many enclosed islands an engraved legend would leave loose. */
+export function counterCount(contours: Shape2D): number {
+  let n = 0;
+  for (let i = 0; i < contours.length; i++) if (isCounter(contours, i)) n++;
+  return n;
+}
+
+/**
  * Ties that stop a stencil's counters falling out.
  *
  * Cut an `8` clean through a plate and the two enclosed islands inside it are attached to
@@ -389,56 +523,105 @@ function pointInPoly(poly: Contour, px: number, py: number): boolean {
  * counter to the surrounding field.
  *
  * These are the bridges as solid rectangles; the caller **subtracts** them from the glyph
- * before cutting, so the material they cover is never removed. Each runs vertically from
- * inside its counter out past the top of the glyph that contains it, which is guaranteed to
- * cross the stroke and reach the field beyond.
+ * before cutting, so the material they cover is never removed.
  *
- * A counter is found by containment rather than by winding: `@vostok/fonts` flips Y on the way
- * out of opentype, which reverses every loop, so signed area is not a reliable "is this a
- * hole" test here. A loop whose centre sits inside an odd number of other loops is a hole.
+ * **Each tie takes the shortest way out, which is the whole of the rework.** The first version
+ * ran every tie vertically from the counter's centre past the top and the bottom of the glyph
+ * bounding box. On an `0` that is roughly the right answer by luck — the shortest crossing
+ * happens to be near-vertical and the strokes above and below are thin. On an `e` it is a
+ * disaster: the eye's shortest exit is a nick through the crossbar, about a stroke thick,
+ * and instead the tie ran the full cap height of the letter and cut it in half. Reported as
+ * "they ruin letter e", and that is exactly what they did.
+ *
+ * So the exit is measured rather than assumed. A ray is cast from inside the counter in 48
+ * directions; along each one every crossing with every contour is collected in order and the
+ * set of loops the ray is currently inside is toggled at each, so the first distance at which
+ * that set empties is the first point that is genuinely field — not another counter, and not
+ * the inside of a neighbouring glyph. The cheapest direction wins. On the `e` that is the
+ * crossbar; on a `0` it is whichever of the four strokes is thinnest.
+ *
+ * A second tie, roughly opposite, is added only on a counter big enough to carry one without
+ * reading as damage. On a 70 mm `0` a symmetric pair looks deliberate; on a 16 mm `e` a
+ * second nick is just a second nick.
  */
 export function stencilBridges(contours: Shape2D, bridgeWidth = 1.6): Shape2D {
-  const w = Math.max(0.3, bridgeWidth) / 2;
-  const boxes = contours.map((loop) => bboxOf([loop]));
+  const width = Math.max(0.3, bridgeWidth);
+  const w = width / 2;
   const bridges: Shape2D = [];
+  /** Directions tried per counter. 48 is 7.5°, which is finer than any stroke cares about. */
+  const DIRS = 48;
+  /** How far past the field edge a tie runs, so it overlaps rather than abuts. */
+  const OVERRUN = 0.7;
 
   for (let i = 0; i < contours.length; i++) {
-    const b = boxes[i]!;
-    const cx = (b.minX + b.maxX) / 2;
-    const cy = (b.minY + b.maxY) / 2;
+    // Hole-ness is decided at the rim and the ray is cast from the middle — see `rimPoint`
+    // for why the two cannot be the same point.
+    if (!isCounter(contours, i)) continue;
+    const [cx, cy] = interiorPoint(contours[i]!);
+    const holders = holdersOf(contours, i, cx, cy);
 
-    // How many other loops contain this one's centre? Odd means it is a counter.
-    let depth = 0;
-    let outerTop = -Infinity;
-    let outerBottom = Infinity;
-    for (let j = 0; j < contours.length; j++) {
-      if (j === i) continue;
-      if (pointInPoly(contours[j]!, cx, cy)) {
-        depth++;
-        outerTop = Math.max(outerTop, boxes[j]!.maxY);
-        outerBottom = Math.min(outerBottom, boxes[j]!.minY);
+    /** Distance along (dx, dy) at which the ray first reaches material outside every loop. */
+    const reach = (dx: number, dy: number): number => {
+      const hits: Array<{ t: number; loop: number }> = [];
+      for (let n = 0; n < contours.length; n++) {
+        const loop = contours[n]!;
+        for (let a = 0, b = loop.length - 1; a < loop.length; b = a++) {
+          const p = loop[b]!, q = loop[a]!;
+          const ex = q[0]! - p[0]!, ey = q[1]! - p[1]!;
+          const den = dx * ey - dy * ex;
+          if (Math.abs(den) < 1e-12) continue;
+          const t = ((p[0]! - cx) * ey - (p[1]! - cy) * ex) / den;
+          // Half-open in `u`, so a segment's shared end vertex is counted once and not twice.
+          const u = ((p[0]! - cx) * dy - (p[1]! - cy) * dx) / den;
+          if (t > 1e-6 && u >= 0 && u < 1) hits.push({ t, loop: n });
+        }
       }
-    }
-    if (depth % 2 === 0) continue;
+      hits.sort((m, n) => m.t - n.t);
 
-    /*
-     * One tie above and one below, not just above.
-     *
-     * A single tie holds the island perfectly well, and looks like a mistake — an `0` with a
-     * bar at the top and nothing at the bottom reads as damage rather than as a stencil.
-     * Every stencil alphabet ties symmetrically for exactly that reason, and the pair is also
-     * stiffer: the island is carried at both ends instead of cantilevered off one.
-     *
-     * Both start at the counter's own centre so the island is genuinely held by them.
-     */
-    bridges.push(ccw([
-      [cx - w, cy], [cx + w, cy],
-      [cx + w, outerTop + 1], [cx - w, outerTop + 1],
-    ]));
-    bridges.push(ccw([
-      [cx - w, outerBottom - 1], [cx + w, outerBottom - 1],
-      [cx + w, cy], [cx - w, cy],
-    ]));
+      const inside = new Set<number>([i, ...holders]);
+      for (const h of hits) {
+        if (inside.has(h.loop)) inside.delete(h.loop);
+        else inside.add(h.loop);
+        if (inside.size === 0) return h.t;
+      }
+      return Infinity;
+    };
+
+    const cand: Array<{ a: number; t: number }> = [];
+    for (let k = 0; k < DIRS; k++) {
+      const a = (k / DIRS) * Math.PI * 2;
+      const t = reach(Math.cos(a), Math.sin(a));
+      if (Number.isFinite(t)) cand.push({ a, t });
+    }
+    if (cand.length === 0) continue;
+    cand.sort((m, n) => m.t - n.t);
+
+    const push = (a: number, t: number) => {
+      const dx = Math.cos(a), dy = Math.sin(a);
+      const len = t + OVERRUN;
+      const nx = -dy * w, ny = dx * w;
+      bridges.push(ccw([
+        [cx + nx, cy + ny],
+        [cx - nx, cy - ny],
+        [cx - nx + dx * len, cy - ny + dy * len],
+        [cx + nx + dx * len, cy + ny + dy * len],
+      ]));
+    };
+
+    const best = cand[0]!;
+    push(best.a, best.t);
+
+    // Big enough to carry a second tie without it reading as damage? An island six tie-widths
+    // across can; a small lowercase eye cannot, and one tie holds it just as well.
+    const cb = bboxOf([contours[i]!]);
+    const shortSide = Math.min(cb.maxX - cb.minX, cb.maxY - cb.minY);
+    if (shortSide < width * 6) continue;
+
+    const opp = cand.find((c) => {
+      const d = Math.abs(c.a - best.a);
+      return Math.min(d, Math.PI * 2 - d) >= Math.PI / 2;
+    });
+    if (opp && opp.t <= Math.max(best.t * 2.2, best.t + 2)) push(opp.a, opp.t);
   }
   return bridges;
 }
@@ -473,12 +656,23 @@ export function nudgeClear(
   hole: [number, number],
   radius: number,
   plate: Shape2D,
+  /**
+   * Which way "outward" is. Radial from the centre by default, which is right for a set of
+   * four at the corners.
+   *
+   * A pair on one row wants `'x'` instead. Radial was the same thing while the row was pinned
+   * to the centreline — the direction from the origin to a hole at (x, 0) *is* horizontal —
+   * but the moment the row can be moved up, radial starts sliding the holes diagonally and
+   * quietly undoes the height the user just set.
+   */
+  axis: 'radial' | 'x' = 'radial',
 ): { at: [number, number]; clear: boolean } {
   const need = radius + radius * 0.6;
   // A wall between the hole and the plate edge, or the hole is a notch rather than a hole.
   const wall = radius * 0.75;
   const len = Math.hypot(hole[0], hole[1]) || 1;
-  const ux = hole[0] / len, uy = hole[1] / len;
+  const ux = axis === 'x' ? Math.sign(hole[0]) || 1 : hole[0] / len;
+  const uy = axis === 'x' ? 0 : hole[1] / len;
 
   // Best-effort, not all-or-nothing. Giving up and returning the original position left the
   // hole punched through a glyph — the exact failure being fixed. If nothing fully clears,
@@ -521,16 +715,28 @@ export function screwHolePositions4(
 }
 
 /**
- * Where the keyhole slots go: symmetric about the centre, near enough the ends to stop the
- * sign pivoting but never so near that the slot breaks the outline.
+ * Where the keyhole slots go: symmetric about the centre, inset from the ends by `inset`.
  *
- * Spacing is a fraction of the width rather than a fixed inset, because a keyhole is drilled
- * into a wall from the exported hole plan — the two have to be far enough apart that a
- * spirit level is worth using, and close enough that both land in the same stud bay.
+ * It used to be a flat 28% of the width with no way to touch it, which is the "keyhole slots
+ * are not usable" report in one line: the slot landed wherever the plate happened to be wide,
+ * and if that was behind the numeral there was nothing at all the user could do about it. The
+ * same "Hole inset" the screws already have now drives this, so both mountings answer to the
+ * same control and both can be moved off the legend.
+ *
+ * `headDia` is what has to fit between the slot's centre and the plate edge, not the shank —
+ * the entry circle is the widest part of the cut.
  */
-export function keyholePositions(plateWidth: number): number[] {
-  const half = Math.max(WELD, plateWidth * 0.28);
-  return plateWidth < 60 ? [0] : [-half, half];
+export function keyholePositions(plateWidth: number, headDia = 0, inset = 0): number[] {
+  const wall = Math.max(WELD, headDia * 0.6);
+  const maxHalf = plateWidth / 2 - headDia / 2 - wall;
+  if (maxHalf <= WELD) return [0];
+  const wanted = inset > 0
+    ? plateWidth / 2 - inset - headDia / 2
+    // No inset asked for: the shipped proportion, so an existing sign keeps its hole plan.
+    : plateWidth * 0.28;
+  const half = Math.min(Math.max(wanted, 0), maxHalf);
+  // Two slots need room to be two slots; below that a single central one is the honest answer.
+  return plateWidth < 60 || half < headDia * 0.75 ? [0] : [-half, half];
 }
 
 /** A keyhole as two stacked cavities. See `keyhole` for what each one is and why. */
