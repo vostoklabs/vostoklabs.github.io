@@ -73,6 +73,10 @@ import { TEMPLATE } from './template';
  */
 export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   setAssetBase(host?.assetBase?.() ?? undefined);
+  // The container is the app's layout column — see `.cg-mount` in style.css. It has to be
+  // set here rather than on `#root` in index.html, because on the desktop host there is no
+  // index.html and the container is an element the host owns.
+  container.classList.add('cg-mount');
   container.innerHTML = TEMPLATE;
 
   /** Everything the teardown has to undo, in the order it was set up. */
@@ -1673,6 +1677,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       try { fn(); } catch { /* one failed cleanup must not strand the rest */ }
     }
     cleanups.length = 0;
+    container.classList.remove('cg-mount');
     container.replaceChildren();
   };
 }

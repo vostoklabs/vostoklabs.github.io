@@ -2,9 +2,17 @@
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   font-family: var(--font-body); font-size: var(--fs-body); }
 body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-/* The topbar sits ABOVE .vl-app in the body flex column, so .vl-app must fill the
-   REMAINING height, not a full 100dvh — otherwise its bottom (and the right sidebar
-   footer's last row: Help / Light mode) is pushed off-screen. */
+/* The column that hands .vl-app the height left over after the topbar.
+   `mount()` stamps the shell into a container it is given — `#root` on the web, the
+   desktop host's own element — so the topbar and .vl-app are NOT body's children and
+   this class, not `body`, has to be the flex column. Without it .vl-app fell back to
+   sizing to its content: the panels grew past the window (so .vl-panel__scroll never
+   overflowed and NOTHING scrolled) and the stage rendered ~1000px tall inside a ~630px
+   opening, which cropped the model top and bottom and read as a broken zoom level. */
+.cg-mount { display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-height: 0; }
+/* The topbar sits ABOVE .vl-app in that column, so .vl-app must fill the REMAINING
+   height, not a full 100dvh — otherwise its bottom (and the right sidebar footer's
+   last row: Help / Light mode) is pushed off-screen. */
 main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
 /* app-shell.css defines two rows (auto + 1fr) for apps whose topbar sits INSIDE
    .vl-app. Ours sits outside, so the three panels all land in row 1 and the 1fr row
