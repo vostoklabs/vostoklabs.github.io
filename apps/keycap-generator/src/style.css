@@ -182,8 +182,12 @@
            makes these dropdowns/inputs read oversized next to their labels). */
         font-family: inherit; font-size: 14px;
       }
-      .colors { display: flex; gap: 18px; }
-      .color { display: flex; align-items: center; gap: 8px; }
+      /* One colour per row, not a row of colours.
+         Two fitted side by side; a third does not, and a swatch you have to scroll sideways to
+         reach is a swatch nobody knows is there. Stacking also lets the labels read as a list
+         of the parts being printed, which is what they are. */
+      .colors { display: grid; gap: 10px; }
+      .color { display: flex; align-items: center; gap: 10px; }
       .color input[type=color] {
         width: 34px; height: 28px; border: 1px solid var(--line); border-radius: 6px;
         background: none; padding: 0; cursor: pointer;
@@ -237,6 +241,57 @@
       /* Stem fit: a − [value] + stepper rather than a slider, since the useful
          adjustments are discrete nudges. Set apart by a hairline separator, not a
          boxed card — sidebar sections are flat here (ui-kit base.css). */
+      /* Off screen but still a real, focusable-by-script form control: the nudge ranges live
+         here. They carry this cap's min/max (setNudgeRange) and they are what the rebuild and
+         every Pro mode listen to — `display: none` would keep all of that and `hidden` would
+         too, but a clipped element still reports the layout the number sync relies on, and it
+         leaves the inputs available if the pad ever needs to be reverted. */
+      .visually-hidden {
+        position: absolute; width: 1px; height: 1px;
+        margin: -1px; padding: 0; border: 0;
+        clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+      }
+
+      /* Nudge d-pad. Nudging is a DIRECTION — "a bit to the left" — and two signed sliders make
+         you work out which sign that is on which axis every time. Built as a 3x3 grid so the
+         arrows sit where the directions are, with the centre as "back to the middle". Shares
+         .fit-head and the .tol-btn look with the stem-fit block below it, because they are the
+         same kind of control: a stepper, not a continuous value. */
+      .nudge-block { margin-top: 14px; }
+      .nudge-row { display: flex; align-items: center; gap: 14px; }
+      .dpad {
+        flex: 0 0 auto;
+        display: grid;
+        grid-template-columns: repeat(3, 30px);
+        grid-template-rows: repeat(3, 30px);
+        gap: 3px;
+      }
+      .dpad-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 0; background: var(--panel); border: 1px solid var(--line);
+        border-radius: 7px; color: var(--text); cursor: pointer;
+        transition: border-color .12s, color .12s, background .12s;
+      }
+      .dpad-btn svg { width: 17px; height: 17px; }
+      .dpad-btn:hover { border-color: var(--accent); color: var(--accent); }
+      .dpad-btn:active { background: var(--panel-2); }
+      .dpad-btn--up { grid-area: 1 / 2; }
+      .dpad-btn--left { grid-area: 2 / 1; }
+      .dpad-btn--center { grid-area: 2 / 2; color: var(--muted); }
+      .dpad-btn--right { grid-area: 2 / 3; }
+      .dpad-btn--down { grid-area: 3 / 2; }
+
+      .nudge-vals { flex: 1; min-width: 0; display: grid; gap: 7px; }
+      .nudge-val { display: grid; grid-template-columns: 14px 1fr 20px; align-items: center; gap: 7px; }
+      .nudge-val > label { color: var(--muted); font-size: 12px; }
+      .nudge-val input[type=number] {
+        width: 100%; min-width: 0; background: var(--panel-2); border: 1px solid var(--line);
+        color: var(--text); border-radius: 6px; padding: 4px 5px; text-align: right;
+        font-family: inherit; font-size: 14px; font-variant-numeric: tabular-nums;
+      }
+      .nudge-val input[type=number]:disabled { opacity: .45; }
+      .nudge-val .unit { font-size: 11px; color: var(--muted); }
+
       .fit-block {
         margin-top: 14px; padding-top: 13px;
         border-top: 1px solid var(--line);

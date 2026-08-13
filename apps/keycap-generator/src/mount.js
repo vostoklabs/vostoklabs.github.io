@@ -118,12 +118,38 @@ export function mount(container, host) {
   /** The footer's primary export button, once the footer exists. Relabelled per mode.
    *  Declared before the footer is built — the block below assigns it. */
   let exportBtn = null;
+  /** The footer's export block, so a paid mode can hang a Buy button beside the button. */
+  let exportPanelEl = null;
+  /**
+   * Set while a paid mode is configured but not paid for.
+   *
+   * A FLAG plus a class, deliberately not `exportBtn.disabled`: the ui-kit's export panel owns
+   * that property for its own busy state and writes `disabled = false` the moment an export
+   * settles, which would quietly un-grey a locked button. This lock is ours and the kit never
+   * touches it.
+   *
+   * Presentation only, in the SDK's sense — it decides what the button looks like and whether
+   * the click travels. What decides whether paid work runs is `ensureAccess` at the far end,
+   * which is called per operation regardless of anything here.
+   */
+  let exportLocked = false;
+  /**
+   * What to do when someone presses the locked button anyway.
+   *
+   * A greyed control that swallows the click is worse than no control: the user cannot tell
+   * whether they missed, whether it is broken, or whether something happened off screen. The
+   * press is the clearest possible statement of intent — they want the file — so it is answered
+   * with the explanation rather than with silence.
+   *
+   * @type {(() => void) | null}
+   */
+  let onExportBlocked = null;
 
   const keycapFooter = $('keycapFooter');
   if (keycapFooter) {
     const footer = sidebarFooter({
       formats: [{ id: '3mf', label: '3MF' }],
-      onExport: () => $('export')?.click(),
+      onExport: () => { if (exportLocked) onExportBlocked?.(); else $('export')?.click(); },
       onSave: () => $('saveProj')?.click(),
       onLoad: (file) => {
         // On the desktop the kit's Load button hands us nothing and expects the host's own
@@ -154,6 +180,7 @@ export function mount(container, host) {
     // The one primary action, whatever the mode. Set mode relabels it rather than adding a
     // second export button somewhere else — there is one place to press to get a file.
     exportBtn = footer.querySelector('.vl-export .vl-btn--primary');
+    exportPanelEl = footer.querySelector('.vl-export');
   }
 
   const busyEl = $('busy');
@@ -216,6 +243,16 @@ export function mount(container, host) {
   const logoMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5, metalness: 0.0 });
   const capMesh = new THREE.Mesh(undefined, capMat);
   const logoMesh = new THREE.Mesh(undefined, logoMat);
+  /**
+   * Meshes for legends BEYOND the first — see `extraLegends` under state.
+   *
+   * One mesh and one material each, not a shared material: a layer's colour is its own, and
+   * pointing two legends at `logoMat` is what makes the second one silently follow the first
+   * everywhere the user changes a colour.
+   *
+   * @type {Array<{mesh: THREE.Mesh, mat: THREE.MeshStandardMaterial}>}
+   */
+  const extraLegendMeshes = [];
   // The stem is a constant body; only its material swaps (cap colour normally, legend
   // colour in shine-through). It shares the cap/logo materials so colour edits follow.
   const stemMesh = new THREE.Mesh(undefined, capMat);
@@ -227,6 +264,22 @@ export function mount(container, host) {
   const printGroup = new THREE.Group();
   printGroup.add(capMesh, logoMesh, stemMesh);
   group.add(printGroup);
+
+  /** Grow or shrink the extra-legend mesh pool to `n`, freeing whatever it drops. */
+  function ensureExtraMeshes(n) {
+    while (extraLegendMeshes.length < n) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5, metalness: 0.0 });
+      const mesh = new THREE.Mesh(undefined, mat);
+      printGroup.add(mesh);
+      extraLegendMeshes.push({ mesh, mat });
+    }
+    while (extraLegendMeshes.length > n) {
+      const { mesh, mat } = extraLegendMeshes.pop();
+      mesh.geometry?.dispose();
+      printGroup.remove(mesh);
+      mat.dispose();
+    }
+  }
 
   // Point the stem at the right shared material for the current shine-through state.
   // (Single-colour mode prints everything in the cap filament, so the stem stays capMat.)
@@ -318,6 +371,7 @@ export function mount(container, host) {
   cleanups.push(() => {
     cancelAnimationFrame(frame);
     clearTimeout(regenTimer); // a queued rebuild would otherwise fire into a torn-down scene
+    ensureExtraMeshes(0);     // pooled meshes carry a material each, which renderer.dispose() misses
     controls.dispose();
     buildPlate.dispose?.();
     // forceContextLoss() is what actually hands the WebGL context back; dispose() alone
@@ -333,7 +387,19 @@ export function mount(container, host) {
   let stemGeometry = null;    // stem after fit-tolerance scaling — the body used for preview + export
   let homingBumpGeometry = null; // homing bump geometry
   let currentLegend = null;   // { contours, box, name }
-  let lastBodies = null;      // { keycapGeometry, logoGeometry } for export
+  /**
+   * Legends carved into this cap BEYOND the first one, in carve order.
+   *
+   * Empty by default and empty for good in the free build — the list is something a mode hands
+   * us through `shell.setExtraLegends`, and the free single-cap path never hands us one. What
+   * the shell knows is only that a cap may carry more than one legend, each with its own
+   * placement and its own colour; which legends those are, and how you choose them, belongs to
+   * whoever supplies the list.
+   *
+   * @type {Array<{legend: object, placement: object, color: string}>}
+   */
+  let extraLegends = [];
+  let lastBodies = null;      // { keycapGeometry, logoGeometry, extraGeometries } for export
   let lastIconSelection = null;
   let currentMode = 'icon';
   let currentUnit = 1;        // size of the active keycap (drives the letter limit)
@@ -389,6 +455,37 @@ export function mount(container, host) {
   $('stemTolMinus').addEventListener('click', () => { setStemTol(stemTolValue - STEM_TOL_STEP); applyStemTolerance(); });
   $('stemTolPlus').addEventListener('click', () => { setStemTol(stemTolValue + STEM_TOL_STEP); applyStemTolerance(); });
   renderStemTol();
+  // ---------------------------------------------------------------- nudge d-pad
+  //
+  // The pad does not replace the nudge values, it DRIVES them: it clamps against whatever range
+  // this cap allows (setNudgeRange), writes the hidden range and its number box, and then
+  // announces — so everything already listening for a nudge hears it exactly as it would from a
+  // dragged slider. That includes a Pro mode that has the nudge pointed at a different legend,
+  // which is why this must not write `currentOpts` directly.
+  const NUDGE_STEP = 0.5;
+  function nudgeBy(dx, dy) {
+    const move = (ctl, id, d) => {
+      if (!d) return;
+      const input = $(id);
+      const lo = parseFloat(input.min), hi = parseFloat(input.max);
+      ctl.set(Math.min(hi, Math.max(lo, Math.round((ctl.get() + d) * 100) / 100)));
+    };
+    move(C.offx, 'offx', dx);
+    move(C.offy, 'offy', dy);
+    announce(['offx', 'offy']); // the range's own listener syncs its number box
+    scheduleRegen();
+  }
+  $('nudgeUp').addEventListener('click', () => nudgeBy(0, NUDGE_STEP));
+  $('nudgeDown').addEventListener('click', () => nudgeBy(0, -NUDGE_STEP));
+  $('nudgeLeft').addEventListener('click', () => nudgeBy(-NUDGE_STEP, 0));
+  $('nudgeRight').addEventListener('click', () => nudgeBy(NUDGE_STEP, 0));
+  $('nudgeCenter').addEventListener('click', () => {
+    C.offx.set(0);
+    C.offy.set(0);
+    announce(['offx', 'offy']);
+    scheduleRegen();
+  });
+
   $('mirror').addEventListener('change', scheduleRegen);
   $('homingBump').addEventListener('change', scheduleRegen);
   // Shine-through and single-colour are mutually exclusive: one prints the legend in a second
@@ -474,18 +571,56 @@ export function mount(container, host) {
   $('resetLegend').addEventListener('click', () => legendSink.reset());
 
   // ---------------------------------------------------------------- geometry
+  /**
+   * Where the FIRST legend's placement sits while something else has the sliders.
+   *
+   * Normally — and always, in the free build — the sliders are the first legend's placement and
+   * this is null. A mode that borrows them to edit a different legend has to park the first
+   * one's numbers somewhere, or every drag moves both legends: the sliders would be showing one
+   * legend and `currentOpts` would be carving the other with them.
+   *
+   * @type {{sizeMM:number, depth:number, rotationDeg:number, offsetX:number, offsetY:number}|null}
+   */
+  let placementOverride = null;
+
   function currentOpts() {
+    const p = placementOverride;
     return {
-      widthMM: C.size.get(),
-      depth: C.depth.get(),
-      centerX: meta.center[0] + C.offx.get(),
-      centerY: meta.center[1] + C.offy.get(),
-      rotationDeg: C.rot.get(),
+      widthMM: p ? p.sizeMM : C.size.get(),
+      depth: p ? p.depth : C.depth.get(),
+      centerX: meta.center[0] + (p ? p.offsetX : C.offx.get()),
+      centerY: meta.center[1] + (p ? p.offsetY : C.offy.get()),
+      rotationDeg: p ? p.rotationDeg : C.rot.get(),
       mirror: $('mirror').checked,
       through: $('through').checked,
       singleColor: $('single').checked,
       homingBump: $('homingBump').checked,
       homingBumpGeom: homingBumpGeometry,
+    };
+  }
+
+  /**
+   * The same options for an EXTRA legend, whose placement is carried on its layer rather than
+   * read off the sliders (the sliders show whichever layer is being edited).
+   *
+   * Mirror, shine-through and single-colour are still read live, because they are properties of
+   * the CAP and not of a legend: a cap cannot have one legend printed through the top and
+   * another one not, and a mirrored cap is mirrored. The homing bump is forced off for a
+   * different reason — it is unioned into the cap by the FIRST pass, and a later pass asking
+   * for it again would merge a second copy into a cap that already has one.
+   */
+  function placementOpts(p) {
+    return {
+      widthMM: p.sizeMM,
+      depth: p.depth,
+      centerX: meta.center[0] + p.offsetX,
+      centerY: meta.center[1] + p.offsetY,
+      rotationDeg: p.rotationDeg,
+      mirror: $('mirror').checked,
+      through: $('through').checked,
+      singleColor: $('single').checked,
+      homingBump: false,
+      homingBumpGeom: null,
     };
   }
 
@@ -506,15 +641,32 @@ export function mount(container, host) {
     await new Promise((r) => setTimeout(r, 0)); // let the spinner paint
 
     try {
-      const fp = logoFootprint(currentLegend.box, C.size.get());
-      const { keycapGeometry: capG, logoGeometry: logoG, surfaceVariation } =
-        await buildBodies(shellGeometry, meta, currentLegend, currentOpts());
+      const oneOpts = currentOpts();
+      let { keycapGeometry: capG, logoGeometry: logoG, surfaceVariation } =
+        await buildBodies(shellGeometry, meta, currentLegend, oneOpts);
+
+      // Each extra legend is the same carve again, run on the cap the PREVIOUS pass produced.
+      //
+      // Chaining rather than carving every legend against the original shell is what makes two
+      // legends that touch impossible to get wrong: pass 2 intersects a cap that has already
+      // had pass 1's material taken out of it, so an overlapping sliver belongs to legend 1 and
+      // the two bodies can never claim the same space in the exported file. Carving both
+      // against the shell would hand the slicer two solids sharing a volume.
+      const extraG = [];
+      for (const layer of extraLegends) {
+        const r = await buildBodies(capG, meta, layer.legend, placementOpts(layer.placement));
+        capG.dispose(); // superseded by the cap this pass carved
+        capG = r.keycapGeometry;
+        extraG.push(r.logoGeometry);
+        surfaceVariation = Math.max(surfaceVariation, r.surfaceVariation);
+      }
 
       // Preview meshes get creased normals (cosmetic); export keeps the clean indexed solids.
       capMesh.geometry?.dispose();
       logoMesh.geometry?.dispose();
       lastBodies?.keycapGeometry?.dispose();
       lastBodies?.logoGeometry?.dispose();
+      for (const g of lastBodies?.extraGeometries ?? []) g?.dispose();
       capMesh.geometry = creaseNormals(capG);
       // Single-colour mode returns no legend body — hide the legend mesh; the icon is now a
       // recess carved into the cap geometry itself.
@@ -525,21 +677,42 @@ export function mount(container, host) {
         logoMesh.geometry = undefined;
         logoMesh.visible = false;
       }
+      ensureExtraMeshes(extraG.length);
+      extraG.forEach((g, i) => {
+        const { mesh, mat } = extraLegendMeshes[i];
+        mesh.geometry?.dispose();
+        mesh.geometry = g ? creaseNormals(g) : undefined;
+        mesh.visible = !!g;
+        mat.color.set(extraLegends[i].color);
+      });
       updateStemMaterial();
-      lastBodies = { keycapGeometry: capG, logoGeometry: logoG };
+      lastBodies = { keycapGeometry: capG, logoGeometry: logoG, extraGeometries: extraG };
 
       $('export').disabled = false;
+
+      // One footprint per legend, so the "it won't fit" warning covers the second one too —
+      // it is the layer most likely to be pushed out to an edge.
+      const fps = [logoFootprint(currentLegend.box, oneOpts.widthMM)];
+      for (const layer of extraLegends) {
+        fps.push(logoFootprint(layer.legend.box, layer.placement.sizeMM));
+      }
+      const mm = (fp) => `${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm`;
+      const word = fps.length > 1 ? 'legends' : 'legend';
+      const sizes = fps.map(mm).join(' + ');
       const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
-      if (Math.max(fp.w, fp.h) > room) {
-        setStatus(`Heads up: legend (${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm) is larger than the top (~${room.toFixed(1)} mm) and will be clipped.`, 'warn');
+      const tooBig = fps.findIndex((fp) => Math.max(fp.w, fp.h) > room);
+
+      if (tooBig >= 0) {
+        const which = fps.length > 1 ? `Legend ${tooBig + 1}` : 'Legend';
+        setStatus(`Heads up: ${which.toLowerCase()} (${mm(fps[tooBig])}) is larger than the top (~${room.toFixed(1)} mm) and will be clipped.`, 'warn');
       } else if (surfaceVariation > 0.4) {
-        setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm. Note: top is curved (${surfaceVariation.toFixed(1)} mm). Keep it small so it stays flush.`, 'warn');
+        setStatus(`Ready · ${word} ${sizes}. Note: top is curved (${surfaceVariation.toFixed(1)} mm). Keep it small so it stays flush.`, 'warn');
       } else if ($('through').checked) {
-        setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm · shine-through: legend + stem print in the legend filament (use transparent to light up).`);
+        setStatus(`Ready · ${word} ${sizes} · shine-through: legend + stem print in the legend filament (use transparent to light up).`);
       } else if ($('single').checked) {
-        setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm · single colour: legend engraved ${C.depth.get()} mm deep, prints in one filament.`);
+        setStatus(`Ready · ${word} ${sizes} · single colour: legend engraved ${oneOpts.depth} mm deep, prints in one filament.`);
       } else {
-        setStatus(`Ready · legend ${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm · ${C.depth.get()} mm deep.`);
+        setStatus(`Ready · ${word} ${sizes} · ${oneOpts.depth} mm deep.`);
       }
     } catch (e) {
       console.error(e);
@@ -879,13 +1052,35 @@ export function mount(container, host) {
   // assignment stays identical. The stem rides on the legend filament in shine-through,
   // otherwise the keycap filament.
   function buildExportParts(bodies, capColor, logoColor, through) {
+    // Filament slots, by colour. Slot 1 is the cap and slot 2 is the legend, unconditionally
+    // and as they always have been — even when the two are set to the same hex, which is a
+    // two-filament file someone may well have asked for on purpose.
+    //
+    // Extra legends are matched against what is already claimed instead, so a second legend in
+    // the SAME colour as the first shares its slot rather than demanding a third filament for
+    // a colour the plate is already loaded with.
+    const bySlot = [capColor];
+    const slotOf = (hex) => {
+      const i = bySlot.findIndex((c) => c.toLowerCase() === hex.toLowerCase());
+      if (i >= 0) return i + 1;
+      bySlot.push(hex);
+      return bySlot.length;
+    };
+
     const parts = [
       { name: 'Keycap', color: capColor, extruder: 1, geom: bodies.keycapGeometry },
     ];
-    // Single-colour mode has no separate legend body (it's a recess in the cap).
+    // Single-colour mode has no separate legend body (it's a recess in the cap) — and with no
+    // legend body there are no extra ones either, so no slot is claimed and never filled.
     if (bodies.logoGeometry) {
+      bySlot.push(logoColor); // slot 2
       parts.push({ name: 'Legend', color: logoColor, extruder: 2, geom: bodies.logoGeometry });
     }
+    (bodies.extraGeometries ?? []).forEach((geom, i) => {
+      if (!geom) return;
+      const color = extraLegends[i]?.color ?? logoColor;
+      parts.push({ name: `Legend ${i + 2}`, color, extruder: slotOf(color), geom });
+    });
     if (stemGeometry) {
       parts.push({
         name: 'Stem',
@@ -1007,13 +1202,19 @@ export function mount(container, host) {
     if (!lastBodies) return;
     const legendSlug = (currentLegend?.name || 'legend').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
     const baseName = `keycap-${legendSlug}${profileSlug() ? '-' + profileSlug() : ''}`;
+    // Counted from the parts rather than assumed to be two: a cap with a second legend in its
+    // own colour is a three-filament print, and "assign two filaments" would be wrong advice
+    // at the one moment the user is standing in front of the slicer.
+    const parts = buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked);
+    const filaments = new Set(parts.map((p) => p.extruder)).size;
+    const count = ['no', 'one', 'two', 'three', 'four'][filaments] ?? String(filaments);
     await deliverModel(
-      () => buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked),
+      () => parts,
       baseName,
       $('single').checked
         ? 'Exported 3MF ✓  Single-colour cap with an engraved legend, one filament.'
-        : 'Exported 3MF ✓  Open in your slicer and assign two filaments.',
-      'Two-colour keycap, made with the Keycap Legend Generator.'
+        : `Exported 3MF ✓  Open in your slicer and assign ${count} filaments.`,
+      `Keycap in ${count} colour${filaments === 1 ? '' : 's'}, made with the Keycap Legend Generator.`
     );
   });
 
@@ -1448,6 +1649,8 @@ export function mount(container, host) {
   let proPanel = null;
   /** The edited keyboard set, so it rides along in Save/Load like any other setting. */
   let keyboardSet = null;
+  /** The second legend, likewise — an opaque blob the Pro mode writes and reads. */
+  let dualLegend = null;
   if (MAKERLAB) {
     if ($('kcModeTabs')) {
       proPanel = mountProFeatures({
@@ -1457,8 +1660,14 @@ export function mount(container, host) {
         hosts: {
           tabs: $('kcModeTabs'),
           profileExtra: $('kcProfileExtra'),
+          /** Above the Size/Depth/Rotation/Nudge sliders — for a control that decides what
+           *  those sliders are pointed at, and so has to be read before them. */
+          placementLead: $('kcPlacementLead'),
           placementExtra: $('kcPlacementExtra'),
           legendExtra: $('kcLegendExtra'),
+          /** The footer's export block. A paywall goes HERE rather than in the panel that
+           *  configures the paid feature, because the thing being refused is the export. */
+          exportPanel: exportPanelEl,
           viewport,
         },
         /** What the shell lets a mode change about itself. */
@@ -1468,6 +1677,13 @@ export function mount(container, host) {
           setStageOwner,
           /** Retarget the right panel's legend picker. Null restores the single cap. */
           setLegendSink: (sink) => { legendSink = sink ?? singleCapSink; },
+          /**
+           * The shell's own sink, for a mode that edits the first legend ALONGSIDE something
+           * else and wants the picker to reach both. Delegating to it is the only way to set
+           * the first legend without reimplementing the icon and letter paths — and a second
+           * implementation of "the user picked an icon" is one that will drift.
+           */
+          ownLegendSink: singleCapSink,
           /** The picker's own controls, so a sink can show the selected key's legend. */
           legendUI: {
             setType: setLegendMode,
@@ -1477,9 +1693,30 @@ export function mount(container, host) {
             get fontId() { return $('fontSelect').value; },
             set fontId(v) { $('fontSelect').value = v; },
             setLetterMaxLength: (n) => { $('letterText').maxLength = n; },
+            get letterMaxLength() { return $('letterText').maxLength; },
+            // Readable as well as writable, so a mode that borrows the picker can put it back
+            // exactly as it found it. A mode that can only WRITE the picker has to remember
+            // what it did instead, and the two records drift the moment anything else moves.
+            get type() { return currentMode; },
+            get activeIcon() { return container.querySelector('.icon.active')?.title ?? null; },
           },
           /** Relabel the one primary action for the active mode. */
           setExportLabel: (text) => { if (exportBtn) exportBtn.textContent = text; },
+
+          /**
+           * Grey the primary button and stop the click travelling — the cap on screen is one
+           * the user has configured but not paid to take away.
+           *
+           * Deliberately does NOT hide it or relabel it "Buy". The button says what it would
+           * do, greyed, with the price beside it, so what is being bought is legible from the
+           * thing itself rather than from a button that has changed meaning.
+           */
+          setExportLocked: (locked, onBlocked = null) => {
+            exportLocked = !!locked;
+            onExportBlocked = exportLocked ? onBlocked : null;
+            exportBtn?.classList.toggle('is-locked', exportLocked);
+            exportBtn?.setAttribute('aria-disabled', String(exportLocked));
+          },
           /** Subscribe to shell inputs by id. Returns an unsubscribe. */
           onShellEvent: (ids, type, fn) => {
             const nodes = ids.map((id) => $(id)).filter(Boolean);
@@ -1498,12 +1735,56 @@ export function mount(container, host) {
             if (offx != null) C.offx.set(offx);
             if (offy != null) C.offy.set(offy);
           },
-          /** The single cap's Size ceiling is that cap's top; a board needs its own. */
-          setSizeRange: (max) => { C.size.setMax(max); },
+          /**
+           * The single cap's Size ceiling is that cap's top; a board needs its own.
+           *
+           * Null puts it back — and something has to, or leaving a mode leaves the slider at
+           * whatever ceiling that mode wanted. `updateSizeMax` only runs when the legend or the
+           * cap changes, so nothing else was ever going to restore it.
+           */
+          setSizeRange: (max) => { if (max == null) updateSizeMax(); else C.size.setMax(max); },
+
+          /**
+           * Carve these legends into the cap as well as the one the picker owns.
+           *
+           * Each entry is `{ legend, placement: {sizeMM, depth, rotationDeg, offsetX, offsetY,
+           * mirror}, color }` — the placement in the same terms the sliders use, so a mode never
+           * has to know about cap metadata or where the dish sits. Null or empty puts the cap
+           * back to one legend. Always schedules a rebuild: the caller changed what the cap is.
+           */
+          setExtraLegends: (list) => {
+            extraLegends = Array.isArray(list) ? list : [];
+            scheduleRegen();
+          },
+
+          /**
+           * Park the FIRST legend's placement here while the sliders are showing something
+           * else. Null hands it back to the sliders. The object is read on every rebuild, so a
+           * mode that mutates it in place gets what it changed on the next carve.
+           */
+          setPlacementOverride: (p) => { placementOverride = p ?? null; scheduleRegen(); },
+
+          /**
+           * Re-read the extra layers' colours onto their materials.
+           *
+           * Separate from `setExtraLegends` because a colour never changes a shape, and routing
+           * it through the carve would spend a full CSG rebuild — half a second of the preview
+           * freezing — on repainting a mesh. This is the same thing the cap and legend colour
+           * inputs do for their own materials.
+           */
+          refreshExtraColors: () => {
+            extraLegends.forEach((l, i) => extraLegendMeshes[i]?.mat.color.set(l.color));
+          },
         },
         setMainPaused: setPaused,
         getSavedSet: () => keyboardSet,
         onSetChanged: (set) => { keyboardSet = set; },
+        // The second legend rides along in Save/Load the same way an edited board does: the
+        // shell keeps the blob and never looks inside it, and the mode that wrote it is the one
+        // that reads it back — when it is next opened, not on load, so opening a project cannot
+        // put you inside a paid mode you did not ask for.
+        getSavedDual: () => dualLegend,
+        onDualChanged: (v) => { dualLegend = v; },
         getState: () => ({
           profile: currentProfile,
           profileSlug: profileSlug(),
@@ -1521,6 +1802,20 @@ export function mount(container, host) {
             homingBumpAllowed: currentProfile?.homingBump !== false && !!homingBumpGeometry,
           },
           glyphHeightMM: C.size.get(),
+          // The usable top of the cap that is loaded, so a mode can place a legend as a
+          // fraction of the room available instead of in absolute millimetres that only
+          // happen to look right on a 1u.
+          topExtent: meta ? [meta.topExtent[0], meta.topExtent[1]] : null,
+          // The first legend's artwork proportions. A mode placing a second legend beside it
+          // has to know how wide the first one actually comes out — the Size control scales the
+          // LONGER side, so everything else follows from this box and nothing else can supply
+          // it: this module owns the parsed legend.
+          legendBox: currentLegend
+            ? {
+              w: currentLegend.box.max.x - currentLegend.box.min.x,
+              h: currentLegend.box.max.y - currentLegend.box.min.y,
+            }
+            : null,
           stemTolMM: stemTolValue,
           capColor: $('capColor').value,
           logoColor: $('logoColor').value,
@@ -1612,6 +1907,7 @@ export function mount(container, host) {
     // An edited keyboard set is hours of work; it belongs in the project file next to
     // everything else. Absent in the public build, where the editor doesn't exist.
     if (keyboardSet) projectState.keyboardSet = keyboardSet;
+    if (dualLegend) projectState.dualLegend = dualLegend;
     return projectState;
   }
 
@@ -1744,6 +2040,7 @@ export function mount(container, host) {
     if (loaded.profile) $('profileSelect').value = loaded.profile;
     if (loaded.unit) $('unitSelect').value = loaded.unit;
     if (loaded.keyboardSet) keyboardSet = loaded.keyboardSet;
+    if (loaded.dualLegend) dualLegend = loaded.dualLegend;
     // Trigger UI sync
     $('size').dispatchEvent(new Event('input'));
     $('profileSelect').dispatchEvent(new Event('change'));
@@ -1796,11 +2093,22 @@ export function mount(container, host) {
   // boot(); the export buttons check mlReady() at click time, so ordering doesn't matter.
   if (MAKERLAB) {
     initMakerlab({
-      onDisconnect: () => setStatus('Disconnected from the MakerLab host.', 'warn'),
+      onDisconnect: () => {
+        setStatus('Disconnected from the MakerLab host.', 'warn');
+        // Entitlements came from the host, so losing it means we no longer know what is owned.
+        // Repaint to the locked look rather than leave a stale unlocked one on screen.
+        proPanel?.refresh();
+      },
     }).then((ctx) => {
       if (!ctx) return;
       document.body.classList.add('makerlab');
       console.log('[MakerLab] connected, capabilities:', ctx.capabilities.join(', '));
+      // The pro panel was built synchronously, well before this resolved, so its first paint ran
+      // with no handshake: nothing owned and no price to show. Everything the paywall displays —
+      // the Pro badges, the price on the Buy button — comes from this context, so it has to be
+      // repainted the moment it lands. It used to come right anyway, but only because loading
+      // the profiles happened to finish later and dragged a refresh along with it.
+      proPanel?.refresh();
     });
   }
 

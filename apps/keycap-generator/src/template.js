@@ -64,6 +64,11 @@ export const TEMPLATE = `
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
           </button>
         </div>
+        <!-- Mode-specific controls that must sit ABOVE the sliders rather than among them
+             (see #kcModeTabs). This is where the Pro Pack's "which legend am I editing" switch
+             goes: it decides what every control below it is pointed at, so it has to be read
+             first. #kcPlacementExtra, further down, is for controls that belong among them. -->
+        <div id="kcPlacementLead"></div>
         <div class="prow">
           <label for="size">Size</label>
           <input id="size" type="range" min="3" max="16" step="0.1" value="8" />
@@ -84,17 +89,39 @@ export const TEMPLATE = `
           <input id="rotNum" type="number" step="1" />
           <span class="unit">°</span>
         </div>
-        <div class="prow">
-          <label for="offx">Nudge X</label>
-          <input id="offx" type="range" min="-5" max="5" step="0.1" value="0" />
-          <input id="offxNum" type="number" step="0.1" />
-          <span class="unit">mm</span>
-        </div>
-        <div class="prow">
-          <label for="offy">Nudge Y</label>
-          <input id="offy" type="range" min="-5" max="5" step="0.1" value="0" />
-          <input id="offyNum" type="number" step="0.1" />
-          <span class="unit">mm</span>
+        <!-- Nudge. A d-pad, because nudging is a DIRECTION — "a bit to the left" — and a pair
+             of signed sliders makes you work out which sign that is and on which axis. The two
+             range inputs are still here, hidden: they carry the per-cap limits (see
+             setNudgeRange) that the pad clamps against, and they are what every other part of
+             the app already listens to and writes to. The pad drives them; it does not replace
+             them. The number boxes stay visible for typing an exact offset. -->
+        <div class="nudge-block">
+          <div class="fit-head">Nudge</div>
+          <div class="nudge-row">
+            <div class="dpad">
+              <button id="nudgeUp" class="dpad-btn dpad-btn--up" type="button" aria-label="Nudge up">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+              </button>
+              <button id="nudgeLeft" class="dpad-btn dpad-btn--left" type="button" aria-label="Nudge left">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <button id="nudgeCenter" class="dpad-btn dpad-btn--center" type="button" aria-label="Centre the legend" title="Back to the middle">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/></svg>
+              </button>
+              <button id="nudgeRight" class="dpad-btn dpad-btn--right" type="button" aria-label="Nudge right">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+              <button id="nudgeDown" class="dpad-btn dpad-btn--down" type="button" aria-label="Nudge down">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+            <div class="nudge-vals">
+              <div class="nudge-val"><label for="offxNum">X</label><input id="offxNum" type="number" step="0.1" /><span class="unit">mm</span></div>
+              <div class="nudge-val"><label for="offyNum">Y</label><input id="offyNum" type="number" step="0.1" /><span class="unit">mm</span></div>
+            </div>
+          </div>
+          <input id="offx" type="range" min="-5" max="5" step="0.1" value="0" class="visually-hidden" tabindex="-1" aria-hidden="true" />
+          <input id="offy" type="range" min="-5" max="5" step="0.1" value="0" class="visually-hidden" tabindex="-1" aria-hidden="true" />
         </div>
         <div class="fit-block">
           <div class="fit-head">Stem fit tolerance</div>
@@ -137,9 +164,11 @@ export const TEMPLATE = `
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
           </button>
         </div>
+        <!-- The labels are in spans so a mode that adds a second legend can renumber the first
+             one ("Legend" → "Legend 1"); a bare text node has nothing to address. -->
         <div class="colors">
-          <div class="color"><input id="capColor" type="color" value="#1c1c1e" /> Keycap</div>
-          <div class="color"><input id="logoColor" type="color" value="#f2f2f2" /> Legend</div>
+          <div class="color"><input id="capColor" type="color" value="#1c1c1e" /> <span class="color-label">Keycap</span></div>
+          <div class="color"><input id="logoColor" type="color" value="#f2f2f2" /> <span class="color-label" id="logoColorLabel">Legend</span></div>
         </div>
         <button id="exportBlank" class="vl-btn vl-btn--secondary vl-btn--block" type="button" disabled style="margin-top:16px;">Export blank keycap</button>
       </div>
