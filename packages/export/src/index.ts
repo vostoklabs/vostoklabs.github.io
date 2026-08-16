@@ -12,8 +12,12 @@
 //    1-based filament slot (`extruder`); parts sharing a colour share a slot
 //  - parts carrying a different `group` become separate objects, so physically
 //    separate pieces stay independently movable in the slicer
+//  - Metadata/project_settings.config carries Bambu's own A1 / 0.4 nozzle /
+//    Bambu PLA Basic presets in full, so Studio resolves them by name instead of
+//    inventing project presets named after the file — see projectSettings()
 import { zipSync, strToU8 } from 'fflate';
 import { BRAND } from '@vostok/brand';
+import { BAMBU_BASE, BAMBU_FILAMENT, BAMBU_IDENTITY } from './bambuProfile.generated';
 
 export type RGB = [number, number, number];
 
@@ -66,8 +70,11 @@ export const BBL_VERSION_META =
 
 // Bambu Studio's bbs_3mf.cpp only sets is_bbl_3mf when Application starts with
 // "BambuStudio-"; without it, project_settings.config is skipped and every part
-// collapses to a single filament.
-export const BBL_APPLICATION = 'BambuStudio-01.09.00.00';
+// collapses to a single filament. The version has to be the one whose presets we
+// snapshotted — Studio reads it to decide whether the file predates a config
+// migration, and running an old migration over a current config would edit the
+// values back out of agreement with the system presets.
+export const BBL_APPLICATION = `BambuStudio-${BAMBU_IDENTITY.studioVersion}`;
 
 const f = (n: number): string => String(Math.round(n * 1e4) / 1e4);
 
@@ -76,23 +83,13 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** #rrggbbff — sRGB with the alpha byte 3MF's core `displaycolor` wants. Bambu
+ *  silently ignores lowercase hex digits, so anything it reads gets uppercased at
+ *  the call site. */
 function hex(rgb: RGB): string {
   const h = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
   return `#${h(rgb[0])}${h(rgb[1])}${h(rgb[2])}FF`;
 }
-
-/** #RRGGBB, uppercase — the form Bambu Studio's parser accepts (it silently
- *  ignores lowercase hex digits) and without the alpha byte that belongs only in
- *  the 3MF core `displaycolor`. */
-function hexRGB(rgb: RGB): string {
-  const h = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
-  return `#${h(rgb[0])}${h(rgb[1])}${h(rgb[2])}`.toUpperCase();
-}
-
-/** Bambu's built-in "Generic PLA" filament id. A non-empty `filament_id` is what
- *  lets the firmware honour an AMS slot assignment — left blank, prints fall back
- *  to the external spool regardless of the mapping. */
-const GENERIC_PLA_ID = 'GFL99';
 
 /** Materials-Extension colour group, one `<m:color>` per filament slot, at the
  *  given free resource id. Slicers that read the standard 3MF colour path
@@ -120,42 +117,70 @@ export function paletteOf(parts: { color: RGB }[], extruders: number[]): RGB[] {
   return palette;
 }
 
-/** The project's filament list.
+/** The project's printer, process and filament presets.
  *
- *  This is the file that fixes "I open the 3MF in Bambu Studio and everything is
- *  one colour". `model_settings.config` alone only says which SLOT each part
- *  wants; it does not create the slots. A user with a single filament loaded has
- *  a one-filament project, so Studio clamps every part back to slot 1 and the
- *  model arrives monochrome. Bambu's own project 3MFs carry their filament list
- *  here and Studio restores it on load — so declaring N filaments with our exact
- *  colours makes the palette travel with the file and land on AMS slots 1..N.
+ *  Two problems live in this file, and they need different amounts of it.
+ *
+ *  The first is "I open the 3MF in Bambu Studio and everything is one colour".
+ *  `model_settings.config` only says which SLOT each part wants; it does not
+ *  create the slots. Someone with a single filament loaded therefore had every
+ *  part clamped onto slot 1. Declaring N filaments here is what makes the palette
+ *  travel with the file and land on slots 1..N.
+ *
+ *  The second is the preset pickers reading "(name-keychain (1).3mf)" instead of
+ *  a printer, a process and a filament. Studio keeps a preset's real name only
+ *  when the project carries a config that matches a system preset value-for-value
+ *  (PresetCollection::load_external_preset -> profile_print_params_same). Naming
+ *  the preset is not enough; a near-miss is not enough. So the whole preset has
+ *  to be in the file, which is what `bambuProfile.generated.ts` holds — Bambu's
+ *  own A1 / 0.4 nozzle / Bambu PLA Basic presets, resolved from an installed
+ *  Studio. Anything those presets do not set is deliberately absent: Studio fills
+ *  it from the same built-in defaults it compares us against, and from the user's
+ *  own project for things like bed type and purge volumes.
  *
  *  Only read when the file also carries the Bambu extension markers — see
  *  `BBL_NS` / `BBL_VERSION_META`. Without them Studio reports "The 3mf is not
  *  from Bambu Lab, load geometry data and color data only" and skips this file
- *  entirely, which is exactly the monochrome import above.
- *
- *  Deliberately minimal: only the filament arrays. Everything omitted keeps the
- *  user's own printer/process profile, which is what we want — we are shipping a
- *  model, not dictating anyone's print settings. */
+ *  entirely, which is the monochrome import above. */
 export function projectSettings(palette: RGB[]): string {
-  const n = palette.length;
+  const n = Math.max(1, palette.length);
   const fill = <T,>(v: T): T[] => Array.from({ length: n }, () => v);
-  return JSON.stringify(
-    {
-      version: '01.09.00.00',
-      name: 'project_settings',
-      from: 'project',
-      filament_colour: palette.map(hexRGB),
-      filament_color: palette.map(hexRGB),
-      filament_type: fill('PLA'),
-      filament_ids: fill(GENERIC_PLA_ID),
-      filament_settings_id: fill('Generic PLA'),
-      filament_vendor: fill('(Generic)'),
-    },
-    null,
-    2,
-  );
+
+  const cfg: Record<string, unknown> = {
+    version: BAMBU_IDENTITY.studioVersion,
+    name: 'project_settings',
+    from: 'project',
+    ...BAMBU_BASE,
+  };
+
+  // One slot's worth of filament settings, repeated per slot. A few keys (the AMS
+  // drying tables) hold several values per slot, so the whole group repeats
+  // rather than just the first entry.
+  for (const [key, value] of Object.entries(BAMBU_FILAMENT)) {
+    cfg[key] = Array.isArray(value) ? fill(value).flat() : fill(value);
+  }
+
+  // Per-slot identity. `filament_colour` is project data, not part of the preset,
+  // so setting it costs nothing; a non-empty `filament_id` is what lets the
+  // printer honour an AMS slot assignment instead of falling back to the
+  // external spool. Studio writes these as 8-digit uppercase sRGB.
+  cfg.filament_colour = palette.map((c) => hex(c).toUpperCase());
+  cfg.filament_ids = fill(BAMBU_IDENTITY.filamentId);
+  cfg.filament_settings_id = fill(BAMBU_IDENTITY.filamentSettingsId);
+  cfg.filament_self_index = Array.from({ length: n }, (_, i) => String(i + 1));
+
+  cfg.print_settings_id = BAMBU_IDENTITY.printSettingsId;
+  cfg.printer_settings_id = BAMBU_IDENTITY.printerSettingsId;
+  cfg.print_compatible_printers = [BAMBU_IDENTITY.printerSettingsId];
+
+  // "Nothing here was edited away from the system preset", one entry per preset
+  // the project carries: the process, each filament, then the printer. Studio
+  // shows a preset as modified when its entry is non-empty.
+  const presetCount = n + 2;
+  cfg.different_settings_to_system = Array.from({ length: presetCount }, () => '');
+  cfg.inherits_group = Array.from({ length: presetCount }, () => '');
+
+  return JSON.stringify(cfg, null, 2);
 }
 
 /** Stable 1-based filament slot per unique colour, in first-seen order. */
@@ -184,6 +209,65 @@ function meshXml(p: ExportPart, minZ: number): string {
     tris.push(`<triangle v1="${t[i]}" v2="${t[i + 1]}" v3="${t[i + 2]}"/>`);
   }
   return `<mesh><vertices>${verts.join('')}</vertices><triangles>${tris.join('')}</triangles></mesh>`;
+}
+
+/** Footprint of everything written to the file, in millimetres. */
+export interface PlateBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+/** XY footprint of some flat vertex arrays. `stride` is the floats per vertex —
+ *  manifold meshes can carry properties past xyz. */
+export function xyBounds(meshes: ArrayLike<number>[], stride = 3): PlateBounds {
+  const b: PlateBounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  for (const v of meshes) {
+    for (let i = 0; i < v.length; i += stride) {
+      const x = v[i]!;
+      const y = v[i + 1]!;
+      if (x < b.minX) b.minX = x;
+      if (x > b.maxX) b.maxX = x;
+      if (y < b.minY) b.minY = y;
+      if (y > b.maxY) b.maxY = y;
+    }
+  }
+  return b;
+}
+
+/** The middle of the bed, read from the profile's `printable_area` (four "XxY"
+ *  corners) so it follows whichever printer we snapshot. */
+function plateCentre(): [number, number] {
+  const corners = BAMBU_BASE.printable_area as string[] | undefined;
+  const pts = (corners ?? []).map((c) => c.split('x').map(Number));
+  const xs = pts.map((p) => p[0]!).filter((n) => Number.isFinite(n));
+  const ys = pts.map((p) => p[1]!).filter((n) => Number.isFinite(n));
+  if (!xs.length || !ys.length) return [128, 128];
+  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+}
+
+/** The `transform` a `<build><item>` needs to land the model mid-plate.
+ *
+ *  Without one, the mesh's own origin lands on the bed's origin — its front-left
+ *  corner — so anything modelled around (0,0) arrives half off the plate. Studio
+ *  reads the layout literally now that the file resolves as a real Bambu project;
+ *  it only auto-arranges 3MFs it does not recognise as one.
+ *
+ *  Every item in an export takes the SAME translation, so a model whose pieces
+ *  were arranged relative to each other keeps that arrangement.
+ *
+ *  3MF wants a row-major 4x3: three basis vectors, then the translation. Z stays
+ *  at zero because the meshes are already written with their lowest point on the
+ *  bed. */
+export function plateItemTransform(bounds: PlateBounds): string {
+  const [cx, cy] = plateCentre();
+  if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY)) {
+    return `1 0 0 0 1 0 0 0 1 ${f(cx)} ${f(cy)} 0`;
+  }
+  const tx = cx - (bounds.minX + bounds.maxX) / 2;
+  const ty = cy - (bounds.minY + bounds.maxY) / 2;
+  return `1 0 0 0 1 0 0 0 1 ${f(tx)} ${f(ty)} 0`;
 }
 
 /** The lowest z across every part — the model is dropped onto the bed by it. */
@@ -233,7 +317,10 @@ export function buildThreeMF(parts: ExportPart[], meta: ExportMeta): Uint8Array 
         `</components></object>`,
     )
     .join('');
-  const buildItems = groups.map((_, i) => `<item objectid="${wrapperIdFor(i)}"/>`).join('');
+  const transform = plateItemTransform(xyBounds(parts.map((p) => p.positions)));
+  const buildItems = groups
+    .map((_, i) => `<item objectid="${wrapperIdFor(i)}" transform="${transform}" printable="1"/>`)
+    .join('');
 
   // Materials-Extension colour group, one entry per filament slot, taking the
   // next free resource id after the wrappers. Slicers that read the standard 3MF

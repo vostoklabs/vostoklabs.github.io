@@ -1,0 +1,45 @@
+name: Check
+
+# The deploy workflow only builds the apps the hub links to, so nothing was watching the
+# generator template — the thing every new generator is copied from. A template that has
+# quietly stopped building is worse than no template: the next scaffold starts broken and
+# gets hand-rolled instead, which is how generators drifted apart in the first place.
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The page frame lives in @vostok/ui-kit and nowhere else (invariant #9).
+      - name: Page-frame check
+        run: pnpm check:chrome
+
+      - name: Typecheck every package and app
+        run: pnpm typecheck
+
+      # The template has to build, or `pnpm new:generator` hands someone a broken app.
+      - name: Build the generator template
+        run: pnpm build:template

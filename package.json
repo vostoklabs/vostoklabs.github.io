@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "packageManager": "pnpm@10.8.1",
   "scripts": {
+    "new:generator": "node scripts/new-generator.mjs",
+    "dev:template": "pnpm --filter generator-template dev",
+    "build:template": "pnpm --filter generator-template build",
     "dev:hub": "pnpm --filter hub dev",
     "build:hub": "pnpm --filter hub build",
     "dev:demo": "pnpm --filter kit-demo dev",
@@ -18,6 +21,13 @@
     "build:magnet": "pnpm --filter magnet-generator build",
     "typecheck": "pnpm -r --if-present typecheck",
     "dev:housenumber": "pnpm --filter house-number dev",
-    "build:housenumber": "pnpm --filter house-number build"
+    "build:housenumber": "pnpm --filter house-number build",
+    "dev:bubblepop": "pnpm --filter bubble-pop-generator dev",
+    "build:bubblepop": "pnpm --filter bubble-pop-generator build",
+    "dev:foldbox": "pnpm --filter foldbox dev",
+    "build:foldbox": "pnpm --filter foldbox build",
+    "dev:laserslot": "pnpm --filter laser-slot dev",
+    "build:laserslot": "pnpm --filter laser-slot build",
+    "check:chrome": "node scripts/check-app-chrome.mjs"
   }
 }

@@ -1,6 +1,9 @@
 import { zipSync, strToU8 } from 'fflate';
 import { BRAND } from '@vostok/brand';
-import { projectSettings, colorGroupXml, paletteOf, BBL_NS, BBL_VERSION_META, BBL_APPLICATION } from '@vostok/export';
+import {
+  projectSettings, colorGroupXml, paletteOf, plateItemTransform, xyBounds,
+  BBL_NS, BBL_VERSION_META, BBL_APPLICATION,
+} from '@vostok/export';
 import type { PartMesh } from '../types';
 
 const f = (n: number): string => String(Math.round(n * 1e4) / 1e4);
@@ -71,7 +74,10 @@ export function buildThreeMF(parts: PartMesh[]): Uint8Array {
   const comps = parts.map((_, i) => `<component objectid="${i + 2}"/>`).join('');
   const wrapperObject = `<object id="${firstWrapperId}" type="model"><components>${comps}</components></object>`;
 
-  const buildItems = `<item objectid="${firstWrapperId}"/>`;
+  // Land it mid-plate. Without a transform the mesh origin sits on the bed's
+  // front-left corner, so a keychain modelled around (0,0) arrives half off.
+  const transform = plateItemTransform(xyBounds(parts.map((p) => p.vertProperties)));
+  const buildItems = `<item objectid="${firstWrapperId}" transform="${transform}" printable="1"/>`;
 
 
   // The filament slots the parts above ask for. `model_settings.config` only

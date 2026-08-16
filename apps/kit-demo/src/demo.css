@@ -3,15 +3,12 @@
    Dark instrument palette (from the shipped apps), three type roles
    (display / body / mono), hairline entries that read like a parts catalog. */
 
+/* Only the accent wash is the demo's own — the rest of the page frame (margin,
+   colours, fonts) comes from the kit's root.css. */
 body {
-  margin: 0;
   background:
     radial-gradient(1200px 600px at 80% -10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
     var(--bg);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: var(--fs-body);
-  -webkit-font-smoothing: antialiased;
 }
 
 #app {

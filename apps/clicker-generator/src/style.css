@@ -1,6 +1,6 @@
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-  font-family: var(--font-body); font-size: var(--fs-body); }
+/* Background, colour and fonts come from the kit's root.css; only the sizing is ours. */
+html, body { height: 100%; }
 body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 /* The column that hands .vl-app the height left over after the topbar.
    `mount()` stamps the shell into a container it is given — `#root` on the web, the

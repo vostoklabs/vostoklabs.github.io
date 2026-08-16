@@ -44,7 +44,7 @@ import {
   sdkExport,
   sdkToast,
 } from 'virtual:makerlab';
-// Pro Pack (MakerWorld-only, paid). Imported statically so the MAKERLAB=false constant lets
+// Paid features (MakerWorld-only). Imported statically so the MAKERLAB=false constant lets
 // the bundler drop the whole feature — tabs, layouts and set builder — from the public build.
 // Through the same kind of virtual seam as the SDK above, because src/pro/ is gitignored: the
 // public build resolves this to a no-op stub and never needs those files to exist.
@@ -118,38 +118,17 @@ export function mount(container, host) {
   /** The footer's primary export button, once the footer exists. Relabelled per mode.
    *  Declared before the footer is built — the block below assigns it. */
   let exportBtn = null;
-  /** The footer's export block, so a paid mode can hang a Buy button beside the button. */
+  /** The footer's export block, so a paid mode can hang its price note under the button. */
   let exportPanelEl = null;
-  /**
-   * Set while a paid mode is configured but not paid for.
-   *
-   * A FLAG plus a class, deliberately not `exportBtn.disabled`: the ui-kit's export panel owns
-   * that property for its own busy state and writes `disabled = false` the moment an export
-   * settles, which would quietly un-grey a locked button. This lock is ours and the kit never
-   * touches it.
-   *
-   * Presentation only, in the SDK's sense — it decides what the button looks like and whether
-   * the click travels. What decides whether paid work runs is `ensureAccess` at the far end,
-   * which is called per operation regardless of anything here.
-   */
-  let exportLocked = false;
-  /**
-   * What to do when someone presses the locked button anyway.
-   *
-   * A greyed control that swallows the click is worse than no control: the user cannot tell
-   * whether they missed, whether it is broken, or whether something happened off screen. The
-   * press is the clearest possible statement of intent — they want the file — so it is answered
-   * with the explanation rather than with silence.
-   *
-   * @type {(() => void) | null}
-   */
-  let onExportBlocked = null;
 
   const keycapFooter = $('keycapFooter');
   if (keycapFooter) {
     const footer = sidebarFooter({
       formats: [{ id: '3mf', label: '3MF' }],
-      onExport: () => { if (exportLocked) onExportBlocked?.(); else $('export')?.click(); },
+      // Always travels. A paid mode may have relabelled this button "Unlock Pro — $9.99",
+      // but that is a label: the click goes down the same path either way and meets the gate at
+      // the far end, which is the only thing that decides whether paid work runs.
+      onExport: () => { $('export')?.click(); },
       onSave: () => $('saveProj')?.click(),
       onLoad: (file) => {
         // On the desktop the kit's Load button hands us nothing and expects the host's own
@@ -1639,7 +1618,7 @@ export function mount(container, host) {
     }
   });
 
-  // ------------------------------------------------------- Pro Pack (MakerWorld only)
+  // -------------------------------------------------- paid features (MakerWorld only)
   // Paid features live behind the host's `requestAccess` gate and are only offered inside the
   // MakerLab embed, so the whole panel is fenced behind the compile-time MAKERLAB flag: the
   // public build drops the branch, and with it the panel, the layouts and the set builder.
@@ -1700,23 +1679,17 @@ export function mount(container, host) {
             get type() { return currentMode; },
             get activeIcon() { return container.querySelector('.icon.active')?.title ?? null; },
           },
-          /** Relabel the one primary action for the active mode. */
-          setExportLabel: (text) => { if (exportBtn) exportBtn.textContent = text; },
-
           /**
-           * Grey the primary button and stop the click travelling — the cap on screen is one
-           * the user has configured but not paid to take away.
+           * Relabel the one primary action for the active mode — including, in a paid mode that
+           * has not been bought, to name the purchase and its price.
            *
-           * Deliberately does NOT hide it or relabel it "Buy". The button says what it would
-           * do, greyed, with the price beside it, so what is being bought is legible from the
-           * thing itself rather than from a button that has changed meaning.
+           * There is deliberately no second seam for "locked". The button was greyed once, with
+           * a separate Unlock button under it, and it made the user pick between an action and a
+           * purchase that were the same intent — they pressed the dead one. One button that
+           * changes what it says is the whole mechanism; what it does is decided by the gate at
+           * the far end of the click, not here.
            */
-          setExportLocked: (locked, onBlocked = null) => {
-            exportLocked = !!locked;
-            onExportBlocked = exportLocked ? onBlocked : null;
-            exportBtn?.classList.toggle('is-locked', exportLocked);
-            exportBtn?.setAttribute('aria-disabled', String(exportLocked));
-          },
+          setExportLabel: (text) => { if (exportBtn) exportBtn.textContent = text; },
           /** Subscribe to shell inputs by id. Returns an unsubscribe. */
           onShellEvent: (ids, type, fn) => {
             const nodes = ids.map((id) => $(id)).filter(Boolean);

@@ -52,6 +52,18 @@ export interface Viewer {
   /** Screen point -> model coordinates (mm, relative to the model's centre), or
    *  null if the ray misses. */
   pickPoint(clientX: number, clientY: number): [number, number, number] | null;
+  /** Hand the viewer a hierarchy it did not build — a fold rig, a linkage, anything
+   *  whose parts are parented to each other rather than sitting flat on the root.
+   *
+   *  It lives in its own group beside the parts, because `setParts` clears the root
+   *  and does NOT traverse Group children: a hierarchy parented there would lose
+   *  every descendant's geometry and material on the next rebuild without ever
+   *  disposing them. Pass null to clear. The viewer takes ownership and disposes
+   *  the whole subtree.
+   *
+   *  Framing uses the rig's extent at the moment it is set, and is never touched
+   *  again — so a rig that animates does not drag the camera around with it. */
+  setFoldRig(rig: THREE.Object3D | null, refit?: boolean): void;
   /** Swap the floor: a build plate, or the plain grid. */
   setPlate(choice: PlateChoice): void;
   setTheme(theme: string): void;
@@ -127,6 +139,11 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   const root = new THREE.Group();
   scene.add(root);
 
+  // A sibling of `root`, deliberately: `clearParts` empties the root on every
+  // rebuild, so anything long-lived and hierarchical has to live outside it.
+  const rig = new THREE.Group();
+  scene.add(rig);
+
   const materials: THREE.MeshStandardMaterial[] = [];
   const partMeshes: THREE.Mesh[] = [];
 
@@ -151,6 +168,50 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     }
     materials.length = 0;
     partMeshes.length = 0;
+  }
+
+  /** Dispose a whole subtree. `clearParts` only reaches direct Mesh children, which
+   *  is enough for the flat part list and not enough for anything nested. */
+  function disposeSubtree(obj: THREE.Object3D) {
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        const m = child.material;
+        if (Array.isArray(m)) for (const one of m) one.dispose();
+        else (m as THREE.Material).dispose();
+      }
+    });
+  }
+
+  function setFoldRig(next: THREE.Object3D | null, refit = false) {
+    for (const child of [...rig.children]) {
+      rig.remove(child);
+      disposeSubtree(child);
+    }
+    if (!next) return;
+    rig.add(next);
+
+    // Same measure-from-zero discipline as setParts: `setFromObject` reuses the
+    // parent's cached matrix, so measuring without resetting first folds the last
+    // build's offset into this one and the model creeps on every rebuild.
+    rig.position.set(0, 0, 0);
+    rig.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(rig);
+    if (!Number.isFinite(box.min.x)) return;
+    const centre = box.getCenter(new THREE.Vector3());
+    rig.position.set(-centre.x, -centre.y, -box.min.z);
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.x, size.y, size.z);
+
+    if (refit || framedRadius === 0) {
+      framedRadius = radius;
+      const offset = camera.position.clone().sub(controls.target);
+      controls.target.set(0, 0, size.z / 2);
+      camera.position
+        .copy(controls.target)
+        .add(offset.setLength(radius * FRAME_MUL + FRAME_PAD));
+      controls.update();
+    }
   }
 
   function setParts(parts: ViewerPart[], refit = false) {
@@ -404,6 +465,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     renderer.domElement.removeEventListener('pointerdown', onPointerDown);
     renderer.domElement.removeEventListener('pointerup', onPointerUp);
     clearParts();
+    setFoldRig(null);
     buildPlate.dispose();
     controls.dispose();
     pmrem.dispose();
@@ -431,6 +493,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       applyHighlight();
     },
     pickPoint,
+    setFoldRig,
     setPlate: (choice) => buildPlate.setChoice(choice),
     setTheme,
     setOrbitEnabled: (on) => {

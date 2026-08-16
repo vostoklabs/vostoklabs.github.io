@@ -44,6 +44,14 @@
       "blurb": "Type a number, pick a plate, print a house or office sign that fits your door. Custom fonts, independent line sizes, and keyhole slots so no fixings show."
     },
     {
+      "id": "foldbox",
+      "name": "Fold-Up Box Generator",
+      "route": "app",
+      "status": "coming-soon",
+      "appUrl": "/foldbox/",
+      "blurb": "Cut-ready dielines for folded card boxes — trays, tuck cartons, gable handle boxes, windows and dividers. Set the size, watch it fold, then cut it on a laser, a blade cutter or by hand."
+    },
+    {
       "id": "large-box",
       "name": "Large Customizable Box",
       "route": "mw",

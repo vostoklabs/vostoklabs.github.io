@@ -26,13 +26,25 @@ export function weldPositions(geom, tol = 1e-3) {
  * survive printing flat. Keeping this in one place is what stops the preview (which rotates a
  * group) and the exports (which bake it into the geometry) from disagreeing about where the
  * cap sits.
+ *
+ * `rotateXDeg` overrides the profile's own orientation, for the one place the user gets to
+ * choose: a Choc board can be laid out face down (180°) instead of standing (90°), trading the
+ * supports for a much more fragile pair of stems. Pass nothing and the profile decides.
+ *
+ * The drop onto the plate is computed from the ROTATED bounding box rather than from a
+ * hardcoded axis. At 90° that is the same `-bbox.min[1]` it always was; at 180° the axis that
+ * ends up lowest is a different one, and an axis baked into this function is exactly the kind of
+ * thing that goes unnoticed until a plate of caps is floating in the slicer.
  */
-export function printMatrix(profile, meta) {
-  const rotDeg = profile?.printRotateX ?? 0;
+export function printMatrix(profile, meta, rotateXDeg) {
+  const rotDeg = rotateXDeg ?? profile?.printRotateX ?? 0;
   if (!rotDeg) return null;
-  return new THREE.Matrix4()
-    .makeTranslation(0, 0, -meta.bbox.min[1]) // drop the lowest rib onto the plate
-    .multiply(new THREE.Matrix4().makeRotationX((rotDeg * Math.PI) / 180));
+  const rot = new THREE.Matrix4().makeRotationX((rotDeg * Math.PI) / 180);
+  const box = new THREE.Box3(
+    new THREE.Vector3(...meta.bbox.min),
+    new THREE.Vector3(...meta.bbox.max),
+  ).applyMatrix4(rot);
+  return new THREE.Matrix4().makeTranslation(0, 0, -box.min.z).multiply(rot);
 }
 
 /**

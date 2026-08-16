@@ -77,8 +77,8 @@ function iconsManifestPlugin(isMakerWorld) {
 // pulls in the NDA SDK). In every other build it resolves to an inline no-op stub, so the
 // public site never depends on the SDK and builds fine without those gitignored files.
 //
-// `virtual:pro-pack` is the same seam for the paid Pro Pack (src/pro/). Both the SDK glue and
-// the Pro Pack sources are gitignored, so this indirection is what keeps `pnpm build` working
+// `virtual:pro-pack` is the same seam for the paid features (src/pro/). Both the SDK glue and
+// those sources are gitignored, so this indirection is what keeps `pnpm build` working
 // in a fresh public clone: without it, mount.js's static `./pro/panel.js` import is an
 // unresolved module and the build dies before the MAKERLAB dead-code pass ever runs.
 function makerlabPlugin(enabled) {

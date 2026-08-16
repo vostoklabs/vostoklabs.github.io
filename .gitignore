@@ -46,7 +46,7 @@ apps/opal-suite/planning/
 **/tests/
 packages/manifold-noeval/README.md
 
-# Paid feature source (Pro Pack and anything else sold rather than given away). The public
+# Paid feature source (anything sold rather than given away). The public
 # build never ships these — the branch that mounts them is fenced behind the MAKERLAB
 # compile-time flag and resolved through `virtual:pro-pack` — but the SOURCE would still be
 # readable in a public repo, which is the whole thing people are paying for.

@@ -436,8 +436,18 @@ export function buildClicker(
     );
     wellFp = track(wellFp.add(col));
   }
-  const wellFootprint = simp(wellFp);
-  const bodyFootprint = simp(grow(wellFootprint, Math.max(0.4, params.borderWidth)));
+  // Simplify the well far more finely than anything else in the build. `simplify(eps)`
+  // may move a boundary by up to eps in EITHER direction, and this is the one outline
+  // that has to stay parallel to another: the cap rides inside it with only `tol` to
+  // spare. At the default 0.04 the well drifted independently of the plate it was grown
+  // from, so the gap wandered around the perimeter instead of staying at `tol` — the
+  // halves read as misaligned and the skirt rubbed on whichever side lost clearance.
+  // 0.004 keeps that error under 1% of the gap while still collapsing the collinear runs
+  // the offset leaves behind.
+  const wellFootprint = simp(wellFp, 0.004);
+  // The body's outer wall mates with nothing, so it keeps the cheap default.
+  const borderW = Math.max(0.4, params.borderWidth);
+  const bodyFootprint = simp(grow(wellFootprint, borderW));
 
   // --- Z layout (shared assembly frame: Z = 0 is the switch-plate top) ---
   const cavityFloorZ = socketBB.max[2]; // socket top = plate plane (≈ 0); the well opens to it
@@ -463,6 +473,19 @@ export function buildClicker(
   const skirtThickness = 1.4;
   const skirtBottomZ = stemBB.min[2];
   const skirtLen = slabBottomZ - skirtBottomZ;
+
+  // The skirt is deliberately a PLAIN full-height wall: constant outer profile from the
+  // cap plate to its bottom face, so the top part has one clean silhouette with no step
+  // in it anywhere.
+  //
+  // Tried and rejected (2026-08-16): relieving the lower skirt by 0.3 mm so only a short
+  // band near `bodyTopZ` kept the nominal fit, to stop the wall scraping over the full
+  // travel. It works mechanically, but the band's bottom edge reads as a lip around the
+  // underside of the cap in the slicer and the exploded view, which is not worth it. A
+  // continuous draft (full size at the plate, tapering in toward the bottom) would get
+  // the same relief with no step, and is the thing to build if the scraping needs more
+  // than the uniform-gap fix above — a stacked loft, since manifold's `scaleTop` pivots
+  // about a point and will not hold a constant width on a heart or a star.
 
   const extrudeAt = (cs: Section, h: number, z: number): Solid => {
     if (sectionIsEmpty(cs)) {

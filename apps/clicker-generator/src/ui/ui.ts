@@ -89,6 +89,8 @@ export interface UiCallbacks {
   onColorCount(n: number): void;
   onSmoothing(v: number): void;
   onFilament(index: number, hex: string): void;
+  /** Put every individually recolored shape back on its palette row. */
+  onResetPartColors(): void;
   onShape(kind: BaseShapeKind): void;
   onWidth(mm: number): void;
   onTopThickness(mm: number): void;
@@ -2036,9 +2038,31 @@ export function createUi(
     colorMode?: 'normal' | 'limited',
     limitedColors?: RGB[],
     blocks?: { capRgb: RGB },
+    recolored = 0,
   ) {
     const pal = $('palette');
     pal.innerHTML = '';
+
+    // The tip, plus — once shapes have been recolored one by one — the way back. A
+    // palette row only resets its own bucket, so without this a scattered set of
+    // per-shape colors has no single undo.
+    const appendTip = (text: string) => {
+      const tip = document.createElement('div');
+      tip.className = 'hint model-recolor-tip';
+      tip.textContent = text;
+      pal.appendChild(tip);
+      if (recolored <= 0) return;
+      const reset = document.createElement('button');
+      reset.type = 'button';
+      reset.className = 'vl-btn vl-btn--ghost vl-btn--block reset-part-colors';
+      reset.textContent = `Reset ${recolored} recolored shape${recolored === 1 ? '' : 's'}`;
+      reset.title = 'Put every individually recolored shape back on its palette row';
+      reset.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cb.onResetPartColors();
+      });
+      pal.appendChild(reset);
+    };
 
     const chipsToRender: [string, string][] = [];
     if (colorMode === 'limited' && limitedColors && limitedColors.length > 0) {
@@ -2074,10 +2098,7 @@ export function createUi(
       row('Letters', palette[0]?.filamentRgb ?? [247, 247, 245], 'legend color', (hex) =>
         cb.onFilament(0, hex),
       );
-      const tip = document.createElement('div');
-      tip.className = 'hint model-recolor-tip';
-      tip.textContent = 'Tip: click a block, a cap or a letter on the 3D model to recolor it.';
-      pal.appendChild(tip);
+      appendTip('Tip: click a block, a cap or a letter on the 3D model to recolor it.');
       return;
     }
 
@@ -2127,10 +2148,7 @@ export function createUi(
         pal.appendChild(row);
       });
 
-      const tip = document.createElement('div');
-      tip.className = 'hint model-recolor-tip';
-      tip.textContent = 'Tip: click any color on the 3D model to recolor it.';
-      pal.appendChild(tip);
+      appendTip('Tip: click a shape on the 3D model to recolor just that shape. A row above recolors its whole color.');
     }
   }
 
@@ -2355,6 +2373,7 @@ export function createUi(
       state.colorMode,
       state.limitedColors,
       isBlockMode ? { capRgb: state.baseColorOverride ?? DEFAULT_CAP_RGB } : undefined,
+      Object.keys(state.partOverrides ?? {}).length,
     );
 
     // Highlight the active icon in the Lucide gallery

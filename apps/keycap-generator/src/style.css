@@ -1,5 +1,6 @@
       * { box-sizing: border-box; }
-      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: var(--fs-body); }
+      /* Background, colour and fonts come from the kit's root.css; only sizing is ours. */
+      html, body { height: 100%; }
       body {
         display: flex;
         flex-direction: column;
@@ -420,3 +421,11 @@
         background: var(--panel-2);
       }
       .switch-row[hidden], .switch-block[hidden], .profile-note[hidden] { display: none; }
+
+      /* These two used to carry `style="margin-top:…"` in the markup. A style ATTRIBUTE needs
+         `style-src 'unsafe-inline'` in the host's CSP even when the markup was written by our
+         own script, and the SDK guide asks submissions to drop 'unsafe-inline' now that a
+         production build has no inline styles of its own. Two rules here buy back the whole
+         directive. (Setting .style.* from JS is CSSOM, not an inline style, and is unaffected.) */
+      #exportBlank { margin-top: 16px; }
+      #alphabetSet { margin-top: 8px; }

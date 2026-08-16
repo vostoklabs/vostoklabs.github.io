@@ -12,7 +12,10 @@
 //    1-based filament slot (`extruder`). Parts sharing a color share a slot.
 import { zipSync, strToU8 } from 'fflate';
 import { BRAND } from '@vostok/brand';
-import { projectSettings, colorGroupXml, paletteOf, BBL_NS, BBL_VERSION_META, BBL_APPLICATION } from '@vostok/export';
+import {
+  projectSettings, colorGroupXml, paletteOf, plateItemTransform, type PlateBounds,
+  BBL_NS, BBL_VERSION_META, BBL_APPLICATION,
+} from '@vostok/export';
 import type { ClickerPart, PartGroup, RGB } from '../types';
 import { assemblyMinZ, place, plateLayout, type Placement } from './plateLayout';
 
@@ -106,10 +109,25 @@ export function buildThreeMF(parts: ClickerPart[]): Uint8Array {
     })
     .join('');
 
-  // Placement is baked into the meshes above, so every item is an independent,
-  // untransformed object sitting on the plate.
+  // The side-by-side layout is baked into the meshes above; the item transform
+  // only slides that whole arrangement to the middle of the bed. Measure the
+  // footprint AFTER the placement — the raw meshes are the stacked assembly, and
+  // centring on those would put the laid-out halves somewhere else entirely.
+  // Without any transform the mesh origin lands on the bed's front-left corner.
+  const bounds: PlateBounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  for (const p of parts) {
+    const pl = placementFor(p.group);
+    for (let i = 0; i < p.vertProperties.length; i += p.numProp) {
+      const [x, y] = place(p.vertProperties[i], p.vertProperties[i + 1], 0, pl);
+      if (x < bounds.minX) bounds.minX = x;
+      if (x > bounds.maxX) bounds.maxX = x;
+      if (y < bounds.minY) bounds.minY = y;
+      if (y > bounds.maxY) bounds.maxY = y;
+    }
+  }
+  const transform = plateItemTransform(bounds);
   const buildItems = groups
-    .map((_g, gi) => `<item objectid="${firstWrapperId + gi}" printable="1"/>`)
+    .map((_g, gi) => `<item objectid="${firstWrapperId + gi}" transform="${transform}" printable="1"/>`)
     .join('');
 
   // The filament slots the parts above ask for. `model_settings.config` only

@@ -1,5 +1,8 @@
 import { zipSync, strToU8 } from 'fflate';
-import { projectSettings, colorGroupXml, BBL_NS, BBL_VERSION_META, BBL_APPLICATION } from '@vostok/export';
+import {
+  projectSettings, colorGroupXml, plateItemTransform, xyBounds,
+  BBL_NS, BBL_VERSION_META, BBL_APPLICATION,
+} from '@vostok/export';
 import { weldPositions } from './meshUtils.js';
 
 // Round to keep the XML compact without losing print precision (1e-4 mm).
@@ -69,6 +72,12 @@ export function buildThreeMF(parts) {
     .join('');
   const components = parts.map((_, i) => `<component objectid="${i + 2}"/>`).join('');
 
+  // Land the set mid-plate. Without a transform the mesh origin sits on the bed's
+  // front-left corner, so a set laid out around (0,0) arrives half off it.
+  const transform = plateItemTransform(
+    xyBounds(parts.map((p) => p.geom.getAttribute('position').array)),
+  );
+
   const model =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<model unit="millimeter" xml:lang="en-US"` +
@@ -85,7 +94,7 @@ export function buildThreeMF(parts) {
     `<object id="${wrapperId}" type="model"><components>${components}</components></object>` +
     colorGroupXml(palette, wrapperId + 1) +
     `</resources>` +
-    `<build><item objectid="${wrapperId}"/></build>` +
+    `<build><item objectid="${wrapperId}" transform="${transform}" printable="1"/></build>` +
     `</model>`;
 
   // Bambu/Orca-flavored metadata: assign each part to its own filament slot.

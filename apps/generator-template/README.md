@@ -14,7 +14,7 @@ pnpm --filter generator-template dev
 
 | Package | What it gives you |
 | --- | --- |
-| `@vostok/ui-kit` | Layout, topbar, header, callout, footer, controls, **and the shared patterns**: source cards, dropzone, sample grid, mode bar, stage panel, status line, sections |
+| `@vostok/ui-kit` | The page frame (`body`'s margin, background, colour and **fonts**), layout, topbar, header, callout, footer, controls, **and the shared patterns**: source cards, dropzone, sample grid, mode bar, stage panel, status line, sections |
 | `@vostok/viewer` | The 3D preview: Z-up CAD frame, PBR lighting, view presets, part picking + highlight, theme following, PNG capture |
 | `@vostok/plates` | The real Bambu build plate under the model, plus the plate picker |
 | `@vostok/export` | Multi-part 3MF with per-colour filament slots, binary STL, OBJ |
@@ -22,6 +22,13 @@ pnpm --filter generator-template dev
 
 If you catch yourself restyling one of those, **fix it in the package**. That is
 what keeps the generators looking like one product instead of five cousins.
+
+That includes the page frame. `packages/ui-kit/src/root.css` sets `body`'s font,
+size, colour, background and margin; this app's `style.css` adds only
+`body { overflow: hidden }`. Restating the font in an app is not harmless — it is
+how two shipped generators ended up rendering their whole panel in Times New
+Roman while the headings kept Chakra Petch, because `.vl-btn` and every control
+row use `font: inherit`. `pnpm check:chrome` fails the build if an app tries.
 
 ## Where things go
 
@@ -56,11 +63,21 @@ This layout is the house style. Keep it, or the catalogue drifts apart.
 
 ## Making a new generator
 
-### Step 1 — the rename checklist
+### Step 1 — run the scaffold, don't copy by hand
 
-Copy this folder to `apps/<your-generator>`, then change every one of these. They
-are the only strings that are *wrong* rather than merely generic, and three of
-them collide with the template if you miss them.
+```bash
+pnpm new:generator <id> "Display Name" "one-line description"
+pnpm install
+```
+
+That copies this folder to `apps/<id>` and performs the entire checklist below,
+adds a `.claude/launch.json` entry on a free port, and adds the root `dev:`/
+`build:` scripts. The app runs immediately.
+
+The checklist is kept here because it says *why* each string matters — read it
+when something looks wrong, not to execute it. These are the only strings that
+are *wrong* rather than merely generic, and three of them collide with the
+template if they are missed.
 
 | Where | What | Why it matters |
 | --- | --- | --- |
@@ -74,6 +91,11 @@ them collide with the template if you miss them.
 | `main.ts` §6 | `generatorHeader({ title, description })` | the name users read |
 | `state.ts` | `TagSettings` → your settings, and the type name | Save/Load serialises this |
 | `geometry.ts` | `buildTag` → your builder | see step 3 |
+
+The scaffold does every row above except the last two — `state.ts` and
+`geometry.ts` are the actual work and are step 2 and step 3 below. It also
+rewrites the `tpl-` CSS prefix to your app's own, so two generators never fight
+over a class name.
 
 Then delete what you don't need: the input section (§4) if nothing is imported,
 the mode bar and stage panel (§6) if there is only one thing to do on the model,
@@ -116,14 +138,22 @@ the footer beside the 3MF.
 Always go through `@vostok/export`. The 3MF it writes carries three things that
 are easy to miss and invisible until a user complains:
 
-- `Metadata/project_settings.config` — the filament list. Without it, someone with
-  a single filament loaded opens your model and every part collapses onto slot 1.
+- `Metadata/project_settings.config` — the filament list, and Bambu's A1 / 0.4
+  nozzle / Bambu PLA Basic presets in full. Without the filament list, someone
+  with a single filament loaded opens your model and every part collapses onto
+  slot 1. Without the *whole* presets, Studio cannot match them to its own and
+  labels the printer, process and every filament with your file's name instead.
+  A near-match is the same as no match — see `projectSettings()`.
 - The `BambuStudio:3mfVersion` metadata and matching `xmlns:BambuStudio`. Bambu
   Studio only reads the file above when these are present; otherwise it says
   *"The 3mf is not from Bambu Lab, load geometry data and color data only"* and
   throws the filament list away. Both markers are required — the config alone
   does nothing.
 - `<m:colorgroup>` for the standard-3MF path (PrusaSlicer, Orca).
+
+The presets are a snapshot of an installed Bambu Studio, regenerated with
+`pnpm --filter @vostok/export profile:build` and verified against real Studio
+projects by `pnpm --filter @vostok/export check`.
 
 ## Nothing may jump
 

@@ -11,16 +11,11 @@
    If you find yourself restyling one of those, fix it in the ui-kit instead —
    that is what keeps every generator looking like the same product. */
 
-:root {
-  background: var(--bg);
-  color: var(--text);
-}
-
+/* The page frame — background, text colour, fonts, margin — comes from the kit's
+   root.css. A generator only adds this: it fills the viewport, so the page itself
+   never scrolls (the panels do). */
 body {
-  margin: 0;
   overflow: hidden;
-  font-family: var(--font-body);
-  -webkit-font-smoothing: antialiased;
 }
 
 /* The viewer mounts its canvas here; it fills the stage behind the overlays. */

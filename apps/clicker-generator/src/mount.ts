@@ -252,6 +252,30 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       if (!store.get().palette[i]) return;
       applyModelRecolor({ kind: 'region', index: i, compIndex: 0 }, hexToRgb(hex), -1);
     },
+    onResetPartColors: () => {
+      const s = store.get();
+      if (Object.keys(s.partOverrides ?? {}).length === 0) return;
+      store.set({ partOverrides: {} });
+      // Repaint live rather than rebuilding — colour never changes geometry. The base a
+      // shape falls back to is the one `rebuild` would give it: its palette row, or the
+      // single "Letters" row when this is a block chain.
+      const blocks = s.importMode === 'blocks';
+      const capBase = s.baseColorOverride ?? deriveFrameColor(s);
+      latestParts.forEach((p, idx) => {
+        let base: RGB | undefined;
+        const m = /^top-color-(\d+)-\d+$/.exec(p.name);
+        if (m) {
+          const i = blocks ? 0 : +m[1];
+          base = s.palette[i]?.filamentRgb ?? regionSet?.regions[i]?.quantRgb;
+        } else if (/^cap-\d+$/.test(p.name)) {
+          base = capBase;
+        }
+        if (!base) return;
+        latestParts[idx] = { ...latestParts[idx], colorRgb: base };
+        viewer.setPartColor(idx, base);
+      });
+      syncBaseColor();
+    },
     onShape: (kind) => {
       store.set({ baseShape: kind });
       debouncedRebuild();
@@ -828,10 +852,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // bodies are the exception — the blocks read as a single object, so any of them recolors
     // the lot.
     if (/^block-\d+$/.test(name)) return { kind: 'body' };
-    if (store.get().importMode === 'blocks') {
-      if (/^cap-\d+$/.test(name)) return { kind: 'part', name };
-      if (/^top-color-\d+-\d+$/.test(name)) return { kind: 'part', name };
-    }
+    if (/^cap-\d+$/.test(name)) return { kind: 'part', name };
+    // A click in the viewport means THIS shape — one key, one letter, one island — in
+    // every mode, not just blocks. Both the click and the palette row used to funnel
+    // into the whole colour bucket, which left no way to recolour a single component.
+    if (/^top-color-\d+-\d+$/.test(name)) return { kind: 'part', name };
+    // Fallback for a region carrying no component index. The bucket-wide path is what
+    // the left-hand palette rows use; they call applyModelRecolor directly.
     const m = /^top-color-(\d+)(?:-(\d+))?$/.exec(name);
     if (m) {
       return { kind: 'region', index: +m[1], compIndex: m[2] ? +m[2] : 0 };
@@ -847,27 +874,26 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   function applyModelRecolor(target: ColorTarget, rgb: RGB, partIndex: number) {
     const s = store.get();
     if (target.kind === 'region') {
-      // Recolor EVERY component of this color across the model (not just the clicked
-      // one) and update the palette swatch + overrides, so clicking a color in the
-      // viewport behaves like changing its filament in the left menu (whole model).
+      // The whole colour bucket. Only the left-hand palette rows reach this — a click on
+      // the model recolours the one shape it hit (see partColorTarget).
       const i = target.index;
-      // A block chain has one legend part per block (top-color-0-0, top-color-1-0, …). This
-      // path is only reached from the left-hand palette there, and the palette means "all
-      // of them" — so it also wipes any single letters that were recoloured by clicking.
+      // A block chain has one legend part per block (top-color-0-0, top-color-1-0, …) and a
+      // single "Letters" row governing the lot, so there the bucket is every legend.
       const blocks = s.importMode === 'blocks';
       const prefix = `top-color-${i}-`;
       const isTarget = blocks
         ? (n: string) => /^top-color-\d+-\d+$/.test(n)
         : (n: string) => n.startsWith(prefix);
+      // The row governs its bucket, so it also RESETS the shapes in that bucket the user
+      // recoloured one by one — otherwise the swatch would change and half the model
+      // would not follow. The colour survives the next rebuild through `palette` /
+      // `paletteOverrides` below, which is what the builder reads for a region's base.
       const overrides = s.partOverrides ? { ...s.partOverrides } : {};
-      if (blocks) {
-        for (const k of Object.keys(overrides)) if (isTarget(k)) delete overrides[k];
-      }
+      for (const k of Object.keys(overrides)) if (isTarget(k)) delete overrides[k];
       latestParts.forEach((p, idx) => {
         if (isTarget(p.name)) {
           viewer.setPartColor(idx, rgb);
           latestParts[idx] = { ...latestParts[idx], colorRgb: rgb };
-          overrides[p.name] = rgb;
         }
       });
       const palette = s.palette.slice();

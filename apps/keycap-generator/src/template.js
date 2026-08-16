@@ -21,7 +21,7 @@ export const TEMPLATE = `
         <div class="vl-panel__scroll">
         <div id="keycapAppHeader"></div>
 
-        <!-- Mode tabs. Empty here and filled at runtime by the Pro Pack, which is a
+        <!-- Mode tabs. Empty here and filled at runtime by the paid panel, which is a
              MakerWorld-build-only module — the public build leaves this empty and it
              renders nothing, so there is one shell rather than two. -->
         <div id="kcModeTabs"></div>
@@ -65,7 +65,7 @@ export const TEMPLATE = `
           </button>
         </div>
         <!-- Mode-specific controls that must sit ABOVE the sliders rather than among them
-             (see #kcModeTabs). This is where the Pro Pack's "which legend am I editing" switch
+             (see #kcModeTabs). This is where the paid modes' "which legend am I editing" switch
              goes: it decides what every control below it is pointed at, so it has to be read
              first. #kcPlacementExtra, further down, is for controls that belong among them. -->
         <div id="kcPlacementLead"></div>
@@ -170,7 +170,7 @@ export const TEMPLATE = `
           <div class="color"><input id="capColor" type="color" value="#1c1c1e" /> <span class="color-label">Keycap</span></div>
           <div class="color"><input id="logoColor" type="color" value="#f2f2f2" /> <span class="color-label" id="logoColorLabel">Legend</span></div>
         </div>
-        <button id="exportBlank" class="vl-btn vl-btn--secondary vl-btn--block" type="button" disabled style="margin-top:16px;">Export blank keycap</button>
+        <button id="exportBlank" class="vl-btn vl-btn--secondary vl-btn--block" type="button" disabled>Export blank keycap</button>
       </div>
       </div><!-- .vl-panel__scroll -->
 
@@ -247,7 +247,7 @@ export const TEMPLATE = `
               </label>
             </div>
             <div class="switch-block" id="alphabetBlock">
-              <button id="alphabetSet" class="vl-btn vl-btn--secondary vl-btn--block" type="button" style="margin-top:8px;">Get full alphabet set (A–Z)</button>
+              <button id="alphabetSet" class="vl-btn vl-btn--secondary vl-btn--block" type="button">Get full alphabet set (A–Z)</button>
               <p class="switch-help" id="alphabetHelp">Generates 26 keycaps (A–Z) in the current font &amp; settings, zipped as 3MF files.</p>
             </div>
           </div>
@@ -276,7 +276,7 @@ export const TEMPLATE = `
         <ul class="whatsnew-list">
           <li>
             <span class="wn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 11h.01M10 11h.01M14 11h.01M18 11h.01"/></svg></span>
-            <span class="wn-body"><strong>Choc v1 profile</strong><span>Low-profile caps for Kailh Choc v1 switches, in 1u, 1.5u and 2u. Pick “Choc v1” in the Keycap → Profile dropdown. Print them standing on their side, as modelled, with supports for the stems — there's a note in the panel to remind you.</span></span>
+            <span class="wn-body"><strong>Choc v1 profile</strong><span>Low-profile caps for Kailh Choc v1 switches, in 1u, 1.5u and 2u. Pick “Choc v1” in the Keycap → Profile dropdown. Print them standing on their side, as modelled, with supports for the stems. There's a note in the panel to remind you.</span></span>
           </li>
           <li>
             <span class="wn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>

@@ -1,0 +1,224 @@
+/* App-local styling only. Anything that looks like it belongs to every generator
+   belongs in @vostok/ui-kit instead — that is what stops the catalogue drifting
+   into five cousins.
+
+   Everything structural already comes from @vostok/ui-kit/styles.css:
+     tokens.css      colours, spacing, radii, fonts   (var(--accent), …)
+     base.css        .vl-section .vl-label .vl-hint .vl-btn .vl-row
+     components.css  sliders, toggles, dialogs, toasts, footer, topbar
+     patterns.css    sources / dropzone / samples / mode bar / stage panel
+     app-shell.css   the three-column layout and its panels */
+
+/* The page frame — background, text colour, fonts, margin — comes from the kit's
+   root.css now. It used to be copied into every app, and this app (and house-number
+   before it) shipped without it: `.vl-btn` and every control row use `font: inherit`,
+   so the whole page fell back to the browser's default serif. The kit owns it so that
+   cannot happen again. A generator only adds this: it fills the viewport, so the page
+   itself never scrolls (the panels do). */
+body {
+  overflow: hidden;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------- stage -- */
+
+.fb-stage-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.fb-flat {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+
+.fb-flat svg {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+}
+
+.fb-flat__sheet {
+  fill: var(--panel-2);
+  stroke: var(--line);
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The blank reads as one piece of card, so a net that has accidentally come apart
+   is visible at a glance rather than only in the diagnostics. */
+.fb-flat__panel {
+  fill: var(--text);
+  fill-opacity: 0.07;
+  stroke: none;
+}
+
+.fb-flat__label {
+  fill: var(--muted);
+  font-family: var(--font-body);
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ------------------------------------------------------------ fold panel -- */
+
+.fb-scrub-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.fb-play {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+}
+
+.fb-scrub {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.fb-scrub__value {
+  flex: 0 0 auto;
+  min-width: 3.2rem;
+  text-align: right;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.fb-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.fb-legend__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--fs-body);
+}
+
+.fb-legend__swatch {
+  width: 0.85rem;
+  height: 0.2rem;
+  border-radius: var(--radius-s);
+}
+
+/* --------------------------------------------------------------- panels -- */
+
+.fb-blurb,
+.fb-note {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--fs-body);
+  line-height: 1.45;
+}
+
+.fb-note {
+  margin-top: var(--space-3);
+}
+
+/* -------------------------------------------------------------- results -- */
+
+.fb-readout {
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+
+.fb-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--panel);
+}
+
+.fb-stat__label {
+  color: var(--muted);
+  font-size: var(--fs-body);
+}
+
+.fb-stat__value {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.fb-stat--ok .fb-stat__value {
+  color: var(--green);
+}
+
+.fb-stat--bad .fb-stat__value {
+  color: var(--red);
+}
+
+.fb-diagnostics {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.fb-diagnostics:empty {
+  margin-top: 0;
+}
+
+.fb-diag {
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--panel-2);
+}
+
+.fb-diag--error {
+  border-left-color: var(--red);
+}
+
+.fb-diag--warning {
+  border-left-color: var(--warn);
+}
+
+.fb-diag--info {
+  border-left-color: var(--accent);
+}
+
+.fb-diag__msg {
+  color: var(--text);
+  font-size: var(--fs-body);
+  line-height: 1.45;
+}
+
+.fb-diag__fix {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--fs-body);
+  line-height: 1.45;
+}
+
+/* The style picker carries seven options, which is more than the shared source-card
+   row is sized for — let it wrap into a grid rather than squeezing every label. */
+.vl-source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.2rem, 1fr));
+  gap: var(--space-2);
+}
+

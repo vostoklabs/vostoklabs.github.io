@@ -100,6 +100,37 @@ importers:
         specifier: ^6.0.5
         version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
 
+  apps/foldbox:
+    dependencies:
+      '@vostok/brand':
+        specifier: workspace:*
+        version: link:../../config
+      '@vostok/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
+      '@vostok/viewer':
+        specifier: workspace:*
+        version: link:../../packages/viewer
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+      three:
+        specifier: ^0.171.0
+        version: 0.171.0
+    devDependencies:
+      '@types/three':
+        specifier: ^0.171.0
+        version: 0.171.0
+      esbuild:
+        specifier: ^0.24.0
+        version: 0.24.2
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.5
+        version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
+
   apps/generator-template:
     dependencies:
       '@vostok/brand':
@@ -380,6 +411,9 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
     devDependencies:
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

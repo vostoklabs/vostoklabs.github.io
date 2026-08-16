@@ -1,0 +1,31 @@
+/* The page frame — the one file in the kit that styles the document itself.
+
+   This used to be every app's job: a `:root` + `body` block copied by hand into each
+   app's `style.css`. It is the single most-repeated bug in this repo. `.vl-btn` and
+   every control row use `font: inherit`, so an app that forgot the block rendered its
+   whole panel — buttons, labels, inputs, the status line — in the browser's default
+   serif, while the few elements naming `--font-display` kept Chakra Petch. That mix is
+   what makes a new generator read as a different product. house-number and foldbox both
+   shipped exactly that bug; their style.css files carried the post-mortem.
+
+   Dialogs, toasts, tooltips and the license modal are appended to `document.body`, not
+   into `.vl-app`, so putting the font on `.vl-app` alone would still leave those in the
+   fallback face. It has to be `body`.
+
+   Everything here is a default, not a lock: apps import their own `style.css` AFTER
+   `@vostok/ui-kit/styles.css`, so the hub still replaces the background and the
+   generators still add `overflow: hidden`. */
+
+:root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  -webkit-font-smoothing: antialiased;
+}

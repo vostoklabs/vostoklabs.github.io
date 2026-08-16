@@ -5,17 +5,11 @@
    ./fonts/, which moved into the shared package — a dead URL, which is why the
    symbol picker rendered tofu boxes. */
 
-:root {
-  background: var(--bg);
-  color: var(--text);
-}
-
+/* The page frame — background, text colour, fonts, margin — comes from the kit's
+   root.css. A generator only adds this: it fills the viewport, so the page itself
+   never scrolls (the panels do). */
 body {
-  margin: 0;
   overflow: hidden;
-  font-family: var(--font-body);
-  font-size: var(--fs-body);
-  -webkit-font-smoothing: antialiased;
 }
 
 /* ---- Keychain-specific hint text ---- */

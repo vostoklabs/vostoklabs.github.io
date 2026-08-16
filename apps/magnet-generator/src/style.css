@@ -6,16 +6,11 @@
    The import source, palette rows, edit-mode bar and extrude panel are ported
    from the Clicker Generator's shipped CSS (same tokens, same feel). */
 
-:root {
-  background: var(--bg);
-  color: var(--text);
-}
-
+/* The page frame — background, text colour, fonts, margin — comes from the kit's
+   root.css. A generator only adds this: it fills the viewport, so the page itself
+   never scrolls (the panels do). */
 body {
-  margin: 0;
   overflow: hidden;
-  font-family: var(--font-body);
-  -webkit-font-smoothing: antialiased;
 }
 
 /* Controls the app hides contextually (a bevel size with no bevel, the pause

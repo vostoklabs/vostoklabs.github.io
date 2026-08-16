@@ -11,7 +11,10 @@
 //    it prints as-is with no flipping or rearrangement.
 import { zipSync, strToU8 } from 'fflate';
 import { BRAND } from '@vostok/brand';
-import { projectSettings, colorGroupXml, paletteOf, BBL_NS, BBL_VERSION_META, BBL_APPLICATION } from '@vostok/export';
+import {
+  projectSettings, colorGroupXml, paletteOf, plateItemTransform, xyBounds,
+  BBL_NS, BBL_VERSION_META, BBL_APPLICATION,
+} from '@vostok/export';
 import type { MagnetPart, RGB } from '../types';
 
 const f = (n: number): string => String(Math.round(n * 1e4) / 1e4);
@@ -107,7 +110,13 @@ export function buildThreeMF(parts: MagnetPart[]): Uint8Array {
     )
     .join('');
 
-  const buildItems = groups.map((_, i) => `<item objectid="${wrapperIdFor(i)}"/>`).join('');
+  // Land it mid-plate. Without a transform the mesh origin sits on the bed's
+  // front-left corner, so a magnet modelled around (0,0) arrives half off. Every
+  // item takes the same translation, so the pieces keep their relative layout.
+  const transform = plateItemTransform(xyBounds(parts.map((p) => p.vertProperties)));
+  const buildItems = groups
+    .map((_, i) => `<item objectid="${wrapperIdFor(i)}" transform="${transform}" printable="1"/>`)
+    .join('');
 
   // The filament slots the parts above ask for. `model_settings.config` only says
   // WHICH slot each part wants — it does not create them, so a user with a single

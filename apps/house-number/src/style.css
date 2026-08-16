@@ -2,27 +2,14 @@
    @vostok/ui-kit instead — two apps with their own idea of a row is how the catalogue
    stops looking like one product. */
 
-/* The page frame. The kit styles `.vl-*` classes and deliberately never touches `body`, so
-   every app sets this itself — the same block is in generator-template, clicker, magnet and
-   name-keychain, and this generator was the one that shipped without it.
-
-   Leaving it out is not cosmetic. `.vl-btn` and the control rows use `font: inherit`, so
-   with no font-family on `body` every button, label, input and status line fell back to the
-   browser default — Times New Roman — while the few elements that name `--font-display`
-   outright (the title, section summaries, the stage label) kept Chakra Petch. That mix is
-   what made the panel read as a different product. The default `margin: 8px` also pushed
-   the page 16px past the viewport, putting a scrollbar on a layout built to fill it. */
-:root {
-  background: var(--bg);
-  color: var(--text);
-}
-
+/* The page frame — background, text colour, fonts, margin — comes from the kit's root.css
+   now. It used to be copied into every app, and this generator shipped without it: `.vl-btn`
+   and the control rows use `font: inherit`, so every button, label, input and status line
+   fell back to Times New Roman while the `--font-display` elements kept Chakra Petch, and
+   the default `margin: 8px` put a scrollbar on a layout built to fill the viewport. The kit
+   owns it so that cannot happen again. A generator only adds this: */
 body {
-  margin: 0;
   overflow: hidden;
-  font-family: var(--font-body);
-  font-size: var(--fs-body);
-  -webkit-font-smoothing: antialiased;
 }
 
 .hn-stage-canvas {
