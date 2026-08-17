@@ -295,34 +295,63 @@ export interface Sheet {
   name: string;
   widthMm: number;
   heightMm: number;
+  /** A sheet of card you cut, or a printer bed you print on. The two never belong
+   *  in the same dropdown: which one is on offer follows from how you are making
+   *  the box, and offering both is how the panel stopped making sense. */
+  kind: 'sheet' | 'plate';
 }
 
 /** Sheet presets. The trap worth knowing: A4 PORTRAIT (297 tall) fits neither the
  *  H2D blade area (285) nor a Cricut 12x12 mat (292.1), and US 12x12 cardstock
  *  (304.8) fits no H2D process at all. */
 export const SHEETS: Sheet[] = [
-  { id: 'a4-land', name: 'A4 landscape (297 × 210)', widthMm: 297, heightMm: 210 },
-  { id: 'a4', name: 'A4 portrait (210 × 297)', widthMm: 210, heightMm: 297 },
-  { id: 'letter', name: 'US Letter (279 × 216)', widthMm: 279.4, heightMm: 215.9 },
-  { id: 'sq12', name: '12 × 12 in cardstock (305 × 305)', widthMm: 304.8, heightMm: 304.8 },
-  { id: 'mat12', name: 'Cricut 12 × 12 mat (292 × 292)', widthMm: 292.1, heightMm: 292.1 },
-  { id: 'mat24', name: 'Cricut 12 × 24 mat (292 × 597)', widthMm: 292.1, heightMm: 596.9 },
-  { id: 'a3', name: 'A3 (420 × 297)', widthMm: 420, heightMm: 297 },
-  { id: 'sra3', name: 'SRA3 (450 × 320)', widthMm: 450, heightMm: 320 },
+  { id: 'a4-land', name: 'A4 landscape (297 × 210)', widthMm: 297, heightMm: 210 , kind: 'sheet' },
+  { id: 'a4', name: 'A4 portrait (210 × 297)', widthMm: 210, heightMm: 297 , kind: 'sheet' },
+  { id: 'letter', name: 'US Letter (279 × 216)', widthMm: 279.4, heightMm: 215.9 , kind: 'sheet' },
+  { id: 'sq12', name: '12 × 12 in cardstock (305 × 305)', widthMm: 304.8, heightMm: 304.8 , kind: 'sheet' },
+  { id: 'mat12', name: 'Cricut 12 × 12 mat (292 × 292)', widthMm: 292.1, heightMm: 292.1 , kind: 'sheet' },
+  { id: 'mat24', name: 'Cricut 12 × 24 mat (292 × 597)', widthMm: 292.1, heightMm: 596.9 , kind: 'sheet' },
+  { id: 'a3', name: 'A3 (420 × 297)', widthMm: 420, heightMm: 297 , kind: 'sheet' },
+  { id: 'sra3', name: 'SRA3 (450 × 320)', widthMm: 450, heightMm: 320 , kind: 'sheet' },
+  // Build plates, for the printed sheet. Same mechanism as a sheet of card — the
+  // fit check does not care which one you meant, and "will this blank fit" is the
+  // same question on a bed as on a mat.
+  // 256 first: it is the bed most people have, and the first plate in this list is
+  // the one that gets picked when someone switches to printing. Defaulting to the
+  // smallest bed there is meant the mode opened on an overflow error.
+  { id: 'plate-256', name: 'Build plate — A1 / P1 / X1 (256 × 256)', widthMm: 256, heightMm: 256 , kind: 'plate' },
+  { id: 'plate-a1mini', name: 'Build plate — A1 mini (180 × 180)', widthMm: 180, heightMm: 180 , kind: 'plate' },
+  { id: 'plate-mk4', name: 'Build plate — Prusa MK4 (250 × 210)', widthMm: 250, heightMm: 210 , kind: 'plate' },
+  { id: 'plate-h2d', name: 'Build plate — H2D (350 × 320)', widthMm: 350, heightMm: 320 , kind: 'plate' },
 ];
 
 // ───────────────────────────────── parameters ─────────────────────────────────
 
-/** Only styles we can build correctly. `mailer` and `gable` were removed rather
- *  than shipped broken — see the note above STYLES in geometry/styles.ts. */
-export type StyleId = 'tray-lid' | 'tuck-top' | 'snap-lock' | 'sleeve' | 'divider';
+/** Only styles we can build correctly. The first three are transcribed from
+ *  production dielines and need no glue at all; see geometry/styles.ts. */
+export type StyleId =
+  | 'mailer'
+  | 'handle-box'
+  | 'tray'
+  | 'tray-lid'
+  | 'tuck-top'
+  | 'snap-lock'
+  | 'sleeve'
+  | 'divider';
 
 export type TuckLock = 'none' | 'friction' | 'slit';
 export type DimBasis = 'inside' | 'outside';
 export type Units = 'mm' | 'in';
 
+/** How the box gets made. It is one decision and it changes almost everything
+ *  downstream — the material, the sheet, the export, and the thickness the geometry
+ *  is built for — so it is one control at the top rather than a machine dropdown
+ *  next to an unrelated "print it flat" drawer. */
+export type MakeMode = 'cut' | 'print';
+
 export interface BoxParams {
   style: StyleId;
+  makeMode: MakeMode;
 
   lengthMm: number;
   widthMm: number;
@@ -352,13 +381,30 @@ export interface BoxParams {
   dividerRows: number;
   hangHole: boolean;
 
-  /** Gable handle height above the ridge. */
+  /** Add a carry handle: raised grips on a tray, standing straps on a carry box. */
+  handle: boolean;
+  /** How far the handle rises above the rim or the lid. */
   handleHeightMm: number;
+  /** Mailer only: cut a hand hole through both plies of each rolled end. */
+  handHoles: boolean;
 
   stockId: string;
   /** MEASURED caliper, mm. Not the number on the packet. */
   caliperMm: number;
   grainAlongLength: boolean;
+
+  // ── printed sheet (phase 2) ──
+  /** Print the net flat as a thin sheet and fold it once. These four only affect
+   *  the 3MF/STL; the dieline is the same file either way. */
+  layerHeightMm: number;
+  /** Total sheet thickness, in layers. Two layers of 0.2 is 0.4 mm, which is what
+   *  300 gsm card measures — that is the whole idea. */
+  sheetLayers: number;
+  /** What is left under a fold line. Equal to `sheetLayers` means no groove. */
+  hingeLayers: number;
+  /** Width of the thinned band. A 90 degree fold in a sheet of thickness t needs
+   *  roughly pi·t/2 of band before the outer face has to stretch. */
+  hingeWidthMm: number;
 
   machineId: string;
   sheetId: string;
@@ -370,14 +416,16 @@ export interface BoxParams {
 }
 
 export const DEFAULT_PARAMS: BoxParams = {
-  style: 'tray-lid',
-  // 75 x 50 x 35 is a soap or candle box, and it is the largest round number whose
-  // blank still fits A4 in EVERY style here. Boxes eat a lot of paper: a tuck carton
-  // blank is roughly 4S+12 by 3S+24 for a cube of side S, so a Cricut mat or an H2D
-  // tops out around a 70 mm cube. Defaulting past that means opening on an error.
-  lengthMm: 75,
-  widthMm: 50,
-  heightMm: 35,
+  style: 'mailer',
+  makeMode: 'cut',
+  // 90 x 60 x 25 is a small shipper, and it is the largest round size whose MAILER
+  // blank still fits A4 landscape — 198 x 196 against the 287 x 200 usable area.
+  // Boxes eat a lot of paper: a mailer's blank is roughly L+4H by 2W+2H+2t, so an A4
+  // sheet or a Cricut mat tops out near a 40 mm cube in this style. Defaulting past
+  // that means opening the app on an error, which is how the incumbents do it.
+  lengthMm: 90,
+  widthMm: 60,
+  heightMm: 25,
   dimBasis: 'inside',
   units: 'mm',
   lidHeightMm: 22,
@@ -386,7 +434,9 @@ export const DEFAULT_PARAMS: BoxParams = {
   tuckLock: 'slit',
   glueTabMm: 12,
   thumbNotch: true,
-  window: true,
+  handle: true,
+  handHoles: false,
+  window: false,
   windowScale: 0.62,
   windowRadiusMm: 4,
   filmMarginMm: 5,
@@ -398,6 +448,13 @@ export const DEFAULT_PARAMS: BoxParams = {
   stockId: 'card300',
   caliperMm: 0.38,
   grainAlongLength: true,
+  // 2 x 0.2 = 0.40 mm sheet on a 0.20 mm hinge. 300 gsm card measures 0.38, so the
+  // default printed sheet lands within a fortieth of a millimetre of the default
+  // card — the same box, in a material you already have on the spool.
+  layerHeightMm: 0.2,
+  sheetLayers: 2,
+  hingeLayers: 1,
+  hingeWidthMm: 1.2,
   machineId: 'h2d-blade',
   sheetId: 'a4-land',
   foldMode: 'draw',

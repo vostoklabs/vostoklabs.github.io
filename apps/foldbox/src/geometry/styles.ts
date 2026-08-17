@@ -9,80 +9,127 @@
 // the clamps are the interesting part.
 
 import type { BoxParams, LoosePart, Panel, Poly, Pt, Slit, StyleParts } from '../types';
-import { rect, roundedRect, stadium, translate } from './poly';
+import { bboxOf, rect, roundCorners, roundedRect, stadium, translate } from './poly';
 import {
   HALF,
+  bladeShoulder,
   clamp,
   closure,
   dustDepth,
   dustFlap,
+  euroSlot,
   glueTab,
+  handleBlade,
   relief,
+  rollEnd,
   tray,
-  trayExtent,
   tube,
   tuckDepth,
 } from './primitives';
 
 export interface StyleMeta {
   id: BoxParams['style'];
+  /** Full name, for the export title and the assembly sheet. */
   name: string;
+  /** Card label. The picker is eight tiles in a 280 px sidebar, so a name that
+   *  wraps to three lines makes every tile in the row that tall — which is how the
+   *  picker came to be 574 px of a 674 px panel. */
+  short: string;
   blurb: string;
+  /** Assembles with nothing but the board. Badged in the UI and stated in the
+   *  assembly sheet, because "no glue" is the only question most people have. */
+  glueFree: boolean;
   /** Which controls this style actually uses, so the UI can hide the rest rather
    *  than showing dead sliders. */
   uses: {
     lid?: boolean;
     tuck?: boolean;
     glue?: boolean;
+    /** A handle whose height is worth a slider. */
     handle?: boolean;
+    /** Hand holes cut through a wall, on or off. */
+    handHoles?: boolean;
     divider?: boolean;
     window?: boolean;
   };
 }
 
-// Two styles are deliberately NOT listed, and their builders below are therefore
-// dead code kept on purpose:
-//
-//   mailer  — the roll-end construction is a 3-segment roll per side, not the plain
-//             side walls we built. Its blank formula fits the one dimensioned drawing
-//             we have only because it has two free constants and two equations, which
-//             cannot fail. It needs a second dimensioned drawing at a different size
-//             before it can be trusted; one is enough to collapse the fit.
-//   gable   — the leaf-shaped side wing is the panel carrying the only closure this
-//             style has, and no source we reached draws its outline. We can compute
-//             its blank size and still not draw the panel that makes it a box.
-//
-// Shipping either would put a blank in front of someone that does not fold.
+// Ordered glue-free first, because that is the question people actually arrive with.
+// `glueFree` is not decoration — the UI badges it and the export sheet says so, and
+// the three styles that are false are false for one specific reason: a tube has to
+// close on itself somewhere, and only a lap does that on 300 gsm card.
 export const STYLES: StyleMeta[] = [
+  {
+    id: 'mailer',
+    name: 'Mailer box',
+    short: 'Mailer',
+    blurb:
+      'The subscription-box shape. Roll each end down, push two tabs through the floor, tuck the lid.',
+    glueFree: true,
+    // No `tuck` — the RETT's tuck is full-depth by construction and reads nothing
+    // from the tuck sliders. Showing them here is what "the settings make no sense"
+    // means: three controls that move and change nothing.
+    uses: { handHoles: true, window: true },
+  },
+  {
+    id: 'handle-box',
+    name: 'Carry box with handle',
+    short: 'Carry box',
+    blurb:
+      'Two lids meet in the middle and their handles lock up through the side wings. Big blank.',
+    glueFree: true,
+    uses: { handle: true, window: true },
+  },
+  {
+    id: 'tray',
+    name: 'Tray',
+    short: 'Tray',
+    blurb:
+      'Open tray. Each end rolls over the corner ears and locks into the floor. Raise the sides for a carry basket.',
+    glueFree: true,
+    // A tray is open on top; there is no face to put a window in that is not either
+    // the floor or the wall the grip is already cut out of.
+    uses: { handle: true },
+  },
   {
     id: 'tray-lid',
     name: 'Tray & lid',
-    blurb: 'Two nested trays. No glue if you tuck the corners — the classic gift box.',
+    short: 'Tray & lid',
+    blurb: 'Two of the same locking tray, one nesting over the other.',
+    glueFree: true,
     uses: { lid: true, window: true },
+  },
+  {
+    id: 'divider',
+    name: 'Divider insert',
+    short: 'Dividers',
+    blurb: 'Slot-together strips that drop into a box you already have.',
+    glueFree: true,
+    uses: { divider: true },
   },
   {
     id: 'tuck-top',
     name: 'Tuck-top carton',
-    blurb: 'The standard reverse tuck carton: four walls, dust flaps, a tuck at each end.',
+    short: 'Tuck carton',
+    blurb: 'The standard reverse tuck carton: dust flaps and a tuck at each end.',
+    glueFree: false,
     uses: { tuck: true, glue: true, window: true },
   },
   {
     id: 'snap-lock',
     name: 'Interlocking base',
-    blurb: 'Tuck lid over a snap-lock base: a tongue through a slot, so the bottom holds itself shut. No glue underneath.',
+    short: 'Snap-lock',
+    blurb: 'Tuck lid over a base that locks itself with a tongue through a slot.',
+    glueFree: false,
     uses: { tuck: true, glue: true, window: true },
   },
   {
     id: 'sleeve',
     name: 'Sleeve',
+    short: 'Sleeve',
     blurb: 'An open-ended wrap. Slide it over a tray, or use it as a belly band.',
+    glueFree: false,
     uses: { glue: true, window: true },
-  },
-  {
-    id: 'divider',
-    name: 'Divider insert',
-    blurb: 'Slot-together strips that drop into a box you already have.',
-    uses: { divider: true },
   },
 ];
 
@@ -184,6 +231,42 @@ export function applyWindow(
   };
 }
 
+// ────────────────────────────────── plain tray ──────────────────────────────────
+
+/** One tray on its own — the everyday glue-free box. With the handle turned on, the
+ *  two long walls grow a raised grip and it becomes a carry basket, which is by a
+ *  wide margin the most compact handled box here: no lid, no wings, no blades, so
+ *  the blank is barely bigger than the tray itself. */
+function buildTray(p: BoxParams): StyleParts {
+  const { L, W, H } = insideDims(p);
+  const rise = p.handle ? clamp(p.handleHeightMm, 12, 140) : 0;
+  const { panels, slits } = tray({
+    prefix: 'tr-',
+    labelPrefix: '',
+    L,
+    W,
+    H,
+    t: p.caliperMm,
+    x: H + 2,
+    y: H + rise + 2,
+    handleRiseMm: rise,
+  });
+  return {
+    panels,
+    slits,
+    rootId: 'tr-base',
+    loose: [],
+    assembly: [
+      'Fold the two long walls up, then fold the ear at each of their four corners inward.',
+      'Roll each end over the ears: the wall up, the narrow strip across the top, the inner panel straight back down inside.',
+      'Push the two tabs on each inner panel through the slots in the floor. The ears are now trapped between the two plies of the end and the tray holds itself square — nothing is glued and nothing needs to be.',
+      ...(rise > 0
+        ? ['Carry it by the two raised grips. Under 300 gsm, fold a spare strip over the top edge of each grip before you load it up.']
+        : []),
+    ],
+  };
+}
+
 // ───────────────────────────────── tray & lid ─────────────────────────────────
 
 function buildTrayLid(p: BoxParams): StyleParts {
@@ -191,31 +274,16 @@ function buildTrayLid(p: BoxParams): StyleParts {
   const t = p.caliperMm;
   const gap = 8;
 
-  const base = tray({
-    prefix: 'tr-',
-    labelPrefix: 'tray ',
-    L,
-    W,
-    H,
-    t,
-    x: H + 2,
-    y: H + 2,
-  });
+  const base = tray({ prefix: 'tr-', labelPrefix: 'tray ', L, W, H, t, x: 0, y: 0 });
 
-  // The lid nests over the tray, so its inside must clear the tray's OUTSIDE. The
-  // 2t is pure nesting — it buys no play at all — and the play is added on top of it.
-  // A percentage clearance, which is what the incumbent uses, is wrong at both ends:
+  // The lid nests over the tray, so its inside must clear the tray's OUTSIDE — and
+  // the tray's outside is now its FLOOR, because the rolled ends fold up from the
+  // floor's edge and the long walls from theirs. Play goes on top of that. A
+  // percentage clearance, which is what the incumbent uses, is wrong at both ends:
   // 7% of 30 mm is sloppy and 7% of 300 mm falls off.
-  const lidL = L + 2 * t + 2 * p.lidPlayMm;
+  const lidL = L + 5 * t + 2 * p.lidPlayMm;
   const lidW = W + 2 * t + 2 * p.lidPlayMm;
   const lidH = clamp(p.lidHeightMm, 6, Math.max(8, H));
-
-  // Stack the two blanks rather than setting them side by side. Both trays are wider
-  // than they are tall, so side by side makes a very long thin blank that fits no
-  // sheet in any orientation — stacked, the same two pieces turn 90 degrees onto A4.
-  const [, trayH] = trayExtent(L, W, H);
-  const lidY = 2 + trayH + gap + lidH;
-  const lidX = H + 2 + L / 2 - lidL / 2;
 
   const lid = tray({
     prefix: 'ld-',
@@ -224,20 +292,40 @@ function buildTrayLid(p: BoxParams): StyleParts {
     W: lidW,
     H: lidH,
     t,
-    x: lidX,
-    y: lidY,
+    x: 0,
+    y: 0,
     // The lid arrives from above, upside down, and comes to rest lidH above the rim.
     rootPose: { offset: [0, 0, H + 6], flip: true },
   });
 
+  // Stack the two blanks rather than setting them side by side. Both trays are wider
+  // than they are tall, so side by side makes a very long thin blank that fits no
+  // sheet in any orientation — stacked, the same two pieces turn 90 degrees onto A4.
+  //
+  // Measured off the built panels rather than predicted from L/W/H: a tray's blank
+  // now reaches out by a roll's worth at each end and a wall's at each side, and a
+  // formula that has to be kept in step with the builder is a formula that will not be.
+  const bb = (parts: { panels: Panel[] }) => bboxOf(parts.panels.map((q) => q.outline));
+  const [tx0, , , ty1] = bb(base);
+  const [lx0, ly0, lx1] = bb(lid);
+  const dx = tx0 + (L + 5 * t) / 2 - (lx0 + lx1) / 2;
+  const dy = ty1 + gap - ly0;
+  const moved = lid.panels.map((q) => ({
+    ...q,
+    outline: translate(q.outline, dx, dy),
+    holes: q.holes.map((h) => translate(h, dx, dy)),
+  }));
+
   return {
-    panels: [...base.panels, ...lid.panels],
+    panels: [...base.panels, ...moved],
     slits: [],
     rootId: 'tr-base',
     loose: [],
     assembly: [
-      'Tuck each corner ear inside, then bring the side wall up over it — the ear holds the corner without glue.',
-      'A dab of glue on each ear makes it permanent if you would rather it never came apart.',
+      'Fold the two long walls up, then fold the ear at each of their four corners inward.',
+      'Roll each end over the ears: the wall up, the narrow strip across the top, the inner panel straight back down inside.',
+      'Push the two tabs on each inner panel through the slots in the floor. That is what holds the tray square — nothing is glued and nothing needs to be.',
+      'Build the lid exactly the same way, then drop it over the tray.',
     ],
   };
 }
@@ -471,151 +559,409 @@ function buildSnapLock(p: BoxParams): StyleParts {
   };
 }
 
-// ──────────────────────────────── roll-end mailer ────────────────────────────────
+// ─────────────────────── mailer — roll end tuck top (RETT) ───────────────────────
 
+/** The e-commerce mailer, transcribed from a production dieline (315 × 202 × 62 on
+ *  1.5 mm board) rather than derived, then re-expressed in caliper so it survives
+ *  cardstock. It is the most-made glue-free box there is, and every term below was
+ *  measured off that drawing:
+ *
+ *    base            (L + 5t) × (W + 2t)   — 2.5t per end is the double-ply roll
+ *    front/back wall  H + t, inset g from the base's ends
+ *    ear              W/2 long, hinged VERTICALLY off each wall end
+ *    roll end         wall H │ roll 2t │ inner ply H − t │ tabs
+ *    lid              (L + 5t + t) × (W + t), off the back wall
+ *    tuck             L wide × H deep, big radii
+ *
+ *  The assembly order is the whole point: walls up, ears in, then the roll comes
+ *  over and DOWN on top of the ears and its tabs drop through the floor. Nothing is
+ *  holding the ears but the roll, and nothing is holding the roll but the tabs. */
 function buildMailer(p: BoxParams): StyleParts {
   const { L, W, H } = insideDims(p);
   const t = p.caliperMm;
   const g = relief(t);
-  const tuck = tuckDepth(H, W, p.tuckDepthMm);
-  const wing = Math.max(6, H - g);
 
-  const panels: Panel[] = [];
-  const slits: Slit[] = [];
+  const BL = L + 5 * t;
+  const BW = W + 2 * t;
+  const wallH = H + t;
 
   const base: Panel = {
     id: 'ml-base',
     label: 'base',
     role: 'base',
-    outline: rect(0, 0, L, W),
+    outline: rect(0, 0, BL, BW),
+    holes: [],
+    parent: null,
+    foldAngle: 0,
+  };
+
+  // One hand hole per end, cut through BOTH plies of the roll at the same distance
+  // from the fold, so they line up into a single lined hole once it is rolled.
+  const hand = p.handHoles
+    ? { w: clamp(BW * 0.42, 40, 95), h: clamp(H * 0.3, 14, 26) }
+    : null;
+
+  const rolls = [
+    rollEnd({ prefix: 'ml-l', parent: base.id, x: 0, y0: 0, y1: BW, dir: -1, H, t, hand, order: 3 }),
+    rollEnd({ prefix: 'ml-r', parent: base.id, x: BL, y0: 0, y1: BW, dir: 1, H, t, hand, order: 3 }),
+  ];
+  base.holes = rolls.flatMap((r) => r.slots);
+
+  const front: Panel = {
+    id: 'ml-front',
+    label: 'front wall',
+    role: 'body',
+    outline: rect(g, -wallH, BL - 2 * g, wallH),
+    holes: [],
+    parent: base.id,
+    foldAngle: HALF,
+    order: 1,
+  };
+  const back: Panel = {
+    id: 'ml-back',
+    label: 'back wall',
+    role: 'body',
+    outline: rect(g, BW, BL - 2 * g, wallH),
+    holes: [],
+    parent: base.id,
+    foldAngle: HALF,
+    order: 1,
+  };
+
+  // Ears: half the box's depth each, so the front ear and the back ear very nearly
+  // meet inside the end wall. They hinge on a VERTICAL crease one relief in from the
+  // base's end, which is what lands them flat against the end wall's inner face.
+  const earLen = Math.max(5, BW / 2 - g);
+  const chamfer = Math.min(earLen * 0.35, (wallH - 2 * g) * 0.35);
+  const ear = (
+    id: string,
+    parent: string,
+    hx: number,
+    dirX: 1 | -1,
+    yBase: number,
+    yRim: number,
+  ): Panel => {
+    const d = Math.sign(yRim - yBase);
+    return {
+      id,
+      label: 'corner ear',
+      role: 'flap',
+      outline: [
+        [hx, yBase],
+        [hx + dirX * earLen, yBase],
+        [hx + dirX * earLen, yRim - d * chamfer],
+        [hx + dirX * (earLen - chamfer), yRim],
+        [hx, yRim],
+      ],
+      holes: [],
+      parent,
+      foldAngle: HALF,
+      order: 2,
+    };
+  };
+
+  const panels: Panel[] = [
+    base,
+    front,
+    back,
+    ...rolls.flatMap((r) => r.panels),
+    ear('ml-ear-fl', front.id, g, -1, -g, -wallH + g),
+    ear('ml-ear-fr', front.id, BL - g, 1, -g, -wallH + g),
+    ear('ml-ear-bl', back.id, g, -1, BW + g, BW + wallH - g),
+    ear('ml-ear-br', back.id, BL - g, 1, BW + g, BW + wallH - g),
+  ];
+
+  // Lid: one caliper wider than the base so it drops over the outside of the walls
+  // rather than fighting them, and W + t deep so its far crease lands on the front
+  // wall's outer face.
+  const lidY = BW + wallH;
+  const lidD = W + t;
+  const lid: Panel = {
+    id: 'ml-lid',
+    label: 'lid',
+    role: 'lid',
+    outline: rect(-t / 2, lidY, BL + t, lidD),
+    holes: [],
+    parent: back.id,
+    foldAngle: HALF,
+    order: 6,
+  };
+
+  // The tuck goes the full depth of the front wall, inside it. Its far corners carry
+  // a radius of nearly half its depth — that is what lets it find the gap between the
+  // wall and the two ears instead of catching on them.
+  const tuckD = clamp(H - 2 * t, 6, Math.max(6, H));
+  const tuckW = Math.max(8, L);
+  const tuckX = BL / 2 - tuckW / 2;
+  const tuckR = Math.min(tuckD * 0.48, tuckW * 0.14);
+  const tuckY = lidY + lidD;
+  const tuckPanel: Panel = {
+    id: 'ml-tuck',
+    label: 'tuck flap',
+    role: 'tuck',
+    outline: roundCorners(rect(tuckX, tuckY, tuckW, tuckD), [0, 0, tuckR, tuckR]),
+    holes: [],
+    parent: lid.id,
+    foldAngle: HALF,
+    undershoot: 0.05,
+    order: 7,
+  };
+
+  panels.push(lid, tuckPanel);
+
+  return {
+    panels,
+    slits: [],
+    rootId: base.id,
+    loose: [],
+    assembly: [
+      'Stand the front and back walls up, then fold the four corner ears inward so they lie flat against the ends.',
+      'Now roll each end over the ears: the wall up, the narrow strip across the top, the inner panel straight back down inside.',
+      'Push the two tabs on each inner panel through the slots in the floor. That is the whole lock — the ends are now double-walled and nothing can spring open.',
+      'Fold the lid over and slide its tuck down inside the front wall.',
+    ],
+  };
+}
+
+// ───────────────────────── carry box with a folded handle ─────────────────────────
+
+/** The glue-free bakery box, transcribed from a production dieline (250 × 202 × 95
+ *  on 0.46 mm board). Four things happen in order and each one traps the last:
+ *
+ *    1. front and back walls up, their ears folded in against the ends
+ *    2. side walls up over the ears
+ *    3. the two top flaps fold in — each is HALF the depth, so they meet on the
+ *       centre line — and their handle straps stand up off that meeting line
+ *    4. the side wings fold over the top and the two straps come UP THROUGH a slot
+ *       cut along each wing
+ *
+ *  Step 4 is the lock, and it is mutual: the wings cannot lift because the straps
+ *  are through them, and the top flaps cannot lift because the wings are on them.
+ *  The strap's shoulders are wider than the slot, which is what takes the weight. */
+function buildHandleBox(p: BoxParams): StyleParts {
+  const { L, W, H } = insideDims(p);
+  const t = p.caliperMm;
+  const g = relief(t);
+
+  const BL = L + 2 * t;
+  const BW = W + 2 * t;
+  const wallH = H + t;
+  // The side walls stand one caliper proud of the front and back, so their wings
+  // fold over the TOP of the two lid flaps instead of fighting them for the rim.
+  const sideH = H + 2 * t;
+  const topD = BW / 2;
+
+  const base: Panel = {
+    id: 'hb-base',
+    label: 'base',
+    role: 'base',
+    outline: rect(0, 0, BL, BW),
     holes: [],
     parent: null,
     foldAngle: 0,
   };
 
   const front: Panel = {
-    id: 'ml-front',
+    id: 'hb-front',
     label: 'front wall',
     role: 'body',
-    outline: rect(0, -H, L, H),
+    outline: rect(g, -wallH, BL - 2 * g, wallH),
     holes: [],
     parent: base.id,
     foldAngle: HALF,
     order: 1,
   };
-  const backWall: Panel = {
-    id: 'ml-back',
+  const back: Panel = {
+    id: 'hb-back',
     label: 'back wall',
     role: 'body',
-    outline: rect(0, W, L, H),
+    outline: rect(g, BW, BL - 2 * g, wallH),
     holes: [],
     parent: base.id,
     foldAngle: HALF,
     order: 1,
   };
-  // The lid rolls over from the back wall: lid, then the front flap that drops down
-  // the front face, then the tuck that slides inside.
-  const lid: Panel = {
-    id: 'ml-lid',
-    label: 'lid',
-    role: 'lid',
-    outline: rect(0, W + H, L, W + t),
+
+  const earLen = Math.max(5, BW / 2 - g);
+  const earChamfer = Math.min(earLen * 0.35, (wallH - 2 * g) * 0.35);
+  const ear = (
+    id: string,
+    parent: string,
+    hx: number,
+    dirX: 1 | -1,
+    yBase: number,
+    yRim: number,
+  ): Panel => {
+    const d = Math.sign(yRim - yBase);
+    return {
+      id,
+      label: 'corner ear',
+      role: 'flap',
+      outline: [
+        [hx, yBase],
+        [hx + dirX * earLen, yBase],
+        [hx + dirX * earLen, yRim - d * earChamfer],
+        [hx + dirX * (earLen - earChamfer), yRim],
+        [hx, yRim],
+      ],
+      holes: [],
+      parent,
+      foldAngle: HALF,
+      order: 2,
+    };
+  };
+
+  const leftWall: Panel = {
+    id: 'hb-left',
+    label: 'left side',
+    role: 'body',
+    outline: rect(-sideH, g, sideH, BW - 2 * g),
     holes: [],
-    parent: backWall.id,
+    parent: base.id,
+    foldAngle: HALF,
+    order: 3,
+  };
+  const rightWall: Panel = {
+    id: 'hb-right',
+    label: 'right side',
+    role: 'body',
+    outline: rect(BL, g, sideH, BW - 2 * g),
+    holes: [],
+    parent: base.id,
+    foldAngle: HALF,
+    order: 3,
+  };
+
+  const topFront: Panel = {
+    id: 'hb-topf',
+    label: 'lid (front half)',
+    role: 'lid',
+    outline: rect(g, -wallH - topD, BL - 2 * g, topD),
+    holes: [],
+    parent: front.id,
     foldAngle: HALF,
     order: 4,
   };
-  const lidFront: Panel = {
-    id: 'ml-lidfront',
-    label: 'front flap',
-    role: 'body',
-    outline: rect(0, W + H + W + t, L, H + t),
+  const topBack: Panel = {
+    id: 'hb-topb',
+    label: 'lid (back half)',
+    role: 'lid',
+    outline: rect(g, BW + wallH, BL - 2 * g, topD),
     holes: [],
-    parent: lid.id,
+    parent: back.id,
     foldAngle: HALF,
-    order: 5,
+    order: 4,
   };
-  const tuckW = L - 2 * Math.max(t, 0.5);
-  const tuckX = (L - tuckW) / 2;
-  const ty = W + H + W + t + H + t;
-  const r = Math.min(tuck * 0.6, tuckW / 2, 8);
-  const lidTuck: Panel = {
-    id: 'ml-lidtuck',
-    label: 'tuck flap',
-    role: 'tuck',
+
+  // Width first, and it has to be a MINIMUM against the blank, not a clamp between
+  // two bounds — on a 20 mm box the "at least 40 mm" floor wins over the "at most
+  // BL − 4g" ceiling and hands back a blade wider than the box it stands on.
+  const bladeW = Math.min(BL - 4 * g, Math.max(30, BL * 0.72));
+  // A blade much taller than it is wide is a spire, not a handle — and one much
+  // taller than the box it stands on is a suitcase handle on a pizza box, which is
+  // what 45 mm looked like on a 25 mm carton.
+  const bladeH = Math.min(clamp(p.handleHeightMm, 22, 140), bladeW * 1.6, H * 0.9 + 18);
+  const blades = [
+    handleBlade({
+      id: 'hb-bladef',
+      label: 'handle',
+      parent: topFront.id,
+      cx: BL / 2,
+      yc: -wallH - topD,
+      dir: -1,
+      width: bladeW,
+      height: bladeH,
+      // Mountain: the lid it hangs off is already 180 degrees from the base.
+      foldAngle: -HALF,
+      order: 5,
+    }),
+    handleBlade({
+      id: 'hb-bladeb',
+      label: 'handle',
+      parent: topBack.id,
+      cx: BL / 2,
+      yc: BW + wallH + topD,
+      dir: 1,
+      width: bladeW,
+      height: bladeH,
+      foldAngle: -HALF,
+      order: 5,
+    }),
+  ];
+
+  // The locking wing. Folded over, its distance from the side wall's rim maps one
+  // for one onto the box's own x, so the slot can be placed against the blade in
+  // base coordinates and simply read off as a distance.
+  const shoulder = bladeShoulder(bladeW);
+  // Two plies of board go through this slot, because both blades do.
+  const slotW = Math.max(2.5 * t + 0.8, 2);
+  const inset = Math.min(shoulder * 0.4, 4);
+  const tipMargin = Math.max(5, BL * 0.03);
+
+  // Each wing takes HALF the blade, and they meet over the middle.
+  //
+  // The reference dieline runs each wing 91% of the way across, so the two overlap
+  // over four fifths of the lid — two big tapering tongues crossing, which is most
+  // of what made the closed box read as a mess. The lock does not need that: a wing
+  // whose slot spans its own half of the blade traps that half, and the blade's
+  // shoulders are wider than the slot on both. Half the wing, half the board, and
+  // the top of the box reads as two panels meeting rather than an X.
+  const wingLen = Math.min(BL - 2 * g, BL / 2 + Math.max(6, BL * 0.05));
+  const slotTo = Math.min(BL / 2 + bladeW / 2 - inset, wingLen - tipMargin);
+  const slotFrom = Math.min(BL / 2 - bladeW / 2 + inset, slotTo - 6);
+  const tipH = Math.min(BW - 2 * g, slotW + 2 * Math.max(5, BW * 0.055));
+
+  const wing = (id: string, xRoot: number, dirX: 1 | -1): Panel => ({
+    id,
+    label: 'locking wing',
+    role: 'flap',
     outline: [
-      [tuckX, ty],
-      [tuckX + tuckW, ty],
-      [tuckX + tuckW - r, ty + tuck],
-      [tuckX + r, ty + tuck],
+      [xRoot, g],
+      [xRoot + dirX * wingLen, BW / 2 - tipH / 2],
+      [xRoot + dirX * wingLen, BW / 2 + tipH / 2],
+      [xRoot, BW - g],
     ],
-    holes: [],
-    parent: lidFront.id,
+    holes: [
+      stadium(
+        xRoot + dirX * ((slotFrom + slotTo) / 2),
+        BW / 2,
+        Math.max(6, slotTo - slotFrom),
+        slotW,
+      ),
+    ],
+    parent: dirX < 0 ? leftWall.id : rightWall.id,
     foldAngle: HALF,
-    undershoot: 0.03,
     order: 6,
-  };
-
-  panels.push(base, front, backWall, lid, lidFront, lidTuck);
-
-  // Side wings on the base's short edges fold in first; the lid's own wings fold in
-  // over them, which is what makes the double-thick sides of a real mailer.
-  for (const [id, x, dir] of [
-    ['l', 0, -1],
-    ['r', L, 1],
-  ] as const) {
-    panels.push({
-      id: `ml-side-${id}`,
-      label: 'side wall',
-      role: 'body',
-      outline: rect(dir < 0 ? -H : L, 0, H, W),
-      holes: [],
-      parent: base.id,
-      foldAngle: HALF,
-      order: 1,
-    });
-    panels.push({
-      id: `ml-wing-${id}`,
-      label: 'lid wing',
-      role: 'flap',
-      outline: rect(dir < 0 ? -wing : L, W + H, wing, W + t),
-      holes: [],
-      parent: lid.id,
-      foldAngle: HALF,
-      order: 3,
-      overshoot: 0.2,
-    });
-    void x;
-  }
-
-  // Cherry locks: a nick in each side wall that the front flap's corners catch under.
-  const lockY = W - Math.min(12, W / 3);
-  for (const dir of [-1, 1] as const) {
-    const lx = dir < 0 ? -H : L + H;
-    slits.push({
-      panelId: dir < 0 ? 'ml-side-l' : 'ml-side-r',
-      op: 'cut',
-      points: [
-        [lx, lockY],
-        [lx - dir * Math.min(6, H / 2), lockY],
-      ],
-    });
-  }
+  });
 
   return {
-    panels,
-    slits,
+    panels: [
+      base,
+      front,
+      back,
+      leftWall,
+      rightWall,
+      ear('hb-ear-fl', front.id, g, -1, -g, -wallH + g),
+      ear('hb-ear-fr', front.id, BL - g, 1, -g, -wallH + g),
+      ear('hb-ear-bl', back.id, g, -1, BW + g, BW + wallH - g),
+      ear('hb-ear-br', back.id, BL - g, 1, BW + g, BW + wallH - g),
+      topFront,
+      topBack,
+      ...blades,
+      wing('hb-wingl', -sideH, -1),
+      wing('hb-wingr', BL + sideH, 1),
+    ],
+    slits: [],
     rootId: base.id,
     loose: [],
     assembly: [
-      'Fold both side walls up, then the front and back walls.',
-      'Roll the lid over: lid down, front flap down the face, tuck inside.',
-      'The nicks in the side walls catch the lid wings — press them in and the box stays shut without tape.',
+      'Front and back walls up first, then fold the four ears in flat against the ends.',
+      'Bring both side walls up over the ears.',
+      'Fold the two lid flaps in until they meet down the middle, and stand both handle straps upright.',
+      'Fold each side wing over the top and feed the straps up through the slot in it. The two wings meet over the middle, each holding its own half of the handle. Press down until the strap shoulders sit under the wing — that is the lock, and the box will now carry.',
     ],
   };
 }
-
-// ──────────────────────────────── gable handle box ────────────────────────────────
 
 function buildGable(p: BoxParams): StyleParts {
   const { L, W, H } = insideDims(p);
@@ -784,20 +1130,12 @@ function buildSleeve(p: BoxParams): StyleParts {
   // blank on any sleeve under 20 mm tall, leaving a closed cut ring floating outside
   // the outline that no connectivity check looks for.
   const EDGE = 4;
-  const slotOK = p.hangHole && H >= 2 * EDGE + 16;
-  if (slotOK) {
+  const slotH = Math.min(20, H - 2 * EDGE);
+  if (p.hangHole && slotH >= 12) {
     const span = body.spans[0];
-    const cx = span.x + span.w / 2;
-    const headR = 3.25;
-    const headCy = H - EDGE - headR;
-    const tail = Math.min(16, H - 2 * EDGE - 2 * headR);
     panels[0] = {
       ...(panels[0] as Panel),
-      holes: [
-        ...(panels[0] as Panel).holes,
-        stadium(cx, headCy - tail / 2, 9, tail + 2 * headR),
-        stadium(cx, headCy, 20, 2 * headR),
-      ],
+      holes: [...(panels[0] as Panel).holes, euroSlot(span.x + span.w / 2, H - EDGE, slotH)],
     };
   }
 
@@ -885,6 +1223,9 @@ function buildDivider(p: BoxParams): StyleParts {
 
 /** Which panel a window goes in, per style. Always the face a buyer looks at. */
 export const WINDOW_PANEL: Record<BoxParams['style'], string> = {
+  mailer: 'ml-lid',
+  'handle-box': 'hb-front',
+  tray: '',
   'tray-lid': 'ld-base',
   'tuck-top': 'tt-w0',
   'snap-lock': 'sl-w0',
@@ -898,6 +1239,9 @@ export function buildStyle(p: BoxParams): {
   windowInsetMm: number;
 } {
   const builders: Record<BoxParams['style'], (p: BoxParams) => StyleParts> = {
+    mailer: buildMailer,
+    'handle-box': buildHandleBox,
+    tray: buildTray,
     'tray-lid': buildTrayLid,
     'tuck-top': buildTuckTop,
     'snap-lock': buildSnapLock,
@@ -911,8 +1255,8 @@ export function buildStyle(p: BoxParams): {
   return { parts: withWindow, windowFitted: fitted, windowInsetMm: insetMm };
 }
 
-// Kept deliberately: see the note above STYLES.
-void buildMailer;
+// The gable roof/gusset construction never got a source that draws its side wing, so
+// it stays unlisted. `handle-box` covers the same job with a dieline we could check.
 void buildGable;
 
 export function styleMeta(id: BoxParams['style']): StyleMeta {

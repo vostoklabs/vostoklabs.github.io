@@ -9,7 +9,7 @@
 // fit inside.
 
 import type { Panel, Poly, Pt, Slit } from '../types';
-import { arcPoints, at, rect, signedArea } from './poly';
+import { arcPoints, at, bboxOf, rect, roundCorners, signedArea, stadium } from './poly';
 
 export const HALF = Math.PI / 2;
 
@@ -116,49 +116,104 @@ export interface TrayOpts {
   baseHole?: Poly;
   /** Fold the walls down instead of up — what a lid does when it comes over a tray. */
   invert?: boolean;
+  /** Raise the two long walls into carry handles this far above the rim.
+   *  The handle is part of the WALL, not a panel hinged to it: a basket tray's side
+   *  rises straight out of its wall and there is no fold line there to draw. */
+  handleRiseMm?: number;
 }
 
-/** A four-corner tray: a base, four walls, and an ear at each end of the two long
- *  walls that folds in behind the short wall.
+/** A self-locking four-corner tray.
  *
- *  This is the shape in the reference photos, and it is the only tray worth building
- *  first — it needs no glue if the ears are tucked, and it folds as a clean tree.
+ *  The old one was four walls and four ears, and the ears were folded in behind the
+ *  short walls with NOTHING holding them there. That is not a glue-free tray, it is a
+ *  tray you have to glue and a badge that says you do not — the ears spring straight
+ *  back out and the walls fall flat. Every real glue-free tray solves this the same
+ *  way, and it is the way the mailer already solved it here: the short wall carries
+ *  on over the rim and back down INSIDE, trapping the ear between its two plies, and
+ *  its tabs drop through slots in the floor so the roll cannot open either.
  *
- *          ┌────────────┐
- *          │   wall N   │
- *     ┌────┼────────────┼────┐
- *     │ear │            │ear │
- *     │ W  │    BASE    │  E │
- *     │ear │            │ear │
- *     └────┼────────────┼────┘
- *          │   wall S   │
- *          └────────────┘
+ *          ┌──────────────────────┐
+ *          │       wall N         │   long walls, single ply, with the ears
+ *     ┌────┼──────────────────────┼────┐
+ *     │ear │                      │ear │
+ *     │roll│         BASE         │roll│  short walls roll: wall │ 2t │ inner + tabs
+ *     │ear │      ▭        ▭      │ear │  (▭ = the slots the tabs drop through)
+ *     └────┼──────────────────────┼────┘
+ *          │       wall S         │
+ *          └──────────────────────┘
  */
-export function tray(o: TrayOpts): { panels: Panel[]; slits: Slit[] } {
+export function tray(o: TrayOpts): { panels: Panel[]; slits: Slit[]; extent: [number, number] } {
   const { prefix: p, labelPrefix: lp, L, W, H, t, x, y } = o;
   const g = relief(t);
   const sign = o.invert ? -1 : 1;
   const fold = sign * HALF;
 
+  // The rolled ends are double-ply, so the floor has to be longer than the inside by
+  // 2.5t at each end — the same allowance the reference mailer dieline makes.
+  const BL = L + 5 * t;
+  const BW = W + 2 * t;
+  const wallH = H + t;
+
   const base: Panel = {
     id: `${p}base`,
     label: `${lp}base`,
     role: 'base',
-    outline: rect(x, y, L, W),
+    outline: rect(x, y, BL, BW),
     holes: o.baseHole ? [o.baseHole] : [],
     parent: null,
     foldAngle: 0,
     rootPose: o.rootPose,
   };
 
-  // The two long walls fold first; the short walls come up over the ears last, which
-  // is why they carry an explicit later `order` rather than relying on tree depth.
+  // A carry handle is a raised section of the long wall itself, with a hand hole in
+  // it — a basket tray, an egg-crate, a produce tray. Drawn as part of the wall
+  // outline rather than as a hinged blade because there is no fold there: an extra
+  // panel would put a crease line straight across the handle.
+  const rise = Math.max(0, o.handleRiseMm ?? 0);
+  const wx = x + g;
+  const ww = BL - 2 * g;
+  const handled = rise > 4 && ww > 40;
+  const gripW = Math.min(ww * 0.45, 95);
+  const gripH = Math.min(rise * 0.5, 24);
+
+  /** Long-wall outline: a plain rectangle, or one with a raised handle on its rim. */
+  const longWall = (yBase: number, dirY: 1 | -1): { outline: Poly; holes: Poly[] } => {
+    const rim = yBase + dirY * wallH;
+    if (!handled) {
+      return { outline: span(wx, wx + ww, yBase, rim), holes: [] };
+    }
+    const top = yBase + dirY * (wallH + rise);
+    const shoulder = Math.min(rise * 0.9, (ww - gripW) / 2 - 2);
+    const ring: Poly = [
+      [wx, yBase],
+      [wx + ww, yBase],
+      [wx + ww, rim],
+      [wx + (ww + gripW) / 2 + shoulder, rim],
+      [wx + (ww + gripW) / 2 + shoulder * 0.15, top],
+      [wx + (ww - gripW) / 2 - shoulder * 0.15, top],
+      [wx + (ww - gripW) / 2 - shoulder, rim],
+      [wx, rim],
+    ];
+    return {
+      outline: roundCorners(ring, [0, 0, 0, Math.min(8, shoulder), 10, 10, Math.min(8, shoulder), 0]),
+      // The hole sits below the top edge by more than its own half-height: a hand
+      // hole any nearer the rim tears out the first time the tray is carried.
+      holes: [
+        stadium(
+          wx + ww / 2,
+          yBase + dirY * (wallH + rise - gripH / 2 - Math.max(6, rise * 0.28)),
+          gripW,
+          gripH,
+        ),
+      ],
+    };
+  };
+
   const wallS: Panel = {
     id: `${p}s`,
     label: `${lp}front`,
     role: 'body',
-    outline: rect(x, y - H, L, H),
-    holes: [],
+    ...longWall(y, -1),
     parent: base.id,
     foldAngle: fold,
     order: 1,
@@ -167,64 +222,38 @@ export function tray(o: TrayOpts): { panels: Panel[]; slits: Slit[] } {
     id: `${p}n`,
     label: `${lp}back`,
     role: 'body',
-    outline: rect(x, y + W, L, H),
-    holes: [],
+    ...longWall(y + BW, 1),
     parent: base.id,
     foldAngle: fold,
     order: 1,
   };
-  const wallE: Panel = {
-    id: `${p}e`,
-    label: `${lp}right side`,
-    role: 'body',
-    outline: rect(x + L, y, H, W),
-    holes: [],
-    parent: base.id,
-    foldAngle: fold,
-    order: 3,
-  };
-  const wallW: Panel = {
-    id: `${p}w`,
-    label: `${lp}left side`,
-    role: 'body',
-    outline: rect(x - H, y, H, W),
-    holes: [],
-    parent: base.id,
-    foldAngle: fold,
-    order: 3,
-  };
 
-  // Ears. Each is a caliper shorter than its wall so it cannot peek over the rim, and
-  // its free edge runs back at 45 degrees.
-  //
-  // The taper is not decoration. Federal Specification PPP-B-566E draws every
-  // Brightwood tray corner this way (fig. 3, Style III): a square ear jams against
-  // the wall folding over it and bows the corner out, and it also leaves a visible
-  // tongue poking above the rim on any tray whose walls are not exactly equal.
+  // Ears, hinged VERTICALLY one relief in from the floor's end — which is what lands
+  // them flat on the inner face of the end wall instead of in the same plane as it.
+  // Half the tray's depth each, so the front ear and the back ear very nearly meet
+  // inside the end and the roll has something to grip along its whole length.
+  const earLen = Math.max(4, Math.min(BW / 2 - g, H + 2 * t));
+  const chamfer = Math.min(earLen * 0.35, (wallH - 2 * g) * 0.35);
   const ear = (
     id: string,
-    label: string,
     parent: string,
     hx: number,
-    hy: number,
     dirX: 1 | -1,
-    dirY: 1 | -1,
+    yBase: number,
+    yRim: number,
   ): Panel => {
-    const w = H - g;
-    const taper = Math.min(w * 0.45, H * 0.45);
-    const x0 = hx;
-    const y1 = hy + dirY * (H - g);
-    const poly: Poly = [
-      [x0, hy],
-      [x0 + dirX * w, hy + dirY * (g + taper)],
-      [x0 + dirX * w, y1],
-      [x0, y1],
-    ];
+    const d = Math.sign(yRim - yBase);
     return {
       id,
-      label,
+      label: `${lp}corner ear`,
       role: 'flap',
-      outline: dirX * dirY > 0 ? poly : [...poly].reverse(),
+      outline: [
+        [hx, yBase],
+        [hx + dirX * earLen, yBase],
+        [hx + dirX * earLen, yRim - d * chamfer],
+        [hx + dirX * (earLen - chamfer), yRim],
+        [hx, yRim],
+      ],
       holes: [],
       parent,
       foldAngle: fold,
@@ -232,24 +261,308 @@ export function tray(o: TrayOpts): { panels: Panel[]; slits: Slit[] } {
     };
   };
 
-  const panels = [
+  const rolls = [
+    rollEnd({
+      prefix: `${p}l`,
+      parent: base.id,
+      x,
+      y0: y,
+      y1: y + BW,
+      dir: -1,
+      H,
+      t,
+      order: 3,
+      fold,
+    }),
+    rollEnd({
+      prefix: `${p}r`,
+      parent: base.id,
+      x: x + BL,
+      y0: y,
+      y1: y + BW,
+      dir: 1,
+      H,
+      t,
+      order: 3,
+      fold,
+    }),
+  ];
+  base.holes = [...base.holes, ...rolls.flatMap((r) => r.slots)];
+
+  const panels: Panel[] = [
     base,
     wallS,
     wallN,
-    wallE,
-    wallW,
-    ear(`${p}sw`, `${lp}corner`, wallS.id, x, y, -1, -1),
-    ear(`${p}se`, `${lp}corner`, wallS.id, x + L, y, 1, -1),
-    ear(`${p}nw`, `${lp}corner`, wallN.id, x, y + W, -1, 1),
-    ear(`${p}ne`, `${lp}corner`, wallN.id, x + L, y + W, 1, 1),
+    ...rolls.flatMap((r) => r.panels),
+    ear(`${p}sw`, wallS.id, x + g, -1, y - g, y - wallH + g),
+    ear(`${p}se`, wallS.id, x + BL - g, 1, y - g, y - wallH + g),
+    ear(`${p}nw`, wallN.id, x + g, -1, y + BW + g, y + BW + wallH - g),
+    ear(`${p}ne`, wallN.id, x + BL - g, 1, y + BW + g, y + BW + wallH - g),
   ];
 
-  return { panels, slits: [] };
+  const b = bboxOf(panels.map((q) => q.outline));
+  return { panels, slits: [], extent: [b[2] - b[0], b[3] - b[1]] };
 }
 
-/** Outer footprint a tray occupies in the net, so callers can place the next one. */
-export function trayExtent(L: number, W: number, H: number): [number, number] {
-  return [L + 2 * H, W + 2 * H];
+
+// ───────────────────────────────── euro hang slot ─────────────────────────────────
+
+/** The ISO 15348 retail peg slot: a round head with a narrower tail under it, as ONE
+ *  closed ring.
+ *
+ *  It used to be two overlapping stadiums. That draws the right SHAPE and the wrong
+ *  PATH — two closed cut rings that cross each other send the blade round a figure of
+ *  eight and cut the overlap twice, which is the one thing the exporter's own rules
+ *  forbid. It is also not a shape at all under an even-odd fill rule, so the printed
+ *  sheet had no way to interpret it. One ring, traced round the union's real outline:
+ *  up the tail, round the head, back down, and a cap across the bottom. */
+export function euroSlot(cx: number, topY: number, heightMm: number, segments = 10): Poly {
+  const R = clamp(heightMm * 0.42, 3, 10);
+  const w = Math.min(4.5, R * 0.55);
+  const cyHead = topY - R;
+  const d = Math.sqrt(Math.max(1e-6, R * R - w * w));
+  const yJoin = cyHead - d;
+  const yb = Math.min(yJoin - 0.5, topY - heightMm + w);
+  const a0 = Math.atan2(-d, w);
+  return [
+    [cx + w, yb],
+    [cx + w, yJoin],
+    ...arcPoints(cx, cyHead, R, a0, Math.PI - a0, segments).slice(1, -1),
+    [cx - w, yJoin],
+    [cx - w, yb],
+    ...arcPoints(cx, yb, w, Math.PI, Math.PI * 2, 6).slice(1, -1),
+  ];
+}
+
+// ────────────────────────────────── roll end ──────────────────────────────────
+
+/** An axis-aligned rectangle given as two x bounds and two y bounds, in any order.
+ *  A roll end is built outward from a crease in whichever direction it faces, and
+ *  writing every panel as `rect(min, …, width)` there means computing the min first
+ *  at every single call. Winding is fixed by `buildNet`, so order does not matter. */
+function span(xa: number, xb: number, ya: number, yb: number): Poly {
+  return [
+    [xa, ya],
+    [xb, ya],
+    [xb, yb],
+    [xa, yb],
+  ];
+}
+
+export interface RollEndOpts {
+  prefix: string;
+  /** The base panel this rolls off. */
+  parent: string;
+  /** x of the base edge it hinges on, and the y run of that edge. */
+  x: number;
+  y0: number;
+  y1: number;
+  /** Which way the roll goes: -1 for the net's −x, +1 for +x. */
+  dir: 1 | -1;
+  H: number;
+  t: number;
+  /** Die-cut hand hole through BOTH plies, or null. */
+  hand?: { w: number; h: number } | null;
+  /** Animation stage of the outer wall; the roll's two other panels follow it. */
+  order: number;
+  /** Signed fold, so a lid's roll can go down while a tray's goes up. */
+  fold?: number;
+}
+
+/** The roll end of a mailer box — the reason a mailer needs no glue.
+ *
+ *  Measured off a production RETT dieline (315 × 202 × 62, 1.5 mm board) rather than
+ *  invented. From the base crease outward it is three panels and a pair of tabs:
+ *
+ *      base │ outer wall (H) │ roll (2t) │ inner wall (H−t) │ tabs
+ *
+ *  The 2 mm strip in the middle is not decoration: the wall folds over its own
+ *  thickness twice, so the reference dieline draws TWO parallel creases 2t apart
+ *  there. Collapse them into one and the inner ply is a caliper too long and bows.
+ *
+ *  The inner ply stops one caliper short of the floor and the tabs carry on past it,
+ *  through slots cut in the base — which is what stops the roll springing open, and
+ *  what traps the ears folded in from the front and back walls on the way. */
+export function rollEnd(o: RollEndOpts): { panels: Panel[]; slots: Poly[] } {
+  const { prefix: p, dir, H, t, x, y0, y1 } = o;
+  const g = relief(t);
+  const run = y1 - y0;
+  const step = layerStep(t);
+  const innerD = Math.max(4, H - t);
+  // The tab has to clear the floor it passes through, so it is sized against the
+  // board rather than being a constant — and it never goes below what a finger can
+  // actually push into a slot.
+  const tabLen = Math.max(2.5, 3 * t);
+  const slotW = Math.max(2.5 * t, 1.8);
+  // The inner ply stands 2t out from the crease, so the slot has to contain that —
+  // but on cardstock 2t is a third of a millimetre and a slot ON the crease would
+  // cut the fold. Hence a floor, then centre the slot on where the ply actually is.
+  const slotX0 = Math.max(0.6, 2 * t - slotW / 2);
+  const clear = Math.max(0.4, t);
+  const tabH = clamp(run * 0.2, 5, 30);
+  const centres = [y0 + run * 0.3, y0 + run * 0.7];
+
+  /** Distance out from the crease -> net x. */
+  const X = (d: number): number => x + dir * d;
+  const mid = (y0 + y1) / 2;
+
+  const hand =
+    o.hand && H >= o.hand.h + 16 && run >= o.hand.w + 20
+      ? { ...o.hand, inset: o.hand.h / 2 + Math.max(7, H * 0.15) }
+      : null;
+
+  const fold = o.fold ?? HALF;
+
+  const wall: Panel = {
+    id: `${p}wall`,
+    label: 'end wall',
+    role: 'body',
+    outline: span(X(0), X(H), y0, y1),
+    // Wide along the run of the wall, shallow across its height — the roll's x axis
+    // is the box's HEIGHT and its y axis is the box's width, so the stadium's two
+    // axes go in the opposite order to the way it reads. Swapped, a 40 mm hole ran
+    // up a 50 mm wall and the wall's hole and the inner ply's hole overlapped.
+    holes: hand ? [stadium(X(H - hand.inset), mid, hand.h, hand.w)] : [],
+    parent: o.parent,
+    foldAngle: fold,
+    order: o.order,
+  };
+
+  const roll: Panel = {
+    id: `${p}roll`,
+    label: 'roll',
+    role: 'body',
+    outline: span(X(H), X(H + step), y0 + g, y1 - g),
+    holes: [],
+    parent: wall.id,
+    foldAngle: fold,
+    order: o.order + 1,
+  };
+
+  // Far edge of the inner ply, with a tab standing proud of it at each centre.
+  const A = X(H + step);
+  const B = X(H + step + innerD);
+  const T = X(H + step + innerD + tabLen);
+  const far: Poly = [[B, y0 + g]];
+  for (const c of centres) {
+    far.push([B, c - tabH / 2], [T, c - tabH / 2], [T, c + tabH / 2], [B, c + tabH / 2]);
+  }
+  far.push([B, y1 - g]);
+
+  const inner: Panel = {
+    id: `${p}inner`,
+    label: 'inner wall',
+    role: 'flap',
+    outline: [[A, y0 + g], ...far, [A, y1 - g]],
+    holes: hand ? [stadium(X(H + step + hand.inset), mid, hand.h, hand.w)] : [],
+    parent: roll.id,
+    foldAngle: fold,
+    order: o.order + 2,
+  };
+
+  // The slots live in the BASE, on the far side of the crease from everything above.
+  const slots = centres.map((c) =>
+    span(
+      x - dir * slotX0,
+      x - dir * (slotX0 + slotW),
+      c - tabH / 2 - clear,
+      c + tabH / 2 + clear,
+    ),
+  );
+
+  return { panels: [wall, roll, inner], slots };
+}
+
+// ───────────────────────────────── handle blade ─────────────────────────────────
+
+export interface HandleBladeOpts {
+  id: string;
+  label: string;
+  parent: string;
+  /** Crease the blade stands up from: the line y = yc, centred on cx. */
+  cx: number;
+  yc: number;
+  /** +1 puts the blade above the crease in the net, −1 below. */
+  dir: 1 | -1;
+  /** Width at the crease, and height above it. */
+  width: number;
+  height: number;
+  /** Signed, because the sense is NOT the same as every other flap's.
+   *
+   *  The blade hangs off a lid that has itself folded twice — wall up, lid over — so
+   *  by the time the fold reaches the blade the parent's plane is upside down and
+   *  another +90 sends the strap straight down INTO the box. It has to fold the
+   *  other way. The caller knows how deep in the tree it is; this does not. */
+  foldAngle: number;
+  order: number;
+}
+
+/** The carry handle of a glue-free bakery box: a strap standing up from the ridge
+ *  with the hand hole cut through it, open at the bottom onto the crease itself.
+ *
+ *  That open bottom is the whole trick, and it falls out of the derivation for free.
+ *  The blade meets its parent along TWO runs — the strap's two legs — with the hand
+ *  hole's mouth in between. `buildNet` sees twins under the legs and no twin under
+ *  the mouth, so the legs come out creased and the mouth comes out cut, without any
+ *  builder saying so. Two blades meet face to face and the hole becomes one handle. */
+export function handleBlade(o: HandleBladeOpts): Panel {
+  const { cx, yc, dir } = o;
+  const w = o.width;
+  const h = o.height;
+  const strapW = bladeShoulder(w);
+
+  const L0 = cx - w / 2;
+  const R0 = cx + w / 2;
+  const L1 = L0 + strapW;
+  const R1 = R0 - strapW;
+  const holeW = w - 2 * strapW;
+  const holeH = clamp(h * 0.62, 4, Math.max(4, h - 5));
+
+  // Both profiles lean in at the same angle, which is what keeps the strap an even
+  // thickness all the way round instead of pinching at the shoulders. 6 degrees is
+  // what the reference dieline draws — but a taper is a proportion of the HEIGHT and
+  // the hole is only as wide as the blade, so on a small blade a fixed 6 degrees
+  // closes the hole up and then crosses it over itself. Cap it on the hole instead.
+  const k = Math.min(0.104, holeH > 0 ? (holeW * 0.28) / (2 * holeH) : 0);
+
+  const Y = (v: number): number => yc + dir * v;
+  const ring: Poly = [
+    [L0, Y(0)],
+    [L1, Y(0)],
+    [L1 + k * holeH, Y(holeH)],
+    [R1 - k * holeH, Y(holeH)],
+    [R1, Y(0)],
+    [R0, Y(0)],
+    [R0 - k * h, Y(h)],
+    [L0 + k * h, Y(h)],
+  ];
+  const rOuter = Math.min(10, strapW, h / 3);
+  const rInner = Math.min(8, strapW, holeH / 2);
+
+  return {
+    id: o.id,
+    label: o.label,
+    role: 'flap',
+    outline: roundCorners(ring, [0, 0, rInner, rInner, 0, 0, rOuter, rOuter]),
+    holes: [],
+    parent: o.parent,
+    foldAngle: o.foldAngle,
+    order: o.order,
+    // Two blades that meet exactly co-planar z-fight down their whole length, so
+    // each stops a hair short. Signed with the fold, or a mountain crease would
+    // undershoot past square instead of stopping before it.
+    undershoot: Math.sign(o.foldAngle) * 0.05,
+  };
+}
+
+/** How thick a blade of this width makes its strap. Exported because the locking
+ *  wing's slot has to stop clear of the shoulders, and because both numbers have to
+ *  come from the same place or the slot swallows the shoulder it is meant to catch.
+ *
+ *  Nominally 9 % of the width — but never more than a quarter of it, or there is no
+ *  hole left, and the 6 mm floor gives way rather than eat a small blade whole. */
+export function bladeShoulder(width: number): number {
+  return clamp(width * 0.09, Math.min(6, width * 0.2), width * 0.25);
 }
 
 // ─────────────────────────────────── tube ───────────────────────────────────

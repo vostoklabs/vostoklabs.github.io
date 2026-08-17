@@ -29,3 +29,24 @@ body {
   font-size: var(--fs-body);
   -webkit-font-smoothing: antialiased;
 }
+
+/* `node.hidden = true` has to actually hide the node.
+
+   The UA stylesheet's rule is a bare `[hidden] { display: none }` — specificity (0,1,0) —
+   so ANY class that sets `display` outranks it and `hidden` silently does nothing. Every
+   component in this kit sets `display` (`.vl-btn` is `inline-flex`, `.vl-callout` is
+   `flex`), which makes this the second most-repeated bug in the repo after the page frame
+   above: `.vl-stage-panel`, `.vl-plate-picker__menu`, `.kc-set__block` and `.import-card`
+   each carry a one-line `[hidden]` patch of their own, and the keycap generator gave up on
+   `hidden` for `.vl-callout` and calls `remove()` instead. Those are the ones somebody
+   noticed. The ones nobody noticed shipped a control that was supposed to be gone: the
+   keycap set editor showed a Print orientation dropdown on the profiles that ignore the
+   setting, which sent a tester chasing an export bug that did not exist.
+
+   `!important` because the app's own `style.css` is imported AFTER the kit, so a plain
+   rule here would lose to any app-side class the same way. Nothing may show while
+   `hidden` is set; `until-found` is exempt because the browser removes the attribute
+   itself when find-in-page reaches the node, and `display: none` would stop it looking. */
+[hidden]:not([hidden='until-found']) {
+  display: none !important;
+}

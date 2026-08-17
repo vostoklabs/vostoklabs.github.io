@@ -1,5 +1,9 @@
 node_modules/
 dist/
+dist-offline/
+# The single-file offline build. Regenerate with `pnpm --filter <app> build:offline`
+# rather than committing a megabyte of inlined bundle.
+offline/
 *.log
 .DS_Store
 Thumbs.db

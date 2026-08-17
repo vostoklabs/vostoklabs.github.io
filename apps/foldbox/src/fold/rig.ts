@@ -138,7 +138,12 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
     return d;
   };
   const ordered = [...net.panels].sort((a, b) => depthOf(a) - depthOf(b));
-  const maxDepth = Math.max(1, ...ordered.map(depthOf));
+  // Stage the animation on the LARGEST of tree depth and explicit order. A mailer
+  // has a fold tree only three deep but seven distinct moves in it — walls, ears,
+  // roll, inner ply, lid, tuck — and sizing the timeline on depth alone crushed the
+  // last four into the final 15% of the scrub, where they read as one jump.
+  const stageOf = (p: Panel): number => p.order ?? depthOf(p);
+  const maxStage = Math.max(1, ...ordered.map(stageOf));
 
   // Everything assembles around where the primary blank already sits, so the box
   // comes together in place instead of sliding across the view.
@@ -218,8 +223,8 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
     // then the tuck last" on every style without a line of per-style authoring.
     // `order` overrides it for the handful of cases depth gets wrong — a tray's ears
     // have to fold before the side walls come up over them, and they are siblings.
-    const stage = panel.order ?? depthOf(panel);
-    const span = 1 / (maxDepth + 1);
+    const stage = stageOf(panel);
+    const span = 1 / (maxStage + 1);
     const t0 = Math.max(0, Math.min(0.85, (stage - 1) * span * 0.92));
     const node: PanelNode = {
       panel,

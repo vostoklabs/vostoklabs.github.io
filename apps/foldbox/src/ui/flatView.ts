@@ -139,10 +139,16 @@ export function styleIcon(id: string): string {
         `<rect x="12" y="6" width="24" height="10" rx="1"/><rect x="12" y="16" width="24" height="14" rx="1"/>` +
           `<path d="M12 16H4v14h8M36 16h8v14h-8"/><line x1="12" y1="16" x2="36" y2="16" ${dash}/>`,
       );
-    case 'gable':
+    case 'handle-box':
       return s(
-        `<path d="M8 30V16h32v14z"/><path d="M12 16l12-9 12 9"/><path d="M20 7h8v-4h-8z"/>` +
-          `<line x1="24" y1="7" x2="24" y2="3" ${dash}/>`,
+        `<rect x="8" y="16" width="32" height="16" rx="1"/><path d="M8 16h32"/>` +
+          `<path d="M18 16v-6a6 6 0 0 1 12 0v6"/><path d="M21 16v-6a3 3 0 0 1 6 0v6"/>` +
+          `<line x1="24" y1="16" x2="24" y2="32" ${dash}/>`,
+      );
+    case 'tray':
+      return s(
+        `<path d="M6 30V14h36v16z"/><path d="M6 14l6-6h24l6 6"/>` +
+          `<line x1="12" y1="8" x2="12" y2="30" ${dash}/><line x1="36" y1="8" x2="36" y2="30" ${dash}/>`,
       );
     case 'sleeve':
       return s(

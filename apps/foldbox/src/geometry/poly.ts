@@ -193,6 +193,64 @@ export function stadium(cx: number, cy: number, w: number, h: number, segments =
   return out;
 }
 
+/** Fillet corners of a ring. `radii` is either one radius for every corner or one
+ *  per vertex, parallel to `poly` — 0 leaves that corner sharp.
+ *
+ *  Card tears from a sharp internal corner, so every hand hole, handle blade and
+ *  tuck flap in a real dieline is filleted. The radius is clamped against BOTH
+ *  adjacent edges, which is what stops a generous radius on a short edge from
+ *  turning the corner inside out. */
+export function roundCorners(poly: Poly, radii: number | number[], segments = 5): Poly {
+  const n = poly.length;
+  if (n < 3) return poly;
+  const out: Poly = [];
+  for (let i = 0; i < n; i++) {
+    const want = Array.isArray(radii) ? (radii[i] ?? 0) : radii;
+    const cur = at(poly, i);
+    const v1 = sub(at(poly, i - 1), cur);
+    const v2 = sub(at(poly, i + 1), cur);
+    const l1 = len(v1);
+    const l2 = len(v2);
+    if (want <= 0 || l1 < EPS || l2 < EPS) {
+      out.push(cur);
+      continue;
+    }
+    const u1: Pt = [v1[0] / l1, v1[1] / l1];
+    const u2: Pt = [v2[0] / l2, v2[1] / l2];
+    // Interior angle at this corner. Straight and doubled-back both have no corner
+    // to round, and both would divide by zero below.
+    const ang = Math.acos(Math.max(-1, Math.min(1, dot(u1, u2))));
+    if (ang < 1e-3 || Math.PI - ang < 1e-3) {
+      out.push(cur);
+      continue;
+    }
+    const tanHalf = Math.tan(ang / 2);
+    // Half of each adjacent edge is the most this corner may consume, so two
+    // filleted corners sharing an edge can never overrun each other.
+    const r = Math.min(want, (l1 / 2) * tanHalf, (l2 / 2) * tanHalf);
+    const d = r / tanHalf;
+    const p1: Pt = [cur[0] + u1[0] * d, cur[1] + u1[1] * d];
+    const p2: Pt = [cur[0] + u2[0] * d, cur[1] + u2[1] * d];
+    const bis: Pt = [u1[0] + u2[0], u1[1] + u2[1]];
+    const bl = len(bis);
+    if (bl < EPS) {
+      out.push(cur);
+      continue;
+    }
+    const h = r / Math.sin(ang / 2);
+    const c: Pt = [cur[0] + (bis[0] / bl) * h, cur[1] + (bis[1] / bl) * h];
+    const a1 = Math.atan2(p1[1] - c[1], p1[0] - c[0]);
+    let da = Math.atan2(p2[1] - c[1], p2[0] - c[0]) - a1;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    for (let k = 0; k <= segments; k++) {
+      const a = a1 + (da * k) / segments;
+      out.push([c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)]);
+    }
+  }
+  return out;
+}
+
 /** A circular arc as a polyline, used for thumb notches. */
 export function arcPoints(
   cx: number,

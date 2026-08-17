@@ -35,7 +35,10 @@ body {
   inset: 0;
   display: grid;
   place-items: center;
-  padding: var(--space-5);
+  /* Room at the bottom for the dieline's own control panel, which floats in the
+     stage's bottom-centre slot. Without it the panel sat squarely on the blank it
+     was describing. */
+  padding: var(--space-5) var(--space-5) 9.25rem;
 }
 
 .fb-flat svg {
@@ -69,6 +72,8 @@ body {
 
 /* ------------------------------------------------------------ fold panel -- */
 
+/* ---- the fold control, now in the stage's bottom-centre panel ---- */
+
 .fb-scrub-row {
   display: flex;
   align-items: center;
@@ -77,7 +82,18 @@ body {
 
 .fb-play {
   flex: 0 0 auto;
-  min-width: 5.5rem;
+  /* Narrower than a sidebar button: the panel is 300-380px and the scrubber needs
+     the room more than the label does. */
+  min-width: 4.6rem;
+  padding-inline: var(--space-3);
+}
+
+/* Two toggles side by side rather than stacked — the dieline panel is short and
+   wide, and stacking them made it tall enough to cover the blank it describes. */
+.fb-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
 }
 
 .fb-scrub {
@@ -100,7 +116,6 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  margin-bottom: var(--space-2);
 }
 
 .fb-legend__chip {
@@ -127,8 +142,43 @@ body {
   line-height: 1.45;
 }
 
-.fb-note {
+/* "Does it need glue" is the question people arrive with, so it reads as a state on
+   the style rather than a clause buried in the blurb. */
+.fb-style-meta {
+  margin-top: var(--space-2);
+}
+
+.fb-badge {
+  display: inline-block;
+  padding: 1px var(--space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fb-badge--ok {
+  color: var(--green);
+}
+
+.fb-badge--warn {
+  color: var(--warn);
+}
+
+.fb-style-meta .fb-blurb {
+  margin-top: var(--space-1, 4px);
+}
+
+.fb-fit,
+.fb-wide {
+  width: 100%;
   margin-top: var(--space-3);
+}
+
+.fb-note--warn {
+  color: var(--warn);
 }
 
 /* -------------------------------------------------------------- results -- */
@@ -214,11 +264,94 @@ body {
   line-height: 1.45;
 }
 
-/* The style picker carries seven options, which is more than the shared source-card
-   row is sized for — let it wrap into a grid rather than squeezing every label. */
+/* The style picker carries eight options, which is more than the shared source-card
+   ROW is sized for. The kit's card is icon-left / label-right, which is right for a
+   full-width row and wrong for a 70 px tile: the label has nowhere to go, so it
+   clipped ("Maile", "Divide") and broke mid-word ("Tuck car-ton").
+   Stack it instead — icon over a centred label, two lines allowed, no hyphenation.
+   Kept local rather than pushed into the kit: only this app has eight sources to
+   pick from, and the kit's row is still right for the apps that have three. */
 .vl-source-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(6.2rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(4.6rem, 1fr));
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.vl-source-card {
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  /* icon 26 + gap 4 + one line 16 + padding 16. Two columns, not three: at three
+     the tile is 72 px and "Tuck carton" wraps, which makes every tile in its row
+     taller and buys nothing. */
+  min-height: 4rem;
+  padding: var(--space-2) var(--space-1);
+  text-align: center;
+}
+
+.vl-source-card__icon {
+  width: 26px;
+  height: 26px;
+}
+
+.vl-source-card__label {
+  flex-grow: 0;
+  font-size: 13px;
+  line-height: 1.2;
+  /* Never hyphenate and never clip: a tile that cannot show its own name is worse
+     than a tile one line taller. */
+  hyphens: manual;
+  overflow-wrap: normal;
+}
+
+
+/* ------------------------------------------------------- stage fold panel -- */
+
+/* The fold control is a play button and a scrubber; a heading over it and a line
+   under it explaining that sliders slide made the panel a fifth of the stage. */
+.fb-panel--bare {
+  gap: 0;
+  padding-block: var(--space-3);
+}
+
+.fb-panel--bare .vl-stage-panel__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The dieline panel is a legend and two switches — one row, not three. `.vl-switch-row`
+   is `justify-content: space-between` and stretches to whatever box it is in, so it
+   also needs telling to take only the width it needs. */
+.fb-dieline-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.fb-dieline-body > .vl-switch-row {
+  flex: 0 0 auto;
   gap: var(--space-2);
 }
 
+.fb-dieline-body .vl-switch-label {
+  font-size: 14px;
+}
+
+/* The status line moves to the top-left, under the stage label.
+   The kit parks it bottom-left because the nav hint holds the opposite corner — but
+   this app has no nav hint and does have a permanent bottom-centre panel, and on a
+   narrow stage a 45%-wide status and a 344 px centred panel overlap every time. Up
+   here it collides with nothing and sits where the eye enters the frame. */
+.vl-stage-status {
+  top: 3.1rem;
+  bottom: auto;
+  max-width: min(70ch, 60%);
+}

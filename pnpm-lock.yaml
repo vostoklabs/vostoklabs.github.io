@@ -6,7 +6,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
 
   apps/bubble-pop-generator:
     dependencies:
@@ -105,6 +109,9 @@ importers:
       '@vostok/brand':
         specifier: workspace:*
         version: link:../../config
+      '@vostok/export':
+        specifier: workspace:*
+        version: link:../../packages/export
       '@vostok/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit

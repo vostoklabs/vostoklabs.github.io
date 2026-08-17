@@ -128,7 +128,10 @@ export function mount(container, host) {
       // Always travels. A paid mode may have relabelled this button "Unlock Pro — $9.99",
       // but that is a label: the click goes down the same path either way and meets the gate at
       // the far end, which is the only thing that decides whether paid work runs.
-      onExport: () => { $('export')?.click(); },
+      //
+      // RETURNED, not fired and forgotten. The kit greys this button for as long as the promise
+      // is pending, which is the whole feedback story for a keyboard set — see runPrimaryExport.
+      onExport: () => runPrimaryExport(),
       onSave: () => $('saveProj')?.click(),
       onLoad: (file) => {
         // On the desktop the kit's Load button hands us nothing and expects the host's own
@@ -1173,7 +1176,17 @@ export function mount(container, host) {
     setStatus(downloadMsg);
   }
 
-  $('export').addEventListener('click', async () => {
+  /**
+   * The one primary action, whatever the mode is pointed at.
+   *
+   * A named async function rather than the click handler it used to be, because the footer has
+   * to be able to AWAIT it. The kit's export panel disables its buttons for as long as
+   * `onExport` is pending — but the footer reached this through `$('export').click()`, which
+   * returns the moment the handler starts, so the button un-greyed itself immediately and a
+   * twenty-minute keyboard set ran with no sign that anything had happened. The hidden
+   * `#export` button stays wired to the same function: other code still clicks it.
+   */
+  async function runPrimaryExport() {
     // The footer's primary button is the same button in every mode. When a Pro mode owns the
     // stage it owns this too — the keyboard set generates a board, not the cap behind it — so
     // it gets first refusal before the single-cap path runs.
@@ -1195,7 +1208,9 @@ export function mount(container, host) {
         : `Exported 3MF ✓  Open in your slicer and assign ${count} filaments.`,
       `Keycap in ${count} colour${filaments === 1 ? '' : 's'}, made with the Keycap Legend Generator.`
     );
-  });
+  }
+
+  $('export').addEventListener('click', () => { void runPrimaryExport(); });
 
   // Export the bare cap (uncarved shell + stem) in a single colour — no legend.
   // Works for any size; uses the loaded shell directly (already a clean indexed solid).

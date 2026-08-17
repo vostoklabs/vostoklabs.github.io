@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Fold-up box generator — parametric folding-carton dielines for laser, blade and print-and-cut, with a live fold animation.",
+  "description": "Fold-up box generator \u2014 parametric folding-carton dielines for laser, blade and print-and-cut, with a live fold animation.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
@@ -11,11 +11,15 @@
     "typecheck": "tsc -p tsconfig.json",
     "test:net": "esbuild tests/net.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/net.mjs --log-level=error && node node_modules/.cache/net.mjs",
     "test:export": "esbuild tests/export.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/export.mjs --log-level=error && node node_modules/.cache/export.mjs",
-    "test": "pnpm run test:net && pnpm run test:export",
-    "demo": "esbuild scripts/demo.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/demo.mjs --log-level=error && node node_modules/.cache/demo.mjs"
+    "test:fold": "esbuild tests/fold.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/fold.mjs --log-level=error && node node_modules/.cache/fold.mjs",
+    "test": "pnpm run test:net && pnpm run test:fold && pnpm run test:print && pnpm run test:export",
+    "demo": "esbuild scripts/demo.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/demo.mjs --log-level=error && node node_modules/.cache/demo.mjs",
+    "test:print": "esbuild tests/print.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/print.mjs --log-level=error && node node_modules/.cache/print.mjs",
+    "build:offline": "node ../../scripts/offline.mjs foldbox"
   },
   "dependencies": {
     "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "@vostok/viewer": "workspace:*",
     "fflate": "^0.8.3",

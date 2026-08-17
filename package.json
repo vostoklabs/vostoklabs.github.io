@@ -28,6 +28,10 @@
     "build:foldbox": "pnpm --filter foldbox build",
     "dev:laserslot": "pnpm --filter laser-slot dev",
     "build:laserslot": "pnpm --filter laser-slot build",
-    "check:chrome": "node scripts/check-app-chrome.mjs"
+    "check:chrome": "node scripts/check-app-chrome.mjs",
+    "build:offline": "node scripts/offline.mjs"
+  },
+  "devDependencies": {
+    "fflate": "^0.8.3"
   }
 }

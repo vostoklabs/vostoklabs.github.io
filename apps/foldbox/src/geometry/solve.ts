@@ -82,12 +82,85 @@ function largestCube(p: BoxParams, sheet: Sheet, margin: number): number {
   return Math.max(0, Math.floor(Math.max(limitFor(avail), limitFor([avail[1], avail[0]]))));
 }
 
+/** The biggest version of THIS box, at the proportions the user typed, that still
+ *  fits the chosen sheet.
+ *
+ *  `largestCube` answers a different question — the biggest CUBE — and a cube is
+ *  rarely the box anyone wants. Boxes eat paper at a rate nobody predicts (a mailer
+ *  is `L + 4H` wide before it is anything else), so "the one you asked for does not
+ *  fit, here is the same box that does" is worth more than any amount of advice.
+ *
+ *  Bisection rather than arithmetic: blank size is affine in the dimensions but the
+ *  clamps inside the builders are not, and a solve is cheap. */
+export function fitToSheet(input: BoxParams): Pick<BoxParams, 'lengthMm' | 'widthMm' | 'heightMm'> {
+  const p: BoxParams = { ...input, caliperMm: effectiveCaliper(input) };
+  const sheet = sheetById(p.sheetId);
+  const availW = sheet.widthMm - 2 * SHEET_MARGIN_MM;
+  const availH = sheet.heightMm - 2 * SHEET_MARGIN_MM;
+
+  const at = (s: number): Pick<BoxParams, 'lengthMm' | 'widthMm' | 'heightMm'> => ({
+    lengthMm: Math.max(8, Math.round(p.lengthMm * s)),
+    widthMm: Math.max(8, Math.round(p.widthMm * s)),
+    heightMm: Math.max(4, Math.round(p.heightMm * s)),
+  });
+  const fits = (dims: ReturnType<typeof at>): boolean => {
+    const { net } = rawNet({ ...p, ...dims });
+    const w = net.bbox[2] - net.bbox[0];
+    const h = net.bbox[3] - net.bbox[1];
+    return (w <= availW && h <= availH) || (h <= availW && w <= availH);
+  };
+
+  if (fits(at(1))) {
+    // Already fits — grow it instead, so the button is useful in both directions.
+    let lo = 1;
+    let hi = 8;
+    if (fits(at(hi))) return at(hi);
+    for (let i = 0; i < 18; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(at(mid))) lo = mid;
+      else hi = mid;
+    }
+    return at(lo);
+  }
+
+  let lo = 0.02;
+  let hi = 1;
+  if (!fits(at(lo))) return at(lo);
+  for (let i = 0; i < 18; i++) {
+    const mid = (lo + hi) / 2;
+    if (fits(at(mid))) lo = mid;
+    else hi = mid;
+  }
+  // Rounding to whole millimetres can push it back over the edge, so step down until
+  // the answer is one that actually fits rather than one that nearly does.
+  let dims = at(lo);
+  for (let guard = 0; guard < 40 && !fits(dims); guard++) {
+    lo *= 0.98;
+    dims = at(lo);
+  }
+  return dims;
+}
+
 function rawNet(p: BoxParams): { net: Net; windowFitted: boolean; windowInsetMm: number } {
   const { parts, windowFitted, windowInsetMm } = buildStyle(p);
   return { net: placeNet(buildNet(parts), SHEET_MARGIN_MM), windowFitted, windowInsetMm };
 }
 
-export function solve(p: BoxParams): SolveResult {
+/** The thickness the blank is actually built for.
+ *
+ *  When you are printing the net, that is not a number to type — it is layers times
+ *  layer height, and it can only ever be that. Deriving it here rather than asking
+ *  the user to keep two fields in step deletes a whole class of "the tabs do not fit"
+ *  and, with it, the drift warning and the reconcile button that used to sit under
+ *  the print settings. */
+export function effectiveCaliper(p: BoxParams): number {
+  return p.makeMode === 'print'
+    ? Math.max(1, p.sheetLayers) * p.layerHeightMm
+    : p.caliperMm;
+}
+
+export function solve(input: BoxParams): SolveResult {
+  const p: BoxParams = { ...input, caliperMm: effectiveCaliper(input) };
   const machine = machineById(p.machineId);
   const sheet = sheetById(p.sheetId);
   const stock = stockById(p.stockId);
@@ -143,7 +216,7 @@ export function solve(p: BoxParams): SolveResult {
     });
   }
 
-  if (machine.maxCaliperMm > 0 && p.caliperMm > machine.maxCaliperMm) {
+  if (p.makeMode === 'cut' && machine.maxCaliperMm > 0 && p.caliperMm > machine.maxCaliperMm) {
     diagnostics.push({
       level: 'error',
       code: 'caliper',
@@ -180,6 +253,23 @@ export function solve(p: BoxParams): SolveResult {
     });
   }
 
+  // A hand hole needs ~14 mm of clear opening plus a margin to the rim, so the roll
+  // end refuses to cut one it cannot place. Refusing quietly is worse than not
+  // offering it: the switch moves, the file does not change, and there is no way to
+  // tell that from a bug. Read it off the built net rather than re-deriving the
+  // condition here, so the two can never drift apart.
+  if (p.handHoles && meta.uses.handHoles) {
+    const cut = net.panels.some((x) => /wall|inner/.test(x.id) && x.holes.length > 0);
+    if (!cut) {
+      diagnostics.push({
+        level: 'warning',
+        code: 'hand-hole',
+        message: `There is no room for a hand hole on a ${H.toFixed(0)} mm tall end.`,
+        fix: 'A hole you can get a finger through needs about 14 mm, and it has to stay clear of the rim or it tears out. Take the box to 30 mm tall or more, or leave the holes off.',
+      });
+    }
+  }
+
   const tuckNeeded = 2 * 8;
   if (meta.uses.tuck && H < tuckNeeded) {
     diagnostics.push({
@@ -190,7 +280,7 @@ export function solve(p: BoxParams): SolveResult {
     });
   }
 
-  if (p.foldMode === 'perf') {
+  if (p.makeMode === 'cut' && p.foldMode === 'perf') {
     const minFeature = machine.id.startsWith('h2d') && machine.foldMode !== 'score' ? 1 : 0.5;
     if (p.perfCutMm < minFeature) {
       diagnostics.push({
@@ -205,7 +295,7 @@ export function solve(p: BoxParams): SolveResult {
   // Grain is a one-bit decision, never an optimisation: a tube's body creases and its
   // flap creases are mutually orthogonal, so no rotation puts all of them with the
   // grain. It is only worth saying anything at all on heavy coated stock.
-  if (stock.gsm >= 300 && meta.uses.tuck) {
+  if (p.makeMode === 'cut' && stock.gsm >= 300 && meta.uses.tuck) {
     diagnostics.push({
       level: 'info',
       code: 'grain',
@@ -214,13 +304,37 @@ export function solve(p: BoxParams): SolveResult {
     });
   }
 
-  if (machine.mirror) {
+  if (p.makeMode === 'cut' && machine.mirror) {
     diagnostics.push({
       level: 'info',
       code: 'mirror',
       message: 'This machine folds into the score, so the sheet goes on the mat pretty side down.',
       fix: 'Mirror any artwork you add. The dieline itself is symmetric, so the cut file needs nothing.',
     });
+  }
+
+  // The printed sheet's own gotcha, and the only one it has: a groove can only be
+  // on the face that is up, so a fold that goes the other way has to be worked from
+  // underneath. Silence about it is why the first test print of a handle box comes
+  // back with two cracked straps.
+  if (p.makeMode === 'print') {
+    const mountains = net.creases.filter((c) => c.dir === 'mountain').length;
+    if (mountains > 0) {
+      diagnostics.push({
+        level: 'info',
+        code: 'mountain',
+        message: `${mountains} of the ${net.creases.length} folds go the opposite way to the rest.`,
+        fix: 'The grooves are all on the top face, so press those ones in from underneath — over the edge of a table works. They still fold; they just fold against their groove.',
+      });
+    }
+    if (p.hingeLayers >= p.sheetLayers) {
+      diagnostics.push({
+        level: 'warning',
+        code: 'no-hinge',
+        message: 'With the hinge as thick as the sheet there are no fold lines on the print at all.',
+        fix: 'It comes out as a plain slab with nothing to fold against. Drop the hinge to one layer unless you meant to score it by hand.',
+      });
+    }
   }
 
   return {

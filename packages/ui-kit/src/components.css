@@ -503,6 +503,34 @@
 .vl-export__buttons { display: flex; gap: 10px; }
 .vl-export__buttons .vl-btn { flex: 1; }
 
+/* Working, not refused. `exportPanel` disables its buttons for as long as the export promise
+   is pending; on an export that runs for minutes (a keycap set carves sixty-one caps) a button
+   that is only greyed reads as broken, and the next thing anyone does is click it again.
+   A ::before rather than an inserted node, so the app relabelling the button per mode with
+   `.textContent` cannot wipe the spinner. */
+.vl-btn--busy::before {
+  content: '';
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.9;
+  animation: vl-spin 0.7s linear infinite;
+}
+@keyframes vl-spin { to { transform: rotate(360deg); } }
+
+/* Reduced motion still needs "working", just not spinning: hold the ring still and pulse it. */
+@media (prefers-reduced-motion: reduce) {
+  .vl-btn--busy::before {
+    animation: vl-pulse 1.4s ease-in-out infinite;
+    border-top-color: currentColor;
+    border-style: dotted;
+  }
+  @keyframes vl-pulse { 50% { opacity: 0.3; } }
+}
+
 /* ---------- Generator chrome: header + credit ---------- */
 .vl-app-header {
   display: flex;

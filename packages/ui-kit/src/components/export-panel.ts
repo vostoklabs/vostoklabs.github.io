@@ -14,11 +14,22 @@ export interface ExportPanelOptions {
 }
 
 /** Format buttons with busy-state handling. The app owns the actual export logic,
- *  kept behind one function so future export targets (e.g. a host SDK) are a drop-in swap. */
+ *  kept behind one function so future export targets (e.g. a host SDK) are a drop-in swap.
+ *
+ *  Busy is greyed AND spinning. Disabling alone is enough for an export that takes a moment,
+ *  but not for one that takes minutes: a keycap set carves sixty-one caps, and a button that
+ *  is merely grey reads as refused rather than working. The spinner is a `::before` on the
+ *  button so `.textContent = 'Generate set'` — how every generator relabels this button per
+ *  mode — cannot wipe it. */
 export function exportPanel(opts: ExportPanelOptions): HTMLElement {
   const buttons: HTMLButtonElement[] = [];
   const setBusy = (busy: boolean) => {
-    for (const b of buttons) b.disabled = busy;
+    for (const b of buttons) {
+      b.disabled = busy;
+      b.classList.toggle('vl-btn--busy', busy);
+      if (busy) b.setAttribute('aria-busy', 'true');
+      else b.removeAttribute('aria-busy');
+    }
   };
 
   const row = el('div', { className: 'vl-export__buttons' });
