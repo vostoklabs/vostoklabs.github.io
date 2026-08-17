@@ -5,8 +5,8 @@
    every control row use `font: inherit`, so an app that forgot the block rendered its
    whole panel — buttons, labels, inputs, the status line — in the browser's default
    serif, while the few elements naming `--font-display` kept Chakra Petch. That mix is
-   what makes a new generator read as a different product. house-number and foldbox both
-   shipped exactly that bug; their style.css files carried the post-mortem.
+   what makes a new generator read as a different product. Two generators shipped exactly
+   that bug; their style.css files carried the post-mortem.
 
    Dialogs, toasts, tooltips and the license modal are appended to `document.body`, not
    into `.vl-app`, so putting the font on `.vl-app` alone would still leave those in the

@@ -56,6 +56,18 @@ packages/manifold-noeval/README.md
 # readable in a public repo, which is the whole thing people are paying for.
 apps/*/src/pro/
 
+# Unreleased apps. This repo is public and it is the live site, so an app in it is an
+# announcement — the whole design, before it is finished and before it is decided whether it
+# ships free, paid or at all. These two stay on disk and stay pnpm workspace members, so
+# `pnpm --filter foldbox dev` works exactly as it did; they are simply not published yet.
+# Add the app back here and to generators.json (with a build + copy step in deploy.yml, or
+# the hub card is a 404) on the day it ships.
+#
+# They were tracked until 2026-08-17, so both are still readable in the history — removing
+# them from HEAD hides them from anyone browsing, not from anyone looking.
+apps/foldbox/
+apps/laser-slot/
+
 # Blocks and 3mf files
 **/blocks/**/*.3mf
 **/blocks.3mf

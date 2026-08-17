@@ -24,10 +24,6 @@
     "build:housenumber": "pnpm --filter house-number build",
     "dev:bubblepop": "pnpm --filter bubble-pop-generator dev",
     "build:bubblepop": "pnpm --filter bubble-pop-generator build",
-    "dev:foldbox": "pnpm --filter foldbox dev",
-    "build:foldbox": "pnpm --filter foldbox build",
-    "dev:laserslot": "pnpm --filter laser-slot dev",
-    "build:laserslot": "pnpm --filter laser-slot build",
     "check:chrome": "node scripts/check-app-chrome.mjs",
     "build:offline": "node scripts/offline.mjs"
   },

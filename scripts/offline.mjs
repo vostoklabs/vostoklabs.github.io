@@ -1,8 +1,8 @@
 // Build a generator as ONE html file that runs from `file://` — no server, no
 // network — and zip it.
 //
-//   node scripts/offline.mjs foldbox
 //   node scripts/offline.mjs clicker-generator
+//   node scripts/offline.mjs keycap-generator
 //
 // Out: apps/<id>/offline/<id>-offline.{html,zip}
 //
@@ -200,7 +200,8 @@ html = html.replace(/<link[^>]+rel="stylesheet"[^>]*>/g, (tag) => {
 // Vite's html plugin writes `type="module"` on the entry whatever the rollup output
 // format is, so the tag proves nothing — check the CODE. Not by grepping for the
 // word `import`: the bundle is one minified line apart from newlines inside string
-// literals, and one of foldbox's literals begins a line "import drops the size".
+// literals, and a UI string beginning "import drops the size" starts one of those
+// lines with the very word the grep is looking for.
 // What is unambiguous is rollup's iife tail, and `import.meta`, which a classic
 // script cannot evaluate at all.
 const isClassicBundle = (js) => {
