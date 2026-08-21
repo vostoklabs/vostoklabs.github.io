@@ -19,6 +19,7 @@
 import { existsSync, readdirSync, mkdirSync, copyFileSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { licenseMarkdown } from './licenses.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TEMPLATE = join(ROOT, 'apps', 'generator-template');
@@ -97,6 +98,11 @@ edit('src/style.css', (s) => s.replaceAll('tpl-', `${prefix}-`));
 // The template's README documents the template itself; the new app gets a stub that
 // points back at it rather than a copy that will rot.
 edit('README.md', () => appReadme({ id, title, description }));
+
+// Same reason, and it matters more here: a copied LICENSE.md would carry another app's
+// name and a stale price into a legal document. Generated from brand instead — see
+// scripts/licenses.mjs, and `pnpm gen:licenses` to rewrite them all.
+edit('LICENSE.md', () => licenseMarkdown({ title }));
 
 // ---------------------------------------------------------------------------
 // 3. Wire it into the repo: launch config, root scripts

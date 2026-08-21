@@ -25,7 +25,13 @@ import { SHELL_FILES } from './offline-config.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const app = process.argv[2];
-if (!app) throw new Error('usage: node scripts/offline.mjs <app-id>');
+// Anything after the app id goes straight to vite, so an app can ask for a different
+// build than its own `pnpm build` makes. The one use today is foldbox's `--mode full`:
+// the hosted app is fenced to the 3D-print half until the laser half launches, but this
+// file is not published — it is handed to one person directly — so it stays complete.
+// If that ever changes and the offline file goes on the hub, drop the flag first.
+const viteArgs = process.argv.slice(3);
+if (!app) throw new Error('usage: node scripts/offline.mjs <app-id> [...vite args]');
 const APP = join(ROOT, 'apps', app);
 if (!existsSync(join(APP, 'vite.offline.config.ts'))) {
   throw new Error(`apps/${app} has no vite.offline.config.ts`);
@@ -36,7 +42,7 @@ const OUT = join(APP, 'offline');
 const NAME = `${app}-offline`;
 
 rmSync(BUILD, { recursive: true, force: true });
-execFileSync('npx', ['vite', 'build', '--config', 'vite.offline.config.ts'], {
+execFileSync('npx', ['vite', 'build', '--config', 'vite.offline.config.ts', ...viteArgs], {
   cwd: APP,
   stdio: 'inherit',
   shell: true,

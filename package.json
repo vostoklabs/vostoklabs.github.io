@@ -25,6 +25,8 @@
     "dev:bubblepop": "pnpm --filter bubble-pop-generator dev",
     "build:bubblepop": "pnpm --filter bubble-pop-generator build",
     "check:chrome": "node scripts/check-app-chrome.mjs",
+    "gen:licenses": "node scripts/licenses.mjs",
+    "check:licenses": "node scripts/licenses.mjs --check",
     "build:offline": "node scripts/offline.mjs"
   },
   "devDependencies": {
