@@ -41,6 +41,33 @@ export interface HostProject {
   updatedAt: number;
 }
 
+/**
+ * What a generator hands over when it lets the host own its projects.
+ *
+ * Every generator already has these three under its own names — `buildProject` /
+ * `applyProject` / `capturePreview` in one, `collectState` / `applyLoadedState` in another.
+ * Naming them once is what lets one implementation of autosave, Save, Open, Rename and
+ * Delete serve all of them, instead of each generator growing its own.
+ */
+export interface ProjectAdapter {
+  /** The generator's own state blob — the same one its Save already sends. */
+  getState(): unknown;
+  /**
+   * Put a blob back on screen. May be async: some generators re-decode an image first.
+   *
+   * `assets` is whatever `assets()` returned when this was stored. A generator that
+   * imported a typeface has to re-register it here: parameters that restore without their
+   * font come back in the wrong face, and nothing on screen says so.
+   */
+  applyState(state: unknown, assets?: HostAsset[]): void | Promise<void>;
+  /** Files this design depends on, so they travel with it. */
+  assets?(): HostAsset[];
+  /** A `data:image/png;base64,…` from the generator's renderer, for the host's lists. */
+  capturePreview?(): string | undefined;
+  /** A starting point for the name field, e.g. the text being carved. */
+  suggestName?(): string;
+}
+
 export interface DesktopHost {
   saveProject(input: {
     id?: string;
@@ -101,6 +128,30 @@ export interface DesktopHost {
    * contains one.
    */
   openExternal?(url: string): void;
+
+  /**
+   * Hands the host everything it needs to own this generator's projects. Optional.
+   *
+   * A generator that calls this stops owning Save, Load, autosave and "which project am I
+   * in" — the host draws all of it, in its own chrome, the same way for every generator it
+   * hosts. Three functions the generator already has under its own names are the whole
+   * price, and a generator that does not call it keeps every path it has today.
+   *
+   * **A generator that calls this must also tell its own Save/Load block to stand down**,
+   * by passing `hostOwnsProjects` to `projectActions` / `sidebarFooter`. Two Save buttons
+   * that do different things is worse than either one alone.
+   */
+  registerProject?(adapter: ProjectAdapter): void;
+
+  /**
+   * Opens the host's media library and resolves with the chosen file, or null. Optional.
+   *
+   * Called from a generator's own import affordance, so "Import custom font" can offer the
+   * eleven the user already imported before it offers the file system. On the web there is
+   * no host and no library, and `chooseFile` in `host-assets.ts` falls back to the file
+   * input the generator has always had.
+   */
+  pickMedia?(opts?: { kind?: string; extensions?: string[] }): Promise<HostFile | null>;
 
   /** Writes an exported model where the host wants it, and indexes it. */
   exportToLibrary(file: HostFile, opts?: { designer?: string }): Promise<{ path: string; indexed: boolean }>;

@@ -41,6 +41,7 @@ import {
   rememberFile,
   rememberBytes,
   bindExternalLinks,
+  chooseFile,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import type { RegionSet } from './types';
@@ -644,6 +645,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // Help / theme. The licence nudge lives on the export path (modal on the first
   // download, toast after) exactly as the clicker does it — not as a sidebar line.
   const footer = sidebarFooter({
+    // The host draws Save and Open itself when it owns projects; two Save buttons that
+    // do different things is worse than either one alone. `Boolean(...)`, not `isDesktop()`:
+    // a desktop host without the capability still needs these.
+    hostOwnsProjects: Boolean(host?.registerProject),
     formats: [{ id: '3mf', label: '3MF' }],
     onExport: (format) => exportModel(format),
     onSave: saveProject,
@@ -1717,7 +1722,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // No source of that kind yet — the panel is showing so the user can add one.
     });
 
-    drop.addEventListener('click', () => file.click());
+    // With a host this opens its media library — every image imported into any generator,
+    // and a way to the file system beyond it. Without one it clicks the hidden input, which
+    // answers through its own `change` handler below. The generator never learns which.
+    drop.addEventListener('click', () => {
+      void chooseFile(host, { kind: 'image', extensions: ['png', 'jpg', 'jpeg', 'webp'] }, () => file.click())
+        .then((f) => {
+          if (!f) return;
+          void rememberFile(host, 'image', f);
+          openImport(f.name, () => loadFileToImage(f));
+        });
+    });
     file.addEventListener('change', () => {
       const f = file.files?.[0];
       if (f) {
@@ -1735,6 +1750,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         void importSvgFile(f);
       }
       svgFile.value = '';
+    });
+    // The label wraps the input, so the host's library has to pre-empt the click rather
+    // than replace it — otherwise both open.
+    svgFile.parentElement?.addEventListener('click', (e) => {
+      if (!host?.pickMedia) return;
+      e.preventDefault();
+      void chooseFile(host, { kind: 'svg', extensions: ['svg'] }, () => {}).then((f) => {
+        if (f) void importSvgFile(f);
+      });
     });
 
     // Drag & drop — on the zone and anywhere in the window.
@@ -1839,6 +1863,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
     });
 
+    fontUpload.parentElement?.addEventListener('click', (e) => {
+      if (!host?.pickMedia) return;
+      e.preventDefault();
+      void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'zip'] }, () => {}).then((f) => {
+        if (f) void importCustomFont(f, (id) => {
+          patchImage({ textFont: id });
+          renderFontGrid();
+          void applyTextSource();
+        });
+      });
+    });
     fontUpload.addEventListener('change', () => {
       const f = fontUpload.files?.[0];
       if (f) void importCustomFont(f, (id) => {
@@ -3000,9 +3035,27 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   }
 
-  // Optional on the host and absent on the web, so this is a no-op in a browser tab.
-  const arrivingWith = host?.initialProjectId?.();
-  if (arrivingWith) void openProject(arrivingWith);
+  /**
+   * Hand the host the three things it needs to own projects for this generator.
+   *
+   * Autosave, the unsaved dot, Save, Open, Rename, Delete and Start fresh then belong to
+   * the host, drawn once in its own chrome for every generator it hosts, rather than a
+   * fourth copy of that machinery living in here. Absent on the web, where every path
+   * below keeps working exactly as it did.
+   */
+  host?.registerProject?.({
+    getState: () => buildProject(),
+    applyState: (loaded) => applyProject(loaded),
+    capturePreview,
+    suggestName: () => (s().productType === 'slider' ? 'Slider' : 'Magnet'),
+  });
+
+  // Only when the host is *not* owning projects: with `registerProject` it opens the
+  // arriving project itself, and doing it here too would open it twice.
+  if (!host?.registerProject) {
+    const arrivingWith = host?.initialProjectId?.();
+    if (arrivingWith) void openProject(arrivingWith);
+  }
 
   function saveProject() {
     if (host) { void saveToHost(); return; }

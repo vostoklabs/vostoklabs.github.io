@@ -20,7 +20,7 @@
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import '@vostok/plates/plates.css';
-import { topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks } from '@vostok/ui-kit';
+import { topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile } from '@vostok/ui-kit';
 import './style.css';
 import { createStore } from './store/store';
 import { createViewer } from './viewer/viewer';
@@ -500,6 +500,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         console.log(AI_PROMPT);
       }
     },
+    hostOwnsProjects: Boolean(host?.registerProject),
+    // Only when the host actually has a library. Providing this unconditionally would hand
+    // the web build a picker that resolves null and never opens the file input, which is a
+    // dead Import button and exactly the kind of break these capabilities are optional to
+    // avoid.
+    pickFile: host?.pickMedia
+      ? (kind, extensions) => chooseFile(host, { kind, extensions }, () => {})
+      : undefined,
     onSaveProject: () => saveProject(),
     onLoadProject: (file) => loadProject(file),
     onOpenFromHost: () => void openFromHost(),
@@ -1494,9 +1502,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     });
   }
 
-  function saveProject() {
+  /**
+   * The saved shape, in one function.
+   *
+   * Split out of `saveProject` because the host now asks for it on a timer as well as when
+   * the user presses Save — autosave cannot go through a function whose other half writes
+   * a file and sets a status line.
+   */
+  function buildProject() {
     const s = store.get();
-    const proj = {
+    return {
       version: 3,
       settings: {
         colorCount: s.colorCount,
@@ -1532,7 +1547,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       palette: s.palette, // filament mappings
       image: originalImage ? imageToDataUrl(originalImage) : null,
     };
+  }
 
+  function saveProject() {
+    const proj = buildProject();
     if (host) { void saveToHost(proj); return; }
 
     downloadBlob(new Blob([JSON.stringify(proj)], { type: 'application/json' }), 'clicker-project.json');
@@ -1637,9 +1655,27 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   }
 
-  // Optional on the host and absent on the web, so this is a no-op in a browser tab.
-  const arrivingWith = host?.initialProjectId?.();
-  if (arrivingWith) void openProject(arrivingWith);
+  /**
+   * Hand the host the three things it needs to own projects for this generator.
+   *
+   * Autosave, the unsaved dot, Save, Open, Rename, Delete and Start fresh then belong to
+   * the host, drawn once in its own chrome for every generator it hosts, rather than a
+   * fourth copy of that machinery living in here. Absent on the web, where every path
+   * below keeps working exactly as it did.
+   */
+  host?.registerProject?.({
+    getState: () => buildProject(),
+    applyState: (loaded) => applyProject(loaded),
+    capturePreview,
+    suggestName: () => currentSvgName || currentIconName || 'Clicker',
+  });
+
+  // Only when the host is *not* owning projects: with `registerProject` it opens the
+  // arriving project itself, and doing it here too would open it twice.
+  if (!host?.registerProject) {
+    const arrivingWith = host?.initialProjectId?.();
+    if (arrivingWith) void openProject(arrivingWith);
+  }
 
   async function loadProject(file: File) {
     try {

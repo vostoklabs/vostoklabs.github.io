@@ -135,6 +135,21 @@ export interface UiCallbacks {
    * simply does not provide it and keeps the file-input path.
    */
   onOpenFromHost?(): void;
+  /**
+   * The host draws Save and Open itself, so the sidebar footer must not.
+   *
+   * Passed in rather than read off a flag here, because the UI has no host to ask and the
+   * question is about the host's capability rather than about being on a desktop at all.
+   */
+  hostOwnsProjects?: boolean;
+  /**
+   * Ask the host for a file, when it has a library to offer.
+   *
+   * Returns null and does nothing when there is no host, which is the signal to fall
+   * through to the hidden file input this UI already owns. One hook rather than a `host`
+   * reference, because the UI has no business knowing what a host is.
+   */
+  pickFile?(kind: string, extensions: string[]): Promise<File | null>;
   onBodyColor(hex: string): void;
 
   // New callbacks for vector modes
@@ -750,6 +765,7 @@ export function createUi(
   rightScroll.appendChild(projFileInput);
 
   const rightFooter = sidebarFooter({
+    hostOwnsProjects: cb.hostOwnsProjects,
     formats: [{ id: '3mf', label: '3MF' }],
     onExport: () => cb.onExport(),
     onSave: () => cb.onSaveProject(),
@@ -791,10 +807,27 @@ export function createUi(
   $('redoBtn')?.addEventListener('click', () => cb.onRedo());
   $('refreshBtn')?.addEventListener('click', () => cb.onRefresh());
 
+  /** The host's library if there is one, the hidden input if there is not. */
+  async function pickOrBrowse(
+    kind: string,
+    extensions: string[],
+    fallback: () => void,
+  ): Promise<File | null> {
+    if (!cb.pickFile) { fallback(); return null; }
+    return cb.pickFile(kind, extensions);
+  }
+
   // --- Image ---
   const drop = $('drop');
   const file = $<HTMLInputElement>('file');
-  drop.addEventListener('click', () => file.click());
+  // With a host this opens its media library — every image imported into any generator,
+  // and a way to the file system beyond it. Without one it clicks the hidden input, whose
+  // own change handler picks it up from there.
+  drop.addEventListener('click', () => {
+    void pickOrBrowse('image', ['png', 'jpg', 'jpeg', 'webp'], () => file.click()).then((f) => {
+      if (f) cb.onUpload(f);
+    });
+  });
   file.addEventListener('change', () => {
     if (file.files?.[0]) cb.onUpload(file.files[0]);
   });
@@ -857,6 +890,11 @@ export function createUi(
 
   // --- SVG Panel Setup ---
   const svgUpload = $<HTMLInputElement>('svgUpload');
+  svgUpload.parentElement?.addEventListener('click', (e) => {
+    if (!cb.pickFile) return;
+    e.preventDefault();
+    void pickOrBrowse('svg', ['svg'], () => {}).then((f) => { if (f) cb.onSvgUpload(f); });
+  });
   svgUpload.addEventListener('change', () => {
     const f = svgUpload.files?.[0];
     if (f) cb.onSvgUpload(f);
@@ -1013,6 +1051,13 @@ export function createUi(
 
   letterText.addEventListener('input', () => {
     cb.onTextChange(letterText.value);
+  });
+  fontUpload.parentElement?.addEventListener('click', (e) => {
+    if (!cb.pickFile) return;
+    e.preventDefault();
+    void pickOrBrowse('font', ['ttf', 'otf', 'json'], () => {}).then((f) => {
+      if (f) cb.onImportFont(f);
+    });
   });
   fontUpload.addEventListener('change', () => {
     const f = fontUpload.files?.[0];

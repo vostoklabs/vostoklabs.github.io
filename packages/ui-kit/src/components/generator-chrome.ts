@@ -124,11 +124,24 @@ export interface ProjectActionsOptions {
   theme?: boolean;
   /** localStorage key for the theme toggle. */
   themeStorageKey?: string;
+  /**
+   * The host draws Save and Open itself, so this block must not.
+   *
+   * Pass `Boolean(host?.registerProject)` — not `isDesktop()`. The two are different
+   * questions: a desktop host that has not implemented project ownership still needs these
+   * buttons, and inferring one from the other is how a generator ends up with no way to
+   * save at all. Explicit, so every combination is correct rather than assumed.
+   */
+  hostOwnsProjects?: boolean;
 }
 
 /**
  * The Save project / Load project / Help / Light-mode block that sits under the
  * export button. Two rows of two buttons, matching the clicker.
+ *
+ * With `hostOwnsProjects` the first row is gone and only Help (and, on the web, the theme
+ * toggle) remains — the block collapses to what the host is not already providing rather
+ * than disappearing, because Help is the generator's own and nobody else can draw it.
  */
 export function projectActions(opts: ProjectActionsOptions): HTMLElement {
   const fileInput = el('input', {
@@ -160,8 +173,9 @@ export function projectActions(opts: ProjectActionsOptions): HTMLElement {
     }));
   }
 
-  return el('div', { className: 'vl-project-actions' }, [
-    el('div', { className: 'vl-action-row' }, [save, load, fileInput]),
-    el('div', { className: 'vl-action-row' }, row2),
-  ]);
+  const rows: HTMLElement[] = [];
+  if (!opts.hostOwnsProjects) rows.push(el('div', { className: 'vl-action-row' }, [save, load, fileInput]));
+  if (row2.length) rows.push(el('div', { className: 'vl-action-row' }, row2));
+
+  return el('div', { className: 'vl-project-actions' }, rows);
 }

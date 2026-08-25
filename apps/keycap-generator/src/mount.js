@@ -19,7 +19,7 @@
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import '@vostok/plates/plates.css';
-import { topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks } from '@vostok/ui-kit';
+import { topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
 import * as THREE from 'three';
@@ -128,6 +128,10 @@ export function mount(container, host) {
   const keycapFooter = $('keycapFooter');
   if (keycapFooter) {
     const footer = sidebarFooter({
+      // The host draws Save and Open itself when it owns projects; two Save buttons that
+      // do different things is worse than either one alone. `Boolean(...)`, not `isDesktop()`:
+      // a desktop host without the capability still needs these.
+      hostOwnsProjects: Boolean(host?.registerProject),
       formats: [{ id: '3mf', label: '3MF' }],
       // Always travels. A paid mode may have relabelled this button "Unlock Pro — $9.99",
       // but that is a label: the click goes down the same path either way and meets the gate at
@@ -860,6 +864,26 @@ export function mount(container, host) {
   // NOT legendSink.letter(): a font change must never be mistaken for typing a legend.
   $('fontSelect').addEventListener('change', () => legendSink.font());
 
+  // The host's library first, when there is one. The input lives inside its own label, so
+  // the click has to be pre-empted rather than replaced or both would open.
+  $('fontUpload').parentElement?.addEventListener('click', (e) => {
+    if (!host?.pickMedia) return;
+    e.preventDefault();
+    void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'json'] }, () => {}).then(async (file) => {
+      if (!file) return;
+      try {
+        const font = await importFontFile(file);
+        addFontOption(font);
+        $('fontSelect').value = font.id;
+        setLegendMode('letter');
+        setStatus(`Imported font: ${font.name}`);
+      } catch (error) {
+        console.error(error);
+        setStatus('Could not import this font. Try a TTF, OTF, or typeface JSON file.', 'err');
+      }
+    });
+  });
+
   $('fontUpload').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1029,6 +1053,21 @@ export function mount(container, host) {
     }
     refreshUploadEmptyState();
   }
+
+  $('upload').parentElement?.addEventListener('click', (e) => {
+    if (!host?.pickMedia) return;
+    e.preventDefault();
+    void chooseFile(host, { kind: 'svg', extensions: ['svg'] }, () => {}).then(async (file) => {
+      if (!file) return;
+      const text = await file.text();
+      const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+      const iconEl = makeIconEl(url, async () => text, file.name.replace(/\.svg$/i, ''));
+      uploadGalleryEl.appendChild(iconEl);
+      refreshUploadEmptyState();
+      setLegendMode('upload');
+      iconEl.click();
+    });
+  });
 
   $('upload').addEventListener('change', async (e) => {
     let firstEl = null;
@@ -2063,9 +2102,27 @@ export function mount(container, host) {
     }
   }
 
-  // Optional on the host and absent on the web, so this is a no-op in a browser tab.
-  const arrivingWith = host?.initialProjectId?.();
-  if (arrivingWith) void openProject(arrivingWith);
+  /**
+   * Hand the host the three things it needs to own projects for this generator.
+   *
+   * Autosave, the unsaved dot, Save, Open, Rename, Delete and Start fresh then belong to
+   * the host, drawn once in its own chrome for every generator it hosts, rather than a
+   * fourth copy of that machinery living in here. Absent on the web, where every path
+   * below keeps working exactly as it did.
+   */
+  host?.registerProject?.({
+    getState: () => collectState(),
+    applyState: (loaded) => applyLoadedState(loaded),
+    capturePreview,
+    suggestName: () => currentLegend?.name || 'Keycap',
+  });
+
+  // Only when the host is *not* owning projects: with `registerProject` it opens the
+  // arriving project itself, and doing it here too would open it twice.
+  if (!host?.registerProject) {
+    const arrivingWith = host?.initialProjectId?.();
+    if (arrivingWith) void openProject(arrivingWith);
+  }
 
   $('saveProj')?.addEventListener('click', () => {
     if (host) { void saveToHost(); return; }

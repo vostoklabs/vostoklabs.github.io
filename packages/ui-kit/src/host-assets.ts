@@ -77,6 +77,38 @@ export async function rememberBytes(
 }
 
 /**
+ * One file, from wherever this generator is running.
+ *
+ * With a host it opens the host's media library — everything the user has imported before,
+ * plus a way to the file system. Without one it clicks the hidden `<input type="file">` the
+ * generator already has and resolves null, because a file input answers through its own
+ * `change` event and the caller's existing handler is already listening for it.
+ *
+ * So a call site becomes:
+ *
+ *     const f = await chooseFile(host, { kind: 'image' }, () => input.click());
+ *     if (f) handleFile(f);      // a real File: the existing path is unchanged
+ *
+ * and the generator never learns which of the two happened.
+ */
+export async function chooseFile(
+  host: DesktopHost | undefined,
+  opts: { kind: string; extensions?: string[] },
+  fallback: () => void,
+): Promise<File | null> {
+  if (!host?.pickMedia) {
+    fallback();
+    return null;
+  }
+  const picked = await host.pickMedia(opts);
+  if (!picked) return null;
+  // A real `File`, so every decode path that was written against a file input keeps
+  // working without learning where this one came from.
+  const view = new Uint8Array(picked.bytes);
+  return new File([view], picked.name);
+}
+
+/**
  * A stored path, as something the DOM can load.
  *
  * Falls back to the path itself, which is what a browser build wants and what an older host

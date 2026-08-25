@@ -23,6 +23,7 @@ import {
   promptDialog,
   hostAssetUrl,
   bindExternalLinks,
+  chooseFile,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { unzipSync } from 'fflate';
@@ -847,9 +848,33 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   }
 
-  // Optional on the host and absent on the web, so this is a no-op in a browser tab.
-  const arrivingWith = host?.initialProjectId?.();
-  if (arrivingWith) void openProject(arrivingWith);
+  /**
+   * Hand the host the three things it needs to own projects for this generator.
+   *
+   * Everything built on them — autosave, the unsaved dot, Save, Open, Rename, Delete,
+   * Start fresh — is then the host's, drawn once in its own chrome for every generator it
+   * hosts, instead of a fourth copy of that machinery living in here. Optional and absent
+   * on the web, where the block below keeps working exactly as it always has.
+   */
+  host?.registerProject?.({
+    getState: () => state,
+    applyState: async (loaded, assets) => {
+      // Fonts first. Applying the parameters before the typeface they name is registered
+      // would lay the name out in the fallback face and then never rebuild it.
+      if (assets) await restoreFonts(assets);
+      applyLoadedState(loaded as Record<string, unknown>);
+    },
+    assets: () => importedFontAssets,
+    capturePreview,
+    suggestName: () => state.name.trim() || 'Keychain',
+  });
+
+  // Only when the host is *not* owning projects: with `registerProject` the host opens the
+  // arriving project itself, and doing it here as well would open it twice.
+  if (!host?.registerProject) {
+    const arrivingWith = host?.initialProjectId?.();
+    if (arrivingWith) void openProject(arrivingWith);
+  }
 
   /**
    * Re-registers the fonts a saved project was built with.
@@ -933,11 +958,22 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const fileInput = el('input', {
     attrs: { type: 'file', accept: '.ttf,.otf,.zip', style: 'display: none;' }
   });
-  importFontBtn.addEventListener('click', () => fileInput.click());
+  // The host's library first, when there is one: a typeface imported for one keychain is
+  // the most likely answer for the next. The hidden input is the fallback, and the change
+  // handler below serves both paths because `chooseFile` hands back a real File.
+  importFontBtn.addEventListener('click', () => {
+    void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'zip'] }, () => fileInput.click())
+      .then((f) => { if (f) void handleFontFiles(f); });
+  });
 
-  fileInput.addEventListener('change', async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
+  /**
+   * One typeface, or a zip of them, from wherever it came.
+   *
+   * Named rather than inline on the input's `change`, because there are two ways in now:
+   * the file input, and the host's media library. Both hand over a `File`, so both end up
+   * here and neither has to know about the other.
+   */
+  async function handleFontFiles(file: File) {
     try {
       const rawBuffer = await file.arrayBuffer();
       const isZip = file.name.toLowerCase().endsWith('.zip');
@@ -955,7 +991,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         }
         if (filesToProcess.length === 0) {
           toast('No .ttf or .otf files found in the zip.', { kind: 'error' });
-          (e.target as HTMLInputElement).value = '';
           return;
         }
       } else {
@@ -999,8 +1034,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       console.error(err);
       toast('Failed to process file. Make sure it is a valid TTF, OTF or ZIP file.', { kind: 'error' });
     }
-  
-    (e.target as HTMLInputElement).value = '';
+  }
+
+  fileInput.addEventListener('change', (e) => {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    // Cleared before the await, so re-picking the same file still fires even if the import
+    // is slow.
+    input.value = '';
+    if (file) void handleFontFiles(file);
   });
 
   // Advanced tuning.
@@ -1179,6 +1221,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   ]);
 
   const controlsRightExport = sidebarFooter({
+    // The host draws Save and Open itself when it owns projects; two Save buttons that
+    // do different things is worse than either one alone. `Boolean(...)`, not `isDesktop()`:
+    // a desktop host without the capability still needs these.
+    hostOwnsProjects: Boolean(host?.registerProject),
     formats: [{ id: '3mf', label: '3MF' }],
     onExport: handleExport,
     onSave: () => {
