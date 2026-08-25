@@ -36,6 +36,11 @@ import {
   svgEl,
   helpTip,
   ICONS,
+  promptDialog,
+  hostAssetUrl,
+  rememberFile,
+  rememberBytes,
+  bindExternalLinks,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import type { RegionSet } from './types';
@@ -103,6 +108,10 @@ import { setAssetBase } from './assets';
  */
 export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   setAssetBase(host?.assetBase?.() ?? undefined);
+
+  // Outbound links go to the user's real browser rather than to this window, which has no
+  // address bar and so no way back. One delegated listener, and a no-op on the web.
+  bindExternalLinks(host);
 
   /** Everything the teardown has to undo, in the order it was set up. */
   const cleanups: (() => void)[] = [];
@@ -1583,6 +1592,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           const parsed = parseFont(item.buffer);
           const id = `custom-${Date.now()}-${n++}`;
           registerCustomFont(id, parsed);
+          // The face is usable either way; this is what stops it being usable only until
+          // the tab closes. Per-face rather than per-zip, so a twelve-weight family shows
+          // up as twelve things the user can reach for again.
+          void rememberBytes(host, 'font', item.name, item.buffer);
           // Give the HTML preview the same face the geometry will use.
           const style = document.createElement('style');
           style.textContent = `@font-face { font-family: '${fontFamilyFor(id)}'; src: url('${URL.createObjectURL(new Blob([item.buffer]))}'); }`;
@@ -1707,11 +1720,20 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     drop.addEventListener('click', () => file.click());
     file.addEventListener('change', () => {
       const f = file.files?.[0];
-      if (f) openImport(f.name, () => loadFileToImage(f));
+      if (f) {
+        // Kept the moment it arrives, not when a project is saved. Save is a thing the
+        // user can forget; importing is a thing they just did — and keeping it here is
+        // what makes the *next* magnet, and the clicker, free. No-op without a host.
+        void rememberFile(host, 'image', f);
+        openImport(f.name, () => loadFileToImage(f));
+      }
       file.value = ''; // re-picking the same file must still fire
     });
     svgFile.addEventListener('change', () => {
-      for (const f of Array.from(svgFile.files ?? [])) void importSvgFile(f);
+      for (const f of Array.from(svgFile.files ?? [])) {
+        void rememberFile(host, 'svg', f);
+        void importSvgFile(f);
+      }
       svgFile.value = '';
     });
 
@@ -1734,9 +1756,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       if (!f) return;
       if (f.name.toLowerCase().endsWith('.svg')) {
         setMode('svg');
+        void rememberFile(host, 'svg', f);
         void importSvgFile(f);
       } else if (f.type.startsWith('image/')) {
         setMode('image');
+        void rememberFile(host, 'image', f);
         openImport(f.name, () => loadFileToImage(f));
       }
     };
@@ -2897,7 +2921,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   async function saveToHost() {
     if (!host) return;
     const suggested = s().productType === 'slider' ? 'Slider' : 'Magnet';
-    const name = window.prompt('Project name', suggested);
+    const name = await promptDialog({
+      title: currentProjectId ? 'Rename and save' : 'Save project',
+      label: 'Project name',
+      value: suggested,
+    });
     if (name === null) return;
     try {
       const saved = await host.saveProject({
@@ -2936,27 +2964,45 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         attrs: { type: 'button' },
       });
       if (p.preview) {
-        // `asset:` is how a Tauri webview is allowed to read a file off disk.
+        // The host turns a path into a URL, because the right protocol is `asset:` on
+        // macOS and Linux and `http://asset.localhost` on Windows — a hand-written one is
+        // a broken thumbnail on one of the two, with nothing in the console to say why.
         row.append(el('img', {
           className: 'mg-project-thumb',
-          attrs: { src: `asset://localhost/${encodeURIComponent(p.preview)}`, alt: '' },
+          attrs: { src: hostAssetUrl(host, p.preview), alt: '' },
         }));
       }
       row.append(el('span', { text: p.name }));
-      row.addEventListener('click', async () => {
+      row.addEventListener('click', () => {
         handle.close();
-        try {
-          const project = await host.loadProject(p.id);
-          await applyProject(project.params);
-          currentProjectId = project.id;
-          toast(`Opened "${project.name}"`, { kind: 'ok' });
-        } catch (err) {
-          toast(err instanceof Error ? err.message : 'Could not open the project', { kind: 'error' });
-        }
+        void openProject(p.id);
       });
       list.append(row);
     }
   }
+
+  /**
+   * Loads one saved project into the live UI.
+   *
+   * Shared by the Open list and by the host handing us a project on arrival — the user
+   * clicked a saved magnet in the app's picker rather than the generator's own tile, and
+   * making them find it again in a dialog would be a strange way to honour that click.
+   */
+  async function openProject(projectId: string) {
+    if (!host) return;
+    try {
+      const project = await host.loadProject(projectId);
+      await applyProject(project.params);
+      currentProjectId = project.id;
+      toast(`Opened "${project.name}"`, { kind: 'ok' });
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not open the project', { kind: 'error' });
+    }
+  }
+
+  // Optional on the host and absent on the web, so this is a no-op in a browser tab.
+  const arrivingWith = host?.initialProjectId?.();
+  if (arrivingWith) void openProject(arrivingWith);
 
   function saveProject() {
     if (host) { void saveToHost(); return; }

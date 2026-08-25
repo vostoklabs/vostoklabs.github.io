@@ -20,6 +20,9 @@ import {
   sidebarFooter,
   isDesktop,
   closeAllDialogs,
+  promptDialog,
+  hostAssetUrl,
+  bindExternalLinks,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { unzipSync } from 'fflate';
@@ -65,6 +68,10 @@ type LetterStyle = 'raised' | 'engraved';
  * without unmounting them and the browser starts dropping the oldest context on the floor.
  */
 export function mount(container: HTMLElement, host?: DesktopHost): () => void {
+  // Outbound links go to the user's real browser rather than to this window, which has no
+  // address bar and so no way back. One delegated listener, and a no-op on the web.
+  bindExternalLinks(host);
+
   // Curated fonts show as instant cards; the rest live in the "Browse all" modal.
   const curatedFonts = curatedFontsOf();
 
@@ -757,7 +764,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   async function saveToHost() {
     if (!host) return;
     const suggested = state.name.trim() || 'Keychain';
-    const name = window.prompt('Project name', suggested);
+    const name = await promptDialog({
+      title: currentProjectId ? 'Rename and save' : 'Save project',
+      label: 'Project name',
+      value: suggested,
+    });
     if (name === null) return;
     try {
       const saved = await host.saveProject({
@@ -808,21 +819,37 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         }));
       }
       row.append(el('span', { text: p.name }));
-      row.addEventListener('click', async () => {
+      row.addEventListener('click', () => {
         handle.close();
-        try {
-          const project = await host.loadProject(p.id);
-          await restoreFonts(project.assets);
-          applyLoadedState(project.params as Record<string, unknown>);
-          currentProjectId = project.id;
-          toast(`Opened "${project.name}"`, { kind: 'ok' });
-        } catch (err) {
-          toast(err instanceof Error ? err.message : 'Could not open the project', { kind: 'error' });
-        }
+        void openProject(p.id);
       });
       list.append(row);
     }
   }
+
+  /**
+   * Loads one saved project into the live UI.
+   *
+   * Shared by the Open list and by the host handing us a project on arrival — the user
+   * clicked a saved keychain in Opal's picker rather than the generator's own tile, and
+   * making them find it again in a dialog would be a strange way to honour that click.
+   */
+  async function openProject(projectId: string) {
+    if (!host) return;
+    try {
+      const project = await host.loadProject(projectId);
+      await restoreFonts(project.assets);
+      applyLoadedState(project.params as Record<string, unknown>);
+      currentProjectId = project.id;
+      toast(`Opened "${project.name}"`, { kind: 'ok' });
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not open the project', { kind: 'error' });
+    }
+  }
+
+  // Optional on the host and absent on the web, so this is a no-op in a browser tab.
+  const arrivingWith = host?.initialProjectId?.();
+  if (arrivingWith) void openProject(arrivingWith);
 
   /**
    * Re-registers the fonts a saved project was built with.
@@ -847,9 +874,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   }
 
-  /** `asset:` is how a Tauri webview is allowed to read a file off disk. */
+  /**
+   * A stored preview path, as something an `<img>` can load.
+   *
+   * This used to write `asset://localhost/…` out by hand, which is the macOS and Linux
+   * form: on Windows the same webview serves `http://asset.localhost/…`, so every
+   * thumbnail in this list was a broken image there and nothing said so. The host knows
+   * which platform it is; the generator has no business guessing.
+   */
   function convertPreviewSrc(path: string): string {
-    return `asset://localhost/${encodeURIComponent(path)}`;
+    return hostAssetUrl(host, path);
   }
 
   async function handleExport(formatId: string) {

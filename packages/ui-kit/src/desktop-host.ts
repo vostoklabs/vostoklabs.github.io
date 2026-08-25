@@ -54,9 +54,53 @@ export interface DesktopHost {
   listProjects(): Promise<Omit<HostProject, 'params' | 'assets'>[]>;
   deleteProject(id: string): Promise<void>;
 
-  /** Copies a file the user brought in somewhere permanent, and says where. */
-  importAsset(kind: 'font' | 'image', file: HostFile, ownerProjectId?: string): Promise<HostAsset>;
+  /**
+   * Copies a file the user brought in somewhere permanent, and says where.
+   *
+   * `kind` is a label for grouping, not a whitelist: a generator that starts importing
+   * SVGs, colour profiles or 3MF modules passes its own word and the host stores it the
+   * same way. Narrowing it to the two things today's generators import is how the next
+   * generator ends up not remembering anything.
+   */
+  importAsset(kind: string, file: HostFile, ownerProjectId?: string): Promise<HostAsset>;
   readAsset(path: string): Promise<Uint8Array>;
+
+  /**
+   * What the user has imported before, newest use first. Optional — an older host has none.
+   *
+   * This is the shelf a local app can offer and a web page cannot: the photo traced last
+   * week, the typeface imported for a different design. Omitting `kind` returns everything.
+   */
+  listMedia?(kind?: string): Promise<HostAsset[]>;
+
+  /**
+   * Turns a stored asset path into something an `<img>`, a `@font-face` or a `fetch` can
+   * load. Optional — a generator falls back to the path itself.
+   *
+   * **A generator must never build this string itself.** Tauri serves its asset protocol as
+   * `asset://localhost/…` on macOS and Linux and as `http://asset.localhost/…` on Windows,
+   * so a hand-rolled copy is a silently broken image on one of the two platforms — which is
+   * exactly what every "Open a project" thumbnail was, on Windows, for months.
+   */
+  assetUrl?(path: string): string;
+
+  /**
+   * A saved project the host wants opened as soon as the generator can accept one.
+   *
+   * Set when the user clicked a project rather than the generator's own tile. Optional, and
+   * safe to ignore: on the web there is no host and so nothing to ask.
+   */
+  initialProjectId?(): string | undefined;
+
+  /**
+   * Opens a URL in the user's real browser. Optional.
+   *
+   * A desktop webview has no address bar, so a link that navigates it is a link that eats
+   * the application. `bindExternalLinks` in `external-links.ts` is what routes every
+   * outbound click here without any generator having to know which of its sentences
+   * contains one.
+   */
+  openExternal?(url: string): void;
 
   /** Writes an exported model where the host wants it, and indexes it. */
   exportToLibrary(file: HostFile, opts?: { designer?: string }): Promise<{ path: string; indexed: boolean }>;

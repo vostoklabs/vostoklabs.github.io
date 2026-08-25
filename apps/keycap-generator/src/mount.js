@@ -19,7 +19,7 @@
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import '@vostok/plates/plates.css';
-import { topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs } from '@vostok/ui-kit';
+import { topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
 import * as THREE from 'three';
@@ -60,6 +60,10 @@ import { setAssetBase, assetUrl } from './assets.js';
  */
 export function mount(container, host) {
   setAssetBase(host?.assetBase?.() ?? '');
+
+  // Outbound links go to the user's real browser rather than to this window, which has no
+  // address bar and so no way back. One delegated listener, and a no-op on the web.
+  bindExternalLinks(host);
   container.innerHTML = TEMPLATE;
   // Whoever owns the container, WE own its layout: it has to be a bounded flex column or
   // .vl-app sizes to its content and everything past the fold is clipped away (see .kc-root
@@ -613,10 +617,22 @@ export function mount(container, host) {
     regenTimer = setTimeout(doRegen, 200);
   }
 
-  async function doRegen() {
+  /**
+   * Would `doRegen` actually rebuild anything? The guards from the top of it, hoisted so a
+   * caller can ask BEFORE handing it the busy chip.
+   *
+   * `switchKeycap` turns the chip on and leaves it to the rebuild to turn off again. When the
+   * rebuild declines — a Pro mode owns the stage, or there is no legend yet — nothing else
+   * ever did: changing profile from inside the Full set mode pinned "generating…" over the
+   * preview for the rest of the session.
+   */
+  function canRegen() {
     // A Pro mode owns the stage — the cap this would rebuild is hidden behind its board.
-    if (singleCapSuspended) return;
-    if (!currentLegend || !meta || !shellGeometry) return;
+    return !singleCapSuspended && !!currentLegend && !!meta && !!shellGeometry;
+  }
+
+  async function doRegen() {
+    if (!canRegen()) return;
     if (running) { scheduleRegen(); return; }
     running = true;
     busyEl.style.display = 'block';
@@ -848,6 +864,9 @@ export function mount(container, host) {
     const file = e.target.files[0];
     if (!file) return;
     try {
+      // Kept the moment it arrives rather than when a project is saved. No-op without a
+      // host, so a browser tab still forgets it exactly as it always has.
+      void rememberFile(host, 'font', file);
       const font = await importFontFile(file);
       addFontOption(font);
       $('fontSelect').value = font.id;
@@ -1014,6 +1033,7 @@ export function mount(container, host) {
   $('upload').addEventListener('change', async (e) => {
     let firstEl = null;
     for (const file of e.target.files) {
+      void rememberFile(host, 'svg', file);
       const text = await file.text();
       const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
       const el = makeIconEl(url, async () => text, file.name.replace(/\.svg$/i, ''));
@@ -1324,6 +1344,39 @@ export function mount(container, host) {
       } else {
         // 3MFs are already deflated zips — store (level 0) rather than re-compress.
         const zipped = zipSync(files, { level: 0 });
+
+        if (host) {
+          /*
+           * The branch this batch never had.
+           *
+           * `toHost` above is MakerWorld's host, not a desktop one, so inside a desktop app
+           * the whole set fell through to the browser download below — several minutes of
+           * carving, twenty-six caps, and then a zip in the download bar that the app
+           * itself could never find again, under a status line telling the user to go and
+           * open each file in their slicer. The single-cap path two hundred lines up has
+           * always done the right thing, which is what makes this a missed branch rather
+           * than a decision.
+           *
+           * One zip rather than twenty-six exports: the set is one thing the user asked
+           * for, and twenty-six library rows for one action is its own kind of wrong.
+           */
+          try {
+            const { indexed } = await host.exportToLibrary(
+              { name: `${baseName}.zip`, bytes: new Uint8Array(zipped) },
+              { designer: 'Keycap Legend Generator' },
+            );
+            setStatus(
+              indexed
+                ? 'Exported the full alphabet set to your library ✓  26 keycaps (A–Z).'
+                : `Exported the full alphabet set ✓  26 keycaps (A–Z), as ${baseName}.zip.`,
+            );
+          } catch (err) {
+            console.error(err);
+            setStatus(`Export failed: ${err.message || err}`, 'err');
+          }
+          return;
+        }
+
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([zipped], { type: 'application/zip' }));
         a.download = `${baseName}.zip`;
@@ -1473,16 +1526,20 @@ export function mount(container, host) {
 
   // Load a different keycap (profile/size) and rebuild the current legend on it.
   async function switchKeycap(file, label) {
-    busyEl.style.display = 'block';
+    // The chip is ours only while the single cap is what's on screen. Behind a Pro mode's board
+    // this load is invisible, and that mode may have progress of its own up there.
+    if (!singleCapSuspended) busyEl.style.display = 'block';
     unitSelect.disabled = true;
     profileSelect.disabled = true;
     try {
       const kc = await loadKeycap(file);
       setKeycap(kc);
-      if (currentLegend) scheduleRegen(); else busyEl.style.display = 'none';
+      // Hand the chip to the rebuild only when one is actually going to run — see canRegen().
+      if (canRegen()) scheduleRegen();
+      else if (!singleCapSuspended) busyEl.style.display = 'none';
     } catch (e) {
       console.error(e);
-      busyEl.style.display = 'none';
+      if (!singleCapSuspended) busyEl.style.display = 'none';
       setStatus(`Could not load ${label || 'this keycap'}.`, 'err');
     } finally {
       unitSelect.disabled = false;
@@ -1535,7 +1592,12 @@ export function mount(container, host) {
     renderer.domElement.style.display = pro ? 'none' : '';
     const metaEl = $('meta');
     if (metaEl) metaEl.hidden = pro; // describes one cap; meaningless for a board
-    if (!pro) {
+    if (pro) {
+      // Any rebuild still queued will now decline, so the chip it was going to clear has to be
+      // put away here — before the mode starts using it for progress of its own.
+      clearTimeout(regenTimer);
+      busyEl.style.display = 'none';
+    } else {
       resize();       // the viewport may have been resized while we weren't watching it
       scheduleRegen();
     }
@@ -1914,7 +1976,11 @@ export function mount(container, host) {
 
   async function saveToHost() {
     const suggested = currentLegend?.name || 'Keycap';
-    const name = window.prompt('Project name', suggested);
+    const name = await promptDialog({
+      title: currentProjectId ? 'Rename and save' : 'Save project',
+      label: 'Project name',
+      value: suggested,
+    });
     if (name === null) return;
     try {
       const saved = await host.saveProject({
@@ -1958,27 +2024,48 @@ export function mount(container, host) {
         img.className = 'kc-project-thumb';
         img.alt = '';
         // `asset:` is how a Tauri webview is allowed to read a file off disk.
-        img.src = `asset://localhost/${encodeURIComponent(p.preview)}`;
+        // The host turns a path into a URL: `asset:` on macOS and Linux,
+        // `http://asset.localhost` on Windows. A hand-written one is broken on one of the
+        // two, and says nothing in the console when it is.
+        img.src = hostAssetUrl(host, p.preview);
         row.append(img);
       }
       const label = document.createElement('span');
       label.textContent = p.name;
       row.append(label);
-      row.addEventListener('click', async () => {
+      row.addEventListener('click', () => {
         handle.close();
-        try {
-          const project = await host.loadProject(p.id);
-          applyLoadedState(project.params);
-          currentProjectId = project.id;
-          setStatus(`Opened "${project.name}" ✓`);
-        } catch (err) {
-          console.error(err);
-          setStatus(`Could not open: ${err.message || err}`, 'err');
-        }
+        void openProject(p.id);
       });
       list.append(row);
     }
   }
+
+  /**
+   * Loads one saved project into the live UI.
+   *
+   * Shared by the Open list and by the host handing us a project on arrival — the user
+   * clicked a saved keycap in the app's picker rather than the generator's own tile, and
+   * making them find it again in a dialog would be a strange way to honour that click.
+   *
+   * @param {string} projectId
+   */
+  async function openProject(projectId) {
+    if (!host) return;
+    try {
+      const project = await host.loadProject(projectId);
+      applyLoadedState(project.params);
+      currentProjectId = project.id;
+      setStatus(`Opened "${project.name}" ✓`);
+    } catch (err) {
+      console.error(err);
+      setStatus(`Could not open: ${err.message || err}`, 'err');
+    }
+  }
+
+  // Optional on the host and absent on the web, so this is a no-op in a browser tab.
+  const arrivingWith = host?.initialProjectId?.();
+  if (arrivingWith) void openProject(arrivingWith);
 
   $('saveProj')?.addEventListener('click', () => {
     if (host) { void saveToHost(); return; }

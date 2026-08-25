@@ -20,7 +20,7 @@
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import '@vostok/plates/plates.css';
-import { topbarLinks, isDesktop } from '@vostok/ui-kit';
+import { topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks } from '@vostok/ui-kit';
 import './style.css';
 import { createStore } from './store/store';
 import { createViewer } from './viewer/viewer';
@@ -73,6 +73,10 @@ import { TEMPLATE } from './template';
  */
 export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   setAssetBase(host?.assetBase?.() ?? undefined);
+
+  // Outbound links go to the user's real browser rather than to this window, which has no
+  // address bar and so no way back. One delegated listener, and a no-op on the web.
+  bindExternalLinks(host);
   // The container is the app's layout column — see `.cg-mount` in style.css. It has to be
   // set here rather than on `#root` in index.html, because on the desktop host there is no
   // index.html and the container is an element the host owns.
@@ -239,7 +243,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   })();
 
   const ui: ReturnType<typeof createUi> = createUi(sidebarLeft, sidebarRight, statusEl, {
-    onUpload: (file) => openWizard(() => loadFileToImage(file)),
+    onUpload: (file) => {
+      // Kept the moment it arrives rather than when a project is saved: save is a thing
+      // the user can forget, importing is a thing they just did. No-op without a host.
+      void rememberFile(host, 'image', file);
+      openWizard(() => loadFileToImage(file));
+    },
     onSample: (load) => openWizard(load),
     onColorCount: (n) => {
       store.set({ colorCount: n });
@@ -463,7 +472,24 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     },
     onRenderPng: async () => {
       const blob = await viewer.renderToPng();
-      if (blob) downloadBlob(blob, 'clicker-render.png');
+      if (!blob) return;
+      if (host) {
+        // Not a browser download. A listing photo made inside a desktop app that lands in
+        // the download bar is a file the app itself cannot find again; through the host it
+        // goes where every other export goes. It is a PNG rather than a mesh, so the host
+        // will not index it as a model — the status says what actually happened.
+        try {
+          const { path, indexed } = await host.exportToLibrary({
+            name: 'clicker-render.png',
+            bytes: new Uint8Array(await blob.arrayBuffer()),
+          });
+          store.set({ status: indexed ? 'Render added to your library ✓' : `Render saved to ${path} ✓` });
+        } catch (err) {
+          store.set({ status: 'Could not save the render: ' + String(err) });
+        }
+        return;
+      }
+      downloadBlob(blob, 'clicker-render.png');
     },
     onAiPrompt: async () => {
       try {
@@ -502,6 +528,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onSvgUpload: async (file) => {
       try {
         store.set({ building: true, status: 'Reading SVG…' });
+        void rememberFile(host, 'svg', file);
         const svgText = await file.text();
         ui.addUploadedSvg(svgText, file.name.replace(/\.svg$/i, ''));
         store.set({ building: false });
@@ -582,6 +609,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onImportFont: async (file) => {
       try {
         store.set({ building: true, status: 'Importing font…' });
+        void rememberFile(host, 'font', file);
         const font = await importFontFile(file);
         ui.addFontOption(font);
         currentFontId = font.id;
@@ -1527,7 +1555,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   async function saveToHost(proj: unknown) {
     if (!host) return;
     const suggested = currentSvgName || currentIconName || 'Clicker';
-    const name = window.prompt('Project name', suggested);
+    const name = await promptDialog({
+      title: currentProjectId ? 'Rename and save' : 'Save project',
+      label: 'Project name',
+      value: suggested,
+    });
     if (name === null) return;
     try {
       const saved = await host.saveProject({
@@ -1569,27 +1601,45 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         const img = document.createElement('img');
         img.className = 'ck-project-thumb';
         img.alt = '';
-        // `asset:` is how a Tauri webview is allowed to read a file off disk.
-        img.src = `asset://localhost/${encodeURIComponent(p.preview)}`;
+        // The host turns a path into a URL: the right protocol is `asset:` on macOS and
+        // Linux and `http://asset.localhost` on Windows, so a hand-written one is a broken
+        // thumbnail on one of the two with nothing in the console to say why.
+        img.src = hostAssetUrl(host, p.preview);
         row.append(img);
       }
       const label = document.createElement('span');
       label.textContent = p.name;
       row.append(label);
-      row.addEventListener('click', async () => {
+      row.addEventListener('click', () => {
         handle.close();
-        try {
-          const project = await host.loadProject(p.id);
-          await applyProject(project.params);
-          currentProjectId = project.id;
-          store.set({ status: `Opened "${project.name}" ✓` });
-        } catch (err) {
-          store.set({ building: false, status: 'Could not open: ' + String(err) });
-        }
+        void openProject(p.id);
       });
       list.append(row);
     }
   }
+
+  /**
+   * Loads one saved project into the live UI.
+   *
+   * Shared by the Open list and by the host handing us a project on arrival — the user
+   * clicked a saved clicker in the app's picker rather than the generator's own tile, and
+   * making them find it again in a dialog would be a strange way to honour that click.
+   */
+  async function openProject(projectId: string) {
+    if (!host) return;
+    try {
+      const project = await host.loadProject(projectId);
+      await applyProject(project.params);
+      currentProjectId = project.id;
+      store.set({ status: `Opened "${project.name}" ✓` });
+    } catch (err) {
+      store.set({ building: false, status: 'Could not open: ' + String(err) });
+    }
+  }
+
+  // Optional on the host and absent on the web, so this is a no-op in a browser tab.
+  const arrivingWith = host?.initialProjectId?.();
+  if (arrivingWith) void openProject(arrivingWith);
 
   async function loadProject(file: File) {
     try {

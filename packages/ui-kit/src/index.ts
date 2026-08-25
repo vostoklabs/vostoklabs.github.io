@@ -2,7 +2,7 @@
 // Import styles once per app:  import '@vostok/ui-kit/styles.css'
 
 export { toast, type ToastKind, type ToastOptions } from './components/toast';
-export { dialog, closeAllDialogs, type DialogOptions, type DialogHandle, type DialogAction } from './components/dialog';
+export { dialog, closeAllDialogs, promptDialog, type DialogOptions, type DialogHandle, type DialogAction, type PromptOptions } from './components/dialog';
 export {
   licenseNudge,
   openCommercialModal,
@@ -41,6 +41,7 @@ export {
   sliderRow,
   segmentedControl,
   selectField,
+  setFieldOptions,
   helpTip,
   type ToggleOptions,
   type SliderOptions,
@@ -51,6 +52,14 @@ export {
 } from './components/controls';
 export { dpad, type DpadOptions, type DpadHandle } from './components/dpad';
 export { section, collapsibleSection, type SectionOptions } from './components/section';
+export { drawer, closeAllDrawers, type DrawerOptions, type DrawerHandle } from './components/drawer';
+export {
+  symbolPickerButton,
+  openSymbolPicker,
+  type SymbolItem,
+  type SymbolCategory,
+  type SymbolPickerOptions,
+} from './components/symbol-picker';
 export {
   sourceCards,
   dropZone,
@@ -89,5 +98,13 @@ export { setHostEnv, getHostEnv, isDesktop, renderNothing, noopHandle, type Host
 // The contract a desktop host fulfils for a generator. Type-only: a generator that
 // runs on the web never sees an implementation.
 export type { DesktopHost, HostFile, HostAsset, HostProject, MountFn } from './desktop-host';
+
+// The runtime half of that contract: every capability, called safely, with the web build's
+// behaviour as the fallback. See host-assets.ts for why these are helpers and not a
+// paragraph copied into each import handler.
+export { rememberImport, rememberBytes, rememberFile, hostAssetUrl, hostMedia } from './host-assets';
+
+// One delegated listener that stops an outbound link navigating a window with no way back.
+export { bindExternalLinks } from './external-links';
 
 export const UI_KIT_VERSION = '0.1.0';

@@ -121,3 +121,73 @@ export function dialog(opts: DialogOptions): DialogHandle {
   (firstButton ?? box).focus?.();
   return handle;
 }
+
+export interface PromptOptions {
+  title: string;
+  /** Sits above the field. Omit for a bare input under the title. */
+  label?: string;
+  /** What the field starts with, and what is selected when it opens. */
+  value?: string;
+  placeholder?: string;
+  /** The confirming button. Defaults to "Save". */
+  confirmLabel?: string;
+}
+
+/**
+ * Asks for one line of text, and resolves with it — or with null if the user backed out.
+ *
+ * This replaces `window.prompt`, which four generators were using to name a project.
+ * `prompt` is unstyled, ignores the app's theme, cannot show validation, and is not
+ * implemented by every webview a desktop host might wrap — where it is missing it returns
+ * null without a word, so Save appears to do nothing at all. A dialog the kit already owns
+ * has none of those properties.
+ *
+ * Enter confirms and Escape cancels, because a single-field dialog that needs the mouse is
+ * slower than the thing it replaced.
+ */
+export function promptDialog(opts: PromptOptions): Promise<string | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    const input = el('input', {
+      attrs: { type: 'text', value: opts.value ?? '', ...(opts.placeholder ? { placeholder: opts.placeholder } : {}) },
+    }) as HTMLInputElement;
+
+    // `vl-field` rather than a new class: the kit already styles a label-plus-input pair,
+    // and a second one would be the same rule under a different name.
+    const content = el('div', { className: 'vl-field' });
+    if (opts.label) content.append(el('label', { text: opts.label }));
+    content.append(input);
+
+    const handle = dialog({
+      title: opts.title,
+      content,
+      // Backdrop, Escape and the close path all land here, so a dismissal that never
+      // touched a button still resolves rather than leaving the caller awaiting forever.
+      onClose: () => finish(null),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: opts.confirmLabel ?? 'Save',
+          primary: true,
+          onClick: () => { finish(input.value); },
+        },
+      ],
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key !== 'Enter') return;
+      e.preventDefault();
+      finish(input.value);
+      handle.close();
+    });
+
+    input.focus();
+    input.select();
+  });
+}
