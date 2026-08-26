@@ -15,7 +15,7 @@
 // every neighbouring vertex that lies on it, after which every contact IS a whole
 // edge and the twin test is exact.
 
-import type { Crease, Net, Op, Panel, Poly, Pt, Slit, StyleParts } from '../types';
+import type { Crease, Net, Op, Panel, Poly, Pt, StyleParts } from '../types';
 import { EPS, at, bboxOf, dist, ensureCCW, ensureCW, key, onSegment, pathLength, snapPt } from './poly';
 
 interface DirEdge {

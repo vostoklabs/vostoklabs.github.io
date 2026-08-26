@@ -49,7 +49,6 @@ import { downloadFile } from '@vostok/export';
 import {
   buildPrintable,
   buildPrintableFile,
-  downloadPrintable,
   minHingeWidthMm,
   sandwichThicknessMm,
   sheetThicknessMm,
@@ -149,7 +148,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---------------------------------------------------------------------------
   // 2. REBUILD
   // ---------------------------------------------------------------------------
-  let rebuildQueued = 0;
+  // `ReturnType<typeof setTimeout>` rather than `number`, which is what this was: under a
+  // DOM-only lib the two agree, and under a config that also has Node's types in scope —
+  // which is every host that embeds this generator — `setTimeout` returns a `Timeout` and
+  // the assignment does not compile. The pen topper's `rebuildTimer` has always been
+  // written this way; this is the same fix, one file later.
+  let rebuildQueued: ReturnType<typeof setTimeout> | undefined;
 
   function triggerRebuild(refit = false): void {
     clearTimeout(rebuildQueued);

@@ -634,7 +634,6 @@ export function webbedTray(o: WebbedTrayOpts): {
   extent: [number, number];
 } {
   const { prefix: p, labelPrefix: lp, L, W, H, t, x, y } = o;
-  const g = relief(t);
   const sign = o.invert ? -1 : 1;
   const fold = sign * HALF;
 

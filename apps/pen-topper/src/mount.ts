@@ -63,7 +63,6 @@ import {
   coerceSettings,
   boreFor,
   penPreset,
-  gripFor,
   interferenceFor,
   ribHeightForFit,
   ribCountForFit,
@@ -794,7 +793,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   function refreshSocket() {
     const preset = penPreset(settings.pen);
     const bore = boreFor(settings);
-    const grip = gripFor(settings);
     const bite = interferenceFor(settings); // how much barrel the ribs have to give way for
     const outer = (bore / 2 + settings.wallThickness) * 2;
     const body = settings.penPath === 'collar' ? `collar ⌀${outer.toFixed(1)} mm` : `block ${outer.toFixed(1)} mm thick`;

@@ -20,7 +20,6 @@ import {
   dustDepth,
   dustFlap,
   envelopeBottom,
-  euroSlot,
   hangHoleAcross,
   flapCover,
   hangHeader,

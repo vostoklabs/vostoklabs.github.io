@@ -186,7 +186,7 @@ export function solve(input: BoxParams): SolveResult {
   const machine = machineById(p.machineId);
   const sheet = sheetById(p.sheetId);
   const stock = stockById(p.stockId);
-  const { L, W, H } = insideDims(p);
+  const { H } = insideDims(p);
   const meta = styleMeta(p.style);
 
   const { net: base, windowFitted, windowInsetMm } = rawNet(p);

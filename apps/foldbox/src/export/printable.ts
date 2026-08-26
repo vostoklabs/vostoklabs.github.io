@@ -25,11 +25,10 @@
 
 import { buildStl, buildThreeMF, downloadFile, type ExportPart, type RGB } from '@vostok/export';
 import { BRAND } from '@vostok/brand';
-import type { Crease, Net, Panel, Poly, Pt } from '../types';
+import type { Net, Panel, Poly, Pt } from '../types';
 import { EPS, at, bboxOf, cross, len, signedArea, sub } from '../geometry/poly';
 import {
   effectiveHingeWidthMm,
-  grooveHalfOpeningMm,
   hingeThicknessMm,
   sandwichThicknessMm,
   sheetThicknessMm,
@@ -339,13 +338,6 @@ function insetRing(ring: Poly, dists: number[]): Poly {
     out.push([p1[0] + e1[0] * t, p1[1] + e1[1] * t]);
   }
   return out;
-}
-
-/** Every crease run this panel takes part in — as a child of its parent, and as the
- *  parent of each of its children. In a net whose fold graph is a tree those are
- *  exactly the panel's interior edges. */
-function creasesOf(panel: Panel, creases: Crease[]): Crease[] {
-  return creases.filter((c) => c.panelId === panel.id || c.parentId === panel.id);
 }
 
 /** The panel, pulled back from its own fold lines by half the groove width — the
