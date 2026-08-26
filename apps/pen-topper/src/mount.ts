@@ -26,6 +26,8 @@ import {
   openLicenseModal,
   licenseReminderToast,
   readParamsFromHash,
+  bindExternalLinks,
+  chooseFile,
   button,
   chip,
   textField,
@@ -33,12 +35,14 @@ import {
   filamentRow,
   uploadCta,
   el,
+  type DesktopHost,
+  type HostAsset,
 } from '@vostok/ui-kit';
 import { zipSync } from 'fflate';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
 import { mountPlatePicker, plateSize, loadPlateChoice } from '@vostok/plates';
-import { downloadThreeMF, buildThreeMF, type ExportPart } from '@vostok/export';
+import { buildThreeMF, type ExportPart } from '@vostok/export';
 import {
   FONTS,
   type FontChoice,
@@ -87,6 +91,12 @@ import type { BatchResult, GeometryResponse, PartMesh } from './types';
  * download. That is what keeps one source building for both.
  */
 export function mount(container: HTMLElement, host?: DesktopHost): () => void {
+  // Outbound links go to the user's real browser rather than to this window, which has no
+  // address bar and so no way back. One delegated listener, and a no-op on the web.
+  bindExternalLinks(host);
+
+  /** Everything the teardown has to undo beyond the worker and the viewer. */
+  const cleanups: (() => void)[] = [];
 
   /*
     Pen Topper Generator.
@@ -974,41 +984,88 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onClick: openFontBrowser,
   });
 
+  /**
+   * Makes an imported font usable: parsed for the mesh builder, injected as an @font-face
+   * for the preview cards, and pushed to the front of the font list.
+   *
+   * Split out of the import handler because a font now arrives two ways — the user picks a
+   * file, or a saved project is opened and its faces come back off disk — and the two have
+   * to produce an identical result. Where they drift, opening a project restores every
+   * parameter perfectly and silently renders the name in the wrong typeface.
+   */
+  function registerImportedFont(label: string, buffer: ArrayBuffer): string {
+    const id = `custom-${Date.now()}-${importedFontCounter++}`;
+    registerCustomFont(id, parseFont(buffer));
+    const url = URL.createObjectURL(new Blob([buffer]));
+    objectUrls.push(url);
+    const style = document.createElement('style');
+    style.textContent = `@font-face { font-family: '${fontFamilyFor(id)}'; src: url('${url}'); }`;
+    document.head.append(style);
+    injectedStyles.push(style);
+    const choice: FontChoice = {
+      id,
+      label,
+      category: 'Custom',
+      curated: true,
+      subsets: ['latin', 'latin-ext', 'cyrillic', 'greek'],
+    };
+    FONTS.unshift(choice);
+    curatedFonts.unshift(choice);
+    return id;
+  }
+
+  /** One typeface, from the file input or from the host's media library. Both hand over a
+   *  `File`, so both end up here and neither has to know about the other. */
+  async function handleFontFile(file: File): Promise<void> {
+    try {
+      const buffer = await file.arrayBuffer();
+      const label = file.name.replace(/\.[^/.]+$/, '');
+      const id = registerImportedFont(label, buffer);
+
+      // Keep the file, not just the parsed font. Without this the import lasts until the
+      // app closes, which is the exact behaviour the desktop build exists to fix.
+      if (host) {
+        try {
+          importedFontAssets.push(
+            await host.importAsset('font', { name: file.name, bytes: new Uint8Array(buffer) }),
+          );
+        } catch {
+          toast(`"${file.name}" is usable now but could not be kept for next time`, { kind: 'warn' });
+        }
+      }
+
+      selectFont(id);
+      toast(`Imported ${label}`, { kind: 'ok' });
+    } catch {
+      toast('That file is not a font this reader understands', { kind: 'error' });
+    }
+  }
+
   const importFontCta = uploadCta({
     label: 'Import a .ttf / .otf',
     accept: '.ttf,.otf',
-    onFiles: async (files) => {
+    onFiles: (files) => {
       const file = files[0];
-      if (!file) return;
-      try {
-        const buffer = await file.arrayBuffer();
-        const id = `custom-${Date.now()}`;
-        registerCustomFont(id, parseFont(buffer));
-        const url = URL.createObjectURL(new Blob([buffer]));
-        objectUrls.push(url);
-        const style = document.createElement('style');
-        style.textContent = `@font-face { font-family: '${fontFamilyFor(id)}'; src: url('${url}'); }`;
-        document.head.append(style);
-        injectedStyles.push(style);
-        const choice: FontChoice = {
-          id,
-          label: file.name.replace(/\.[^/.]+$/, ''),
-          category: 'Custom',
-          curated: true,
-          subsets: ['latin', 'latin-ext', 'cyrillic', 'greek'],
-        };
-        FONTS.unshift(choice);
-        curatedFonts.unshift(choice);
-        selectFont(id);
-        toast(`Imported ${choice.label}`, { kind: 'ok' });
-      } catch {
-        toast('That file is not a font this reader understands', { kind: 'error' });
-      }
+      if (file) void handleFontFile(file);
     },
+  });
+  // The host's library goes first when there is one: a typeface imported for one topper is
+  // the most likely answer for the next. The click is intercepted before the label opens
+  // the hidden input, and `onFiles` alone still serves the no-host path.
+  importFontCta.addEventListener('click', (e) => {
+    if (!host?.pickMedia) return;
+    e.preventDefault();
+    void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf'] }, () => {}).then((f) => {
+      if (f) void handleFontFile(f);
+    });
   });
 
   const objectUrls: string[] = [];
   const injectedStyles: HTMLStyleElement[] = [];
+  /** Imported typefaces as the host stored them, so a saved project travels with the faces
+   *  it was built in rather than coming back in the fallback one. */
+  const importedFontAssets: HostAsset[] = [];
+  let importedFontCounter = 0;
 
   // The symbol picker renders its glyphs in the fallback face, so it needs the rule.
   const fallbackUrl = getFontUrl(FALLBACK_FONT_ID);
@@ -1121,11 +1178,32 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         buildId: import.meta.env.VITE_BUILD_ID,
       };
 
+      /**
+       * One file out, wherever this generator is running.
+       *
+       * With a host it does not land in Downloads for the user to go and find — it lands
+       * in their library and shows up in the grid, which is the whole reason the desktop
+       * bundle exists. Without one it is the download it always was.
+       */
+      const deliver = async (bytes: Uint8Array, fileName: string, mime: string) => {
+        if (host) {
+          const { indexed } = await host.exportToLibrary(
+            { name: fileName, bytes },
+            { designer: 'Pen Topper Generator' },
+          );
+          toast(indexed ? 'Exported to your library' : `Exported as ${fileName}`, { kind: 'ok' });
+          return;
+        }
+        // The cast is the TS 5.7 `Uint8Array<ArrayBufferLike>` vs `BlobPart` mismatch, not a
+        // real one: nothing here ever produces a SharedArrayBuffer-backed view.
+        downloadBlob(new Blob([bytes as BlobPart], { type: mime }), fileName);
+      };
+
       if (setResults) {
         const plates = platesOf(setResults);
         const stem = setFileName(setResults.map((r) => r.label));
         if (plates.length === 1) {
-          downloadThreeMF(batchToParts(setResults, plates[0]!), meta, `${stem}.3mf`);
+          await deliver(buildThreeMF(batchToParts(setResults, plates[0]!), meta), `${stem}.3mf`, 'model/3mf');
         } else {
           /*
             One file per plate, zipped. A plate is a print, and a print is a file —
@@ -1137,25 +1215,26 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           */
           const files: Record<string, Uint8Array> = {};
           for (const n of plates) files[`${stem}-plate-${n + 1}.3mf`] = buildThreeMF(batchToParts(setResults, n), meta);
-          downloadBlob(new Blob([zipSync(files, { level: 0 })], { type: 'application/zip' }), `${stem}.zip`);
+          await deliver(zipSync(files, { level: 0 }), `${stem}.zip`, 'application/zip');
         }
       } else {
         const slug = settings.name.trim().replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'pen';
-        downloadThreeMF(parts, meta, `${slug}-pen-topper.3mf`);
+        await deliver(buildThreeMF(parts, meta), `${slug}-pen-topper.3mf`, 'model/3mf');
       }
 
       downloads += 1;
       if (downloads === 1) openLicenseModal({ badge: '✓ 3MF export started' });
       else licenseReminderToast();
     },
+    // The host draws Save and Open itself once it owns projects; two Save buttons that do
+    // different things is worse than either one alone. `Boolean(...)` and not `isDesktop()`:
+    // a desktop host that does not offer the capability still needs these.
+    hostOwnsProjects: Boolean(host?.registerProject),
     onSave: () => downloadJSON(`${settings.name.trim() || 'pen'}-topper.json`, settings),
     onLoad: (file?: File) =>
       file &&
       loadJSON(file, (data) => {
-        settings = coerceSettings(data);
-        syncControls();
-        firstBuild = true;
-        triggerRebuild();
+        applySettings(data);
         toast('Project loaded', { kind: 'ok' });
       }),
     onHelp: () =>
@@ -1466,7 +1545,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     },
   });
 
-  document.getElementById('app')!.append(shell.root);
+  container.append(shell.root);
 
   const viewer = createViewer(stageCanvas);
   mountPlatePicker(shell.stage, viewer);
@@ -1474,14 +1553,55 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   syncControls();
   worker.postMessage({ type: 'init' });
 
-  window.addEventListener('beforeunload', () => {
+  /**
+   * Hand the host the three things it needs to own projects for this generator.
+   *
+   * Autosave, the unsaved dot, Save, Open, Rename, Delete and Start fresh then belong to
+   * the host, drawn once in its own chrome for every generator it hosts, rather than a
+   * sixth copy of that machinery living in here. Absent on the web, where every path in
+   * this file keeps working exactly as it did.
+   *
+   * There is deliberately no `initialProjectId` branch to go with it. A generator that
+   * does not own projects has nothing to open one *with*, so a host that wants a project
+   * on screen has to be a host that owns projects — and Opal is.
+   */
+  host?.registerProject?.({
+    getState: () => settings,
+    applyState: async (loaded, assets) => {
+      // Fonts first. Applying the parameters before the typeface they name is registered
+      // lays the name out in the fallback face and then never rebuilds it.
+      if (assets) await restoreFonts(assets);
+      applySettings(loaded);
+    },
+    assets: () => importedFontAssets,
+    capturePreview,
+    suggestName: () => settings.name.trim() || 'Pen topper',
+  });
+
+  /**
+   * Everything this generator has to give back.
+   *
+   * It used to be a `beforeunload` listener, which is the right hook for a browser tab:
+   * there is only ever one generator in it and the page is going away regardless. Inside a
+   * host it never fires — the user moves from one generator to the next without the
+   * document ever unloading — so the worker, the WebGL context, the object URLs and the
+   * injected @font-face rules would all survive, one more set of them per visit.
+   */
+  const teardown = () => {
+    // Dialogs and drawers render on <body>, outside the container the host clears.
     closeAllDialogs();
     closeAllDrawers();
+    clearTimeout(rebuildTimer);
     worker.terminate();
     viewer.dispose();
     for (const url of objectUrls) URL.revokeObjectURL(url);
     for (const style of injectedStyles) style.remove();
-  });
+    for (const fn of cleanups.reverse()) {
+      try { fn(); } catch { /* one failed cleanup must not strand the rest */ }
+    }
+    cleanups.length = 0;
+    container.replaceChildren();
+  };
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -1514,4 +1634,49 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     r.readAsText(file);
   }
 
+  /** Put a saved parameter blob back on screen. Both load paths — the web's file picker
+   *  and the host's project browser — come through here, so they cannot drift apart. */
+  function applySettings(data: unknown): void {
+    settings = coerceSettings(data);
+    syncControls();
+    firstBuild = true;
+    triggerRebuild();
+  }
+
+  /**
+   * Re-registers the typefaces a saved project was built with.
+   *
+   * Without this, opening a project that used an imported font falls back to a different
+   * face: every parameter restores perfectly, the topper is wrong, and nothing on screen
+   * says so — which is worse than an error.
+   */
+  async function restoreFonts(assets: HostAsset[]): Promise<void> {
+    if (!host) return;
+    for (const asset of assets) {
+      if (asset.role !== 'font') continue;
+      if (importedFontAssets.some((a) => a.path === asset.path)) continue;
+      try {
+        const bytes = await host.readAsset(asset.path);
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+        registerImportedFont(asset.originalName.replace(/\.[^/.]+$/, ''), buffer);
+        importedFontAssets.push(asset);
+      } catch {
+        toast(`Could not load the font "${asset.originalName}"`, { kind: 'warn' });
+      }
+    }
+  }
+
+  /** A still of the stage for the host's project list. Undefined rather than a throw: a
+   *  missing thumbnail is not worth failing a save over. */
+  function capturePreview(): string | undefined {
+    const canvas = stageCanvas.querySelector('canvas');
+    if (!(canvas instanceof HTMLCanvasElement)) return undefined;
+    try {
+      return canvas.toDataURL('image/png');
+    } catch {
+      return undefined;
+    }
+  }
+
+  return teardown;
 }
