@@ -25,11 +25,18 @@
     "dev:bubblepop": "pnpm --filter bubble-pop-generator dev",
     "build:bubblepop": "pnpm --filter bubble-pop-generator build",
     "check:chrome": "node scripts/check-app-chrome.mjs",
+    "check:ui": "node scripts/check-ui-drift.mjs",
     "gen:licenses": "node scripts/licenses.mjs",
     "check:licenses": "node scripts/licenses.mjs --check",
-    "build:offline": "node scripts/offline.mjs"
+    "build:offline": "node scripts/offline.mjs",
+    "dev:penTopper": "pnpm --filter pen-topper dev",
+    "build:penTopper": "pnpm --filter pen-topper build",
+    "dev:foldbox": "pnpm --filter foldbox dev:print",
+    "build:foldbox": "pnpm --filter foldbox build",
+    "render:topper": "node scripts/render-topper.mjs"
   },
   "devDependencies": {
+    "esbuild": "^0.24.2",
     "fflate": "^0.8.3"
   }
 }

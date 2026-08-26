@@ -33,8 +33,6 @@ import {
   dialog,
   el,
   selectField,
-  svgEl,
-  helpTip,
   ICONS,
   promptDialog,
   hostAssetUrl,
@@ -42,6 +40,17 @@ import {
   rememberBytes,
   bindExternalLinks,
   chooseFile,
+  button,
+  iconButton,
+  collapsibleSection,
+  modeBar,
+  stepper,
+  listRow,
+  numberField,
+  textField,
+  sourceCards,
+  sampleGrid,
+  uploadCta,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import type { RegionSet } from './types';
@@ -489,19 +498,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const undoStack: Settings[] = [];
   const redoStack: Settings[] = [];
   let isUndoRedo = false;
-  const undoBtn = iconButton(ICONS.undo ?? '', 'Undo', 'Undo (Ctrl+Z)', () => undo());
-  const redoBtn = iconButton(ICONS.redo ?? '', 'Redo', 'Redo (Ctrl+Shift+Z)', () => redo());
-
-  function iconButton(icon: string, label: string, title: string, onClick: () => void) {
-    const btn = el('button', {
-      className: 'vl-btn',
-      attrs: { type: 'button', title, 'aria-label': label },
-      on: { click: onClick },
-    }) as HTMLButtonElement;
-    if (icon) btn.append(svgEl(icon));
-    else btn.textContent = label;
-    return btn;
-  }
+  const undoBtn = iconButton({ icon: ICONS.undo, label: 'Undo', title: 'Undo (Ctrl+Z)', onClick: () => undo() });
+  const redoBtn = iconButton({ icon: ICONS.redo, label: 'Redo', title: 'Redo (Ctrl+Shift+Z)', onClick: () => redo() });
 
   function syncHistoryButtons() {
     undoBtn.disabled = undoStack.length === 0;
@@ -582,55 +580,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---------------------------------------------------------------------------
   // Local controls
   // ---------------------------------------------------------------------------
-  /** A compact labelled number field — for the dimensions the user reads off a
-   *  magnet's packaging, where a slider would be the wrong instrument. */
-  function numberField(opts: {
-    label: string;
-    value: number;
-    min: number;
-    max: number;
-    step?: number;
-    unit?: string;
-    help?: string;
-    onChange: (v: number) => void;
-  }): HTMLElement {
-    const input = el('input', {
-      attrs: {
-        type: 'number',
-        min: String(opts.min),
-        max: String(opts.max),
-        step: String(opts.step ?? 1),
-        inputmode: 'decimal',
-      },
-    }) as HTMLInputElement;
-    let current = opts.value;
-    input.value = String(current);
-    const commit = () => {
-      const parsed = parseFloat(input.value);
-      const v = Number.isFinite(parsed) ? clamp(parsed, opts.min, opts.max) : current;
-      input.value = String(v);
-      if (v === current) return;
-      current = v;
-      opts.onChange(v);
-    };
-    input.addEventListener('change', commit);
-    input.addEventListener('blur', commit);
-
-    const label = el('label', { text: opts.label });
-    if (opts.help) label.append(helpTip(opts.help));
-    const box = el('div', { className: 'mg-num__input' }, [input]);
-    if (opts.unit) box.append(el('span', { className: 'mg-num__unit', text: opts.unit }));
-    return el('div', { className: 'vl-field mg-num' }, [label, box]);
-  }
-
   /** A collapsible numbered step, matching the clicker's sidebar sections. */
   function step(n: number, title: string, body: (HTMLElement | Node)[], open = false): HTMLElement {
-    const details = el('details', { className: 'vl-section section-collapsible' }, [
-      el('summary', { className: 'vl-label collapsible-head', text: `${n} · ${title}` }),
-      el('div', { className: 'collapsible-body' }, body),
-    ]) as HTMLDetailsElement;
-    details.open = open;
-    return details;
+    return collapsibleSection({ title: `${n} · ${title}`, body, open });
   }
 
   // ---------------------------------------------------------------------------
@@ -705,57 +657,52 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   };
 
   // --- Edit mode bar (Color / Extrude / Magnet), ported from the clicker ---
-  const editModeBar = el('div', { className: 'edit-mode-bar', attrs: { role: 'group' } });
-  const modeBtn = (mode: EditMode, label: string, icon: string) => {
-    const b = el('button', {
-      className: 'edit-mode-btn' + (store.get().editMode === mode ? ' active' : ''),
-      attrs: { type: 'button', 'data-editmode': mode },
-    });
-    b.append(svgEl(icon), el('span', { text: label }));
-    return b;
-  };
-  editModeBar.append(
-    modeBtn('color', 'Color', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>'),
-    modeBtn('extrude', 'Extrude', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>'),
-    modeBtn('magnet', 'Magnet', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v9a6 6 0 0 0 12 0V3"/><path d="M6 8h4"/><path d="M14 8h4"/></svg>'),
-  );
-  shell.stage.append(editModeBar);
+  const editModeBar = modeBar<EditMode>({
+    modes: [
+      { value: 'color', label: 'Color', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>' },
+      { value: 'extrude', label: 'Extrude', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>' },
+      { value: 'magnet', label: 'Magnet', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v9a6 6 0 0 0 12 0V3"/><path d="M6 8h4"/><path d="M14 8h4"/></svg>' },
+    ],
+    value: store.get().editMode,
+    onChange: (mode) => {
+      store.set({ editMode: mode, selectedRegions: [] });
+      viewer.clearHighlight();
+      syncEditMode();
+      syncExtrudePanel();
+      // The pockets are on the back — put the camera where the work is.
+      if (mode === 'magnet' && s().magnetMode !== 'none') setView('back');
+    },
+  });
+  shell.stage.append(editModeBar.root);
 
   // --- Magnet mode: a slim hint pinned at the top of the stage (no center panel
   //     obstructing the model — count & reset live in the left sidebar). ---
-  const magnetHintText = el('span');
-  const magnetHintAdd = el('button', { className: 'mg-chip mg-chip--add', text: '+', attrs: { type: 'button', title: 'Add magnet' }, on: { click: addMagnet } });
-  const magnetHintRemove = el('button', { className: 'mg-chip mg-chip--add', text: '−', attrs: { type: 'button', title: 'Remove magnet' }, on: { click: () => removeMagnet(activeMagnet) } });
-  const magnetHint = el('div', { className: 'mg-magnet-hint', attrs: { hidden: '' } }, [
-    magnetHintRemove,
-    magnetHintText,
-    magnetHintAdd,
-  ]);
+  const magnetStepper = stepper({
+    onStep: (delta) => (delta === 1 ? addMagnet() : removeMagnet(activeMagnet)),
+  });
+  const magnetHint = el('div', { className: 'mg-magnet-hint', attrs: { hidden: '' } }, [magnetStepper.root]);
   shell.stage.append(magnetHint);
 
   // --- Extrude panel (floating, clicker-style) ---
   const extrudeLevelLabel = el('div', { className: 'extrude-level-label', text: 'Select a part' });
-  const extrudeMinus = el('button', { className: 'vl-btn vl-btn--icon', attrs: { type: 'button', 'aria-label': 'Lower' }, text: '−' }) as HTMLButtonElement;
-  const extrudePlus = el('button', { className: 'vl-btn vl-btn--icon', attrs: { type: 'button', 'aria-label': 'Raise' }, text: '+' }) as HTMLButtonElement;
-  const extrudeChamferEl = el('input', { attrs: { type: 'checkbox', id: 'mgExtrudeChamfer' } }) as HTMLInputElement;
-  extrudeChamferEl.checked = s().extrudeChamfer;
+  const extrudeStepperCtl = stepper({ onStep: (delta) => extrudeStep(delta) });
+  const extrudeChamferToggle = toggleSwitch({
+    label: 'Chamfer raised edges',
+    checked: s().extrudeChamfer,
+    onChange: (on) => patch({ extrudeChamfer: on }),
+  });
   const extrudePanel = el('div', { className: 'edges-panel', attrs: { hidden: '' } }, [
     el('div', { className: 'edges-title', text: 'Extrude Part' }),
     extrudeLevelLabel,
-    el('div', { className: 'tol-stepper' }, [extrudeMinus, extrudePlus]),
-    el('div', { className: 'extrude-chamfer-row' }, [
-      el('span', { text: 'Chamfer raised edges' }),
-      el('label', { className: 'toggle' }, [extrudeChamferEl, el('span', { className: 'slider' })]),
-    ]),
+    extrudeStepperCtl.root,
+    extrudeChamferToggle,
     el('div', { className: 'panel-hint', text: 'Click a color on the model to select it, then raise or lower it. Click another to add it to the selection.' }),
   ]);
   shell.stage.append(extrudePanel);
 
   const syncEditMode = () => {
     const m = store.get().editMode;
-    editModeBar.querySelectorAll('.edit-mode-btn').forEach((b) => {
-      b.classList.toggle('active', b.getAttribute('data-editmode') === m);
-    });
+    editModeBar.setValue(m);
     extrudePanel.toggleAttribute('hidden', m !== 'extrude');
     magnetHint.toggleAttribute('hidden', m !== 'magnet');
     // The magnet hint and the interaction hint share the bottom-center slot.
@@ -792,17 +739,18 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           interactive,
         });
         if (interactive) {
-          magnetHintText.textContent = 'Drag the visual helper to see if your sheet fits.';
+          magnetStepper.setReadout('Drag the visual helper to see if your sheet fits.');
         }
         return;
       }
 
       clear();
       if (interactive) {
-        magnetHintText.textContent =
+        magnetStepper.setReadout(
           v.magnetMode === 'none'
             ? 'This design uses magnetic sheet, so there are no pockets to place.'
-            : 'No magnet fits this design yet.';
+            : 'No magnet fits this design yet.',
+        );
       }
       return;
     }
@@ -841,43 +789,28 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     });
 
     if (interactive) {
-      magnetHintText.textContent =
+      magnetStepper.setReadout(
         v.productType === 'slider'
           ? 'Drag to move the whole magnet array. Both halves share one pitch, so they move together.'
           : report.positions.length > 1
             ? `Drag a magnet to move it · #${activeMagnet + 1} of ${report.positions.length} selected`
-            : 'Drag the magnet to move it, or click the shape to place it there';
+            : 'Drag the magnet to move it, or click the shape to place it there',
+      );
     }
   }
   const syncExtrudePanel = () => {
     const sel = store.get().selectedRegions;
     if (sel.length === 0) {
       extrudeLevelLabel.textContent = 'Select a part';
-      extrudeMinus.disabled = true;
-      extrudePlus.disabled = true;
+      extrudeStepperCtl.setEnabled(false, false);
       return;
     }
     const level = s().palette[sel[0]]?.level ?? 0;
     const h = (level * s().stepHeight).toFixed(2);
     extrudeLevelLabel.textContent =
       sel.length > 1 ? `${sel.length} colors · Level: ${level} · ${h} mm` : `Level: ${level} · ${h} mm`;
-    extrudeMinus.disabled = level <= 0;
-    extrudePlus.disabled = level >= MAX_LEVEL;
+    extrudeStepperCtl.setEnabled(level > 0, level < MAX_LEVEL);
   };
-  extrudeChamferEl.addEventListener('change', () => patch({ extrudeChamfer: extrudeChamferEl.checked }));
-  extrudeMinus.addEventListener('click', () => extrudeStep(-1));
-  extrudePlus.addEventListener('click', () => extrudeStep(1));
-  editModeBar.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest('[data-editmode]') as HTMLElement | null;
-    if (!btn) return;
-    const mode = (btn.getAttribute('data-editmode') ?? 'color') as EditMode;
-    store.set({ editMode: mode, selectedRegions: [] });
-    viewer.clearHighlight();
-    syncEditMode();
-    syncExtrudePanel();
-    // The pockets are on the back — put the camera where the work is.
-    if (mode === 'magnet' && s().magnetMode !== 'none') setView('back');
-  });
 
   function extrudeStep(delta: number) {
     const sel = store.get().selectedRegions;
@@ -1500,11 +1433,23 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     let search = '';
 
     const list = el('div', { className: 'mg-fb__list' });
-    const searchInput = el('input', {
-      className: 'mg-fb__search',
-      attrs: { type: 'search', placeholder: `Search ${FONTS.length} fonts…`, 'aria-label': 'Search fonts' },
-    }) as HTMLInputElement;
-    const catRow = el('div', { className: 'mg-fb__cats' });
+    const searchField = textField({
+      label: 'Search',
+      type: 'search',
+      placeholder: `Search ${FONTS.length} fonts…`,
+      onInput: (v) => {
+        search = v;
+        render();
+      },
+    });
+    const catRow = segmentedControl<string>({
+      options: categories.map((c) => ({ value: c, label: c })),
+      value: cat,
+      onChange: (c) => {
+        cat = c;
+        render();
+      },
+    });
 
     const render = () => {
       const q = search.trim().toLowerCase();
@@ -1541,28 +1486,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       }
     };
 
-    for (const c of categories) {
-      const b = el('button', {
-        className: `mg-fb__cat-btn${c === cat ? ' active' : ''}`,
-        text: c,
-        attrs: { type: 'button' },
-      });
-      b.addEventListener('click', () => {
-        cat = c;
-        catRow.querySelectorAll('.mg-fb__cat-btn').forEach((x) => x.classList.toggle('active', x === b));
-        render();
-      });
-      catRow.append(b);
-    }
-    searchInput.addEventListener('input', () => {
-      search = searchInput.value;
-      render();
-    });
     render();
 
     const modal = dialog({
       title: 'Browse fonts',
-      content: el('div', { className: 'mg-fb' }, [searchInput, catRow, list]),
+      content: el('div', { className: 'mg-fb' }, [searchField, catRow, list]),
       actions: [{ label: 'Close' }],
     });
   }
@@ -1636,20 +1564,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const sec = el('div', { className: 'vl-section' });
     sec.innerHTML = `
       <p class="vl-label">Import Source</p>
-      <div class="import-grid" id="mgImportTabs">
-        <button class="import-card active" data-mode="image" type="button">
-          <span class="card-icon">${IMG_ICON}</span>
-          <span class="card-label">Image</span>
-        </button>
-        <button class="import-card" data-mode="svg" type="button">
-          <span class="card-icon">${SVG_ICON}</span>
-          <span class="card-label">SVG</span>
-        </button>
-        <button class="import-card" data-mode="text" type="button">
-          <span class="card-icon">${TEXT_ICON}</span>
-          <span class="card-label">Text</span>
-        </button>
-      </div>
+      <div id="mgImportTabs"></div>
       <div id="imagePanel" class="mode-panel">
         <div class="drop" id="mgDrop">
           <span class="drop-icon">${UPLOAD_ICON}</span>
@@ -1658,69 +1573,63 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           <span class="drop-note">PNG with transparency works best</span>
         </div>
         <input type="file" id="mgFile" accept="image/png,image/jpeg,image/webp" hidden />
-        <span class="sample-heading">Choose a sample image</span>
-        <div class="sample-inline-grid" id="mgSampleGrid"></div>
+        <div id="mgSampleGrid"></div>
       </div>
       <div id="svgPanel" class="mode-panel" hidden>
         <p class="hint-text">Drop or upload SVG vector files. Color paths map to colors.</p>
-        <label class="upload-cta">
-          <span>${UPLOAD_ICON}</span>
-          Upload SVG file(s)
-          <input id="mgSvgUpload" type="file" accept=".svg,image/svg+xml" multiple />
-        </label>
+        <div id="mgSvgUploadMount"></div>
       </div>
       <div id="textPanel" class="mode-panel" hidden>
         <p class="hint-text">Type a word and pick a font. Base shape "Image outline" hugs the letters; the preset shapes put them on a plate.</p>
-        <input id="mgTextInput" class="mg-text-input" type="text" maxlength="24" aria-label="Magnet text" />
+        <div id="mgTextInputMount"></div>
         <div id="mgFontGrid" class="mg-font-grid"></div>
-        <button id="mgBrowseFonts" class="vl-btn vl-btn--secondary vl-btn--block" type="button"></button>
-        <label class="upload-cta mg-font-import">
-          <span>${UPLOAD_ICON}</span>
-          Import custom font (.ttf/.otf/.zip)
-          <input id="mgFontUpload" type="file" accept=".ttf,.otf,.zip" />
-        </label>
+        <div id="mgBrowseFontsMount"></div>
+        <div id="mgFontUploadMount"></div>
         <div id="mgTextTuning"></div>
       </div>
     `;
 
     const $ = <T extends HTMLElement>(sel: string) => sec.querySelector<T>(sel)!;
-    const tabs = $('#mgImportTabs');
+    const tabsMount = $('#mgImportTabs');
     const imagePanel = $('#imagePanel');
     const svgPanel = $('#svgPanel');
     const drop = $('#mgDrop');
     const file = $<HTMLInputElement>('#mgFile');
-    const svgFile = $<HTMLInputElement>('#mgSvgUpload');
 
     const textPanel = $('#textPanel');
 
     const setMode = (mode: ImportMode) => {
-      tabs.querySelectorAll('.import-card').forEach((b) => {
-        b.classList.toggle('active', b.getAttribute('data-mode') === mode);
-      });
+      importCards.setValue(mode);
       imagePanel.hidden = mode !== 'image';
       svgPanel.hidden = mode !== 'svg';
       textPanel.hidden = mode !== 'text';
       syncRemoveBg(mode);
     };
-    tabs.addEventListener('click', (e) => {
-      const t = (e.target as HTMLElement).closest('[data-mode]') as HTMLElement | null;
-      if (!t) return;
-      const mode = (t.getAttribute('data-mode') ?? 'image') as ImportMode;
-      setMode(mode);
-      if (mode === activeSource) return;
-      // Picking a tab switches the design back to that source when it still has
-      // one loaded. Nothing is discarded on the way out, so this round-trips.
-      if (mode === 'text') {
-        void applyTextSource(true);
-      } else if (mode === 'image' && originalImage) {
-        activeSource = 'image';
-        reprocess(true);
-      } else if (mode === 'svg' && svgText) {
-        activeSource = 'svg';
-        reprocess(true);
-      }
-      // No source of that kind yet — the panel is showing so the user can add one.
+    const importCards = sourceCards<ImportMode>({
+      options: [
+        { value: 'image', label: 'Image', icon: IMG_ICON },
+        { value: 'svg', label: 'SVG', icon: SVG_ICON },
+        { value: 'text', label: 'Text', icon: TEXT_ICON },
+      ],
+      value: 'image',
+      onChange: (mode) => {
+        setMode(mode);
+        if (mode === activeSource) return;
+        // Picking a tab switches the design back to that source when it still has
+        // one loaded. Nothing is discarded on the way out, so this round-trips.
+        if (mode === 'text') {
+          void applyTextSource(true);
+        } else if (mode === 'image' && originalImage) {
+          activeSource = 'image';
+          reprocess(true);
+        } else if (mode === 'svg' && svgText) {
+          activeSource = 'svg';
+          reprocess(true);
+        }
+        // No source of that kind yet — the panel is showing so the user can add one.
+      },
     });
+    tabsMount.append(importCards.root);
 
     // With a host this opens its media library — every image imported into any generator,
     // and a way to the file system beyond it. Without one it clicks the hidden input, which
@@ -1744,22 +1653,28 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       }
       file.value = ''; // re-picking the same file must still fire
     });
-    svgFile.addEventListener('change', () => {
-      for (const f of Array.from(svgFile.files ?? [])) {
-        void rememberFile(host, 'svg', f);
-        void importSvgFile(f);
-      }
-      svgFile.value = '';
+    const svgUpload = uploadCta({
+      label: 'Upload SVG file(s)',
+      icon: UPLOAD_ICON,
+      accept: '.svg,image/svg+xml',
+      multiple: true,
+      onFiles: (files) => {
+        for (const f of files) {
+          void rememberFile(host, 'svg', f);
+          void importSvgFile(f);
+        }
+      },
     });
     // The label wraps the input, so the host's library has to pre-empt the click rather
     // than replace it — otherwise both open.
-    svgFile.parentElement?.addEventListener('click', (e) => {
+    svgUpload.addEventListener('click', (e) => {
       if (!host?.pickMedia) return;
       e.preventDefault();
       void chooseFile(host, { kind: 'svg', extensions: ['svg'] }, () => {}).then((f) => {
         if (f) void importSvgFile(f);
       });
     });
+    $('#mgSvgUploadMount').replaceWith(svgUpload);
 
     // Drag & drop — on the zone and anywhere in the window.
     for (const evt of ['dragenter', 'dragover'] as const) {
@@ -1795,24 +1710,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       window.removeEventListener('drop', onWindowDrop);
     });
 
-    const grid = $('#mgSampleGrid');
-    for (const sample of SAMPLES) {
-      const item = el('div', { className: 'sample-inline-item' }, [
-        el('img', { attrs: { src: sample.src, alt: sample.name, loading: 'lazy' } }),
-        el('span', { text: sample.name }),
-      ]);
-      item.addEventListener('click', () => openImport(sample.name, sample.load));
-      grid.append(item);
-    }
+    $('#mgSampleGrid').replaceWith(sampleGrid({
+      heading: 'Choose a sample image',
+      items: SAMPLES.map((sample) => ({ src: sample.src, label: sample.name })),
+      onPick: (_item, i) => openImport(SAMPLES[i].name, SAMPLES[i].load),
+    }));
 
     // ---- Text source ----
-    const textInput = $<HTMLInputElement>('#mgTextInput');
     const fontGrid = $('#mgFontGrid');
-    const browseBtn = $<HTMLButtonElement>('#mgBrowseFonts');
-    const fontUpload = $<HTMLInputElement>('#mgFontUpload');
-
-    textInput.value = s().text;
-    browseBtn.textContent = `Browse all ${FONTS.length} fonts →`;
 
     const fontCard = (font: FontChoice): HTMLButtonElement => {
       const supported = isFontSupported(font, s().text);
@@ -1849,21 +1754,47 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     };
     renderFontGrid();
 
-    textInput.addEventListener('input', () => {
-      patchImage({ text: textInput.value });
-      renderFontGrid(); // samples and the "characters missing" flag follow the text
-      debouncedTextRebuild();
+    const textInputField = textField({
+      label: 'Text',
+      value: s().text,
+      onInput: (v) => {
+        patchImage({ text: v });
+        renderFontGrid(); // samples and the "characters missing" flag follow the text
+        debouncedTextRebuild();
+      },
     });
+    textInputField.field.maxLength = 24;
+    $('#mgTextInputMount').replaceWith(textInputField);
 
-    browseBtn.addEventListener('click', () => {
-      openFontBrowser(s().textFont, s().text, (id) => {
-        patchImage({ textFont: id });
-        renderFontGrid();
-        void applyTextSource();
-      });
+    const browseBtn = button({
+      label: `Browse all ${FONTS.length} fonts →`,
+      emphasis: 'secondary',
+      block: true,
+      onClick: () => {
+        openFontBrowser(s().textFont, s().text, (id) => {
+          patchImage({ textFont: id });
+          renderFontGrid();
+          void applyTextSource();
+        });
+      },
     });
+    $('#mgBrowseFontsMount').replaceWith(browseBtn);
 
-    fontUpload.parentElement?.addEventListener('click', (e) => {
+    const fontUploadCta = uploadCta({
+      label: 'Import custom font (.ttf/.otf/.zip)',
+      icon: UPLOAD_ICON,
+      accept: '.ttf,.otf,.zip',
+      onFiles: (files) => {
+        const f = files[0];
+        if (f) void importCustomFont(f, (id) => {
+          patchImage({ textFont: id });
+          renderFontGrid();
+          void applyTextSource();
+        });
+      },
+    });
+    fontUploadCta.classList.add('mg-font-import');
+    fontUploadCta.addEventListener('click', (e) => {
       if (!host?.pickMedia) return;
       e.preventDefault();
       void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'zip'] }, () => {}).then((f) => {
@@ -1874,15 +1805,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         });
       });
     });
-    fontUpload.addEventListener('change', () => {
-      const f = fontUpload.files?.[0];
-      if (f) void importCustomFont(f, (id) => {
-        patchImage({ textFont: id });
-        renderFontGrid();
-        void applyTextSource();
-      });
-      fontUpload.value = '';
-    });
+    $('#mgFontUploadMount').replaceWith(fontUploadCta);
 
     // Letter spacing now lives in the left panel's Shape & size step, next to the
     // other geometry controls.
@@ -2121,11 +2044,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
       const overrides = Object.keys(cur.componentColors).length;
       if (overrides > 0) {
-        const reset = el('button', {
-          className: 'vl-btn vl-btn--ghost vl-btn--block',
-          text: `Reset ${overrides} recoloured shape${overrides === 1 ? '' : 's'}`,
-          attrs: { type: 'button', title: 'Put every individually recoloured shape back on its palette row' },
-          on: { click: () => patch({ componentColors: {} }) },
+        const reset = button({
+          label: `Reset ${overrides} recoloured shape${overrides === 1 ? '' : 's'}`,
+          emphasis: 'ghost',
+          block: true,
+          title: 'Put every individually recoloured shape back on its palette row',
+          onClick: () => patch({ componentColors: {} }),
         });
         pal.append(reset);
       }
@@ -2239,11 +2163,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         },
       });
 
-      const setupBtn = el('button', {
-        className: 'vl-btn vl-btn--ghost vl-btn--block',
-        text: 'Not sure? Walk me through it',
-        attrs: { type: 'button' },
-        on: { click: () => void runWizard() },
+      const setupBtn = button({
+        label: 'Not sure? Walk me through it',
+        emphasis: 'ghost',
+        block: true,
+        onClick: () => void runWizard(),
       });
 
       if (v.magnetMode === 'none') {
@@ -2264,11 +2188,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         const helperDims = el('div', { className: 'mg-dims' }, [
           numberField({
             label: 'Width', value: v.magnetX, min: 3, max: 200, step: 0.5, unit: 'mm',
-            onChange: (val) => { patch({ magnetX: val }); syncMagnetHandles(); },
+            onInput: (val) => { patch({ magnetX: val }); syncMagnetHandles(); },
           }),
           numberField({
             label: 'Length', value: v.magnetY, min: 3, max: 200, step: 0.5, unit: 'mm',
-            onChange: (val) => { patch({ magnetY: val }); syncMagnetHandles(); },
+            onInput: (val) => { patch({ magnetY: val }); syncMagnetHandles(); },
           }),
         ]);
 
@@ -2335,25 +2259,25 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         ? [
             numberField({
               label: 'Diameter', value: v.magnetDiameter, min: 3, max: 40, step: 0.5, unit: 'mm',
-              onChange: (val) => patch({ magnetDiameter: val }),
+              onInput: (val) => patch({ magnetDiameter: val }),
             }),
             numberField({
               label: 'Height', value: v.magnetDepth, min: 0.5, max: 6, step: 0.5, unit: 'mm',
-              onChange: (val) => patch({ magnetDepth: val }),
+              onInput: (val) => patch({ magnetDepth: val }),
             }),
           ]
         : [
             numberField({
               label: 'Width', value: v.magnetX, min: 3, max: 60, step: 0.5, unit: 'mm',
-              onChange: (val) => patch({ magnetX: val }),
+              onInput: (val) => patch({ magnetX: val }),
             }),
             numberField({
               label: 'Length', value: v.magnetY, min: 3, max: 60, step: 0.5, unit: 'mm',
-              onChange: (val) => patch({ magnetY: val }),
+              onInput: (val) => patch({ magnetY: val }),
             }),
             numberField({
               label: 'Height', value: v.magnetDepth, min: 0.5, max: 6, step: 0.5, unit: 'mm',
-              onChange: (val) => patch({ magnetDepth: val }),
+              onInput: (val) => patch({ magnetDepth: val }),
             }),
           ]);
 
@@ -2388,16 +2312,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
       if (v.magnetPlacement === 'manual') {
         magnetsBlock.append(
-          el('button', {
-            className: 'vl-btn vl-btn--secondary vl-btn--block',
-            text: 'Reset to automatic placement',
-            attrs: { type: 'button' },
-            on: {
-              click: () => {
-                activeMagnet = 0;
-                patch({ magnetPlacement: 'auto', magnets: [] });
-                redrawForm();
-              },
+          button({
+            label: 'Reset to automatic placement',
+            emphasis: 'secondary',
+            block: true,
+            onClick: () => {
+              activeMagnet = 0;
+              patch({ magnetPlacement: 'auto', magnets: [] });
+              redrawForm();
             },
           }),
         );
@@ -2451,10 +2373,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
         );
       }
-      const tuningDetails = el('details', { className: 'mg-details' }, [
-        el('summary', { text: 'Fine tuning' }),
-        el('div', { className: 'mg-details__body' }, tuning),
-      ]);
+      const tuningDetails = collapsibleSection({ title: 'Fine tuning', body: tuning, open: false });
 
       // --- Slider-specific controls ---
       const isSlider = v.productType === 'slider';
@@ -2530,9 +2449,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       }) : null;
 
       // The one thing people get wrong when they assemble a slider, spelled out.
-      const sliderPolarity = isSlider ? el('details', { className: 'mg-details' }, [
-        el('summary', { text: 'How to insert the magnets' }),
-        el('div', { className: 'mg-details__body' }, [
+      const sliderPolarity = isSlider ? collapsibleSection({
+        title: 'How to insert the magnets',
+        open: false,
+        body: [
           el('p', {
             className: 'vl-hint',
             text: v.baseShape === 'outline'
@@ -2550,8 +2470,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             className: 'vl-hint',
             text: 'Glue each magnet flush with the face, let it cure, then rub the two faces together to break them in.',
           }),
-        ]),
-      ]) : null;
+        ],
+      }) : null;
 
       // Real fidget sliders are built around small discs; a ⌀12 magnet makes a
       // brick that snaps shut instead of sliding.
@@ -2784,7 +2704,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *  wizard, where many controls change value at once. Open/closed state is kept,
    *  and the old sections' store subscriptions are dropped first. */
   function rebuildSections() {
-    const existing = shell.leftScroll.querySelectorAll('.vl-section.section-collapsible');
+    const existing = shell.leftScroll.querySelectorAll('.vl-section.vl-section--collapsible');
     const openState = Array.from(existing).map((node) => (node as HTMLDetailsElement).open);
     existing.forEach((node) => node.remove());
     while (sectionSubs.length) sectionSubs.pop()!();
@@ -2994,23 +2914,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const handle = dialog({ title: 'Open a project', content: list });
 
     for (const p of projects) {
-      const row = el('button', {
-        className: 'vl-btn vl-btn--secondary mg-project-row',
-        attrs: { type: 'button' },
-      });
-      if (p.preview) {
-        // The host turns a path into a URL, because the right protocol is `asset:` on
-        // macOS and Linux and `http://asset.localhost` on Windows — a hand-written one is
-        // a broken thumbnail on one of the two, with nothing in the console to say why.
-        row.append(el('img', {
-          className: 'mg-project-thumb',
-          attrs: { src: hostAssetUrl(host, p.preview), alt: '' },
-        }));
-      }
-      row.append(el('span', { text: p.name }));
-      row.addEventListener('click', () => {
-        handle.close();
-        void openProject(p.id);
+      // The host turns a path into a URL, because the right protocol is `asset:` on
+      // macOS and Linux and `http://asset.localhost` on Windows — a hand-written one is
+      // a broken thumbnail on one of the two, with nothing in the console to say why.
+      const row = listRow({
+        label: p.name,
+        thumb: p.preview ? hostAssetUrl(host, p.preview) : undefined,
+        onClick: () => {
+          handle.close();
+          void openProject(p.id);
+        },
       });
       list.append(row);
     }
@@ -3143,9 +3056,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     statusEl.textContent = state.status || (warn ? state.warnings[0] : state.hasParts ? 'Ready.' : '');
     statusEl.classList.toggle('mg-status--busy', state.building);
     statusEl.classList.toggle('mg-status--warn', !state.building && !state.status && warn);
-    if (extrudeChamferEl.checked !== state.settings.extrudeChamfer) {
-      extrudeChamferEl.checked = state.settings.extrudeChamfer;
-    }
+    extrudeChamferToggle.setValue(state.settings.extrudeChamfer);
   });
 
   // ---------------------------------------------------------------------------

@@ -38,6 +38,8 @@ export interface ModeBar<T extends string = string> {
 export function modeBar<T extends string = string>(opts: ModeBarOptions<T>): ModeBar<T> {
   const buttons = new Map<T, HTMLButtonElement>();
   const root = el('div', { className: 'vl-mode-bar', attrs: { role: 'group' } });
+  const indicator = el('span', { className: 'vl-mode-bar__indicator', attrs: { 'aria-hidden': 'true' } });
+  root.append(indicator);
 
   for (const m of opts.modes) {
     const b = el('button', {
@@ -51,14 +53,48 @@ export function modeBar<T extends string = string>(opts: ModeBarOptions<T>): Mod
     root.append(b);
   }
 
+  let current = opts.value;
+
+  /* Move the pill onto the active mode. Measured, because the buttons are label-width.
+     Not scheduled on requestAnimationFrame: rAF does not fire in a background tab, and a
+     mode bar whose pill sits at the far left until the tab is focused is worse than one
+     that simply appears in place. */
+  const place = (animate: boolean) => {
+    const btn = buttons.get(current);
+    if (!btn) return;
+    const box = btn.getBoundingClientRect();
+    if (box.width === 0) {
+      indicator.classList.remove('is-ready');
+      return;
+    }
+    const frame = root.getBoundingClientRect();
+    const cs = getComputedStyle(root);
+    const x = box.left - frame.left - parseFloat(cs.borderLeftWidth);
+    if (!animate) indicator.style.transition = 'none';
+    indicator.style.width = `${box.width}px`;
+    indicator.style.transform = `translateX(${x}px)`;
+    indicator.classList.add('is-ready');
+    if (!animate) {
+      void indicator.offsetWidth;
+      indicator.style.transition = '';
+    }
+  };
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => place(false)).observe(root);
+  }
+
   function setValue(value: T) {
+    current = value;
     for (const [v, b] of buttons) {
       const on = v === value;
       b.classList.toggle('is-active', on);
       b.setAttribute('aria-pressed', String(on));
     }
+    place(true);
   }
   setValue(opts.value);
+  place(false);
 
   return { root, setValue };
 }

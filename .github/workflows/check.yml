@@ -37,6 +37,13 @@ jobs:
       - name: Page-frame check
         run: pnpm check:chrome
 
+      # Controls come from the kit, not from a hand-written <button> (invariant #9). A
+      # ratchet, not a gate: it fails when a count goes up, never for the backlog it
+      # inherited. Also hard-fails on a dead class or an unresolvable token, either of
+      # which renders wrong and reports nothing.
+      - name: UI drift check
+        run: pnpm check:ui
+
       - name: Typecheck every package and app
         run: pnpm typecheck
 

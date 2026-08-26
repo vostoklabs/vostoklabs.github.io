@@ -1,0 +1,400 @@
+/* The primitives the kit was missing.
+
+   Every rule here is adopted from the Opal suite's `opal-components.css`, renamed to the
+   `vl-` prefix and pointed at this kit's tokens, so the two products describe the same
+   control the same way. Where the two systems disagreed, Opal won — that was the
+   instruction, and in each case below Opal's version was also the more finished one.
+
+   These exist so that "if it is not in the kit, add it to the kit" is true rather than
+   aspirational: a generator that needs a chip, a progress bar or an empty state now has one
+   to reach for, and the next app cannot invent a third. */
+
+/* ---------- Chip: a small toggleable filter/tag ---------- */
+.vl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-hover) var(--ease-standard),
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
+}
+.vl-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.vl-chip[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+/*
+  Restated at (0,4,0) on purpose. In Opal this exact pair shipped broken: `:not()` carries
+  the specificity of its argument, so the plain hover rule above is (0,3,0) while the
+  `[aria-pressed]` rule is only (0,2,0) — hover won `color` outright and never set a
+  matching `background`, so an active chip under the cursor painted `--accent` text on an
+  `--accent` fill. Same hex for both: the label did not dim, it vanished.
+*/
+.vl-chip[aria-pressed='true']:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--accent-text);
+}
+.vl-chip:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-chip:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+
+/* ---------- Empty state ---------- */
+.vl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted);
+}
+.vl-empty__icon { color: var(--line); }
+.vl-empty__title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--fs-strong);
+  font-weight: 600;
+}
+.vl-empty__body { margin: 0; max-width: 42ch; font-size: var(--label-fs); line-height: 1.5; }
+
+/* ---------- Progress bar ---------- */
+.vl-progress {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.vl-progress__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width var(--dur-in-md) var(--ease-standard);
+}
+/* Indeterminate: a travelling sliver rather than a fill, because a bar that sits at a
+   guessed percentage is worse than one that admits it does not know. */
+.vl-progress--indeterminate .vl-progress__fill {
+  width: 35%;
+  animation: vl-progress-slide 1.2s var(--ease-standard) infinite;
+}
+@keyframes vl-progress-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(340%); }
+}
+
+/* ---------- Skeleton placeholder ---------- */
+.vl-skeleton {
+  background: var(--panel-2);
+  border-radius: var(--radius-chip);
+  animation: vl-skeleton-pulse 2s var(--ease-standard) infinite;
+}
+@keyframes vl-skeleton-pulse { 50% { opacity: 0.72; } }
+
+/* ---------- Checkbox ---------- */
+/* Distinct from `.vl-toggle`, deliberately. A switch means "this setting is on now"; a
+   checkbox means "include this when I commit". Generators need both. */
+.vl-check-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.vl-check-row input[type='checkbox'] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.vl-check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: var(--panel-2);
+  transition:
+    background-color var(--dur-hover) var(--ease-standard),
+    border-color var(--dur-hover) var(--ease-standard);
+}
+.vl-check-row:hover .vl-check { border-color: var(--accent); }
+.vl-check__tick {
+  width: 12px;
+  height: 12px;
+  color: var(--accent-text);
+  /* Wiped in rather than popped: `clip-path` costs no layout and the tick reads as being
+     drawn. --dur-press, because it is acknowledging a pointer-down. */
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path var(--dur-press) var(--ease-enter);
+}
+.vl-check-row input[type='checkbox']:checked + .vl-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.vl-check-row input[type='checkbox']:checked + .vl-check .vl-check__tick { clip-path: inset(0 0 0 0); }
+.vl-check-row input[type='checkbox']:focus-visible + .vl-check { box-shadow: var(--ring); }
+.vl-check-row input[type='checkbox']:disabled + .vl-check { opacity: var(--opacity-disabled); }
+.vl-check-label { font-size: var(--control-fs); color: var(--text); }
+
+/* ---------- Textarea ---------- */
+.vl-field textarea {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: var(--radius-field);
+  padding: var(--field-pad-y) var(--field-pad-x);
+  font: inherit;
+  font-size: var(--field-fs);
+  line-height: 1.5;
+  resize: vertical;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    box-shadow var(--dur-hover) var(--ease-standard);
+}
+.vl-field textarea:hover:not(:disabled):not(:focus) { border-color: var(--accent); }
+/* `:focus`, not only `:focus-visible`. A text field is focused by clicking into it, and a
+   caret with no ring around the box is the one case where a mouse-click ring is correct
+   rather than noise. */
+.vl-field textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+.vl-field textarea:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+.vl-field textarea::placeholder { color: var(--muted); }
+
+/* ---------- Menu (anchored popover) ---------- */
+.vl-menu {
+  position: fixed;
+  z-index: 400;
+  min-width: 180px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-toast);
+  opacity: 0;
+  transform: scale(0.96);
+  transform-origin: top left;
+  transition:
+    opacity var(--dur-out-sm) var(--ease-exit),
+    transform var(--dur-out-sm) var(--ease-exit);
+}
+.vl-menu[data-open] {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--dur-in-sm);
+  transition-timing-function: var(--ease-enter);
+}
+.vl-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--control-fs);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-standard);
+}
+.vl-menu__item:hover:not(:disabled),
+.vl-menu__item[data-active] { background: var(--panel-2); }
+.vl-menu__item:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-menu__item:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+.vl-menu__sep { height: 1px; margin: 4px 2px; background: var(--line); }
+
+/* ---------- The slider track ----------
+
+   Replaces `accent-color: var(--accent)`, which set the tint and left everything else to
+   the browser. Opal shipped two sliders and measured the difference: the plain one and a
+   calculator's own, which had a gradient track showing the filled portion, a real thumb and
+   a press state. The better one won there and wins here.
+
+   `--pct` is written by `slider()` and `sliderRow()` as the value changes. Without it the
+   track is simply unfilled — a fine default rather than a broken one.
+
+   Keyed on the CLASS, not on `.vl-slider-row`'s descendants. While it hung off the row,
+   the only way to get a styled range was to want the whole label-and-value-box shape —
+   so foldbox's fold scrubber, which wants a bare track, hand-built one and got the
+   browser's `accent-color` default instead. */
+.vl-slider {
+  width: 100%;
+  min-width: 0;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.vl-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0 var(--pct, 0%),
+    var(--line) var(--pct, 0%) 100%
+  );
+}
+.vl-slider::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line); }
+.vl-slider::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+
+.vl-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel-2);
+  transition: transform var(--dur-press) var(--ease-standard);
+}
+.vl-slider::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel-2);
+  transition: transform var(--dur-press) var(--ease-standard);
+}
+/* Two steps, matching what Opal shipped: a small acknowledgement under the cursor and a
+   larger one while dragging. The hover step is the one that matters — without it the thumb
+   is inert until you actually press, which reads as a control that has not noticed you.
+   Neither overshoots: the thumb follows the pointer, it does not bounce. */
+.vl-slider:hover::-webkit-slider-thumb { transform: scale(1.08); }
+.vl-slider:hover::-moz-range-thumb { transform: scale(1.08); }
+.vl-slider:active::-webkit-slider-thumb { transform: scale(1.18); }
+.vl-slider:active::-moz-range-thumb { transform: scale(1.18); }
+.vl-slider:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+.vl-slider:focus-visible { outline: none; }
+.vl-slider:focus-visible::-webkit-slider-thumb { box-shadow: var(--ring); }
+.vl-slider:focus-visible::-moz-range-thumb { box-shadow: var(--ring); }
+
+/* ---------- List row ----------
+
+   The full-width row: left-aligned, square-cornered, laying out flexed children — a project
+   with its thumbnail and name, a font with its specimen, a saved preset. It is NOT a button
+   on the emphasis ladder, which is why forcing one into `button()` always looked wrong, and
+   why four apps grew their own (`mg-project-row`, `nk-project-row`, `mg-fb__row`,
+   `nk-fb__row`) rather than reach for one.
+
+   Opal reached the same conclusion from the other side: its migration added `Row` because it
+   "kept running into" the shape, not because anyone designed it up front. */
+.vl-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--control-fs);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-standard);
+}
+/* Hover only where there is a real pointer: on a touch screen it sticks after the tap and
+   reads as a selection that never clears. */
+@media (hover: hover) and (pointer: fine) {
+  .vl-list-row:hover:not(:disabled) { background: var(--panel-2); }
+}
+.vl-list-row:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-list-row[data-active] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.vl-list-row:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+/* The row's own bits: a leading thumbnail, the label that takes the slack, trailing meta. */
+.vl-list-row__thumb {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-chip);
+  object-fit: cover;
+  background: var(--panel-2);
+}
+.vl-list-row__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vl-list-row__meta { flex: 0 0 auto; color: var(--muted); font-size: var(--fs-micro); }
+
+/* ---------- Bare icon button ----------
+
+   A close X, a clear-the-field cross, a stepper arrow. Quiet until the cursor reaches it,
+   which is what stops a toolbar of them reading as clutter. Distinct from
+   `iconButton()`/`.vl-btn--icon`, which is a real button with a border and a fill. */
+.vl-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color var(--dur-hover) var(--ease-standard),
+    background-color var(--dur-hover) var(--ease-standard);
+}
+.vl-icon-btn:hover:not(:disabled) { color: var(--text); background: var(--panel-2); }
+.vl-icon-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-icon-btn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+
+/* ---------- Number field row ----------
+   The input and its unit suffix. The unit is a sibling, not text inside the input, so it
+   cannot be typed over or accidentally parsed as part of the value. */
+.vl-number-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vl-number-row input[type='number'] {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: var(--radius-field);
+  padding: var(--field-pad-y) var(--field-pad-x);
+  font: inherit;
+  font-size: var(--field-fs);
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    box-shadow var(--dur-hover) var(--ease-standard);
+}
+.vl-number-row input[type='number']:hover:not(:disabled):not(:focus) { border-color: var(--accent); }
+.vl-number-row input[type='number']:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.vl-number-row input[type='number']:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+.vl-number-unit {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--label-fs);
+}

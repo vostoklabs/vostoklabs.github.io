@@ -1,0 +1,40 @@
+{
+  "name": "foldbox",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Fold-up box generator — parametric folding-carton dielines for laser, blade and print-and-cut, with a live fold animation.",
+  "scripts": {
+    "dev": "vite --mode full",
+    "dev:print": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "build:full": "tsc -p tsconfig.json && vite build --mode full",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:net": "esbuild tests/net.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/net.mjs --log-level=error && node node_modules/.cache/net.mjs",
+    "test:export": "esbuild tests/export.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/export.mjs --log-level=error && node node_modules/.cache/export.mjs",
+    "test:fold": "esbuild tests/fold.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/fold.mjs --log-level=error && node node_modules/.cache/fold.mjs",
+    "test": "pnpm run test:net && pnpm run test:fold && pnpm run test:corners && pnpm run test:sink && pnpm run test:print && pnpm run test:thin && pnpm run test:hang && pnpm run test:export",
+    "demo": "esbuild scripts/demo.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/demo.mjs --log-level=error && node node_modules/.cache/demo.mjs",
+    "test:print": "esbuild tests/print.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/print.mjs --log-level=error && node node_modules/.cache/print.mjs",
+    "build:offline": "node ../../scripts/offline.mjs foldbox --mode full",
+    "test:corners": "esbuild tests/corners.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/corners.mjs --log-level=error && node node_modules/.cache/corners.mjs",
+    "test:thin": "esbuild tests/thin.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/thin.mjs --log-level=error && node node_modules/.cache/thin.mjs",
+    "test:sink": "esbuild tests/sink.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/sink.mjs --log-level=error && node node_modules/.cache/sink.mjs",
+    "test:hang": "esbuild tests/hang.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/hang.mjs --log-level=error && node node_modules/.cache/hang.mjs"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
+    "@vostok/viewer": "workspace:*",
+    "fflate": "^0.8.3",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.171.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

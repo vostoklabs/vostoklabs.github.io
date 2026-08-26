@@ -150,6 +150,16 @@ Next:
      the chrome measurements your app has to match.
   5. Ship: add the entry to generators.json and a build+copy step to
      .github/workflows/deploy.yml, or the hub card is a 404.
+
+The one rule that is easiest to break and hardest to undo:
+
+  Every control is a kit component. button(), iconButton(), buttonRow(),
+  toggleSwitch(), sliderRow(), segmentedControl(), selectField(), dpad(),
+  dropZone(), dialog(), toast(). Never a bare <button>, and never
+  el('button', { className: 'vl-btn' }) — a class ladder is not a component,
+  which is how the catalogue grew 163 hand-built buttons wearing class names
+  the kit has never defined. If the kit cannot express your control, widen the
+  kit; the answer is never a local class. \`pnpm check:ui\` enforces it.
 `);
 
 // ---------------------------------------------------------------------------

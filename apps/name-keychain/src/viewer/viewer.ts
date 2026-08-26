@@ -8,6 +8,14 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createBuildPlate, type BuildPlate } from '@vostok/plates/three';
 import { loadPlateChoice, type PlateChoice } from '@vostok/plates';
+import { themeColorHex } from '@vostok/ui-kit';
+
+/* Scene background = the `--bg` token, read live. These two literals used to be written out
+   by hand here and in four sibling files; they are `--bg` in each theme, so the viewport
+   matched the chrome only by coincidence. `themeColorHex` resolves the current theme itself,
+   so this needs no theme argument. */
+const sceneBg = () => themeColorHex('--bg', 0x15171c);
+
 
 interface PartMesh {
   name: string;
@@ -35,7 +43,7 @@ export function createViewer(container: HTMLElement): Viewer {
 
   const scene = new THREE.Scene();
   const currentTheme = (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark';
-  scene.background = new THREE.Color(currentTheme === 'dark' ? 0x15171c : 0xf3f4f6);
+  scene.background = new THREE.Color(sceneBg());
 
   const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
   camera.up.set(0, 0, 1); // Z-up CAD coordinate system
@@ -165,7 +173,7 @@ export function createViewer(container: HTMLElement): Viewer {
     },
 
     setTheme(theme: 'dark' | 'light') {
-      scene.background = new THREE.Color(theme === 'dark' ? 0x15171c : 0xf3f4f6);
+      scene.background = new THREE.Color(sceneBg());
       buildPlate.setTheme(theme);
     },
 

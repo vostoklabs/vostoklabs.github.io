@@ -19,6 +19,7 @@ import {
   stageStatus,
   sliderRow,
   toggleSwitch,
+  button,
   toast,
   dialog,
   openLicenseModal,
@@ -156,9 +157,37 @@ const shapeSection = collapsibleSection({
   body: [controls.width, controls.height, controls.thickness, controls.radius],
 });
 
+/*
+  A button — and the single most important line in this file to copy.
+
+  It comes from the kit. `.vl-btn` and its whole ladder (primary, secondary, ghost, icon,
+  block, busy) have been in the kit's base.css since it shipped, but for a long time there
+  was no `button()`, so every app wrote its own `<button>` and tried to remember the class
+  by hand. Mostly they did not: the catalogue is full of `class="tab"`, `class="primary"`
+  and `class="switch-pad-btn"`, none of which the kit defines, which is why fixing one
+  button never once fixed the others.
+
+  So: never hand-write a control. `button`, `iconButton`, `buttonRow`, `toggleSwitch`,
+  `sliderRow`, `segmentedControl`, `selectField`, `dpad`, `dropZone`, `dialog`, `toast`.
+  If the kit cannot express what you need, widen the kit — do not style your way around
+  it here. `pnpm check:ui` fails the build the moment a hand-built one appears.
+*/
+const resetButton = button({
+  label: 'Reset to defaults',
+  emphasis: 'secondary',
+  icon: ICONS.rotateLeft,
+  block: true,
+  onClick: () => {
+    settings = { ...DEFAULT_SETTINGS };
+    syncControls();
+    triggerRebuild(true);
+    toast('Settings reset', { kind: 'ok' });
+  },
+});
+
 const detailSection = collapsibleSection({
   title: '2 · Details',
-  body: [controls.hole, controls.rim, controls.rimWidth],
+  body: [controls.hole, controls.rim, controls.rimWidth, resetButton],
 });
 
 // ---------------------------------------------------------------------------

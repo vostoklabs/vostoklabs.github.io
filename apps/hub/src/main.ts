@@ -5,7 +5,7 @@ import '@vostok/ui-kit/styles.css';
 import './hub.css';
 
 import { BRAND } from '@vostok/brand';
-import { el, openCommercialModal, segmentedControl, supportLinks, ICONS, svgEl } from '@vostok/ui-kit';
+import { el, button, openCommercialModal, segmentedControl, supportLinks, textField, ICONS, svgEl } from '@vostok/ui-kit';
 import registryData from '../../../generators.json';
 import type { Registry } from './registry';
 import { generatorCard, sellerToolCard } from './cards';
@@ -50,11 +50,10 @@ function buildNav(): HTMLElement {
 
   // Same behavior as the app topbar's commercial button: open the kit's
   // two-lane license modal rather than jumping straight off-site.
-  const cta = el('button', {
+  const cta = button({
+    label: 'Get Commercial License',
     className: 'hub-nav__cta',
-    text: 'Get Commercial License',
-    attrs: { type: 'button' },
-    on: { click: () => openCommercialModal() },
+    onClick: () => openCommercialModal(),
   });
 
   const inner = el('div', { className: 'hub-nav__inner hub-container' }, [logoLink, links, cta]);
@@ -175,23 +174,21 @@ function buildCatalog(): HTMLElement {
   ]);
 
   // Search box: filters visible cards by name/blurb, live as you type.
-  const searchInput = el('input', {
-    className: 'hub-search__input',
-    attrs: {
-      type: 'search',
-      placeholder: 'Search generators & tools…',
-      'aria-label': 'Search generators and tools',
-      autocomplete: 'off',
-      spellcheck: 'false',
+  const searchField = textField({
+    label: 'Search generators and tools',
+    type: 'search',
+    placeholder: 'Search generators & tools…',
+    onInput: (value) => {
+      query = value.trim();
+      render();
     },
-  }) as HTMLInputElement;
-  searchInput.addEventListener('input', () => {
-    query = searchInput.value.trim();
-    render();
   });
+  // Not exposed by textField()'s options — set directly on the underlying input.
+  searchField.field.autocomplete = 'off';
+  searchField.field.spellcheck = false;
   const search = el('div', { className: 'hub-search' }, [
     svgEl(ICONS.search),
-    searchInput,
+    searchField,
   ]);
 
   render();

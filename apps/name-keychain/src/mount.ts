@@ -24,6 +24,15 @@ import {
   hostAssetUrl,
   bindExternalLinks,
   chooseFile,
+  button,
+  chip,
+  listRow,
+  section,
+  filamentRow,
+  symbolPickerButton,
+  uploadCta,
+  textField,
+  type SymbolItem,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { unzipSync } from 'fflate';
@@ -189,50 +198,50 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     { name: 'Peace', char: '\uf67c' },
   ];
 
-  const emojiGrid = el('div', { className: 'nk-emoji-grid', attrs: { style: 'display: none;' } }, 
-    FA_ICONS.map(icon => {
-      const btn = el('button', { 
-        className: 'nk-emoji-btn', 
-        text: icon.char,
-        attrs: { title: icon.name, style: 'font-family: VL-icon-fallback;' } // Use the fallback font explicitly in UI
-      });
-      // Clicking the button blurs the text field, so the caret has to be captured
-      // on pointerdown — by click time document.activeElement is the button and the
-      // selection offsets are gone. Without this the symbol could only ever land at
-      // the very end of the line.
-      let target = nameInput;
-      let caret = { start: nameInput.value.length, end: nameInput.value.length };
-      btn.addEventListener('pointerdown', () => {
-        const active = document.activeElement === secondInput ? secondInput : nameInput;
-        target = active;
-        caret = {
-          start: active.selectionStart ?? active.value.length,
-          end: active.selectionEnd ?? active.value.length,
-        };
-      });
-      btn.addEventListener('click', () => {
-        const { value } = target;
-        target.value = value.slice(0, caret.start) + icon.char + value.slice(caret.end);
-        // Leave the caret after what was just inserted so symbols can be typed in a
-        // row, and keep focus in the field the user was editing.
-        const next = caret.start + icon.char.length;
-        target.focus();
-        target.setSelectionRange(next, next);
-        caret = { start: next, end: next };
-        target.dispatchEvent(new Event('input'));
-      });
-      return btn;
-    })
-  );
+  const SYMBOL_ITEMS: SymbolItem[] = FA_ICONS.map((icon) => ({
+    id: icon.name.toLowerCase().replace(/\s+/g, '-'),
+    label: icon.name,
+    char: icon.char,
+  }));
 
-  const emojiToggle = el('button', { 
+  // Clicking the trigger blurs the text field, so the caret has to be captured on
+  // pointerdown — by click time document.activeElement is the button and the
+  // selection offsets are gone. Without this the symbol could only ever land at
+  // the very end of the line.
+  let symbolTarget = nameInput;
+  let symbolCaret = { start: nameInput.value.length, end: nameInput.value.length };
+  function captureSymbolCaret() {
+    const active = document.activeElement === secondInput ? secondInput : nameInput;
+    symbolTarget = active;
+    symbolCaret = {
+      start: active.selectionStart ?? active.value.length,
+      end: active.selectionEnd ?? active.value.length,
+    };
+  }
+
+  const emojiToggle = symbolPickerButton({
+    items: SYMBOL_ITEMS,
+    fontFamily: fontFamilyFor(FALLBACK_FONT_ID),
+    label: 'Insert Symbol',
     className: 'vl-btn vl-btn--secondary nk-emoji-toggle',
-    text: 'Insert Symbol'
+    title: 'Insert a symbol',
+    // A modal, not the default drawer: unmount only closes dialogs opened through
+    // `dialog()` (see the teardown at the bottom), and a stray drawer would leak.
+    placement: 'modal',
+    stayOpen: true,
+    onPick: (item) => {
+      const { value } = symbolTarget;
+      symbolTarget.value = value.slice(0, symbolCaret.start) + item.char + value.slice(symbolCaret.end);
+      // Leave the caret after what was just inserted so symbols can be typed in a
+      // row, and keep focus in the field the user was editing.
+      const next = symbolCaret.start + item.char.length;
+      symbolTarget.focus();
+      symbolTarget.setSelectionRange(next, next);
+      symbolCaret = { start: next, end: next };
+      symbolTarget.dispatchEvent(new Event('input'));
+    },
   });
-  emojiToggle.addEventListener('click', () => {
-    const isHidden = emojiGrid.style.display === 'none';
-    emojiGrid.style.display = isHidden ? 'grid' : 'none';
-  });
+  emojiToggle.addEventListener('pointerdown', captureSymbolCaret);
 
   const fontGrid = el('div', { className: 'nk-font-grid' });
   const stage = el('section', { className: 'nk-stage' });
@@ -336,15 +345,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       hideStatus();
       toast(e instanceof Error ? e.message : 'Error preparing geometry', { kind: 'error' });
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // UI Setup & Rendering
-  // ---------------------------------------------------------------------------
-  function colorField(label: string, value: string, onInput: (value: string) => void): HTMLElement {
-    const input = el('input', { attrs: { type: 'color', value, 'aria-label': label } });
-    input.addEventListener('input', () => onInput(input.value));
-    return el('label', { className: 'nk-color' }, [el('span', { text: label }), input]);
   }
 
   // ---------------------------------------------------------------------------
@@ -499,20 +499,32 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onChange: (v) => { state.printMode = v; updateControlsVisibility(); refreshNoAmsReadout(); triggerRebuild(); },
   });
 
-  const plateColorField = colorField('Plate', state.plate, (value) => {
-    state.plate = value;
-    if (viewer) viewer.setPartColor('plate', value);
-    triggerRebuild();
+  const plateColorField = filamentRow({
+    label: 'Plate',
+    value: state.plate,
+    onChange: (value) => {
+      state.plate = value;
+      if (viewer) viewer.setPartColor('plate', value);
+      triggerRebuild();
+    },
   });
-  const haloColorField = colorField('Halo', state.halo, (value) => {
-    state.halo = value;
-    if (viewer) viewer.setPartColor('halo', value);
-    triggerRebuild();
+  const haloColorField = filamentRow({
+    label: 'Halo',
+    value: state.halo,
+    onChange: (value) => {
+      state.halo = value;
+      if (viewer) viewer.setPartColor('halo', value);
+      triggerRebuild();
+    },
   });
-  const textColorField = colorField('Text', state.text, (value) => {
-    state.text = value;
-    if (viewer) viewer.setPartColor('text', value);
-    triggerRebuild();
+  const textColorField = filamentRow({
+    label: 'Text',
+    value: state.text,
+    onChange: (value) => {
+      state.text = value;
+      if (viewer) viewer.setPartColor('text', value);
+      triggerRebuild();
+    },
   });
 
   function updateControlsVisibility() {
@@ -610,10 +622,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     let cat = 'All';
     const categories = ['All', ...Array.from(new Set(FONTS.map((f) => f.category))).sort()];
 
-    const searchInput = el('input', {
-      className: 'nk-fb__search',
-      attrs: { type: 'search', placeholder: `Search ${FONTS.length} fonts…`, 'aria-label': 'Search fonts' },
-    }) as HTMLInputElement;
+    const searchField = textField({
+      label: 'Search',
+      type: 'search',
+      placeholder: `Search ${FONTS.length} fonts…`,
+      onInput: (value) => { search = value; render(); },
+    });
     const chips = el('div', { className: 'nk-fb__chips' });
     const list = el('div', { className: 'nk-fb__list' });
 
@@ -669,21 +683,24 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
     }
 
+    const catChips: ReturnType<typeof chip>[] = [];
     for (const c of categories) {
-      const chip = el('button', { className: `nk-fb__chip${c === cat ? ' active' : ''}`, text: c, attrs: { type: 'button' } });
-      chip.addEventListener('click', () => {
-        cat = c;
-        for (const other of chips.querySelectorAll('button')) other.classList.toggle('active', other === chip);
-        render();
+      const catChip = chip({
+        label: c,
+        pressed: c === cat,
+        onToggle: () => {
+          cat = c;
+          for (const other of catChips) other.setPressed(other === catChip);
+          render();
+        },
       });
-      chips.append(chip);
+      catChips.push(catChip);
+      chips.append(catChip);
     }
-    searchInput.addEventListener('input', () => { search = searchInput.value; render(); });
-
-    const content = el('div', { className: 'nk-fontmodal' }, [searchInput, chips, list]);
+    const content = el('div', { className: 'nk-fontmodal' }, [searchField, chips, list]);
     const handle = dialog({ title: 'Choose a font', content });
     render();
-    searchInput.focus();
+    searchField.field.focus();
   }
 
   /**
@@ -809,22 +826,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const handle = dialog({ title: 'Open a project', content: list });
 
     for (const p of projects) {
-      const row = el('button', {
-        className: 'vl-btn vl-btn--secondary nk-project-row',
-        attrs: { type: 'button' },
-      });
-      if (p.preview) {
-        row.append(el('img', {
-          className: 'nk-project-thumb',
-          attrs: { src: convertPreviewSrc(p.preview), alt: '' },
-        }));
-      }
-      row.append(el('span', { text: p.name }));
-      row.addEventListener('click', () => {
-        handle.close();
-        void openProject(p.id);
-      });
-      list.append(row);
+      list.append(listRow({
+        label: p.name,
+        thumb: p.preview ? convertPreviewSrc(p.preview) : undefined,
+        onClick: () => {
+          handle.close();
+          void openProject(p.id);
+        },
+      }));
     }
   }
 
@@ -943,26 +952,29 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     triggerRebuild();
   });
 
-  const browseFontsBtn = el('button', {
+  const browseFontsBtn = button({
+    label: `Browse all ${FONTS.length} fonts →`,
     className: 'nk-browse-fonts',
-    text: `Browse all ${FONTS.length} fonts →`,
-    attrs: { type: 'button' },
+    onClick: openFontBrowser,
   });
-  browseFontsBtn.addEventListener('click', openFontBrowser);
 
-  const importFontBtn = el('button', {
-    className: 'nk-browse-fonts',
-    text: `Import custom font (.ttf/.otf/.zip)`,
-    attrs: { type: 'button', style: 'margin-top: 8px;' },
+  // `uploadCta()` owns its own hidden file input. The host's library goes first when
+  // there is one: a typeface imported for one keychain is the most likely answer for
+  // the next. Its click is intercepted before the label opens the hidden input — the
+  // same interception the magnet generator's font import uses — and `onFiles` alone
+  // serves the no-host path.
+  const importFontCta = uploadCta({
+    label: `Import custom font (.ttf/.otf/.zip)`,
+    accept: '.ttf,.otf,.zip',
+    onFiles: (files) => {
+      const f = files[0];
+      if (f) void handleFontFiles(f);
+    },
   });
-  const fileInput = el('input', {
-    attrs: { type: 'file', accept: '.ttf,.otf,.zip', style: 'display: none;' }
-  });
-  // The host's library first, when there is one: a typeface imported for one keychain is
-  // the most likely answer for the next. The hidden input is the fallback, and the change
-  // handler below serves both paths because `chooseFile` hands back a real File.
-  importFontBtn.addEventListener('click', () => {
-    void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'zip'] }, () => fileInput.click())
+  importFontCta.addEventListener('click', (e) => {
+    if (!host?.pickMedia) return;
+    e.preventDefault();
+    void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'zip'] }, () => {})
       .then((f) => { if (f) void handleFontFiles(f); });
   });
 
@@ -1036,46 +1048,41 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   }
 
-  fileInput.addEventListener('change', (e) => {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    // Cleared before the await, so re-picking the same file still fires even if the import
-    // is slow.
-    input.value = '';
-    if (file) void handleFontFiles(file);
+  // Advanced tuning. The inner `nk-advanced__body` div keeps its own indented,
+  // bordered look (see style.css) as the one child of the kit's section body.
+  const advanced = section({
+    title: 'Advanced (Fine-tuning)',
+    body: [
+      el('div', { className: 'nk-advanced__body' }, [
+        sliderRow({
+          label: 'Text thickness', min: 0.6, max: 4.0, step: 0.2, value: state.textThickness, unit: 'mm',
+          onInput: (v) => { state.textThickness = v; triggerRebuild(); },
+        }),
+        sliderRow({
+          label: 'Border outline width', min: 0.5, max: 6.0, step: 0.1, value: state.outlineWidth, unit: 'mm',
+          help: 'How much plate sticks out around the letters (the coloured border of the keychain).',
+          onInput: (v) => { state.outlineWidth = v; triggerRebuild(); },
+        }),
+        sliderRow({
+          label: 'Plate thickness', min: 1.0, max: 4.0, step: 0.2, value: state.baseThickness, unit: 'mm',
+          help: 'Overall thickness of the backing plate.',
+          onInput: (v) => { state.baseThickness = v; refreshNoAmsReadout(); triggerRebuild(); },
+        }),
+        sliderRow({
+          label: 'Loop thickness', min: 1.0, max: 6.0, step: 0.2, value: state.ringThickness, unit: 'mm',
+          help: 'How chunky the keyring loop is (material around the hole).',
+          onInput: (v) => { state.ringThickness = v; triggerRebuild(); },
+        }),
+        haloWidthSlider,
+        haloThicknessSlider,
+      ]),
+    ],
   });
-
-  // Advanced tuning.
-  const advanced = el('div', { className: 'vl-section nk-advanced' }, [
-    el('p', { className: 'vl-label', text: 'Advanced (Fine-tuning)' }),
-    el('div', { className: 'nk-advanced__body' }, [
-      sliderRow({
-        label: 'Text thickness', min: 0.6, max: 4.0, step: 0.2, value: state.textThickness, unit: 'mm',
-        onInput: (v) => { state.textThickness = v; triggerRebuild(); },
-      }),
-      sliderRow({
-        label: 'Border outline width', min: 0.5, max: 6.0, step: 0.1, value: state.outlineWidth, unit: 'mm',
-        help: 'How much plate sticks out around the letters (the coloured border of the keychain).',
-        onInput: (v) => { state.outlineWidth = v; triggerRebuild(); },
-      }),
-      sliderRow({
-        label: 'Plate thickness', min: 1.0, max: 4.0, step: 0.2, value: state.baseThickness, unit: 'mm',
-        help: 'Overall thickness of the backing plate.',
-        onInput: (v) => { state.baseThickness = v; refreshNoAmsReadout(); triggerRebuild(); },
-      }),
-      sliderRow({
-        label: 'Loop thickness', min: 1.0, max: 6.0, step: 0.2, value: state.ringThickness, unit: 'mm',
-        help: 'How chunky the keyring loop is (material around the hole).',
-        onInput: (v) => { state.ringThickness = v; triggerRebuild(); },
-      }),
-      haloWidthSlider,
-      haloThicknessSlider,
-    ]),
-  ]);
+  advanced.classList.add('nk-advanced');
 
   // Dismissable "best print quality" callout — returns null once the user has closed it.
   const qualityCard = qualityCallout({
-    html: 'For the best quality printed keychain, please use the print profile and instructions available on <a href="https://makerworld.com/en/@Vostok_Labs" target="_blank" rel="noopener">MakerWorld</a>.',
+    html: `For the best quality printed keychain, please use the print profile and instructions available on <a href="${BRAND.urls.makerworld}" target="_blank" rel="noopener">MakerWorld</a>.`,
     storageKey: 'nk-quality-callout',
   });
 
@@ -1086,120 +1093,120 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }),
     ...(qualityCard ? [qualityCard] : []),
     // Text
-    el('div', { className: 'vl-section' }, [
-      el('p', { className: 'vl-label', text: 'Text' }),
-      nameInput,
-      secondInput,
-      emojiToggle,
-      emojiGrid,
-      line2AlignControl,
-    ]),
+    section({
+      title: 'Text',
+      body: [
+        nameInput,
+        secondInput,
+        emojiToggle,
+        line2AlignControl,
+      ],
+    }),
 
     // Layout & style
-    el('div', { className: 'vl-section' }, [
-      el('p', { className: 'vl-label', text: 'Layout & style' }),
-      segmentedControl<Layout>({
-        label: 'Layout',
-        help: 'Letters in a row (Horizontal) or stacked in a column under the ring (Vertical).',
-        value: state.layout,
-        options: [{ value: 'horizontal', label: 'Horizontal' }, { value: 'vertical', label: 'Vertical' }],
-        onChange: (value) => { state.layout = value; updateControlsVisibility(); triggerRebuild(); }
-      }),
-      segmentedControl<LetterStyle>({
-        label: 'Letter style',
-        help: 'Raised = letters stand up off the plate. Engraved = letters are inlaid flush into the plate.',
-        value: state.style,
-        options: [{ value: 'raised', label: 'Raised' }, { value: 'engraved', label: 'Engraved' }],
-        onChange: (value) => { state.style = value; updateControlsVisibility(); triggerRebuild(); }
-      }),
-      segmentedControl<'outline' | 'rectangle'>({
-        label: 'Plate shape',
-        help: 'Outline hugs the letters like a sticker; Rectangle is a plain rounded rectangle behind them.',
-        value: state.plateShape,
-        options: [{ value: 'outline', label: 'Outline' }, { value: 'rectangle', label: 'Rectangle' }],
-        onChange: (value) => { state.plateShape = value; triggerRebuild(); }
-      }),
-      smoothingSlider,
-      chamferToggle,
-      chamferSlider,
-    ]),
+    section({
+      title: 'Layout & style',
+      body: [
+        segmentedControl<Layout>({
+          label: 'Layout',
+          help: 'Letters in a row (Horizontal) or stacked in a column under the ring (Vertical).',
+          value: state.layout,
+          options: [{ value: 'horizontal', label: 'Horizontal' }, { value: 'vertical', label: 'Vertical' }],
+          onChange: (value) => { state.layout = value; updateControlsVisibility(); triggerRebuild(); }
+        }),
+        segmentedControl<LetterStyle>({
+          label: 'Letter style',
+          help: 'Raised = letters stand up off the plate. Engraved = letters are inlaid flush into the plate.',
+          value: state.style,
+          options: [{ value: 'raised', label: 'Raised' }, { value: 'engraved', label: 'Engraved' }],
+          onChange: (value) => { state.style = value; updateControlsVisibility(); triggerRebuild(); }
+        }),
+        segmentedControl<'outline' | 'rectangle'>({
+          label: 'Plate shape',
+          help: 'Outline hugs the letters like a sticker; Rectangle is a plain rounded rectangle behind them.',
+          value: state.plateShape,
+          options: [{ value: 'outline', label: 'Outline' }, { value: 'rectangle', label: 'Rectangle' }],
+          onChange: (value) => { state.plateShape = value; triggerRebuild(); }
+        }),
+        smoothingSlider,
+        chamferToggle,
+        chamferSlider,
+      ],
+    }),
 
     // Typography
-    el('div', { className: 'vl-section' }, [
-      el('p', { className: 'vl-label', text: 'Typography' }),
-      boldnessSlider,
-      letterSpacingSlider,
-      lineSpacingSlider,
-      line2ScaleSlider,
-    ]),
+    section({
+      title: 'Typography',
+      body: [boldnessSlider, letterSpacingSlider, lineSpacingSlider, line2ScaleSlider],
+    }),
 
     // Colours
-    el('div', { className: 'vl-section' }, [
-      el('p', { className: 'vl-label', text: 'Colours' }),
-      selectField({
-        label: 'Colour scheme',
-        help: 'Single = one filament. 2 colours adds a separate name colour. 3 colours adds a coloured outline (halo) around the name.',
-        value: state.colorScheme,
-        options: [
-          { value: 'single', label: 'Single colour' },
-          { value: 'plate-text', label: '2 colours (Plate + Name)' },
-          { value: 'plate-halo-text', label: '3 colours (Plate + Name + Outline)' },
-        ],
-        onChange: (value) => {
-          state.colorScheme = value as 'single' | 'plate-text' | 'plate-halo-text';
-          state.haloOn = value === 'plate-halo-text';
-          updateControlsVisibility();
-          triggerRebuild();
-        }
-      }),
-      el('div', { className: 'nk-colors' }, [
+    section({
+      title: 'Colours',
+      body: [
+        selectField({
+          label: 'Colour scheme',
+          help: 'Single = one filament. 2 colours adds a separate name colour. 3 colours adds a coloured outline (halo) around the name.',
+          value: state.colorScheme,
+          options: [
+            { value: 'single', label: 'Single colour' },
+            { value: 'plate-text', label: '2 colours (Plate + Name)' },
+            { value: 'plate-halo-text', label: '3 colours (Plate + Name + Outline)' },
+          ],
+          onChange: (value) => {
+            state.colorScheme = value as 'single' | 'plate-text' | 'plate-halo-text';
+            state.haloOn = value === 'plate-halo-text';
+            updateControlsVisibility();
+            triggerRebuild();
+          }
+        }),
         plateColorField,
         haloColorField,
         textColorField,
-      ]),
-    ]),
+      ],
+    }),
 
     // Size & keyring
-    el('div', { className: 'vl-section' }, [
-      el('p', { className: 'vl-label', text: 'Size & keyring' }),
-      sliderRow({
-        label: 'Text size', min: 10, max: 28, value: state.size, unit: 'mm',
-        onInput: (value) => { state.size = value; triggerRebuild(); }
-      }),
-      segmentedControl<'loop' | 'corner'>({
-        label: 'Keyring',
-        help: 'Loop Tab adds a protruding tab with a hole; Corner Hole punches the hole into the top corner of the name.',
-        value: state.ringStyle,
-        options: [{ value: 'loop', label: 'Loop Tab' }, { value: 'corner', label: 'Corner Hole' }],
-        onChange: (val) => { state.ringStyle = val; triggerRebuild(); }
-      }),
-      sliderRow({
-        label: 'Hole diameter', min: 2.0, max: 8.0, step: 0.5, value: state.holeDia, unit: 'mm',
-        help: 'Diameter of the keyring hole. Match your split ring or clip.',
-        onInput: (v) => { state.holeDia = v; triggerRebuild(); }
-      }),
-      ringAngleSlider,
-      el('div', { className: 'nk-nudge' }, [
-        el('span', { className: 'vl-hint', text: 'Nudge loop position' }),
-        holeDpad.root,
-      ]),
-    ]),
+    section({
+      title: 'Size & keyring',
+      body: [
+        sliderRow({
+          label: 'Text size', min: 10, max: 28, value: state.size, unit: 'mm',
+          onInput: (value) => { state.size = value; triggerRebuild(); }
+        }),
+        segmentedControl<'loop' | 'corner'>({
+          label: 'Keyring',
+          help: 'Loop Tab adds a protruding tab with a hole; Corner Hole punches the hole into the top corner of the name.',
+          value: state.ringStyle,
+          options: [{ value: 'loop', label: 'Loop Tab' }, { value: 'corner', label: 'Corner Hole' }],
+          onChange: (val) => { state.ringStyle = val; triggerRebuild(); }
+        }),
+        sliderRow({
+          label: 'Hole diameter', min: 2.0, max: 8.0, step: 0.5, value: state.holeDia, unit: 'mm',
+          help: 'Diameter of the keyring hole. Match your split ring or clip.',
+          onInput: (v) => { state.holeDia = v; triggerRebuild(); }
+        }),
+        ringAngleSlider,
+        el('div', { className: 'nk-nudge' }, [
+          el('span', { className: 'vl-hint', text: 'Nudge loop position' }),
+          holeDpad.root,
+        ]),
+      ],
+    }),
 
     // Advanced (collapsed)
     advanced,
 
     // Reset everything to defaults (reloads at the clean URL so every control resets).
     el('div', { className: 'vl-section nk-reset-section' }, [
-      el('button', {
-        className: 'vl-btn vl-btn--secondary nk-reset-btn',
-        text: 'Reset all settings',
-        attrs: { type: 'button' },
-        on: {
-          click: () => {
-            if (window.confirm('Reset all settings to their defaults? Your current design will be cleared.')) {
-              window.location.href = window.location.pathname;
-            }
-          },
+      button({
+        label: 'Reset all settings',
+        emphasis: 'secondary',
+        className: 'nk-reset-btn',
+        onClick: () => {
+          if (window.confirm('Reset all settings to their defaults? Your current design will be cleared.')) {
+            window.location.href = window.location.pathname;
+          }
         },
       }),
     ]),
@@ -1215,8 +1222,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       el('p', { className: 'vl-label', text: 'Font' }),
       fontGrid,
       browseFontsBtn,
-      importFontBtn,
-      fileInput,
+      importFontCta,
     ]),
   ]);
 

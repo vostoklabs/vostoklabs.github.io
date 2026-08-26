@@ -7,7 +7,7 @@ import {
   appShell, topbarLinks, generatorHeader, qualityCallout, section, collapsibleSection, sampleGrid,
   sliderRow, toggleSwitch, segmentedControl, sidebarFooter, stageStatus,
   filamentRow, contrastRatio,
-  toast, dialog, openLicenseModal, licenseReminderToast, el,
+  toast, dialog, openLicenseModal, licenseReminderToast, el, button,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
@@ -676,11 +676,10 @@ fontUpload.addEventListener('change', async () => {
   }
 });
 
-const fontUploadBtn = el('button', {
-  className: 'vl-btn hn-wide',
-  text: 'Use a font from your computer',
-  attrs: { type: 'button' },
-  on: { click: () => fontUpload.click() },
+const fontUploadBtn = button({
+  label: 'Use a font from your computer',
+  className: 'hn-wide',
+  onClick: () => fontUpload.click(),
 });
 
 /* ── 5 · Examples ───────────────────────────────────────────────────────────── */

@@ -193,6 +193,25 @@ export function generatorApps() {
     .map((e) => e.name);
 }
 
+/*
+  Compare the TEXT, not the bytes.
+
+  `core.autocrlf=true` is the default on Windows, so git stores LF and checks out CRLF —
+  while this script writes LF. A tracked LICENSE.md therefore comes back off a Windows
+  checkout differing from `licenseMarkdown()` in all 86 of its newlines and nothing else,
+  and `--check` called it OUT OF DATE. Seven of the ten reported stale on 2026-08-26; all
+  seven were byte-identical apart from the line endings, and the only three that passed
+  were the three not yet tracked — foldbox, laser-slot and pen-topper, still sitting where
+  the script had written them. Committing foldbox and pen-topper would have taken that
+  three to one.
+
+  It ran green in CI (ubuntu, no autocrlf) and red on the machine the repo is written on,
+  which is the wrong way round for a check nobody can act on: `pnpm gen:licenses` rewrote
+  the files to LF, git normalised them straight back on `add`, and the next checkout
+  restored the CRLF. A line ending is not a licence change.
+*/
+const sameText = (a, b) => a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n');
+
 function main() {
   const check = process.argv.includes('--check');
   const rows = [];
@@ -206,7 +225,7 @@ function main() {
     const current = existsSync(path) ? readFileSync(path, 'utf8') : null;
 
     if (check) {
-      const state = current === null ? 'MISSING' : current === wanted ? 'ok' : 'OUT OF DATE';
+      const state = current === null ? 'MISSING' : sameText(current, wanted) ? 'ok' : 'OUT OF DATE';
       if (state !== 'ok') stale.push(`apps/${id}/LICENSE.md — ${state}`);
       rows.push(`  ${state.padEnd(11)} apps/${id}/LICENSE.md`);
       continue;

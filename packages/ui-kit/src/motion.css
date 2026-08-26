@@ -1,0 +1,161 @@
+/* The motion layer — durations, easings and the scalars that reduced-motion switches off.
+
+   This is the upstream half of the craft pass done in the Opal suite. Its spike
+   (`docs/craft-lab/ui-kit-juiced/` over there) deliberately left this kit's hand-typed
+   durations alone, because that tree is vendored and a re-sync would overwrite it — its
+   README says so, and calls tokenising them "upstream work that returns through
+   `pnpm sync:generators`". This is that work returning.
+
+   What it replaces: seven distinct durations across two unit systems (0.06s, 0.1s, 0.12s,
+   0.15s, 0.18s, 0.3s, 90ms), and eleven of eighteen transitions that named no easing at all
+   and therefore got the browser default `ease` — which starts slow, and is why a control
+   could feel sluggish and abrupt at the same time. A control now picks a *tier*, not a
+   number.
+
+   Values are taken from published systems rather than chosen by taste. IBM Carbon's
+   productive set is the spine, because Carbon explicitly forbids curves that "suggest bounce,
+   stretch, or sudden stops" — the right register for a CAD-adjacent tool. See the Opal
+   suite's `docs/CRAFT.md` Part 1.5 for the full derivation and the research behind the
+   dose curve — juice has a measured inverted-U, and extreme juiciness tests no better than
+   none at all.
+
+   Declared on bare `:root` so it reaches dialogs and toasts too — those are appended to
+   `document.body`, outside `.vl-app`. */
+
+:root {
+  /* --------------------------------------------------------------------- durations */
+
+  /* Pointer-down feedback only: press scale. WinUI's ControlFasterAnimationDuration is
+     83ms, so 70 reads as at-or-faster-than the OS this mostly runs on. */
+  --dur-press: 70ms;
+
+  /* Colour, border and background under the cursor. Carbon fast-02. This one token
+     replaces every 0.12s and 0.15s in the kit. */
+  --dur-hover: 110ms;
+
+  /* Small surfaces arriving and leaving: help bubble, menu, dropdown, chevron. Carbon
+     moderate-01, Fluent durationFast and Atlassian's dropdown entrance all land on 150ms —
+     three independent systems agreeing makes it the safest tier in the ladder. */
+  --dur-in-sm: 150ms;
+  --dur-out-sm: 90ms;
+
+  /* Panels, disclosure bodies, the segmented indicator's travel. Fluent's shipped
+     enter/exit pair. */
+  --dur-in-md: 200ms;
+  --dur-out-md: 150ms;
+
+  /* Modal and scrim. Carbon moderate-02, and it brackets WinUI's
+     ControlNormalAnimationDuration of 250ms — the ceiling check, since no chrome
+     transition should be slower than the OS it sits inside. */
+  --dur-in-lg: 240ms;
+  --dur-out-lg: 150ms;
+
+  /* The one spinner period. */
+  --dur-spin: 1s;
+
+  /* ---------------------------------------------------------------------- easings */
+
+  /* The workhorse — roughly 80% of transitions. Anything on screen both before and after
+     the change: colour, border, background, resize. Carbon productive. */
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+
+  /* Anything appearing. The zero first control point means it leaves at full speed and
+     decelerates, so a 200ms entrance still feels instant at the front — which is where
+     perceived latency is actually measured. */
+  --ease-enter: cubic-bezier(0, 0, 0.38, 0.9);
+
+  /* Anything being removed. Ends at full speed and never arrives, which reads as
+     permanence. */
+  --ease-exit: cubic-bezier(0.2, 0, 1, 0.9);
+
+  /* Continuous indeterminate motion only. Easing a loop makes it pulse. */
+  --ease-linear: linear;
+
+  /* ---------------------------------------------------------------------- scalars
+
+     Tokens rather than hard-coded transforms for exactly one reason: it lets the
+     reduced-motion block below neutralise every press and lift in every generator by
+     changing two values, without rewriting a single rule. */
+
+  /* Uniform only — never squash, which implies a material these surfaces do not have. */
+  --press-scale: 0.97;
+  /* translateY on a card-like target. Never on a control that is clicked repeatedly. */
+  --hover-lift: -2px;
+
+  /* One value for "this control is not available", so a disabled button, select and
+     swatch cannot disagree about how dead they look. */
+  --opacity-disabled: 0.45;
+}
+
+/* ==========================================================================
+   REDUCED MOTION
+
+   This block removes movement. It does not remove feedback.
+
+   The widely-copied `animation: 0.01ms !important` reset is deliberately not used. It
+   over-delivers — Apple's own criteria permit dissolve, highlight-fade and colour shift
+   under Reduce Motion, and WCAG's definition of "motion animation" excludes opacity
+   outright — and it breaks things: with `transition: none`, `transitionend` never fires,
+   so any handler waiting on it deadlocks.
+
+   There is a practical reason to get this right too. Chromium maps this query to Windows'
+   SPI_GETCLIENTAREAANIMATION — the "Animation effects" switch — which a large share of
+   Windows users turn off for performance. They asked for a fast tool, not a stripped one.
+
+   So durations collapse to 1ms and the transform scalars go to zero, while overlay
+   crossfades survive at a reduced but non-zero duration. Note what is NOT clamped:
+   `animation-iteration-count`. The standard reset sets it to 1, which stops every spinner
+   after one rotation — so a long export ends up showing a frozen spinner, which reads as a
+   hang. That is a worse outcome than the motion, and a small rotating glyph is not a
+   vestibular trigger.
+   ========================================================================== */
+
+/* Three states, and the same `data-motion` vocabulary the Opal suite already ships, so a
+   setting made in one product means the same thing in the other:
+
+     (no attribute)         follow the OS. The default, and right for almost everyone.
+     data-motion="full"     force the juice ON even when the OS asks to reduce.
+     data-motion="reduced"  force it OFF regardless of what the OS says.
+
+   `full` exists because the OS switch is noisy: Chromium maps this query to Windows'
+   "Animation effects" toggle, which a lot of people turn off for performance rather than
+   for comfort, and some of them do want the motion in a design tool. It has to be
+   possible to say so.
+
+   The values below are duplicated rather than shared because CSS has no way to name a
+   block of declarations and apply it from two places. Keep the two lists identical. */
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) {
+    --dur-press: 1ms;
+    --dur-hover: 1ms;
+    --dur-in-sm: 1ms;
+    --dur-out-sm: 1ms;
+    --dur-in-md: 1ms;
+    --dur-out-md: 1ms;
+
+    /* Overlays keep a real crossfade: a modal that blinks into existence is harder to
+       follow than one that dissolves, and opacity is not what this setting protects
+       against. */
+    --dur-in-lg: 110ms;
+    --dur-out-lg: 70ms;
+
+    /* Movement, off. */
+    --press-scale: 1;
+    --hover-lift: 0px;
+  }
+}
+
+/* The same, chosen in the app rather than inherited from the OS. */
+:root[data-motion='reduced'] {
+  --dur-press: 1ms;
+  --dur-hover: 1ms;
+  --dur-in-sm: 1ms;
+  --dur-out-sm: 1ms;
+  --dur-in-md: 1ms;
+  --dur-out-md: 1ms;
+  --dur-in-lg: 110ms;
+  --dur-out-lg: 70ms;
+  --press-scale: 1;
+  --hover-lift: 0px;
+}

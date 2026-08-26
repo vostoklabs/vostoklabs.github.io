@@ -1,0 +1,386 @@
+// Small exact-ish 2D polygon helpers. No dependencies on purpose: a box net is a
+// few dozen straight-edged panels, and pulling a WASM kernel in to union them would
+// cost more than it buys. The one thing that has to be right is that shared corners
+// compare EQUAL, which is what `snap` is for.
+
+import type { Poly, Pt } from '../types';
+
+/** Grid the whole app rounds to. Fine enough that no real dimension lands on the
+ *  boundary between two cells, coarse enough that two panels built by different
+ *  code paths agree on a shared corner. */
+export const EPS = 1e-4;
+
+/** Ring access that wraps and never returns undefined. Ring code indexes past the
+ *  end constantly — `ring[(i + 1) % n]` is the shape of every loop in this file —
+ *  and under `noUncheckedIndexedAccess` that is a `Pt | undefined` at every site.
+ *  One accessor keeps the arithmetic readable instead of littered with `!`. */
+export function at(ring: Poly, i: number): Pt {
+  const n = ring.length;
+  return ring[((i % n) + n) % n] as Pt;
+}
+
+export function snap(v: number): number {
+  // +0 rather than -0: a leading minus on a zero coordinate reads as a bug in every
+  // exported file, and it also breaks string-keyed vertex identity.
+  const r = Math.round(v / EPS) * EPS;
+  return r === 0 ? 0 : r;
+}
+
+export function snapPt(p: Pt): Pt {
+  return [snap(p[0]), snap(p[1])];
+}
+
+export function key(p: Pt): string {
+  return `${snap(p[0])},${snap(p[1])}`;
+}
+
+export function eq(a: Pt, b: Pt): boolean {
+  return Math.abs(a[0] - b[0]) < EPS / 2 && Math.abs(a[1] - b[1]) < EPS / 2;
+}
+
+export function sub(a: Pt, b: Pt): Pt {
+  return [a[0] - b[0], a[1] - b[1]];
+}
+
+export function len(a: Pt): number {
+  return Math.hypot(a[0], a[1]);
+}
+
+export function dist(a: Pt, b: Pt): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+export function cross(a: Pt, b: Pt): number {
+  return a[0] * b[1] - a[1] * b[0];
+}
+
+export function dot(a: Pt, b: Pt): number {
+  return a[0] * b[0] + a[1] * b[1];
+}
+
+/** Positive for counter-clockwise. Manifold and every laser convention agree on
+ *  this sign, and the exporter uses it to tell an outer ring from a hole. */
+export function signedArea(ring: Poly): number {
+  let s = 0;
+  for (let i = 0, n = ring.length; i < n; i++) {
+    const a = at(ring, i);
+    const b = at(ring, i + 1);
+    s += a[0] * b[1] - b[0] * a[1];
+  }
+  return s / 2;
+}
+
+export function ensureCCW(ring: Poly): Poly {
+  return signedArea(ring) < 0 ? [...ring].reverse() : ring;
+}
+
+/** Holes are wound the other way from outers, and every consumer relies on it: the
+ *  exporter tells a hole from a part by the sign, and so does every importer that
+ *  fills anything. A window aperture left wound CCW reads as a second blank. */
+export function ensureCW(ring: Poly): Poly {
+  return signedArea(ring) > 0 ? [...ring].reverse() : ring;
+}
+
+export function bboxOf(polys: Poly[]): [number, number, number, number] {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const poly of polys) {
+    for (const [x, y] of poly) {
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (!Number.isFinite(minX)) return [0, 0, 0, 0];
+  return [minX, minY, maxX, maxY];
+}
+
+export function translate(poly: Poly, dx: number, dy: number): Poly {
+  return poly.map(([x, y]) => [x + dx, y + dy] as Pt);
+}
+
+export function rotate90(poly: Poly): Poly {
+  // (x, y) -> (-y, x). Winding is preserved, which matters: a nester that mirrors
+  // instead of rotating flips every face-specific feature.
+  return poly.map(([x, y]) => [-y, x] as Pt);
+}
+
+export function pathLength(points: Poly, closed: boolean): number {
+  let total = 0;
+  for (let i = 0; i + 1 < points.length; i++) total += dist(at(points, i), at(points, i + 1));
+  if (closed && points.length > 2) total += dist(at(points, points.length - 1), at(points, 0));
+  return total;
+}
+
+/** Is `p` strictly between `a` and `b` on the segment ab? Used to split an edge at a
+ *  neighbour's vertex — the step that makes a partial contact (a narrow tuck hinged
+ *  to a wide closure panel) resolve into an exact shared edge. */
+export function onSegment(p: Pt, a: Pt, b: Pt): boolean {
+  const ab = sub(b, a);
+  const ap = sub(p, a);
+  const L = len(ab);
+  if (L < EPS) return false;
+  // Perpendicular distance, not a bounding-box test: collinearity is the whole point.
+  if (Math.abs(cross(ab, ap)) / L > EPS) return false;
+  const t = dot(ap, ab) / (L * L);
+  return t > EPS / L && t < 1 - EPS / L;
+}
+
+/** Axis-aligned rectangle, CCW from bottom-left. */
+export function rect(x: number, y: number, w: number, h: number): Poly {
+  return [
+    [x, y],
+    [x + w, y],
+    [x + w, y + h],
+    [x, y + h],
+  ];
+}
+
+/** Rectangle with rounded corners, CCW. `segments` per quarter turn — 6 gives a
+ *  chord error under 0.02 mm at r = 6, which is finer than any of these machines
+ *  positions to. Flattened rather than left as arcs on purpose: a field report from
+ *  the laser work says an importer re-fitted and scrambled real Beziers. */
+export function roundedRect(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  segments = 6,
+): Poly {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  if (rr < EPS) return rect(x, y, w, h);
+  const out: Poly = [];
+  const corners: [number, number, number][] = [
+    [x + w - rr, y + rr, -Math.PI / 2],
+    [x + w - rr, y + h - rr, 0],
+    [x + rr, y + h - rr, Math.PI / 2],
+    [x + rr, y + rr, Math.PI],
+  ];
+  for (const [cx, cy, start] of corners) {
+    for (let i = 0; i <= segments; i++) {
+      const a = start + (i / segments) * (Math.PI / 2);
+      out.push([cx + rr * Math.cos(a), cy + rr * Math.sin(a)]);
+    }
+  }
+  return out;
+}
+
+/** A stadium (obround) — a rectangle capped with semicircles on the short ends.
+ *  The shape every hand hole and every euro hang slot wants, because a square
+ *  internal corner in cardstock is where a tear starts. */
+export function stadium(cx: number, cy: number, w: number, h: number, segments = 8): Poly {
+  const r = Math.min(w, h) / 2;
+  const horizontal = w >= h;
+  const half = (horizontal ? w : h) / 2 - r;
+  const out: Poly = [];
+  const push = (ox: number, oy: number, from: number) => {
+    for (let i = 0; i <= segments; i++) {
+      const a = from + (i / segments) * Math.PI;
+      out.push([cx + ox + r * Math.cos(a), cy + oy + r * Math.sin(a)]);
+    }
+  };
+  if (horizontal) {
+    push(half, 0, -Math.PI / 2);
+    push(-half, 0, Math.PI / 2);
+  } else {
+    push(0, half, 0);
+    push(0, -half, Math.PI);
+  }
+  return out;
+}
+
+/** Fillet corners of a ring. `radii` is either one radius for every corner or one
+ *  per vertex, parallel to `poly` — 0 leaves that corner sharp.
+ *
+ *  Card tears from a sharp internal corner, so every hand hole, handle blade and
+ *  tuck flap in a real dieline is filleted. The radius is clamped against BOTH
+ *  adjacent edges, which is what stops a generous radius on a short edge from
+ *  turning the corner inside out. */
+export function roundCorners(poly: Poly, radii: number | number[], segments = 5): Poly {
+  const n = poly.length;
+  if (n < 3) return poly;
+  const out: Poly = [];
+  for (let i = 0; i < n; i++) {
+    const want = Array.isArray(radii) ? (radii[i] ?? 0) : radii;
+    const cur = at(poly, i);
+    const v1 = sub(at(poly, i - 1), cur);
+    const v2 = sub(at(poly, i + 1), cur);
+    const l1 = len(v1);
+    const l2 = len(v2);
+    if (want <= 0 || l1 < EPS || l2 < EPS) {
+      out.push(cur);
+      continue;
+    }
+    const u1: Pt = [v1[0] / l1, v1[1] / l1];
+    const u2: Pt = [v2[0] / l2, v2[1] / l2];
+    // Interior angle at this corner. Straight and doubled-back both have no corner
+    // to round, and both would divide by zero below.
+    const ang = Math.acos(Math.max(-1, Math.min(1, dot(u1, u2))));
+    if (ang < 1e-3 || Math.PI - ang < 1e-3) {
+      out.push(cur);
+      continue;
+    }
+    const tanHalf = Math.tan(ang / 2);
+    // Half of each adjacent edge is the most this corner may consume, so two
+    // filleted corners sharing an edge can never overrun each other.
+    const r = Math.min(want, (l1 / 2) * tanHalf, (l2 / 2) * tanHalf);
+    const d = r / tanHalf;
+    const p1: Pt = [cur[0] + u1[0] * d, cur[1] + u1[1] * d];
+    const p2: Pt = [cur[0] + u2[0] * d, cur[1] + u2[1] * d];
+    const bis: Pt = [u1[0] + u2[0], u1[1] + u2[1]];
+    const bl = len(bis);
+    if (bl < EPS) {
+      out.push(cur);
+      continue;
+    }
+    const h = r / Math.sin(ang / 2);
+    const c: Pt = [cur[0] + (bis[0] / bl) * h, cur[1] + (bis[1] / bl) * h];
+    const a1 = Math.atan2(p1[1] - c[1], p1[0] - c[0]);
+    let da = Math.atan2(p2[1] - c[1], p2[0] - c[0]) - a1;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    for (let k = 0; k <= segments; k++) {
+      const a = a1 + (da * k) / segments;
+      out.push([c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)]);
+    }
+  }
+  return out;
+}
+
+/** A circular arc as a polyline, used for thumb notches. */
+export function arcPoints(
+  cx: number,
+  cy: number,
+  r: number,
+  from: number,
+  to: number,
+  segments = 10,
+): Poly {
+  const out: Poly = [];
+  for (let i = 0; i <= segments; i++) {
+    const a = from + (i / segments) * (to - from);
+    out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  return out;
+}
+
+/** Cut a straight run into alternating dashes. This is how a fold line becomes a
+ *  perforation on a machine with no scoring tool — which is most Cricuts, and every
+ *  blade cutter on heavy stock.
+ *
+ *  The line always starts AND ends with a bridge, never a cut: a dash that runs into
+ *  the blank's edge tears out, and the two ends of a fold are exactly where the board
+ *  carries the most load. */
+/** Dash geometry for ONE fold, sized to that fold rather than to a global number.
+ *
+ *  Two things decide whether a perforated fold works, and neither of them is a fixed
+ *  dash length:
+ *
+ *  1. **How much of the line is severed.** Heavy board cracks its outer liner instead
+ *     of hinging unless more fibre is taken out; light card tears off the panel if too
+ *     much is. So the cut/land ratio follows caliper, not preference.
+ *  2. **How many dashes the fold gets.** A 20 mm tuck tab carrying four 5 mm slots
+ *     hinges around the slots and the fold wanders between them; the same pitch on a
+ *     200 mm body fold is fine. One global dash length cannot serve both, which is why
+ *     the pitch is a fraction of the fold's own length.
+ *
+ *  Both are then floored by what the blade can physically do: a dash shorter than the
+ *  tip's swivel arc (0.36 mm radius, visible as `G2 … I0 J-.36` at every corner in the
+ *  emitted gcode) is more turn than cut.
+ */
+export function perfSpec(
+  lengthMm: number,
+  caliperMm: number,
+  minCutMm: number,
+): { cutMm: number; gapMm: number } {
+  /** Dashes we would like on a fold. Below ~8 the fold wanders; above ~20 the object
+   *  count starts to hurt import, because every dash is its own path. */
+  const TARGET_DASHES = 14;
+  /** Thinnest bridge that survives being handled before the box is folded. */
+  const MIN_LAND_MM = 0.8;
+  /** Past this the gaps read as slots rather than a perforation. */
+  const MAX_PITCH_MM = 4.5;
+
+  // 0.25 mm card -> half the line cut. 0.55 mm board -> a little over three quarters.
+  const ratio = Math.min(0.8, Math.max(0.5, 0.5 + (caliperMm - 0.25) * 0.7));
+  const pitch = Math.min(MAX_PITCH_MM, Math.max(minCutMm + MIN_LAND_MM, lengthMm / TARGET_DASHES));
+
+  const cutMm = Math.max(minCutMm, pitch * ratio);
+  const gapMm = Math.max(MIN_LAND_MM, pitch - cutMm);
+  // 2 dp because that is what the README prints and what a caliper can check.
+  return { cutMm: Math.round(cutMm * 100) / 100, gapMm: Math.round(gapMm * 100) / 100 };
+}
+
+export function dashSegment(a: Pt, b: Pt, cutMm: number, gapMm: number): Poly[] {
+  const total = dist(a, b);
+  const period = cutMm + gapMm;
+  if (total < period || cutMm <= 0) return [[a, b]];
+
+  // Fit a whole number of periods so the pattern is symmetric, and start half a gap
+  // in from each end.
+  const n = Math.max(1, Math.round((total - gapMm) / period));
+  const span = n * period - gapMm;
+  const lead = (total - span) / 2;
+
+  const dir: Pt = [(b[0] - a[0]) / total, (b[1] - a[1]) / total];
+  const at = (d: number): Pt => [a[0] + dir[0] * d, a[1] + dir[1] * d];
+
+  const out: Poly[] = [];
+  for (let i = 0; i < n; i++) {
+    const s = lead + i * period;
+    out.push([at(s), at(s + cutMm)]);
+  }
+  return out;
+}
+
+/** Offset a closed ring outward (positive) or inward (negative) by `d`, by moving
+ *  every edge along its own normal and intersecting consecutive edges.
+ *
+ *  This is the kerf compensation and the film-margin offset. It is a miter offset
+ *  with no self-intersection cleanup, which is safe here because every ring it is
+ *  applied to is convex or near-convex and `d` is small (a kerf is tenths of a
+ *  millimetre). It is NOT a general polygon offset and should not be used as one. */
+export function offsetRing(ring: Poly, d: number): Poly {
+  if (Math.abs(d) < EPS || ring.length < 3) return ring;
+  const ccw = signedArea(ring) >= 0;
+  // For a CCW ring the outward normal of edge a->b is (dy, -dx) normalised... which
+  // points right of travel. Travelling CCW keeps the interior on the left, so right
+  // is outward. A CW ring (a hole) needs the sign flipped so "outward" still means
+  // "away from the material".
+  const s = ccw ? d : -d;
+  const n = ring.length;
+  const out: Poly = [];
+  for (let i = 0; i < n; i++) {
+    const prev = at(ring, i - 1);
+    const cur = at(ring, i);
+    const next = at(ring, i + 1);
+
+    const e1 = sub(cur, prev);
+    const e2 = sub(next, cur);
+    const l1 = len(e1);
+    const l2 = len(e2);
+    if (l1 < EPS || l2 < EPS) {
+      out.push(cur);
+      continue;
+    }
+    const n1: Pt = [(e1[1] / l1) * s, (-e1[0] / l1) * s];
+    const n2: Pt = [(e2[1] / l2) * s, (-e2[0] / l2) * s];
+
+    // Intersect the two offset lines. Parallel edges (a straight run split by a
+    // vertex) fall back to the shared normal, which is exactly right there.
+    const denom = cross(e1, e2);
+    if (Math.abs(denom) < EPS * Math.max(l1, l2)) {
+      out.push([cur[0] + n1[0], cur[1] + n1[1]]);
+      continue;
+    }
+    const p1: Pt = [prev[0] + n1[0], prev[1] + n1[1]];
+    const p2: Pt = [cur[0] + n2[0], cur[1] + n2[1]];
+    const t = cross(sub(p2, p1), e2) / denom;
+    out.push([p1[0] + e1[0] * t, p1[1] + e1[1] * t]);
+  }
+  return out;
+}

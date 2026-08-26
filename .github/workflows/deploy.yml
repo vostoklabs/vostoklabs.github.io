@@ -76,6 +76,22 @@ jobs:
       - name: Copy House Number Generator to Hub Dist
         run: cp -r apps/house-number/dist apps/hub/dist/house-number
 
+      - name: Build Pen Topper Generator
+        run: pnpm build:penTopper
+
+      - name: Copy Pen Topper Generator to Hub Dist
+        run: cp -r apps/pen-topper/dist apps/hub/dist/pen-topper
+
+      # Print-only on purpose: `build` is the default vite mode, which resolves
+      # `virtual:cut-pack` to a stub and compiles every `if (CUT)` branch out. `build:full`
+      # is the unlaunched cut half and must never be what deploys — its sources are not
+      # even in this repo (see the foldbox fence in .gitignore).
+      - name: Build Fold-Up Box Generator (print-only)
+        run: pnpm build:foldbox
+
+      - name: Copy Fold-Up Box Generator to Hub Dist
+        run: cp -r apps/foldbox/dist apps/hub/dist/foldbox
+
       # Every generator the hub links to has to exist under the path generators.json gives it,
       # or the card is a 404 — which is exactly what shipped: the app was written, the registry
       # entry was added, and nothing here ever built it. Cheap to assert, and it fails the

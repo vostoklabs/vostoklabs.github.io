@@ -1,4 +1,14 @@
-import { generatorHeader, qualityCallout, sidebarFooter } from '@vostok/ui-kit';
+import { BRAND } from '@vostok/brand';
+import {
+  button,
+  dpad,
+  generatorHeader,
+  qualityCallout,
+  segmentedControl,
+  sidebarFooter,
+  sliderRow,
+  makeCollapsible,
+} from '@vostok/ui-kit';
 import { MAKERLAB } from 'virtual:makerlab';
 import type { BaseShapeKind, BlockOrientation, BlockSlot, KeychainSide, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
 import { FILAMENTS } from '../types';
@@ -291,10 +301,7 @@ export function createUi(
   leftScroll.innerHTML = `
     <div class="section" id="previewViewSection">
       <span class="label">Preview &amp; View</span>
-      <div class="tabs" id="viewTabs" role="tablist" style="margin-bottom: 12px;">
-        <button class="tab active" data-view="assembled" type="button">Assembled</button>
-        <button class="tab" data-view="exploded" type="button">Exploded</button>
-      </div>
+      <div id="viewTabsMount" style="margin-bottom: 12px;"></div>
       <div class="switch-row">
         <span class="switch-label">Show MX switch ${tip('Shows a reference MX switch in the preview so you can check the fit. It is not part of the exported model.')}</span>
         <label class="toggle"><input id="showswitch" type="checkbox" /><span class="slider"></span></label>
@@ -307,34 +314,20 @@ export function createUi(
       <span class="label">Blocks</span>
       <div class="field">
         <label>Layout ${tip('A row reading left to right, or a column reading top to bottom.')}</label>
-        <div class="tabs" id="blockOrient" role="tablist">
-          <button class="tab active" data-orient="horizontal" type="button">Horizontal</button>
-          <button class="tab" data-orient="vertical" type="button">Vertical</button>
-        </div>
+        <div id="blockOrientMount"></div>
       </div>
       <div class="prow-stacked">
-        <div class="prow-header">
-          <label for="legendSize">Letter size ${tip('Scales the letter or symbol on the keycap. 100% fills the flat top of the cap.')}</label>
-          <input type="text" class="val" id="legendSizeVal" />
-        </div>
-        <input type="range" id="legendSize" min="0.5" max="1.4" step="0.05" />
+        <div id="legendSizeMount"></div>
       </div>
       <div class="prow-stacked">
-        <div class="prow-header">
-          <label for="legendBold">Boldness ${tip('Thickens (or thins) the legend outline in mm. Symbols are hairline strokes, so a little boldness is what makes them print cleanly.')}</label>
-          <input type="text" class="val" id="legendBoldVal" />
-        </div>
-        <input type="range" id="legendBold" min="-0.3" max="0.8" step="0.05" />
+        <div id="legendBoldMount"></div>
       </div>
     </div>
 
     <div class="section" id="baseStyleSection">
       <span class="label">Base style ${tip('Outline follows your image silhouette. Shape places the image on a preset base such as a circle or square.')}</span>
       <div class="field">
-        <div class="tabs" id="shapeTypeTabs" role="tablist" style="margin-bottom: 12px;">
-          <button class="tab" data-style="outline" type="button">Outline</button>
-          <button class="tab" data-style="shape" type="button">Shape</button>
-        </div>
+        <div id="shapeTypeTabsMount" style="margin-bottom: 12px;"></div>
       </div>
       <div class="field" id="shapeSelectField" style="margin-bottom: 12px;">
         <label for="shapeSelect">Shape geometry ${tip('The preset base shape used when the Shape base style is selected.')}</label>
@@ -349,39 +342,18 @@ export function createUi(
         </select>
       </div>
       <div class="prow-stacked">
-        <div class="prow-header">
-          <label for="width">Size ${tip('Overall size of the clicker (its longest side, in mm). This scales the whole model proportionally, not just the width.')}</label>
-          <input type="text" class="val" id="widthVal" />
-        </div>
-        <input type="range" id="width" min="20" max="70" step="1" />
+        <div id="widthMount"></div>
       </div>
       <div class="field" id="imageNudgeField" style="display:none;">
         <label>Move design ${tip('Slide the artwork around inside the base shape. The shape grows to keep covering it, so you can sit a design high in a heart or off to one side without it spilling over the frame.')}</label>
-        <div class="switch-pad nudge-pad" id="imageNudgePad">
-          <button type="button" class="switch-pad-btn pad-up" data-nudge="up" aria-label="Move design up">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
-          </button>
-          <button type="button" class="switch-pad-btn pad-left" data-nudge="left" aria-label="Move design left">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
-          </button>
-          <button type="button" class="switch-pad-center" id="imageNudgeReset" aria-label="Re-centre the design" title="Re-centre">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-          </button>
-          <button type="button" class="switch-pad-btn pad-right" data-nudge="right" aria-label="Move design right">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-          </button>
-          <button type="button" class="switch-pad-btn pad-down" data-nudge="down" aria-label="Move design down">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
-          </button>
-        </div>
-        <div class="switch-pad-readout" id="imageNudgeReadout">Centered</div>
+        <div id="imageNudgePadMount"></div>
       </div>
     </div>
 
     <div id="geometrySettingsContainer">
-      <details class="section section-collapsible" id="sectionColors">
-        <summary class="label collapsible-head">1 · Colors &amp; Smoothing</summary>
-        <div class="collapsible-body">
+      <details class="vl-section vl-section--collapsible" id="sectionColors">
+        <summary>1 · Colors &amp; Smoothing</summary>
+        <div class="vl-section__body">
         <div class="field" id="colorCountField">
           <label for="ccount">Colors ${tip('How many distinct filament colors the image is split into. Each color becomes a separate part in the export.')}</label>
           <select id="ccount">
@@ -399,11 +371,7 @@ export function createUi(
           </select>
         </div>
         <div class="prow-stacked" id="smoothingField">
-          <div class="prow-header">
-            <label for="smooth">Smoothing ${tip('Simplifies and smooths the traced outlines. Higher values give fewer, cleaner edges; lower keeps more fine detail.')}</label>
-            <input type="text" class="val" id="smoothVal" />
-          </div>
-          <input type="range" id="smooth" min="0" max="1" step="0.05" />
+          <div id="smoothMount"></div>
         </div>
         <div class="palette" id="palette">
           <div class="hint">Load an image/vector to pick colors.</div>
@@ -411,9 +379,9 @@ export function createUi(
         </div>
       </details>
 
-      <details class="section section-collapsible" id="sectionShape">
-        <summary class="label collapsible-head">2 · More Settings</summary>
-        <div class="collapsible-body">
+      <details class="vl-section vl-section--collapsible" id="sectionShape">
+        <summary>2 · More Settings</summary>
+        <div class="vl-section__body">
         <div class="keychain-panel" style="margin-bottom: 16px;">
           <div class="switch-row" style="margin-bottom: 12px;">
             <span class="switch-label">Keychain ${tip('Adds a keyring attachment to the body so you can clip the clicker to a keychain.')}</span>
@@ -424,12 +392,7 @@ export function createUi(
                  choice is which end of the chain it hangs from. -->
             <div class="field" id="keychainEndField" style="display:none;">
               <label>Loop side ${tip('Which side of the block set the keyring loop hangs off.')}</label>
-              <div class="tabs" id="keychainEnd" role="tablist">
-                <button class="tab active" data-end="left" type="button">Left</button>
-                <button class="tab" data-end="right" type="button">Right</button>
-                <button class="tab" data-end="top" type="button">Top</button>
-                <button class="tab" data-end="bottom" type="button">Bottom</button>
-              </div>
+              <div id="keychainEndMount"></div>
             </div>
             <div class="prow-stacked" id="keychainAngleRow">
               <div class="prow-header">
@@ -495,18 +458,10 @@ export function createUi(
         </div>
 
         <div class="prow-stacked">
-          <div class="prow-header">
-            <label for="topthick">Top thickness ${tip('Thickness of the solid top layer beneath the colored image, in mm.')}</label>
-            <input type="text" class="val" id="topthickVal" />
-          </div>
-          <input type="range" id="topthick" min="1" max="4" step="0.1" />
+          <div id="topthickMount"></div>
         </div>
         <div class="prow-stacked">
-          <div class="prow-header">
-            <label for="imgdepth">Image depth ${tip('How far the colored image is raised into the top surface, in mm.')}</label>
-            <input type="text" class="val" id="imgdepthVal" />
-          </div>
-          <input type="range" id="imgdepth" min="0.2" max="3" step="0.1" />
+          <div id="imgdepthMount"></div>
         </div>
         <div class="prow-stacked">
           <div class="prow-header">
@@ -531,43 +486,16 @@ export function createUi(
         </div>
       </details>
 
-      <details class="section section-collapsible" id="sectionSwitch">
-        <summary class="label collapsible-head">3 · Switch</summary>
-        <div class="collapsible-body">
+      <details class="vl-section vl-section--collapsible" id="sectionSwitch">
+        <summary>3 · Switch</summary>
+        <div class="vl-section__body">
         <div class="field" style="margin-bottom:10px;">
           <label>Switches ${tip('Use 1 to 3 MX switches for larger or wider designs, for more click points and stability. Each switch can be moved and rotated individually.')}</label>
-          <div class="tabs" id="switchCount" role="tablist">
-            <button class="tab active" data-count="1" type="button">1</button>
-            <button class="tab" data-count="2" type="button">2</button>
-            <button class="tab" data-count="3" type="button">3</button>
-          </div>
+          <div id="switchCountMount"></div>
         </div>
         <div class="tabs" id="switchChips" role="tablist" style="display:none; margin-bottom:10px;"></div>
         <p class="switch-pad-hint">Move &amp; rotate the MX switch ${tip('Slide and rotate the selected MX switch away from the design centre. Handy when a switch doesn\'t sit neatly in the centre of your design.')}</p>
-        <div class="switch-pad" id="switchPad">
-          <button type="button" class="switch-pad-btn pad-rotl" data-rot="3" aria-label="Rotate switch left" title="Rotate left">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-          </button>
-          <button type="button" class="switch-pad-btn pad-rotr" data-rot="-3" aria-label="Rotate switch right" title="Rotate right">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
-          </button>
-          <button type="button" class="switch-pad-btn pad-up" data-dir="up" aria-label="Move switch up (toward top)">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
-          </button>
-          <button type="button" class="switch-pad-btn pad-left" data-dir="left" aria-label="Move switch left">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
-          </button>
-          <button type="button" class="switch-pad-center" id="switchReset" aria-label="Center the switch" title="Center">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-          </button>
-          <button type="button" class="switch-pad-btn pad-right" data-dir="right" aria-label="Move switch right">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-          </button>
-          <button type="button" class="switch-pad-btn pad-down" data-dir="down" aria-label="Move switch down (toward bottom)">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
-          </button>
-        </div>
-        <div class="switch-pad-readout" id="switchReadout">Centered</div>
+        <div id="switchPadMount"></div>
         <button class="secondary" id="switchResetAll" type="button" style="display:none; width:100%; margin-top:8px;">Reset all switches</button>
         </div>
       </details>
@@ -741,7 +669,7 @@ export function createUi(
         </div>
         ${MAKERLAB ? '' : `<p class="hint-text" id="blocksKeycapLink" hidden>
           Want more keycap options, like profiles, sizes, or your own SVG or photo on the
-          cap? Use the <a class="hint-link" href="https://vostoklabs.github.io/SVG-keycap-generator/" target="_blank" rel="noopener">Vostok Labs Keycap Generator</a>.
+          cap? Use the <a class="hint-link" href="${BRAND.urls.keycapApp}" target="_blank" rel="noopener">Vostok Labs Keycap Generator</a>.
         </p>`}
         <div class="field">
           <label>Font</label>
@@ -1244,18 +1172,52 @@ export function createUi(
     search.focus();
   }
 
-  $('keychainEnd').addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest('[data-end]') as HTMLElement | null;
-    if (b) cb.onKeychainEnd(b.dataset.end as KeychainSide);
+  /* Four segmented pickers that were hand-built `<button class="tab">` rows with delegated
+     `closest('[data-x]')` listeners, plus a matching loop elsewhere that toggled `.active`
+     by hand. `segmentedControl()` is both halves: `onChange` replaces the delegation and
+     `setValue()` replaces the loop, so the two can no longer disagree — and it brings the
+     sliding pill with it. */
+  const keychainEndTabs = segmentedControl<KeychainSide>({
+    options: [
+      { value: 'left', label: 'Left' },
+      { value: 'right', label: 'Right' },
+      { value: 'top', label: 'Top' },
+      { value: 'bottom', label: 'Bottom' },
+    ],
+    value: 'left',
+    onChange: (v) => cb.onKeychainEnd(v),
   });
-  $('blockOrient').addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest('[data-orient]') as HTMLElement | null;
-    if (b) cb.onBlockOrientation(b.dataset.orient as BlockOrientation);
+  $('keychainEndMount').append(keychainEndTabs);
+
+  const blockOrientTabs = segmentedControl<BlockOrientation>({
+    options: [
+      { value: 'horizontal', label: 'Horizontal' },
+      { value: 'vertical', label: 'Vertical' },
+    ],
+    value: 'horizontal',
+    onChange: (v) => cb.onBlockOrientation(v),
   });
-  const legendSize = $<HTMLInputElement>('legendSize');
-  legendSize.addEventListener('input', () => cb.onLegendScale(parseFloat(legendSize.value)));
-  const legendBold = $<HTMLInputElement>('legendBold');
-  legendBold.addEventListener('input', () => cb.onLegendBold(parseFloat(legendBold.value)));
+  $('blockOrientMount').append(blockOrientTabs);
+  /* Six sliders that were a hand-built `<div class="prow-stacked">` each: a label with a tip,
+     a `<input type="text" class="val">` readout, and a bare `<input type="range">`, wired by a
+     local `bindValInput()` that re-derived clamp-on-type, select-on-focus and commit-on-
+     Enter/blur. `sliderRow()` is all of it, and `format`/`parse` carry the per-slider units. */
+  const legendSizeRow = sliderRow({
+    label: 'Letter size', help: 'Scales the letter or symbol on the keycap. 100% fills the flat top of the cap.',
+    min: 0.5, max: 1.4, step: 0.05, value: 1,
+    format: (v) => `${Math.round(v * 100)}%`,
+    parse: (typed) => typed / 100,
+    onInput: (v) => cb.onLegendScale(v),
+  });
+  $('legendSizeMount').append(legendSizeRow);
+
+  const legendBoldRow = sliderRow({
+    label: 'Boldness', help: 'Thickens (or thins) the legend outline in mm. Symbols are hairline strokes, so a little boldness is what makes them print cleanly.',
+    min: -0.3, max: 0.8, step: 0.05, value: 0,
+    format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)} mm`,
+    onInput: (v) => cb.onLegendBold(v),
+  });
+  $('legendBoldMount').append(legendBoldRow);
 
   function addFontOption(font: FontOption) {
     const btn = document.createElement('button');
@@ -1409,35 +1371,62 @@ export function createUi(
   // --- Colors ---
   const ccount = $<HTMLSelectElement>('ccount');
   ccount.addEventListener('change', () => cb.onColorCount(+ccount.value));
-  const smooth = $<HTMLInputElement>('smooth');
-  smooth.addEventListener('input', () => cb.onSmoothing(+smooth.value));
+  const smoothRow = sliderRow({
+    label: 'Smoothing', help: 'Simplifies and smooths the traced outlines. Higher values give fewer, cleaner edges; lower keeps more fine detail.',
+    min: 0, max: 1, step: 0.05, value: 0.5,
+    // Stored 0-1, shown as a percentage: `parse` is what makes typing "50%" mean 0.5
+    // rather than 50 clamped to the top of the range.
+    format: (v) => `${Math.round(v * 100)}%`,
+    parse: (typed) => typed / 100,
+    onInput: (v) => cb.onSmoothing(v),
+  });
+  $('smoothMount').append(smoothRow);
 
   // --- Shape ---
-  const shapeTypeTabs = $('shapeTypeTabs');
   const shapeSelect = $<HTMLSelectElement>('shapeSelect');
 
-  shapeTypeTabs.addEventListener('click', (e) => {
-    const t = (e.target as HTMLElement).closest('[data-style]') as HTMLElement | null;
-    if (!t) return;
-    const style = t.dataset.style;
-    if (style === 'outline') {
-      cb.onShape('outline');
-    } else {
-      cb.onShape(shapeSelect.value as BaseShapeKind);
-    }
+  /* The last of the five tab rows. This one needed `setOptionVisible`, which the kit did not
+     have: icon line-art makes a broken outline body, so in icon mode the Outline option is
+     hidden rather than merely disabled. Hiding it from app CSS would not have worked — the
+     grid's column count comes from the option count, so a `display: none` child leaves a dead
+     column and the sliding indicator travels into the gap. */
+  const shapeTypeTabs = segmentedControl<'outline' | 'shape'>({
+    options: [
+      { value: 'outline', label: 'Outline' },
+      { value: 'shape', label: 'Shape' },
+    ],
+    value: 'shape',
+    onChange: (v) => cb.onShape(v === 'outline' ? 'outline' : (shapeSelect.value as BaseShapeKind)),
   });
+  $('shapeTypeTabsMount').append(shapeTypeTabs);
 
   shapeSelect.addEventListener('change', () => {
     cb.onShape(shapeSelect.value as BaseShapeKind);
   });
 
   // --- Size sliders ---
-  const width = $<HTMLInputElement>('width');
-  width.addEventListener('input', () => cb.onWidth(+width.value));
-  const topthick = $<HTMLInputElement>('topthick');
-  topthick.addEventListener('input', () => cb.onTopThickness(+topthick.value));
-  const imgdepth = $<HTMLInputElement>('imgdepth');
-  imgdepth.addEventListener('input', () => cb.onImageDepth(+imgdepth.value));
+  const widthRow = sliderRow({
+    label: 'Size', help: 'Overall size of the clicker (its longest side, in mm). This scales the whole model proportionally, not just the width.',
+    min: 20, max: 70, step: 1, value: 40, unit: 'mm',
+    onInput: (v) => cb.onWidth(v),
+  });
+  $('widthMount').append(widthRow);
+
+  const topthickRow = sliderRow({
+    label: 'Top thickness', help: 'Thickness of the solid top layer beneath the colored image, in mm.',
+    min: 1, max: 4, step: 0.1, value: 2,
+    format: (v) => `${v.toFixed(1)} mm`,
+    onInput: (v) => cb.onTopThickness(v),
+  });
+  $('topthickMount').append(topthickRow);
+
+  const imgdepthRow = sliderRow({
+    label: 'Image depth', help: 'How far the colored image is raised into the top surface, in mm.',
+    min: 0.2, max: 3, step: 0.1, value: 1,
+    format: (v) => `${v.toFixed(1)} mm`,
+    onInput: (v) => cb.onImageDepth(v),
+  });
+  $('imgdepthMount').append(imgdepthRow);
 
   // --- Fit steppers: socket (top↔base) 0.05 mm steps, stem (keycap mount) 0.2 mm steps.
   //     Both are 0-based (+ looser, − tighter). ---
@@ -1446,46 +1435,57 @@ export function createUi(
   $('stemTolMinus').addEventListener('click', () => cb.onStemTolStep(-0.2));
   $('stemTolPlus').addEventListener('click', () => cb.onStemTolStep(0.2));
 
-  // --- Switch D-pad: arrows nudge one step; top corners rotate; center resets. ---
-  const SWITCH_STEP = 1; // mm per click
-  const switchPad = $('switchPad');
-  switchPad.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    const rotBtn = target.closest('[data-rot]') as HTMLElement | null;
-    if (rotBtn) {
-      cb.onSwitchRotate(+rotBtn.dataset.rot!);
-      return;
-    }
-    const btn = target.closest('[data-dir]') as HTMLElement | null;
-    if (!btn) return;
-    switch (btn.dataset.dir) {
-      case 'up': cb.onSwitchNudge(0, SWITCH_STEP); break;
-      case 'down': cb.onSwitchNudge(0, -SWITCH_STEP); break;
-      case 'left': cb.onSwitchNudge(-SWITCH_STEP, 0); break;
-      case 'right': cb.onSwitchNudge(SWITCH_STEP, 0); break;
-    }
-  });
-  $('switchReset').addEventListener('click', () => cb.onSwitchReset());
+  /* --- The two directional pads ---
 
-  // --- Move the design inside a preset base shape ---
-  const NUDGE_STEP = 0.5; // mm per press
-  $('imageNudgePad').addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest('[data-nudge]') as HTMLElement | null;
-    if (!btn) return;
-    switch (btn.dataset.nudge) {
-      case 'up': cb.onImageNudge(0, NUDGE_STEP); break;
-      case 'down': cb.onImageNudge(0, -NUDGE_STEP); break;
-      case 'left': cb.onImageNudge(-NUDGE_STEP, 0); break;
-      case 'right': cb.onImageNudge(NUDGE_STEP, 0); break;
-    }
+     These were 12 hand-built `<button class="switch-pad-btn">` elements written into the
+     sidebar's innerHTML, with delegated `[data-dir]` / `[data-rot]` / `[data-nudge]`
+     listeners on top. The kit's `dpad()` is a straight port of this very control — the
+     clicker is where it came from — so the markup and the delegation both go, and the
+     component supplies the readout too.
+
+     One deliberate behaviour gain: `dpad()` holds-to-repeat (fires on pointerdown, then
+     repeats after 300ms). Nudging a switch a millimetre at a time used to need one click
+     per millimetre. */
+  const SWITCH_STEP = 1; // mm per press
+  const switchDpad = dpad({
+    readout: 'Centered',
+    onMove: (dir) => {
+      if (dir === 'up') cb.onSwitchNudge(0, SWITCH_STEP);
+      else if (dir === 'down') cb.onSwitchNudge(0, -SWITCH_STEP);
+      else if (dir === 'left') cb.onSwitchNudge(-SWITCH_STEP, 0);
+      else cb.onSwitchNudge(SWITCH_STEP, 0);
+    },
+    // Signed like the old `data-rot`: left was +3, right -3, and the kit uses the same sign.
+    onRotate: (deltaDeg) => cb.onSwitchRotate(deltaDeg),
+    onReset: () => cb.onSwitchReset(),
   });
-  $('imageNudgeReset').addEventListener('click', () => cb.onImageNudgeReset());
+  $('switchPadMount').replaceWith(switchDpad.root);
+
+  const NUDGE_STEP = 0.5; // mm per press
+  const imageDpad = dpad({
+    readout: 'Centered',
+    rotate: false,
+    onMove: (dir) => {
+      if (dir === 'up') cb.onImageNudge(0, NUDGE_STEP);
+      else if (dir === 'down') cb.onImageNudge(0, -NUDGE_STEP);
+      else if (dir === 'left') cb.onImageNudge(-NUDGE_STEP, 0);
+      else cb.onImageNudge(NUDGE_STEP, 0);
+    },
+    onReset: () => cb.onImageNudgeReset(),
+  });
+  $('imageNudgePadMount').replaceWith(imageDpad.root);
 
   // --- Switch count + active-switch chips + reset-all ---
-  $('switchCount').addEventListener('click', (e) => {
-    const t = (e.target as HTMLElement).closest('[data-count]') as HTMLElement | null;
-    if (t) cb.onSwitchCount(+t.dataset.count!);
+  const switchCountTabs = segmentedControl<'1' | '2' | '3'>({
+    options: [
+      { value: '1', label: '1' },
+      { value: '2', label: '2' },
+      { value: '3', label: '3' },
+    ],
+    value: '1',
+    onChange: (v) => cb.onSwitchCount(+v),
   });
+  $('switchCountMount').append(switchCountTabs);
   $('switchChips').addEventListener('click', (e) => {
     const t = (e.target as HTMLElement).closest('[data-sw]') as HTMLElement | null;
     if (t) cb.onActiveSwitch(+t.dataset.sw!);
@@ -1523,39 +1523,25 @@ export function createUi(
   });
 
   // --- Typeable value inputs: parse typed number, commit on Enter / blur ---
-  function bindValInput(
-    valId: string,
-    slider: HTMLInputElement,
-    callback: (v: number) => void,
-    parse?: (raw: number) => number,
-  ) {
-    const el = $<HTMLInputElement>(valId);
-    const commit = () => {
-      const raw = parseFloat(el.value.replace(/[^0-9.\-]/g, ''));
-      if (isNaN(raw)) return;
-      const v = parse ? parse(raw) : raw;
-      const clamped = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), v));
-      slider.value = String(clamped);
-      callback(clamped);
-    };
-    el.addEventListener('focus', () => el.select());
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); commit(); el.blur(); }
-    });
-    el.addEventListener('blur', commit);
+
+  /* The three sidebar sections are written into the innerHTML above, so
+     `collapsibleSection()` never built them and they were the one part of the panel that
+     snapped open in a single frame while the chevron beside them eased. `makeCollapsible`
+     hands them the kit's animation without restructuring the template. */
+  for (const d of document.querySelectorAll<HTMLDetailsElement>('details.vl-section--collapsible')) {
+    makeCollapsible(d);
   }
 
-  bindValInput('smoothVal', smooth, cb.onSmoothing, (v) => v / 100);
-  bindValInput('widthVal', width, cb.onWidth);
-  bindValInput('topthickVal', topthick, cb.onTopThickness);
-  bindValInput('imgdepthVal', imgdepth, cb.onImageDepth);
-
   // --- View tabs ---
-  const viewTabs = $('viewTabs');
-  viewTabs.addEventListener('click', (e) => {
-    const t = (e.target as HTMLElement).closest('[data-view]') as HTMLElement | null;
-    if (t) cb.onView(t.dataset.view as ViewMode);
+  const viewTabs = segmentedControl<ViewMode>({
+    options: [
+      { value: 'assembled', label: 'Assembled' },
+      { value: 'exploded', label: 'Exploded' },
+    ],
+    value: 'assembled',
+    onChange: (v) => cb.onView(v),
   });
+  $('viewTabsMount').append(viewTabs);
 
   $<HTMLInputElement>('showswitch').addEventListener('change', (e) =>
     cb.onShowSwitch((e.target as HTMLInputElement).checked)
@@ -2097,14 +2083,16 @@ export function createUi(
       tip.textContent = text;
       pal.appendChild(tip);
       if (recolored <= 0) return;
-      const reset = document.createElement('button');
-      reset.type = 'button';
-      reset.className = 'vl-btn vl-btn--ghost vl-btn--block reset-part-colors';
-      reset.textContent = `Reset ${recolored} recolored shape${recolored === 1 ? '' : 's'}`;
-      reset.title = 'Put every individually recolored shape back on its palette row';
-      reset.addEventListener('click', (e) => {
-        e.stopPropagation();
-        cb.onResetPartColors();
+      const reset = button({
+        label: `Reset ${recolored} recolored shape${recolored === 1 ? '' : 's'}`,
+        emphasis: 'ghost',
+        block: true,
+        className: 'reset-part-colors',
+        title: 'Put every individually recolored shape back on its palette row',
+        onClick: (e) => {
+          e.stopPropagation();
+          cb.onResetPartColors();
+        },
       });
       pal.appendChild(reset);
     };
@@ -2220,18 +2208,14 @@ export function createUi(
       ccount.value = String(state.colorCount);
     }
 
-    const setVal = (id: string, text: string) => {
-      const el = $<HTMLInputElement>(id);
-      if (document.activeElement !== el) el.value = text;
-    };
-    smooth.value = String(state.smoothing);
-    setVal('smoothVal', Math.round(state.smoothing * 100) + '%');
-    width.value = String(state.capWidthMm);
-    setVal('widthVal', state.capWidthMm + ' mm');
-    topthick.value = String(state.topThickness);
-    setVal('topthickVal', state.topThickness.toFixed(1) + ' mm');
-    imgdepth.value = String(state.imageDepth);
-    setVal('imgdepthVal', state.imageDepth.toFixed(1) + ' mm');
+    /* One call each now. These used to be pairs — the range's `.value` and a separate
+       `setVal()` writing the text box — which is two places to keep in step. `setValue()`
+       moves both, and skips the box write while it has focus so a rebuild cannot fight
+       typing — the guard every app used to carry by hand now lives in the component. */
+    smoothRow.setValue(state.smoothing);
+    widthRow.setValue(state.capWidthMm);
+    topthickRow.setValue(state.topThickness);
+    imgdepthRow.setValue(state.imageDepth);
     // Fit steppers show a signed offset from neutral, so a default design reads 0.
     const fmtSigned = (v: number, dec: number) =>
       (v > 0.0001 ? '+' : v < -0.0001 ? '−' : '') + Math.abs(v).toFixed(dec) + ' mm';
@@ -2242,23 +2226,17 @@ export function createUi(
     const switchCountN = state.switches.length;
     const activeIdx = Math.min(state.activeSwitchIndex, switchCountN - 1);
     const active = state.switches[activeIdx] ?? { x: 0, y: 0, rotation: 0 };
-    const swReadout = document.getElementById('switchReadout');
-    if (swReadout) {
+    {
       const bits: string[] = [];
       if (Math.abs(active.x) >= 0.05 || Math.abs(active.y) >= 0.05) {
         bits.push(`X ${active.x > 0 ? '+' : ''}${active.x.toFixed(1)} · Y ${active.y > 0 ? '+' : ''}${active.y.toFixed(1)} mm`);
       }
       if (Math.abs(active.rotation) >= 0.5) bits.push(`${active.rotation > 0 ? '↺' : '↻'} ${Math.abs(active.rotation)}°`);
       const body = bits.length ? bits.join('  ·  ') : 'Centered';
-      swReadout.textContent = switchCountN > 1 ? `S${activeIdx + 1} · ${body}` : body;
+      switchDpad.setReadout(switchCountN > 1 ? `S${activeIdx + 1} · ${body}` : body);
     }
     // Switch count segmented control.
-    const switchCountEl = document.getElementById('switchCount');
-    if (switchCountEl) {
-      for (const b of switchCountEl.querySelectorAll<HTMLElement>('[data-count]')) {
-        b.classList.toggle('active', +b.dataset.count! === switchCountN);
-      }
-    }
+    switchCountTabs.setValue(String(switchCountN) as '1' | '2' | '3');
     // Active-switch chips (only shown for 2–3 switches).
     const chipsEl = document.getElementById('switchChips');
     if (chipsEl) {
@@ -2318,19 +2296,10 @@ export function createUi(
           .map((s) => s.ch)
           .join('');
       }
-      for (const b of $('blockOrient').querySelectorAll<HTMLElement>('[data-orient]')) {
-        b.classList.toggle('active', b.dataset.orient === state.blockOrientation);
-      }
-      const size = $<HTMLInputElement>('legendSize');
-      if (document.activeElement !== size) size.value = String(state.legendScale);
-      $<HTMLInputElement>('legendSizeVal').value = `${Math.round(state.legendScale * 100)}%`;
-      const bold = $<HTMLInputElement>('legendBold');
-      if (document.activeElement !== bold) bold.value = String(state.legendBold);
-      $<HTMLInputElement>('legendBoldVal').value =
-        `${state.legendBold > 0 ? '+' : ''}${state.legendBold.toFixed(2)} mm`;
-      for (const b of $('keychainEnd').querySelectorAll<HTMLElement>('[data-end]')) {
-        b.classList.toggle('active', b.dataset.end === state.keychainEnd);
-      }
+      blockOrientTabs.setValue(state.blockOrientation);
+      legendSizeRow.setValue(state.legendScale);
+      legendBoldRow.setValue(state.legendBold);
+      keychainEndTabs.setValue(state.keychainEnd);
     }
 
     // Hide/show image specific fields in colors section
@@ -2343,8 +2312,7 @@ export function createUi(
     // Update Shape controls. Icons can't use the outline style (their thin
     // line-art makes a broken body), so the Outline tab is hidden for icon mode
     // and the body is always a solid shape.
-    const outlineTab = shapeTypeTabs.querySelector<HTMLElement>('[data-style="outline"]');
-    if (outlineTab) outlineTab.style.display = state.importMode === 'icon' ? 'none' : '';
+    shapeTypeTabs.setOptionVisible('outline', state.importMode !== 'icon');
     const treatAsOutline = state.baseShape === 'outline' && state.importMode !== 'icon';
     $('shapeSelectField').style.display = treatAsOutline ? 'none' : 'block';
     // Moving the design only applies to a preset shape: on an outline base the shape IS
@@ -2354,8 +2322,7 @@ export function createUi(
     if (showNudge) {
       const { x, y } = state.imageOffset;
       const signed = (v: number) => (v > 0 ? '+' : '') + v.toFixed(1);
-      $('imageNudgeReadout').textContent =
-        x === 0 && y === 0 ? 'Centered' : `${signed(x)}, ${signed(y)} mm`;
+      imageDpad.setReadout(x === 0 && y === 0 ? 'Centered' : `${signed(x)}, ${signed(y)} mm`);
     }
 
     // Blocks mode: the block shells are fixed CAD parts, so everything that shapes a
@@ -2377,9 +2344,7 @@ export function createUi(
     hideForBlocks(document.getElementById('socketTolStepper')?.closest('.prow-stacked') as HTMLElement | null);
     hideForBlocks(document.getElementById('sectionSwitch'));
 
-    for (const btn of shapeTypeTabs.querySelectorAll<HTMLElement>('button')) {
-      btn.classList.toggle('active', btn.dataset.style === (treatAsOutline ? 'outline' : 'shape'));
-    }
+    shapeTypeTabs.setValue(treatAsOutline ? 'outline' : 'shape');
 
     if (treatAsOutline) {
       shapeSelect.disabled = true;
@@ -2388,10 +2353,11 @@ export function createUi(
       shapeSelect.value = state.baseShape === 'outline' ? 'circle' : state.baseShape;
     }
 
-    // Update View tabs
-    for (const b of viewTabs.querySelectorAll<HTMLElement>('button')) {
-      b.classList.toggle('active', b.dataset.view === state.view);
-    }
+    // Update View tabs. This loop used to query `'button'` and key off `dataset.view`; once
+    // the row became a `segmentedControl()` its buttons carry no such attribute, so the
+    // comparison was false for every tab and it stripped `.active` off all of them — the
+    // label kept `--muted` grey while the indicator pill painted accent behind it, 1.03:1.
+    viewTabs.setValue(state.view);
 
     // The export button lives in the ui-kit sidebar footer now; guard in case it
     // isn't present. cb.onExport() also no-ops when there are no parts.

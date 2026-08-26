@@ -30,6 +30,25 @@ how two shipped generators ended up rendering their whole panel in Times New
 Roman while the headings kept Chakra Petch, because `.vl-btn` and every control
 row use `font: inherit`. `pnpm check:chrome` fails the build if an app tries.
 
+### Every control is a kit component
+
+Not a bare `<button>` in a template literal, and not `el('button', { className: 'vl-btn' })`
+either. Use `button()`, `iconButton()`, `buttonRow()`, `toggleSwitch()`, `sliderRow()`,
+`segmentedControl()`, `selectField()`, `dpad()`, `dropZone()`, `dialog()`, `toast()` —
+`main.ts` has a worked example on the Reset button in section 3.
+
+**A class ladder is not a component.** `.vl-btn` and its whole ladder — primary, secondary,
+ghost, icon, block, busy — shipped in the kit's `base.css` with no `button()` behind it for a
+year, and a stylesheet can only style what opts into it *by name*. So the catalogue grew 163
+hand-built buttons wearing `class="tab"`, `class="primary"` and `class="switch-pad-btn"`, none
+of which the kit defines — which is exactly why fixing one button never once fixed the others.
+The clicker even grew its own d-pad next to the kit's `dpad()`.
+
+If the kit cannot express the control you need, **widen the kit**; the answer is never a local
+class. `pnpm check:ui` fails the build the moment a new hand-built control appears, and also
+hard-fails on a class no stylesheet defines or a `var()` that resolves nowhere — both of which
+render silently wrong and report nothing.
+
 ## Where things go
 
 This layout is the house style. Keep it, or the catalogue drifts apart.

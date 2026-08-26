@@ -1,7 +1,7 @@
 // First-run magnet setup. Two quick questions — how it sticks, then which magnet
 // — so the model is right before the user touches a single slider. Skippable at
 // every step, and re-openable from the Magnet section (same flow both times).
-import { dialog, el, segmentedControl, svgEl } from '@vostok/ui-kit';
+import { button, dialog, el, numberField, segmentedControl, svgEl } from '@vostok/ui-kit';
 import { MAGNET_PRESETS, type MagnetMode, type MagnetPreset, type MagnetShapeKind, type ProductType, type SliderLayout } from '../types';
 
 export interface WizardResult {
@@ -53,26 +53,16 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
     // --- Step 3: custom dimensions ---
     const askCustomDimensions = (mode: MagnetMode, shape: MagnetShapeKind, pt: ProductType = 'magnet', sl?: SliderLayout) => {
       let submit = false;
-      const xInput = el('input', { attrs: { type: 'number', step: '0.1', value: shape === 'disc' ? '10' : '20' } }) as HTMLInputElement;
-      const yInput = el('input', { attrs: { type: 'number', step: '0.1', value: '10' } }) as HTMLInputElement;
-      const zInput = el('input', { attrs: { type: 'number', step: '0.1', value: '2' } }) as HTMLInputElement;
-
-      const buildField = (label: string, input: HTMLInputElement) => {
-        return el('div', { className: 'vl-field mg-num' }, [
-          el('label', { text: label }),
-          el('div', { className: 'mg-num__input' }, [
-            input,
-            el('span', { className: 'mg-num__unit', text: 'mm' })
-          ]),
-        ]);
-      };
+      const xField = numberField({ label: shape === 'disc' ? 'Diameter' : 'Width', value: shape === 'disc' ? 10 : 20, step: 0.1, unit: 'mm' });
+      const yField = numberField({ label: 'Length', value: 10, step: 0.1, unit: 'mm' });
+      const zField = numberField({ label: 'Thickness', value: 2, step: 0.1, unit: 'mm' });
 
       const inputs = el('div', { className: 'mg-wizard' }, [
         el('p', { className: 'vl-hint', text: 'Enter the exact dimensions of your magnet in millimeters.' }),
         el('div', { className: 'mg-dims' }, [
-          buildField(shape === 'disc' ? 'Diameter' : 'Width', xInput),
-          shape === 'block' ? buildField('Length', yInput) : '',
-          buildField('Thickness', zInput),
+          xField,
+          shape === 'block' ? yField : '',
+          zField,
         ])
       ]);
 
@@ -97,10 +87,10 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
                   id: 'custom',
                   shape: shape as any,
                   label: 'Custom size',
-                  height: Number(zInput.value) || 2,
-                  diameter: shape === 'disc' ? Number(xInput.value) || 10 : undefined,
-                  x: shape === 'block' ? Number(xInput.value) || 20 : undefined,
-                  y: shape === 'block' ? Number(yInput.value) || 10 : undefined,
+                  height: zField.value || 2,
+                  diameter: shape === 'disc' ? xField.value || 10 : undefined,
+                  x: shape === 'block' ? xField.value || 20 : undefined,
+                  y: shape === 'block' ? yField.value || 10 : undefined,
                 }
               });
             },
@@ -118,16 +108,12 @@ export function openMagnetWizard(current: { shape: MagnetShapeKind }): Promise<W
       const renderPresets = () => {
         grid.replaceChildren(
           ...MAGNET_PRESETS.filter((p) => p.shape === shape).map((p) =>
-            el('button', {
-              className: 'mg-preset',
-              text: p.label,
-              attrs: { type: 'button' },
-              on: {
-                click: () => {
-                  picked = true;
-                  sizeDialog.close();
-                  finish({ productType: pt, sliderLayout: sl, mode, shape, preset: p });
-                },
+            button({
+              label: p.label,
+              onClick: () => {
+                picked = true;
+                sizeDialog.close();
+                finish({ productType: pt, sliderLayout: sl, mode, shape, preset: p });
               },
             }),
           ),

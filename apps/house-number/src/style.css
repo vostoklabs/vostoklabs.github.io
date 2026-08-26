@@ -17,30 +17,6 @@ body {
   inset: 0;
 }
 
-/* A text field wants the whole row — a house number is short but a street name is not. The
-   picker takes `.vl-select` from the kit and needs nothing here. */
-.hn-text {
-  width: 100%;
-  min-width: 0;
-  text-align: left;
-  padding-left: 10px;
-}
-
-.vl-slider-head:has(.hn-text),
-.vl-slider-head:has(.hn-select) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
-}
-
-/* These captions used to be set at 12px muted while the slider labels beside them took the
-   kit default, so "First line" and "Font" read visibly smaller than "Margin" directly
-   below. Match the kit instead of inventing a second size. */
-.vl-slider-head:has(.hn-text) label,
-.vl-slider-head:has(.hn-select) label {
-  color: var(--muted);
-}
-
 .hn-wide {
   width: 100%;
   justify-content: center;
@@ -124,12 +100,6 @@ body {
   display: grid;
   gap: var(--space-3);
   min-width: 0;
-}
-
-.hn-font-search {
-  width: 100%;
-  text-align: left;
-  padding-left: 10px;
 }
 
 .hn-font-all {

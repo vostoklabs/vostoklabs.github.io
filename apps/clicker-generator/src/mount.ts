@@ -20,7 +20,7 @@
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import '@vostok/plates/plates.css';
-import { topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile } from '@vostok/ui-kit';
+import { topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile, listRow } from '@vostok/ui-kit';
 import './style.css';
 import { createStore } from './store/store';
 import { createViewer } from './viewer/viewer';
@@ -1399,7 +1399,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // In-memory only (resets on refresh) so the big modal reappears for new sessions.
   let downloadCount = 0;
 
-  const COMMERCIAL_URL = 'https://makerworld.com/en/@Vostok_Labs#commercial-membership-open';
+  const COMMERCIAL_URL = BRAND.urls.mwCommercial;
   const LICENSE_URL = 'https://creativecommons.org/licenses/by-nc-nd/4.0/';
 
   function showLicenseModal() {
@@ -1420,7 +1420,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           <p>
             If you plan to sell these as 3D-printed products, you need a
             <strong>commercial license membership</strong>, it's just
-            <strong class="license-price">$15&nbsp;/&nbsp;month</strong> and unlocks full commercial rights.
+            <strong class="license-price">$${BRAND.pricing.subscription.month}&nbsp;/&nbsp;month</strong> and unlocks full commercial rights.
           </p>
           <a class="license-cta" href="${COMMERCIAL_URL}" target="_blank" rel="noopener noreferrer">
             Get the commercial license →
@@ -1612,25 +1612,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const handle = dialog({ title: 'Open a project', content: list });
 
     for (const p of projects) {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'vl-btn vl-btn--secondary ck-project-row';
-      if (p.preview) {
-        const img = document.createElement('img');
-        img.className = 'ck-project-thumb';
-        img.alt = '';
-        // The host turns a path into a URL: the right protocol is `asset:` on macOS and
-        // Linux and `http://asset.localhost` on Windows, so a hand-written one is a broken
-        // thumbnail on one of the two with nothing in the console to say why.
-        img.src = hostAssetUrl(host, p.preview);
-        row.append(img);
-      }
-      const label = document.createElement('span');
-      label.textContent = p.name;
-      row.append(label);
-      row.addEventListener('click', () => {
-        handle.close();
-        void openProject(p.id);
+      // The host turns a path into a URL: the right protocol is `asset:` on macOS and
+      // Linux and `http://asset.localhost` on Windows, so a hand-written one is a broken
+      // thumbnail on one of the two with nothing in the console to say why.
+      const row = listRow({
+        label: p.name,
+        thumb: p.preview ? hostAssetUrl(host, p.preview) : undefined,
+        onClick: () => {
+          handle.close();
+          void openProject(p.id);
+        },
       });
       list.append(row);
     }

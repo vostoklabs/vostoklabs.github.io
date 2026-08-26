@@ -1,0 +1,88 @@
+/* Edge panel — see components/drawer.ts. No backdrop on purpose: what is behind it
+   stays visible and stays interactive. */
+
+.vl-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  width: min(400px, 92vw);
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-modal);
+  animation: vl-drawer-in var(--dur-in-sm) var(--ease-enter);
+}
+
+@keyframes vl-drawer-in {
+  from { transform: translateX(16px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.vl-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.vl-drawer__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text);
+}
+
+.vl-drawer__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+}
+.vl-drawer__close:hover { color: var(--text); border-color: var(--line); }
+.vl-drawer__close:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.vl-drawer__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 16px;
+  overflow: hidden;
+}
+
+/* On a phone the same panel becomes a bottom sheet. Taking the full width would
+   hide the very thing the drawer exists to keep visible. */
+@media (max-width: 640px) {
+  .vl-drawer {
+    top: auto;
+    left: 0;
+    width: auto;
+    height: 62vh;
+    border-left: none;
+    border-top: 1px solid var(--line);
+    border-radius: var(--radius-modal) var(--radius-modal) 0 0;
+    animation: vl-sheet-in var(--dur-in-sm) var(--ease-enter);
+  }
+
+  @keyframes vl-sheet-in {
+    from { transform: translateY(16px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+}

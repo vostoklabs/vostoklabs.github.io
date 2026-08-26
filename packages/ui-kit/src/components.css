@@ -28,7 +28,10 @@
   line-height: 1;
   text-decoration: none;
   cursor: pointer;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    background var(--dur-hover) var(--ease-standard);
 }
 .vl-topbar-btn svg { flex: 0 0 auto; }
 .vl-topbar-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -70,7 +73,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: vl-fade-in 0.25s ease;
+  animation: vl-fade-in var(--dur-in-lg) var(--ease-enter);
   padding: 16px;
 }
 @keyframes vl-fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -164,7 +167,9 @@
   padding: 11px 20px;
   border-radius: var(--radius-btn);
   text-decoration: none;
-  transition: background 0.12s, transform 0.1s;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
 }
 .vl-commercial-cta:hover { background: var(--red-hover); }
 .vl-commercial-cta:active { transform: scale(0.98); }
@@ -187,7 +192,9 @@
   gap: 8px;
   transform: translateX(calc(100% + 32px));
   opacity: 0;
-  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease;
+  transition:
+    transform var(--dur-in-lg) var(--ease-enter),
+    opacity var(--dur-in-lg) var(--ease-enter);
 }
 .vl-license-toast.show { transform: translateX(0); opacity: 1; }
 .vl-license-toast-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--accent-2); }
@@ -268,7 +275,9 @@
   cursor: pointer;
   font: inherit;
   font-size: 15px;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
   text-align: center;
   width: 100%;
   min-width: 0;
@@ -279,6 +288,50 @@
 .vl-tab.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 .vl-tab:hover:not(.active) { color: var(--text); background: rgba(255, 255, 255, 0.03); }
 :root[data-theme='light'] .vl-tab:hover:not(.active) { background: rgba(0, 0, 0, 0.03); }
+
+/* The sliding selection pill.
+
+   `segmentedControl()` adds `.vl-tabs--indicator` and one `.vl-tabs__indicator` child, then
+   measures the active tab and drives width/transform from JS — the grid's columns depend on
+   the panel width, so there is nothing to derive in CSS. The active tab hands its background
+   to the pill and keeps only its text colour, so the *look* is unchanged and only the
+   transition is new. Hover on an inactive tab still paints its own wash: that is a different
+   object under the cursor, not the selection moving. */
+.vl-tabs--indicator { position: relative; }
+.vl-tabs--indicator .vl-tab { position: relative; z-index: 1; }
+
+/* The active tab hands its background to the pill ONLY once the pill has actually been
+   measured and placed — note `.is-ready ~`, not a plain descendant selector.
+
+   This is load-bearing, and it was a real bug before it was a rule. Placement depends on a
+   ResizeObserver callback, and ResizeObserver (like requestAnimationFrame) is part of the
+   "update the rendering" steps, so it does not fire while the document is not being
+   rendered — a background tab, a hidden window. With an unconditional `background:
+   transparent` the pill stayed at opacity 0 and the tab painted nothing, so a generator
+   restored into a background tab showed a segmented control with NO selection at all.
+
+   The resting state must be correct without JavaScript. Worst case here is today's instant
+   swap; it can never be an invisible selection. (The indicator is the first child and the
+   tabs follow it, so `~` reaches all of them.) */
+.vl-tabs__indicator.is-ready ~ .vl-tab.active { background: transparent; }
+
+.vl-tabs__indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  opacity: 0;
+  border-radius: var(--radius-chip);
+  background: var(--accent);
+  pointer-events: none;
+  transition:
+    transform var(--dur-in-md) var(--ease-standard),
+    width var(--dur-in-md) var(--ease-standard),
+    opacity var(--dur-in-sm) var(--ease-enter);
+}
+/* Held invisible until it has been measured once, so it never flashes at the far left of a
+   control that has not been laid out yet. */
+.vl-tabs__indicator.is-ready { opacity: 1; }
 
 /* ---------- Toggle switch (iOS style, green when on) ---------- */
 .vl-switch-row {
@@ -295,7 +348,8 @@
   inset: 0;
   background: var(--line);
   border-radius: var(--radius-pill);
-  transition: background 0.18s ease;
+  transition:
+    background var(--dur-in-sm) var(--ease-standard);
 }
 .vl-toggle .vl-knob::before {
   content: '';
@@ -306,7 +360,8 @@
   top: 3px;
   background: #fff;
   border-radius: 50%;
-  transition: transform 0.18s ease;
+  transition:
+    transform var(--dur-in-sm) var(--ease-standard);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 .vl-toggle input:checked + .vl-knob { background: var(--accent-2); }
@@ -316,8 +371,7 @@
 /* ---------- Slider row (label + value badge + range) ---------- */
 .vl-slider-row { display: flex; flex-direction: column; gap: 6px; }
 .vl-slider-head { display: flex; justify-content: space-between; align-items: center; }
-.vl-slider-head > label { color: var(--muted); font-size: 15px; }
-.vl-slider-row input[type='range'] { width: 100%; min-width: 0; accent-color: var(--accent); }
+.vl-slider-head > label { color: var(--muted); font-size: var(--label-fs); }
 .vl-val {
   width: 82px;
   background: var(--panel-2);
@@ -340,22 +394,52 @@
 
 /* ---------- Field (label + input/select) ---------- */
 .vl-field { display: grid; gap: 8px; }
-.vl-field > label { color: var(--muted); font-size: 15px; }
+.vl-field > label { color: var(--muted); font-size: var(--label-fs); }
 .vl-field input,
+.vl-field textarea,
 .vl-field select {
   width: 100%;
   background: var(--panel-2);
   border: 1px solid var(--line);
   color: var(--text);
   border-radius: var(--radius-field);
-  padding: 10px 11px;
+  padding: var(--field-pad-y) var(--field-pad-x);
   font: inherit;
+  /* Comfortable resolves to --fs-base, i.e. exactly the value `font: inherit` already
+     produced. Named only so compact density has something to change. */
+  font-size: var(--field-fs);
+  /* These had no transition and no hover state at all: a dropdown is the one control in the
+     sidebar that gave no sign it was interactive until it was already open. */
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    background-color var(--dur-hover) var(--ease-standard);
+}
+.vl-field select { cursor: pointer; }
+.vl-field input:hover:not(:disabled),
+.vl-field textarea:hover:not(:disabled),
+.vl-field select:hover:not(:disabled) { border-color: var(--accent); }
+.vl-field input:focus-visible,
+.vl-field textarea:focus-visible,
+.vl-field select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
 }
 .vl-field select:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* The two things a textarea needs that an input does not: a floor on its height, and
+   a handle to raise it — a list is a thing people keep adding to. Everything else it
+   inherits from the rule above, so a caller never has to remember a class. */
+.vl-field textarea {
+  box-sizing: border-box;
+  min-height: 140px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
 /* ---------- Captioned control (segmented control with a label + tooltip) ---------- */
 .vl-control { display: grid; gap: 8px; }
-.vl-control-label { color: var(--muted); font-size: 15px; }
+.vl-control-label { color: var(--muted); font-size: var(--label-fs); }
 
 /* ---------- "?" help tip + bubble ---------- */
 .vl-help {
@@ -374,7 +458,9 @@
   line-height: 1;
   cursor: help;
   vertical-align: middle;
-  transition: border-color 0.12s, color 0.12s;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
 }
 .vl-help:hover, .vl-help:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
 .vl-help-bubble {
@@ -391,6 +477,15 @@
   font-weight: 400;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
   pointer-events: none;
+  /* Fade only, no movement. A bubble that slides is a bubble you read late - and this
+     one is fixed-positioned at the cursor, so travel reads as the tip chasing the
+     pointer. Out is quicker than in: leaving should not linger. */
+  opacity: 0;
+  transition: opacity var(--dur-out-sm) var(--ease-standard);
+}
+.vl-help-bubble[data-open] {
+  opacity: 1;
+  transition-duration: var(--dur-in-sm);
 }
 
 /* ---------- Transient status toast ---------- */
@@ -415,7 +510,7 @@
   font-size: 15px;
   color: var(--text);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
-  animation: vl-fade-in 0.2s ease;
+  animation: vl-fade-in var(--dur-in-md) var(--ease-enter);
 }
 .vl-toast--ok { border-color: var(--accent-2); }
 .vl-toast--warn { border-color: var(--warn); }
@@ -440,7 +535,9 @@
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
-  transition: border-color 0.12s, color 0.12s;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
 }
 .vl-support a svg { flex: 0 0 auto; width: 15px; height: 15px; color: var(--muted); }
 .vl-support a:hover { border-color: var(--accent); color: var(--accent); }
@@ -469,7 +566,11 @@
   border-radius: var(--radius-btn);
   cursor: pointer;
   padding: 0;
-  transition: border-color 0.12s, color 0.12s, background 0.12s, transform 0.06s;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    background var(--dur-hover) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
 }
 .vl-dpad-btn:hover { border-color: var(--accent); color: var(--accent); }
 .vl-dpad-btn:active { transform: scale(0.92); }
@@ -517,7 +618,7 @@
   border-top-color: transparent;
   border-radius: 50%;
   opacity: 0.9;
-  animation: vl-spin 0.7s linear infinite;
+  animation: vl-spin var(--dur-spin) var(--ease-linear) infinite;
 }
 @keyframes vl-spin { to { transform: rotate(360deg); } }
 
@@ -676,7 +777,9 @@
   border-radius: var(--radius-chip, 6px);
   background: var(--swatch, transparent);
   cursor: pointer;
-  transition: box-shadow 90ms ease, transform 90ms ease;
+  transition:
+    box-shadow var(--dur-out-sm) var(--ease-standard),
+    transform var(--dur-out-sm) var(--ease-standard);
 }
 .vl-swatch:hover { transform: translateY(-1px); }
 .vl-swatch.is-on {

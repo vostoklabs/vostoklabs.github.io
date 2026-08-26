@@ -9,6 +9,7 @@ import {
   qualityCallout,
   sidebarFooter,
   el,
+  button,
   sliderRow,
   segmentedControl,
   toggleSwitch,
@@ -16,6 +17,13 @@ import {
   dialog,
   openLicenseModal,
   licenseReminderToast,
+  dropZone,
+  sampleGrid,
+  filamentRow,
+  modeBar,
+  collapsibleSection,
+  chip,
+  bareIconButton,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 
@@ -29,7 +37,6 @@ import { downloadThreeMF } from './export/threemfExport';
 import { runImportWizard } from './ui/import-wizard';
 import {
   DEFAULT_PREPROCESS,
-  FILAMENTS,
   POP,
   SHAPE_LIBRARY,
   SOCKET_WALL_MM,
@@ -462,19 +469,21 @@ function renderSourcePanel() {
         ]),
       ]),
     );
-    const adjust = el('button', { className: 'vl-btn', text: 'Adjust image…', attrs: { type: 'button' } });
-    adjust.addEventListener('click', () => {
-      if (!originalImage) return;
-      runImportWizard({
-        baseImage: originalImage,
-        initial: preprocess,
-        onComplete: ({ adjusted, preprocess: p }) => {
-          preprocess = p;
-          originalImage = adjusted;
-          patch({ removeBg: !p.keepBackground });
-          reprocess(false);
-        },
-      });
+    const adjust = button({
+      label: 'Adjust image…',
+      onClick: () => {
+        if (!originalImage) return;
+        runImportWizard({
+          baseImage: originalImage,
+          initial: preprocess,
+          onComplete: ({ adjusted, preprocess: p }) => {
+            preprocess = p;
+            originalImage = adjusted;
+            patch({ removeBg: !p.keepBackground });
+            reprocess(false);
+          },
+        });
+      },
     });
     kids.push(adjust);
     kids.push(
@@ -528,36 +537,36 @@ function renderSourcePanel() {
         },
       }),
     );
-    const back = el('button', { className: 'vl-btn', text: 'Use a library shape instead', attrs: { type: 'button' } });
-    back.addEventListener('click', () => {
-      patch({ source: 'library' });
-      renderSourcePanel();
-      renderShapeGallery();
-      scheduleRebuild(0);
+    const back = button({
+      label: 'Use a library shape instead',
+      onClick: () => {
+        patch({ source: 'library' });
+        renderSourcePanel();
+        renderShapeGallery();
+        scheduleRebuild(0);
+      },
     });
     kids.push(back);
   } else {
-    const upload = el('button', { className: 'import-card', attrs: { type: 'button' } }, [
-      el('span', { className: 'drop-title', text: 'Upload an image' }),
-      el('span', { className: 'drop-note', text: 'PNG or JPG. The outline becomes the shape.' }),
-    ]);
-    const file = el('input', { attrs: { type: 'file', accept: 'image/*' }, className: 'hidden' }) as HTMLInputElement;
-    upload.addEventListener('click', () => file.click());
-    file.addEventListener('change', () => {
-      const f = file.files?.[0];
-      if (f) importImage(() => loadFileToImage(f), f.name.replace(/\.[^.]+$/, ''));
-      file.value = '';
-    });
-    kids.push(upload, file);
+    kids.push(
+      dropZone({
+        title: 'Upload an image',
+        note: 'PNG or JPG. The outline becomes the shape.',
+        accept: 'image/*',
+        onFiles: (files) => {
+          const f = files[0];
+          if (f) importImage(() => loadFileToImage(f), f.name.replace(/\.[^.]+$/, ''));
+        },
+      }),
+    );
 
-    const grid = el('div', { className: 'sample-inline-grid' });
-    for (const sample of SAMPLES) {
-      const b = el('button', { className: 'sample-inline-item', attrs: { type: 'button', title: sample.name } });
-      b.appendChild(el('img', { attrs: { src: sample.src, alt: sample.name, loading: 'lazy' } }));
-      b.addEventListener('click', () => importImage(sample.load, sample.name));
-      grid.appendChild(b);
-    }
-    kids.push(el('p', { className: 'sample-heading', text: 'Or try a sample' }), grid);
+    kids.push(
+      sampleGrid({
+        heading: 'Or try a sample',
+        items: SAMPLES.map((sample) => ({ src: sample.src, label: sample.name })),
+        onPick: (_item, i) => importImage(SAMPLES[i].load, SAMPLES[i].name),
+      }),
+    );
   }
 
   sourcePanel.replaceChildren(...kids);
@@ -577,57 +586,74 @@ const sizeSlider = sliderRow({
   },
 });
 
-const shapeSection = collapsible('Shape', true, [
-  segmentedControl<Source>({
-    label: 'Start from',
-    value: DEFAULTS.source,
-    options: [
-      { value: 'library', label: 'A shape' },
-      { value: 'image', label: 'An image' },
-    ],
-    onChange: (val) => {
-      if (val === 'image' && !originalImage) {
-        // Nothing to show yet — the panel's upload card is the next step.
-        patch({ source: 'image' });
+const shapeSection = collapsibleSection({
+  title: 'Shape',
+  open: true,
+  body: [
+    segmentedControl<Source>({
+      label: 'Start from',
+      value: DEFAULTS.source,
+      options: [
+        { value: 'library', label: 'A shape' },
+        { value: 'image', label: 'An image' },
+      ],
+      onChange: (val) => {
+        if (val === 'image' && !originalImage) {
+          // Nothing to show yet — the panel's upload card is the next step.
+          patch({ source: 'image' });
+          renderSourcePanel();
+          return;
+        }
+        patch({ source: val });
         renderSourcePanel();
-        return;
-      }
-      patch({ source: val });
-      renderSourcePanel();
-      renderShapeGallery();
-      scheduleRebuild(0);
-    },
-  }),
-  shapeGallery,
-  sourcePanel,
-  sizeSlider,
-  shapeExtras,
-]);
+        renderShapeGallery();
+        scheduleRebuild(0);
+      },
+    }),
+    shapeGallery,
+    sourcePanel,
+    sizeSlider,
+    shapeExtras,
+  ],
+});
 
 // ---------------------------------------------------------------------------
 // Left panel — Buttons
 // ---------------------------------------------------------------------------
 const buttonChips = el('div', { className: 'mg-chips' });
 
+// A tiny stroke X, matching @vostok/ui-kit's own icon style — the kit has no
+// "close" entry in ICONS, and bareIconButton() needs raw SVG, not the '×' glyph.
+const CLOSE_ICON =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" ' +
+  'stroke-linecap="round" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>';
+
 function renderButtonChips() {
   const report = store.get().report;
   const n = report?.placed ?? 0;
   const kids: HTMLElement[] = [];
   for (let i = 0; i < n; i++) {
-    const chip = el('span', { className: 'mg-chip', text: `Button ${i + 1}` });
+    // A static badge, not a control — deliberately a <span>, not chip(): chip()
+    // is always a real <button>, and this label has nothing of its own to click.
+    const item = el('span', { className: 'mg-chip', text: `Button ${i + 1}` });
     if (n > 1) {
-      const x = el('button', { className: 'mg-chip__x', text: '×', attrs: { type: 'button', title: 'Remove' } });
-      x.addEventListener('click', () => {
-        const next = s().buttons.slice();
-        next.splice(i, 1);
-        patch({ buttonCount: Math.max(1, s().buttonCount - 1), buttons: next });
-        scheduleRebuild(0);
-      });
-      chip.appendChild(x);
+      item.appendChild(
+        bareIconButton({
+          icon: CLOSE_ICON,
+          label: 'Remove',
+          className: 'mg-chip__x',
+          onClick: () => {
+            const next = s().buttons.slice();
+            next.splice(i, 1);
+            patch({ buttonCount: Math.max(1, s().buttonCount - 1), buttons: next });
+            scheduleRebuild(0);
+          },
+        }),
+      );
     }
-    kids.push(chip);
+    kids.push(item);
   }
-  const add = el('button', { className: 'mg-chip mg-chip--add', text: '+ Add', attrs: { type: 'button' } });
+  const add = chip({ label: '+ Add', className: 'mg-chip mg-chip--add' });
   add.addEventListener('click', () => {
     patch({ buttonCount: Math.min(24, s().buttonCount + 1) });
     scheduleRebuild(0);
@@ -648,185 +674,175 @@ const countSlider = sliderRow({
   },
 });
 
-const buttonSection = collapsible('Pop buttons', true, [
-  countSlider,
-  segmentedControl<ButtonLayout>({
-    label: 'Layout',
-    value: DEFAULTS.buttonLayout,
-    options: [
-      { value: 'auto', label: 'Spread' },
-      { value: 'grid', label: 'Grid' },
-      { value: 'manual', label: 'By hand' },
-    ],
-    onChange: (val) => {
-      patch({ buttonLayout: val });
-      store.set({ editMode: val === 'manual' ? 'buttons' : store.get().editMode });
-      renderEditBar();
-      applyEditMode();
-      scheduleRebuild(0);
-    },
-  }),
-  sliderRow({
-    label: 'Spacing',
-    min: 0,
-    max: 20,
-    value: DEFAULTS.buttonSpacing,
-    unit: 'mm',
-    help: `Extra plastic between buttons, on top of the ${SOCKET_WALL_MM} mm minimum wall.`,
-    onInput: (n) => {
-      patch({ buttonSpacing: n });
-      scheduleRebuild();
-    },
-  }),
-  buttonChips,
-  (() => {
-    const b = el('button', { className: 'vl-btn', text: 'Reset to automatic layout', attrs: { type: 'button' } });
-    b.addEventListener('click', () => {
-      patch({ buttonLayout: 'auto', buttons: [] });
-      store.set({ editMode: 'color' });
-      renderEditBar();
-      applyEditMode();
-      scheduleRebuild(0);
-    });
-    return b;
-  })(),
-]);
+const buttonSection = collapsibleSection({
+  title: 'Pop buttons',
+  open: true,
+  body: [
+    countSlider,
+    segmentedControl<ButtonLayout>({
+      label: 'Layout',
+      value: DEFAULTS.buttonLayout,
+      options: [
+        { value: 'auto', label: 'Spread' },
+        { value: 'grid', label: 'Grid' },
+        { value: 'manual', label: 'By hand' },
+      ],
+      onChange: (val) => {
+        patch({ buttonLayout: val });
+        const nextMode = val === 'manual' ? 'buttons' : store.get().editMode;
+        store.set({ editMode: nextMode });
+        editModeBar.setValue(nextMode);
+        applyEditMode();
+        scheduleRebuild(0);
+      },
+    }),
+    sliderRow({
+      label: 'Spacing',
+      min: 0,
+      max: 20,
+      value: DEFAULTS.buttonSpacing,
+      unit: 'mm',
+      help: `Extra plastic between buttons, on top of the ${SOCKET_WALL_MM} mm minimum wall.`,
+      onInput: (n) => {
+        patch({ buttonSpacing: n });
+        scheduleRebuild();
+      },
+    }),
+    buttonChips,
+    button({
+      label: 'Reset to automatic layout',
+      onClick: () => {
+        patch({ buttonLayout: 'auto', buttons: [] });
+        store.set({ editMode: 'color' });
+        editModeBar.setValue('color');
+        applyEditMode();
+        scheduleRebuild(0);
+      },
+    }),
+  ],
+});
 
 // ---------------------------------------------------------------------------
 // Left panel — Style + Fit
 // ---------------------------------------------------------------------------
-function swatchRow(label: string, get: () => RGB, set: (rgb: RGB) => void): HTMLElement {
-  const row = el('div', { className: 'fil-row' });
-  const render = () => {
-    row.replaceChildren(el('span', { className: 'vl-label', text: label }));
-    for (const [name, hex] of FILAMENTS) {
-      const rgb: RGB = [
-        parseInt(hex.slice(1, 3), 16),
-        parseInt(hex.slice(3, 5), 16),
-        parseInt(hex.slice(5, 7), 16),
-      ];
-      const active = get().join(',') === rgb.join(',');
-      const chip = el('button', {
-        className: `fil-chip${active ? ' is-active' : ''}`,
-        attrs: { type: 'button', title: name, style: `background:${hex}` },
-      });
-      chip.addEventListener('click', () => {
-        set(rgb);
-        render();
-        scheduleRebuild(0);
-      });
-      row.appendChild(chip);
-    }
-  };
-  render();
-  return row;
+/** `filamentRow()` works in hex; body/button colour are stored as RGB triples
+ *  throughout the build pipeline, so the boundary converts. */
+function rgbToHex([r, g, b]: RGB): string {
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+function hexToRgb(hex: string): RGB {
+  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
 }
 
-const styleSection = collapsible('Style', false, [
-  swatchRow('Body colour', () => s().bodyRgb, (rgb) => patch({ bodyRgb: rgb })),
-  swatchRow('Button colour', () => s().buttonRgb, (rgb) => patch({ buttonRgb: rgb })),
-  toggleSwitch({
-    label: 'Bevelled top edge',
-    checked: DEFAULTS.bevelEdge,
-    onChange: (on) => {
-      patch({ bevelEdge: on });
-      scheduleRebuild(0);
-    },
-  }),
-  sliderRow({
-    label: 'Bevel size',
-    min: 0.2,
-    max: 4,
-    value: DEFAULTS.bevelSize,
-    step: 0.1,
-    unit: 'mm',
-    help: 'Only the top edge is bevelled. The bottom face prints against the plate and must stay square.',
-    onInput: (n) => {
-      patch({ bevelSize: n });
-      scheduleRebuild();
-    },
-  }),
-]);
+const styleSection = collapsibleSection({
+  title: 'Style',
+  open: false,
+  body: [
+    filamentRow({
+      label: 'Body colour',
+      value: rgbToHex(DEFAULTS.bodyRgb),
+      onChange: (hex) => {
+        patch({ bodyRgb: hexToRgb(hex) });
+        scheduleRebuild(0);
+      },
+    }),
+    filamentRow({
+      label: 'Button colour',
+      value: rgbToHex(DEFAULTS.buttonRgb),
+      onChange: (hex) => {
+        patch({ buttonRgb: hexToRgb(hex) });
+        scheduleRebuild(0);
+      },
+    }),
+    toggleSwitch({
+      label: 'Bevelled top edge',
+      checked: DEFAULTS.bevelEdge,
+      onChange: (on) => {
+        patch({ bevelEdge: on });
+        scheduleRebuild(0);
+      },
+    }),
+    sliderRow({
+      label: 'Bevel size',
+      min: 0.2,
+      max: 4,
+      value: DEFAULTS.bevelSize,
+      step: 0.1,
+      unit: 'mm',
+      help: 'Only the top edge is bevelled. The bottom face prints against the plate and must stay square.',
+      onInput: (n) => {
+        patch({ bevelSize: n });
+        scheduleRebuild();
+      },
+    }),
+  ],
+});
 
-const fitSection = collapsible('Fit', false, [
-  el('p', { className: 'hint-text', text:
-    `The socket is a fixed snap fit: ⌀${POP.outerDiameter} housing, ⌀${POP.boreDiameter} bore, ` +
-    `${POP.height} mm deep. Only the bore is adjustable. The spring beams and the snap bead are ` +
-    `part of the mechanism and are never scaled.` }),
-  sliderRow({
-    label: 'Button clearance',
-    min: -0.1,
-    max: 0.3,
-    value: DEFAULTS.buttonClearance,
-    step: 0.05,
-    unit: 'mm',
-    help: 'Extra bore DIAMETER for the press fit. Buttons print in place: raise this if they fuse to the socket, lower it if they rattle.',
-    onInput: (n) => {
-      patch({ buttonClearance: n });
-      scheduleRebuild(260);
-    },
-  }),
-]);
+const fitSection = collapsibleSection({
+  title: 'Fit',
+  open: false,
+  body: [
+    el('p', { className: 'hint-text', text:
+      `The socket is a fixed snap fit: ⌀${POP.outerDiameter} housing, ⌀${POP.boreDiameter} bore, ` +
+      `${POP.height} mm deep. Only the bore is adjustable. The spring beams and the snap bead are ` +
+      `part of the mechanism and are never scaled.` }),
+    sliderRow({
+      label: 'Button clearance',
+      min: -0.1,
+      max: 0.3,
+      value: DEFAULTS.buttonClearance,
+      step: 0.05,
+      unit: 'mm',
+      help: 'Extra bore DIAMETER for the press fit. Buttons print in place: raise this if they fuse to the socket, lower it if they rattle.',
+      onInput: (n) => {
+        patch({ buttonClearance: n });
+        scheduleRebuild(260);
+      },
+    }),
+  ],
+});
 
 // ---------------------------------------------------------------------------
 // Stage
 // ---------------------------------------------------------------------------
 const stageCanvas = el('div', { className: 'mg-stage-canvas' });
-const viewBar = el('div', { className: 'mg-view-bar' });
-const editBar = el('div', { className: 'edit-mode-bar' });
 const statusEl = el('p', { className: 'mg-status' });
 const hintEl = el('p', { className: 'vl-stage__hint' });
 
-function renderViewBar() {
-  const cur = store.get().view;
-  viewBar.replaceChildren(
-    ...(
-      [
-        ['front', 'Image side'],
-        ['back', 'Button side'],
-        ['iso', '3D'],
-      ] as [ViewPreset, string][]
-    ).map(([id, label]) => {
-      const b = el('button', {
-        className: `mg-view-btn${cur === id ? ' is-active' : ''}`,
-        text: label,
-        attrs: { type: 'button' },
-      });
-      b.addEventListener('click', () => {
-        store.set({ view: id });
-        viewer.setView(id);
-        renderViewBar();
-      });
-      return b;
-    }),
-  );
-}
+// The pockets are on the back face, so getting there has to be one click, not
+// a rotate-and-hunt: a row of mutually exclusive buttons is exactly what
+// segmentedControl() expresses. `mg-view-bar` only positions it now — the
+// pill chrome (background/border/radius) comes from the kit's own .vl-tabs.
+const viewBar = segmentedControl<ViewPreset>({
+  options: [
+    { value: 'front', label: 'Image side' },
+    { value: 'back', label: 'Button side' },
+    { value: 'iso', label: '3D' },
+  ],
+  value: store.get().view,
+  onChange: (id) => {
+    store.set({ view: id });
+    viewer.setView(id);
+  },
+});
+viewBar.classList.add('mg-view-bar');
 
-function renderEditBar() {
-  const cur = store.get().editMode;
-  editBar.replaceChildren(
-    ...(
-      [
-        ['color', 'Colours'],
-        ['buttons', 'Place buttons'],
-      ] as [EditMode, string][]
-    ).map(([id, label]) => {
-      const b = el('button', {
-        className: `edit-mode-btn${cur === id ? ' is-active' : ''}`,
-        text: label,
-        attrs: { type: 'button' },
-      });
-      b.addEventListener('click', () => {
-        store.set({ editMode: id });
-        if (id === 'buttons') patch({ buttonLayout: 'manual' });
-        renderEditBar();
-        applyEditMode();
-        if (id === 'buttons') scheduleRebuild(0);
-      });
-      return b;
-    }),
-  );
-}
+// Same top-centre stage slot the kit reserves for "what a click on the model
+// does" — this bar is exactly that, so it takes the kit's modeBar() outright
+// rather than the panel-embedded segmentedControl().
+const editModeBar = modeBar<EditMode>({
+  modes: [
+    { value: 'color', label: 'Colours' },
+    { value: 'buttons', label: 'Place buttons' },
+  ],
+  value: store.get().editMode,
+  onChange: (id) => {
+    store.set({ editMode: id });
+    if (id === 'buttons') patch({ buttonLayout: 'manual' });
+    applyEditMode();
+    if (id === 'buttons') scheduleRebuild(0);
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Right panel
@@ -845,33 +861,19 @@ function renderPalette() {
   }
   const kids: HTMLElement[] = [];
   pal.forEach((entry, i) => {
-    const row = el('div', { className: 'fil-row' });
-    row.appendChild(
-      el('span', {
-        className: 'swatch',
-        attrs: { style: `background:rgb(${entry.filamentRgb.join(',')})`, title: `Colour ${i + 1}` },
+    kids.push(
+      filamentRow({
+        label: `Colour ${i + 1}`,
+        value: rgbToHex(entry.filamentRgb),
+        onChange: (hex) => {
+          const next = store.get().palette.slice();
+          next[i] = { ...next[i], filamentRgb: hexToRgb(hex) };
+          store.set({ palette: next });
+          renderPalette();
+          scheduleRebuild(0);
+        },
       }),
     );
-    for (const [name, hex] of FILAMENTS) {
-      const rgb: RGB = [
-        parseInt(hex.slice(1, 3), 16),
-        parseInt(hex.slice(3, 5), 16),
-        parseInt(hex.slice(5, 7), 16),
-      ];
-      const chip = el('button', {
-        className: `fil-chip${entry.filamentRgb.join(',') === rgb.join(',') ? ' is-active' : ''}`,
-        attrs: { type: 'button', title: name, style: `background:${hex}` },
-      });
-      chip.addEventListener('click', () => {
-        const next = store.get().palette.slice();
-        next[i] = { ...next[i], filamentRgb: rgb };
-        store.set({ palette: next });
-        renderPalette();
-        scheduleRebuild(0);
-      });
-      row.appendChild(chip);
-    }
-    kids.push(row);
   });
   const slots = new Set(pal.map((p) => p.filamentRgb.join(',')));
   slots.add(s().bodyRgb.join(','));
@@ -1004,7 +1006,7 @@ const shell = appShell({
       fitSection,
     ],
   },
-  stage: [viewBar, editBar, stageCanvas, statusEl, hintEl],
+  stage: [viewBar, editModeBar.root, stageCanvas, statusEl, hintEl],
   right: {
     scroll: [
       el('div', { className: 'vl-section' }, [el('p', { className: 'vl-label', text: 'Colours' }), paletteEl]),
@@ -1084,21 +1086,8 @@ store.subscribe((st) => {
   renderButtonChips();
 });
 
-renderViewBar();
-renderEditBar();
 renderShapeGallery();
 renderSourcePanel();
 renderPalette();
 applyEditMode();
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function collapsible(title: string, open: boolean, children: (HTMLElement | null)[]): HTMLElement {
-  const d = el('details', { className: 'vl-section' }) as HTMLDetailsElement;
-  d.open = open;
-  const summary = el('summary', { text: title });
-  d.appendChild(summary);
-  d.appendChild(el('div', { className: 'collapsible-body' }, children.filter(Boolean) as HTMLElement[]));
-  return d;
-}

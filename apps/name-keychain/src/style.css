@@ -99,29 +99,6 @@ body {
   width: 100%;
 }
 
-/* ---- Colour swatches ---- */
-.nk-colors {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-2);
-}
-
-.nk-color {
-  display: grid;
-  gap: var(--space-1);
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.nk-color input {
-  width: 100%;
-  height: 34px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-field);
-  background: var(--panel-2);
-  cursor: pointer;
-}
-
 /* ---- Stage (3D viewport) — keychain adds a radial gradient bg ---- */
 .nk-stage {
   background: radial-gradient(circle at center, var(--panel-2), var(--bg) 70%);
@@ -202,7 +179,9 @@ body {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.12s, color 0.12s;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
 }
 .nk-browse-fonts:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -225,7 +204,8 @@ body {
   font-size: 1.1rem;
   line-height: 1;
   color: var(--muted);
-  transition: transform 0.2s;
+  transition:
+    transform var(--dur-in-md) var(--ease-standard);
 }
 .nk-advanced[open] .nk-advanced__summary::after { transform: rotate(180deg); }
 .nk-nudge { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -233,29 +213,7 @@ body {
 /* ---- Font browser modal ---- */
 .vl-dialog:has(.nk-fontmodal) { width: min(760px, 96vw); }
 .nk-fontmodal { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); }
-.nk-fb__search {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-field);
-  background: var(--panel-2);
-  color: var(--text);
-  font: inherit;
-}
 .nk-fb__chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.nk-fb__chip {
-  padding: 5px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--panel-2);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-.nk-fb__chip:hover { border-color: var(--muted); color: var(--text); }
-.nk-fb__chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
 .nk-fb__list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -327,32 +285,6 @@ body {
   margin-bottom: 8px;
 }
 
-.nk-emoji-grid {
-  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
-  gap: 6px;
-  background: var(--panel-2);
-  padding: 8px;
-  border-radius: var(--radius-field);
-  border: 1px solid var(--line);
-  margin-bottom: 12px;
-}
-
-.nk-emoji-btn {
-  background: transparent;
-  border: none;
-  font-size: 1.2rem;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  text-align: center;
-  transition: background 0.15s;
-}
-
-.nk-emoji-btn:hover {
-  background: var(--hover);
-}
-
-
 /* Saved-project list, desktop only.
    The web build has no host and never opens this dialog, so these rules are inert there —
    cheaper than a second stylesheet for four selectors. */
@@ -365,23 +297,3 @@ body {
   margin-top: 8px;
 }
 
-.nk-project-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  justify-content: flex-start;
-  text-align: left;
-  padding: 8px 10px;
-}
-
-/* Fixed box rather than intrinsic size: the previews are whatever aspect ratio the
-   viewport happened to be, and a list that jitters row heights is unreadable. */
-.nk-project-thumb {
-  width: 56px;
-  height: 42px;
-  object-fit: cover;
-  border-radius: var(--radius-field, 6px);
-  background: var(--panel-2);
-  flex-shrink: 0;
-}

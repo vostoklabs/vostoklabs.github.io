@@ -44,6 +44,22 @@
       "blurb": "Type a number, pick a plate, print a house or office sign that fits your door. Custom fonts, independent line sizes, and keyhole slots so no fixings show."
     },
     {
+      "id": "pen-topper",
+      "name": "Pen Topper Generator",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/pen-topper/",
+      "blurb": "Personalised pen and pencil toppers: any name, 152 fonts, 1392 solid symbols, and a socket sized to the pen you actually own."
+    },
+    {
+      "id": "foldbox",
+      "name": "Fold-Up Box Generator",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/foldbox/",
+      "blurb": "Set the size, pick a structure, print it flat as one thin grooved sheet — then fold it into a box. Four glue-free mailers and trays, with a live fold animation before you commit."
+    },
+    {
       "id": "large-box",
       "name": "Large Customizable Box",
       "route": "mw",

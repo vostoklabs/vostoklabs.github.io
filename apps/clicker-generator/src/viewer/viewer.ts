@@ -6,6 +6,14 @@ import { createBuildPlate, type BuildPlate } from '@vostok/plates/three';
 import { loadPlateChoice, type PlateChoice } from '@vostok/plates';
 import type { ClickerPart, MeshData, RGB, SwitchPlacement, ViewMode } from '../types';
 import { MAKERLAB } from 'virtual:makerlab';
+import { themeColorHex } from '@vostok/ui-kit';
+
+/* Scene background = the `--bg` token, read live. These two literals used to be written out
+   by hand here and in four sibling files; they are `--bg` in each theme, so the viewport
+   matched the chrome only by coincidence. `themeColorHex` resolves the current theme itself,
+   so this needs no theme argument. */
+const sceneBg = () => themeColorHex('--bg', 0x15171c);
+
 
 export type SectionAxis = 'x' | 'y' | 'z';
 
@@ -93,7 +101,7 @@ export function createViewer(container: HTMLElement): Viewer {
 
   const scene = new THREE.Scene();
   const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-  scene.background = new THREE.Color(currentTheme === 'dark' ? 0x15171c : 0xf3f4f6);
+  scene.background = new THREE.Color(sceneBg());
 
   const camera = new THREE.PerspectiveCamera(
     45,
@@ -537,7 +545,7 @@ export function createViewer(container: HTMLElement): Viewer {
     renderer.domElement.remove();
   }
   function setTheme(theme: string) {
-    const bgColor = theme === 'dark' ? 0x15171c : 0xf3f4f6;
+    const bgColor = sceneBg();
     scene.background = new THREE.Color(bgColor);
     buildPlate.setTheme(theme);
   }

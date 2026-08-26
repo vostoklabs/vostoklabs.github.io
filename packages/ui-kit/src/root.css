@@ -50,3 +50,27 @@ body {
 [hidden]:not([hidden='until-found']) {
   display: none !important;
 }
+
+/* The native `<select>` popup.
+
+   The list Chromium opens is a window of its own, drawn outside the page, and it takes its
+   row colours from the `<option>` elements — NOT from the `<select>` they hang off. An option
+   with no background of its own paints straight onto the platform's canvas, which on Windows
+   is white, so a dark-theme app got a white menu hanging off a dark control. (macOS and Linux
+   happen to follow `color-scheme`, which is why this only ever showed up on Windows — and why
+   it survived every review done on a Mac.)
+
+   `.vl-select` has carried the two-line fix for a while; the generators that style a bare
+   `<select>` through a `.field select` rule of their own — the keycap generator's Profile,
+   Size and Font pickers — never picked it up. That is the same per-app drift the page frame
+   above exists to stop, so the rule belongs here, on the element, where nothing has to opt in.
+   `color-scheme` on `:root` (tokens.css) already handles the popup's scrollbar and frame;
+   these are the rows.
+
+   Element specificity (0,0,2), so an app or component that genuinely wants a different menu
+   still outranks it. */
+select option,
+select optgroup {
+  background-color: var(--panel);
+  color: var(--text);
+}

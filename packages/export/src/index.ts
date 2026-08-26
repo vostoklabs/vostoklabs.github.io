@@ -44,6 +44,18 @@ export interface ExportMeta {
   application?: string;
   /** Build id; pass `import.meta.env.VITE_BUILD_ID`. */
   buildId?: string;
+  /** Process-preset keys this model needs slicing a particular way, written into
+   *  the project settings and declared as edits against the system preset.
+   *
+   *  For a normal solid model there is nothing to say here — the system process is
+   *  correct and overriding it would only take choices away. It exists for parts
+   *  whose GEOMETRY encodes an assumption about how they will be sliced: the fold-up
+   *  box's printed sheet is the case, where the fold hinge is literally the first
+   *  layer, so a profile whose first layer is 0.2 mm silently prints a 0.12 mm hinge
+   *  two thirds too thick and the box will not fold.
+   *
+   *  Values are Bambu process keys, exactly as the presets spell them. */
+  process?: Record<string, string | string[]>;
 }
 
 const VL_NS = 'https://vostoklabs.com/3mf/2026';
@@ -142,7 +154,7 @@ export function paletteOf(parts: { color: RGB }[], extruders: number[]): RGB[] {
  *  `BBL_NS` / `BBL_VERSION_META`. Without them Studio reports "The 3mf is not
  *  from Bambu Lab, load geometry data and color data only" and skips this file
  *  entirely, which is the monochrome import above. */
-export function projectSettings(palette: RGB[]): string {
+export function projectSettings(palette: RGB[], process: ExportMeta['process'] = {}): string {
   const n = Math.max(1, palette.length);
   const fill = <T,>(v: T): T[] => Array.from({ length: n }, () => v);
 
@@ -173,11 +185,20 @@ export function projectSettings(palette: RGB[]): string {
   cfg.printer_settings_id = BAMBU_IDENTITY.printerSettingsId;
   cfg.print_compatible_printers = [BAMBU_IDENTITY.printerSettingsId];
 
+  // Anything the model needs sliced its own way, applied over the system process.
+  // Written LAST so it wins, and declared below so Studio shows the process as
+  // modified rather than as a system preset whose values quietly disagree.
+  const edited = Object.keys(process);
+  for (const [key, value] of Object.entries(process)) cfg[key] = value;
+
   // "Nothing here was edited away from the system preset", one entry per preset
   // the project carries: the process, each filament, then the printer. Studio
-  // shows a preset as modified when its entry is non-empty.
+  // shows a preset as modified when its entry is non-empty — which is exactly what
+  // an override above is, so the process entry names the keys it changed.
   const presetCount = n + 2;
-  cfg.different_settings_to_system = Array.from({ length: presetCount }, () => '');
+  cfg.different_settings_to_system = Array.from({ length: presetCount }, (_, i) =>
+    i === 0 ? edited.join(';') : '',
+  );
   cfg.inherits_group = Array.from({ length: presetCount }, () => '');
 
   return JSON.stringify(cfg, null, 2);
@@ -426,7 +447,7 @@ export function buildThreeMF(parts: ExportPart[], meta: ExportMeta): Uint8Array 
       'Metadata/model_settings.config': strToU8(modelSettings),
       // Declares the filament slots the parts above are asking for, so the colours
       // survive the trip into Bambu Studio / Orca even from a one-filament setup.
-      'Metadata/project_settings.config': strToU8(projectSettings(palette)),
+      'Metadata/project_settings.config': strToU8(projectSettings(palette, meta.process)),
       'Metadata/vostok_labs.txt': strToU8(provenance),
     },
     { level: 6 },

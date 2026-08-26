@@ -44,7 +44,11 @@ details.vl-section--collapsible > summary::before {
   font-size: 18px;
   line-height: 1;
   color: var(--muted);
-  transition: transform 0.15s;
+  /* --dur-in-md, not --dur-hover: the chevron and the body it points at are two halves
+     of one gesture and have to run on the same clock. They did not - the chevron eased
+     over 110ms while 300px of controls beneath it appeared in a single frame. */
+  transition:
+    transform var(--dur-in-md) var(--ease-standard);
 }
 
 details.vl-section--collapsible[open] > summary::before {
@@ -105,7 +109,11 @@ details.vl-section--collapsible[open] > summary {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    background-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
 }
 
 .vl-source-card:hover {
@@ -161,8 +169,13 @@ details.vl-section--collapsible[open] > summary {
   font-size: 15px;
   line-height: 1.4;
   cursor: pointer;
-  transition: border-color 0.15s, outline-color 0.15s, background-color 0.15s, color 0.15s, transform 0.15s,
-    box-shadow 0.15s;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    outline-color var(--dur-hover) var(--ease-standard),
+    background-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    transform var(--dur-hover) var(--ease-standard),
+    box-shadow var(--dur-hover) var(--ease-standard);
 }
 
 .vl-drop input[type='file'] {
@@ -172,7 +185,9 @@ details.vl-section--collapsible[open] > summary {
 .vl-drop__icon {
   margin-bottom: 10px;
   color: var(--accent);
-  transition: transform 0.18s ease, color 0.15s;
+  transition:
+    transform var(--dur-in-sm) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
 }
 
 .vl-drop__title {
@@ -226,7 +241,10 @@ details.vl-section--collapsible[open] > summary {
   color: var(--muted);
   font-size: 14px;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    background-color var(--dur-hover) var(--ease-standard);
 }
 
 .vl-upload-cta:hover {
@@ -267,7 +285,9 @@ details.vl-section--collapsible[open] > summary {
   background: var(--panel-2);
   font: inherit;
   cursor: pointer;
-  transition: border-color 0.12s, transform 0.12s;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    transform var(--dur-hover) var(--ease-standard);
 }
 
 .vl-sample:hover {
@@ -332,7 +352,10 @@ details.vl-section--collapsible[open] > summary {
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    box-shadow var(--dur-hover) var(--ease-standard);
 }
 
 .vl-mode-btn svg {
@@ -351,6 +374,38 @@ details.vl-section--collapsible[open] > summary {
   color: var(--accent-text);
   box-shadow: 0 1px 6px rgba(91, 157, 255, 0.35);
 }
+
+/* The travelling pill, same idea as the segmented control's.
+
+   Switching mode used to swap one button's background off and another's on in the same
+   frame while only the colour eased - two things blinking rather than one thing moving.
+   The active button hands its fill to the pill ONLY once the pill reports `is-ready`, so
+   if placement never runs (a background tab, where ResizeObserver does not fire) the
+   selection still paints itself. Worst case is the old instant swap, never a bar with no
+   visible selection. */
+.vl-mode-bar__indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  z-index: 0;
+  opacity: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  box-shadow: 0 1px 6px rgba(91, 157, 255, 0.35);
+  pointer-events: none;
+  transition:
+    transform var(--dur-in-md) var(--ease-standard),
+    width var(--dur-in-md) var(--ease-standard),
+    opacity var(--dur-in-sm) var(--ease-enter);
+}
+.vl-mode-bar__indicator.is-ready { opacity: 1; }
+.vl-mode-bar .vl-mode-btn { position: relative; z-index: 1; }
+.vl-mode-bar__indicator.is-ready ~ .vl-mode-btn.is-active {
+  background: transparent;
+  box-shadow: none;
+}
+
 
 /* ---------------------------------------------------- stage overlay: panel */
 /* Bottom-centre floating panel for whatever the current mode is editing. */
@@ -528,4 +583,29 @@ details.vl-section--collapsible[open] > summary {
   right: 5px;
   font-size: 0.7rem;
   color: var(--warn);
+}
+
+
+/* ---------------------------------------------------- collapsible body
+
+   The height animation that `<details>` cannot do by itself.
+
+   `grid-template-rows: 1fr -> 0fr` rather than `interpolate-size`/`calc-size()`, which is
+   Chromium-only with no WebKit implementation - building this on it would work on Windows
+   and fail on a Mac. Same call Opal made; see its CRAFT.md 1.6.
+
+   The resting state is OPEN, deliberately: if the script that drives `data-closed` never
+   runs, the content is visible rather than collapsed to nothing. An animation must never be
+   the reason content can be seen. */
+.vl-collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--dur-in-md) var(--ease-standard);
+}
+.vl-collapse > * {
+  min-height: 0;
+  overflow: hidden;
+}
+.vl-collapse[data-closed] {
+  grid-template-rows: 0fr;
 }

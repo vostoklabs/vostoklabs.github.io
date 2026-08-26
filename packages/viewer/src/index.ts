@@ -10,8 +10,13 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { themeColorHex } from '@vostok/ui-kit';
 import { createBuildPlate, type BuildPlate } from '@vostok/plates/three';
 import { loadPlateChoice, type PlateChoice } from '@vostok/plates';
+
+// `setPlate` takes this, so an app that calls it needs to be able to name it without
+// taking its own dependency on @vostok/plates just for a type.
+export type { PlateChoice };
 
 export type RGB = [number, number, number];
 
@@ -64,6 +69,14 @@ export interface Viewer {
    *  Framing uses the rig's extent at the moment it is set, and is never touched
    *  again — so a rig that animates does not drag the camera around with it. */
   setFoldRig(rig: THREE.Object3D | null, refit?: boolean): void;
+  /** Put the fold rig back down on the floor after its progress has changed.
+   *
+   *  `setFoldRig` seats the model by measuring it ONCE, and that measurement stops
+   *  being true the moment the fold moves — six of foldbox's nine styles swing a panel
+   *  below where it put the floor, by up to 16 mm, which over a build plate reads as
+   *  the box sinking into the bed. Call this whenever the fold is scrubbed or played;
+   *  it only touches Z, so the framing and the centring stay where they were. */
+  settleFoldRig(): void;
   /** Swap the floor: a build plate, or the plain grid. */
   setPlate(choice: PlateChoice): void;
   setTheme(theme: string): void;
@@ -79,13 +92,38 @@ export interface Viewer {
   dispose(): void;
 }
 
-// The floor sits a hair BELOW the model's bottom face (z = 0) so the solid
-// bottom occludes it cleanly — coplanar at z = 0 causes z-fighting.
+// The floor sits BELOW the model's bottom face (z = 0) so the solid bottom occludes
+// it cleanly — coplanar at z = 0 causes z-fighting.
+//
+// How far below cannot be a constant, which is what it used to be. Depth-buffer
+// precision falls off as the SQUARE of the viewing distance, so a gap that is ample
+// on a keycap is beneath the buffer's notice on a carton blank lying on a build
+// plate: at 40 mm the buffer resolves 0.001 mm, at 400 mm only 0.095 mm. A flat
+// blank sitting 0.06 mm above the plate therefore lands in the same depth bucket as
+// the plate, and the plate's speckle texture and grid lines punch straight through
+// it. `floorGapFor` keeps the gap ahead of the buffer instead.
 const FLOOR_GAP = 0.06;
+const NEAR = 0.1;
+const FAR = 5000;
+
+/** Smallest depth difference the 24-bit buffer can still tell apart at distance `z`. */
+function depthResolution(z: number): number {
+  return (z * z * (FAR - NEAR)) / (NEAR * FAR * 16777216);
+}
+
+/** Twelve depth buckets of clearance, and never less than the old constant — so
+ *  every model small enough to have been fine already is left exactly as it was. */
+function floorGapFor(dist: number): number {
+  return Math.max(FLOOR_GAP, depthResolution(dist) * 12);
+}
 
 function readTheme(): string {
   return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 }
+
+/** Scene background = the `--bg` token, read live so the viewport can never seam against
+ *  the chrome behind it. Fallbacks are the values these files used to hardcode. */
+const sceneBg = () => themeColorHex('--bg', readTheme() === 'light' ? 0xf3f4f6 : 0x15171c);
 
 function toColor(rgb: RGB): THREE.Color {
   return new THREE.Color().setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
@@ -113,9 +151,9 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
   let theme = readTheme();
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(theme === 'light' ? 0xf3f4f6 : 0x15171c);
+  scene.background = new THREE.Color(sceneBg());
 
-  const camera = new THREE.PerspectiveCamera(45, aspect(), 0.1, 5000);
+  const camera = new THREE.PerspectiveCamera(45, aspect(), NEAR, FAR);
   camera.up.set(0, 0, 1); // Z up (CAD)
   camera.position.set(60, -60, 45);
 
@@ -127,7 +165,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   scene.add(key);
   scene.add(new THREE.AmbientLight(0xffffff, 0.2));
 
-  const floorZ = -FLOOR_GAP;
+  let floorZ = -FLOOR_GAP;
   const buildPlate: BuildPlate = createBuildPlate(THREE, { theme, topZ: floorZ });
   buildPlate.setChoice(loadPlateChoice());
   scene.add(buildPlate.object);
@@ -181,6 +219,23 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
         else (m as THREE.Material).dispose();
       }
     });
+  }
+
+  /** Lowest point of the fold rig right now, measured from a zeroed offset so the
+   *  last frame's lift cannot compound into this one. */
+  function settleFoldRig(): void {
+    if (!rig.children.length) return;
+    const prev = rig.position.z;
+    rig.position.z = 0;
+    rig.updateMatrixWorld(true);
+    const min = new THREE.Box3().setFromObject(rig).min.z;
+    if (!Number.isFinite(min)) {
+      rig.position.z = prev;
+      return;
+    }
+    // Keep whatever is currently lowest resting ON the floor. A box folding on a
+    // table never passes through it, and this is the same statement.
+    rig.position.z = -min;
   }
 
   function setFoldRig(next: THREE.Object3D | null, refit = false) {
@@ -425,6 +480,21 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       onResize();
     }
     controls.update();
+    // Depth precision follows where the camera actually IS, not how the model was
+    // framed, so this tracks the zoom rather than being set once per build. Cheap:
+    // `setTopZ` is a position write, and the guard means it only fires on real moves.
+    //
+    // Measured to the FAR side of the model, not to the point the camera is aimed at.
+    // A big flat blank seen at a grazing angle has its far edge hundreds of mm beyond
+    // the centre, and precision falls off as the square of distance — so sizing the
+    // gap on the centre leaves the far half of the sheet still fighting the plate,
+    // which is exactly how it looks: clean near the camera, hatched further away.
+    const reach = Math.max(framedRadius, buildPlate.radius());
+    const wantFloor = -floorGapFor(camera.position.distanceTo(controls.target) + reach);
+    if (Math.abs(wantFloor - floorZ) > 1e-3) {
+      floorZ = wantFloor;
+      buildPlate.setTopZ(floorZ);
+    }
     // From below, a solid plate would sit between the camera and the model —
     // ghost it rather than hiding it, so it never pops as you orbit past level.
     buildPlate.setGhosted(camera.position.z <= floorZ);
@@ -434,7 +504,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   // ---- theme ----
   function setTheme(next: string) {
     theme = next === 'light' ? 'light' : 'dark';
-    scene.background = new THREE.Color(theme === 'light' ? 0xf3f4f6 : 0x15171c);
+    scene.background = new THREE.Color(sceneBg());
     buildPlate.setTheme(theme);
   }
   const themeObserver =
@@ -494,6 +564,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     },
     pickPoint,
     setFoldRig,
+    settleFoldRig,
     setPlate: (choice) => buildPlate.setChoice(choice),
     setTheme,
     setOrbitEnabled: (on) => {

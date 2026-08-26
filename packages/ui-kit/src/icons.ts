@@ -11,6 +11,12 @@ export const ICONS = {
     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10"/><path d="M7 12h6"/><circle cx="16.5" cy="14.5" r="2.5"/><path d="m15 17-1 4 2.5-1.5L19 21l-1-4"/>',
   ),
   zap: stroke('<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>'),
+  // The same bolt with a slash through it — the animation toggle's "off" state.
+  zapOff: stroke(
+    '<path d="M10.5 4.9 13.1 2.2a.5.5 0 0 1 .86.46L12.6 7"/><path d="M15.7 10H20a1 1 0 0 1 .78 1.63l-1.72 1.77"/>' +
+      '<path d="M16.3 16.3 10.9 21.8a.5.5 0 0 1-.86-.46l1.25-3.9"/><path d="M8.1 8.1 4 12.9A1 1 0 0 0 5 14h5.5"/>' +
+      '<line x1="2" y1="2" x2="22" y2="22"/>',
+  ),
   coffee: stroke(
     '<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4Z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>',
   ),

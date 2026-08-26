@@ -14,7 +14,7 @@
  * If this earns its place in a third generator it belongs in `@vostok/ui-kit` alongside
  * `sampleGrid`, not copied a third time.
  */
-import { el, dialog } from '@vostok/ui-kit';
+import { el, dialog, button, textField } from '@vostok/ui-kit';
 import { FONTS, type FontChoice, fontFamilyFor, isFontSupported } from '@vostok/fonts';
 
 /**
@@ -90,10 +90,6 @@ export function fontPicker(opts: FontPickerOptions): FontPicker {
 
   /** The rest of the registry, in a searchable dialog rather than a 155-row dropdown. */
   function openAll() {
-    const search = el('input', {
-      className: 'vl-val hn-font-search',
-      attrs: { type: 'text', placeholder: 'Search fonts…', 'aria-label': 'Search fonts' },
-    }) as HTMLInputElement;
     const list = el('div', { className: 'vl-font-grid hn-font-all' });
 
     const paint = (q: string) => {
@@ -109,7 +105,11 @@ export function fontPicker(opts: FontPickerOptions): FontPicker {
       );
     };
 
-    search.addEventListener('input', () => paint(search.value));
+    const search = textField({
+      label: 'Search fonts',
+      placeholder: 'Search fonts…',
+      onInput: (q) => paint(q),
+    });
     paint('');
 
     const handle = dialog({
@@ -122,11 +122,10 @@ export function fontPicker(opts: FontPickerOptions): FontPicker {
     });
   }
 
-  const allBtn = el('button', {
-    className: 'vl-btn hn-wide',
-    text: 'All fonts…',
-    attrs: { type: 'button' },
-    on: { click: openAll },
+  const allBtn = button({
+    label: 'All fonts…',
+    className: 'hn-wide',
+    onClick: openAll,
   });
 
   function render() {

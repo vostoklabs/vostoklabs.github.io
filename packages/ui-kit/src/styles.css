@@ -1,8 +1,12 @@
 /* @vostok/ui-kit, import this once per app: import '@vostok/ui-kit/styles.css' */
 @import './fonts.css';
 @import './tokens.css';
+@import './motion.css';
 @import './root.css';
 @import './base.css';
 @import './components.css';
+@import './elements.css';
 @import './patterns.css';
+@import './drawer.css';
+@import './symbol-picker.css';
 @import './app-shell.css';

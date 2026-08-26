@@ -14,6 +14,16 @@ export {
 export { topbarLinks, type TopbarLinksOptions } from './components/topbar-links';
 export { resolveTheme, applyTheme, themeToggleButton, type ThemeToggleOptions } from './components/theme';
 export {
+  resolveMotion,
+  effectiveMotion,
+  applyMotion,
+  motionToggleButton,
+  type MotionPreference,
+  type EffectiveMotion,
+  type MotionToggleOptions,
+} from './components/motion';
+
+export {
   generatorHeader,
   qualityCallout,
   projectActions,
@@ -38,20 +48,33 @@ export { offlineDownloadButton, type OfflineDownloadOptions } from './components
 export { encodeParamsToHash, readParamsFromHash, presetShareButton } from './components/preset-share';
 export {
   toggleSwitch,
+  slider,
   sliderRow,
   segmentedControl,
   selectField,
   setFieldOptions,
   helpTip,
   type ToggleOptions,
+  type BareSliderOptions,
+  type SliderHandle,
   type SliderOptions,
   type ValueRow,
   type SegmentedOption,
   type SegmentedOptions,
+  type SegmentedRow,
   type SelectFieldOptions,
 } from './components/controls';
+export {
+  button,
+  iconButton,
+  buttonRow,
+  type ButtonEmphasis,
+  type ButtonOptions,
+  type ButtonHandle,
+  type IconButtonOptions,
+} from './components/button';
 export { dpad, type DpadOptions, type DpadHandle } from './components/dpad';
-export { section, collapsibleSection, type SectionOptions } from './components/section';
+export { section, collapsibleSection, makeCollapsible, type SectionOptions } from './components/section';
 export { drawer, closeAllDrawers, type DrawerOptions, type DrawerHandle } from './components/drawer';
 export {
   symbolPickerButton,
@@ -90,6 +113,44 @@ export {
 } from './components/stage';
 export { ICONS, svgEl } from './icons';
 export { el } from './dom';
+export { themeColorHex } from './tokens';
+export {
+  chip,
+  emptyState,
+  progressBar,
+  skeleton,
+  checkbox,
+  textareaField,
+  type ChipOptions,
+  type ChipHandle,
+  type EmptyStateOptions,
+  type ProgressOptions,
+  type ProgressHandle,
+  type CheckboxOptions,
+  type CheckboxHandle,
+  type TextareaFieldOptions,
+  type TextareaHandle,
+  listRow,
+  bareIconButton,
+  type ListRowOptions,
+  type ListRowHandle,
+  type BareIconButtonOptions,
+  textField,
+  numberField,
+  type TextFieldOptions,
+  type TextFieldHandle,
+  type NumberFieldOptions,
+  type NumberFieldHandle,
+} from './components/elements';
+export {
+  openMenu,
+  closeAllMenus,
+  type MenuItem,
+  type MenuSeparator,
+  type MenuEntry,
+  type MenuOptions,
+  type MenuHandle,
+} from './components/menu';
 
 // Web or desktop. Set once by the host app before any generator mounts; the chrome
 // components read it and render nothing when it is 'desktop'.

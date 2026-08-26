@@ -16,6 +16,10 @@ CLAUDE.md
 # only, never part of the public shipped project.
 docs/decisions.md
 docs/briefs/
+# The UI unification plan: describes the unreleased Opal suite's internals and file layout.
+docs/ui-unification.md
+# The migration handover: session-by-session instructions, references Opal internals.
+docs/ui-migration-handover.md
 
 # Commercial licence documents. These are contracts, not product: the subscription and
 # lifetime terms are what customers are sold, and the per-customer ones carry a real name and
@@ -58,15 +62,38 @@ apps/*/src/pro/
 
 # Unreleased apps. This repo is public and it is the live site, so an app in it is an
 # announcement — the whole design, before it is finished and before it is decided whether it
-# ships free, paid or at all. These two stay on disk and stay pnpm workspace members, so
-# `pnpm --filter foldbox dev` works exactly as it did; they are simply not published yet.
+# ships free, paid or at all. It stays on disk and stays a pnpm workspace member, so
+# `pnpm --filter laser-slot dev` works exactly as it did; it is simply not published yet.
 # Add the app back here and to generators.json (with a build + copy step in deploy.yml, or
 # the hub card is a 404) on the day it ships.
 #
-# They were tracked until 2026-08-17, so both are still readable in the history — removing
-# them from HEAD hides them from anyone browsing, not from anyone looking.
-apps/foldbox/
+# It was tracked until 2026-08-17, so it is still readable in the history — removing it
+# from HEAD hides it from anyone browsing, not from anyone looking.
 apps/laser-slot/
+
+# Foldbox ships PRINT-ONLY (2026-08-26). The app is published; its unlaunched CUT half is
+# not. `cutPackPlugin` in apps/foldbox/vite.config.ts already keeps these three modules out
+# of the default bundle — this keeps them out of the public tree as well, for the same
+# reason as `apps/*/src/pro/` above: a finished-but-unlaunched design is an announcement.
+#
+# Consequence, on purpose: a fresh clone can run `pnpm --filter foldbox build` (print-only,
+# what deploy.yml builds) but NOT `build:full`, `build:offline` or `pnpm --filter foldbox
+# dev` — all of which run --mode full and resolve `virtual:cut-pack` to cutPack.ts. Use
+# `dev:print` (which is what `pnpm dev:foldbox` runs) in a clone. Un-ignore these on the day
+# the cut half launches, together with the phase-2 wording already fenced in index.html.
+apps/foldbox/src/export/cutFiles.ts
+apps/foldbox/src/export/cutPack.ts
+apps/foldbox/src/export/lac.ts
+# Cut-half working output and fit rigs — real .svg/.dxf cut files and the scratch harnesses
+# that produced them. Same fence, one level out.
+apps/foldbox/demo/
+apps/foldbox/srcfit/
+apps/foldbox/testfit/
+apps/foldbox/scripts/
+apps/foldbox/offline.README.txt
+# The full engineering README, which documents both halves — machine tables, kerf, cut order,
+# the glued styles. `apps/foldbox/README.md` is the print-only cut-down of it, and is tracked.
+apps/foldbox/README.internal.md
 
 # Blocks and 3mf files
 **/blocks/**/*.3mf
@@ -75,6 +102,9 @@ apps/laser-slot/
 
 # Unignore public assets 3mf files
 !apps/*/public/**/*.3mf
+
+# Bambu Studio CLI slicing output, dropped in the repo root by whatever ran last.
+result.json
 
 # AI OpenSCAD Research
 docs/openscad-ai-research/

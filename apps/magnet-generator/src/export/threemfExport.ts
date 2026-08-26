@@ -216,7 +216,7 @@ export function buildThreeMF(parts: MagnetPart[]): Uint8Array {
     'Commercial use (selling printed designs) requires a membership license:',
     COMMERCIAL_URL,
     '',
-    'Provenance / licensing questions: https://makerworld.com/en/@Vostok_Labs',
+    `Provenance / licensing questions: ${BRAND.urls.makerworld}`,
   ].join('\n');
 
   return zipSync(

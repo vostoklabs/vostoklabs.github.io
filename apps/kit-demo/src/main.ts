@@ -21,6 +21,19 @@ import {
   selectField,
   helpTip,
   dpad,
+  button,
+  iconButton,
+  buttonRow,
+  motionToggleButton,
+  effectiveMotion,
+  chip,
+  emptyState,
+  progressBar,
+  skeleton,
+  checkbox,
+  textareaField,
+  openMenu,
+  ICONS,
   UI_KIT_VERSION,
 } from '@vostok/ui-kit';
 import './demo.css';
@@ -52,18 +65,15 @@ const row = (...kids: (Node | string)[]) => el('div', { className: 'vl-row' }, k
 const panel = (...kids: (Node | string)[]) => el('div', { className: 'kit-panel' }, kids);
 
 /* ---------- Masthead ---------- */
-const themeToggle = el('button', {
-  className: 'vl-btn vl-btn--ghost',
-  text: 'Toggle theme',
-  attrs: { type: 'button' },
-  on: {
-    click: () => {
-      const root = document.documentElement;
-      root.setAttribute(
-        'data-theme',
-        root.getAttribute('data-theme') === 'light' ? 'dark' : 'light',
-      );
-    },
+const themeToggle = button({
+  label: 'Toggle theme',
+  emphasis: 'ghost',
+  onClick: () => {
+    const root = document.documentElement;
+    root.setAttribute(
+      'data-theme',
+      root.getAttribute('data-theme') === 'light' ? 'dark' : 'light',
+    );
   },
 });
 
@@ -106,22 +116,42 @@ for (const name of ['--bg', '--panel', '--panel-2', '--line', '--text', '--muted
   );
 }
 
+/* Reads the live tier values back out of the running CSS, so the demo proves the switch
+   reached the stylesheet rather than just claiming it did. */
+const motionReadout = el('div', { className: 'vl-hint' });
+const paintMotion = () => {
+  const cs = getComputedStyle(document.documentElement);
+  const t = (n: string) => cs.getPropertyValue(n).trim();
+  motionReadout.textContent =
+    `now: ${effectiveMotion()} · hover ${t('--dur-hover')} · panel ${t('--dur-in-md')} ` +
+    `· press scale ${t('--press-scale')}`;
+};
+new MutationObserver(paintMotion).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ['data-motion'],
+});
+paintMotion();
+
 app.append(
   group('Foundations'),
   entry('tokens.css', 'Design tokens', 'One palette drives light and dark. Values are read live from the running CSS.', swatches),
+  entry(
+    'motion.css · motionToggleButton()',
+    'Motion',
+    'Every duration and easing in the kit is a tier, not a number — so one switch reaches all of ' +
+      'them. Follows the OS by default; this button forces it on or off. Watch the tab pill and ' +
+      'the button presses below change speed.',
+    panel(motionReadout, row(motionToggleButton())),
+  ),
   entry(
     '.vl-btn',
     'Buttons',
     'Primary, default, ghost, and disabled, all from the button base. .vl-row keeps a cluster aligned and evenly spaced.',
     row(
-      el('button', { className: 'vl-btn vl-btn--primary', text: 'Primary', attrs: { type: 'button' } }),
-      el('button', { className: 'vl-btn', text: 'Default', attrs: { type: 'button' } }),
-      el('button', { className: 'vl-btn vl-btn--ghost', text: 'Ghost', attrs: { type: 'button' } }),
-      (() => {
-        const b = el('button', { className: 'vl-btn', text: 'Disabled', attrs: { type: 'button' } });
-        b.disabled = true;
-        return b;
-      })(),
+      button({ label: 'Primary', emphasis: 'primary' }),
+      button({ label: 'Default' }),
+      button({ label: 'Ghost', emphasis: 'ghost' }),
+      button({ label: 'Disabled', disabled: true }),
     ),
   ),
 );
@@ -144,8 +174,44 @@ const cornerRadius = sliderRow({
   onInput: (v) => padReadout.setReadout(`radius ${v} mm`),
 });
 
+/* The emphasis ladder, live. One primary per view is the rule; the rest carry the
+   secondary and ghost weights so a panel has somewhere to put a lesser action other
+   than inventing a class for it. */
+const busyDemo = button({
+  label: 'Run something slow',
+  emphasis: 'secondary',
+  icon: ICONS.zap,
+  onClick: () => {
+    busyDemo.setBusy(true);
+    setTimeout(() => {
+      busyDemo.setBusy(false);
+      toast('Finished', { kind: 'ok' });
+    }, 1800);
+  },
+});
+
 app.append(
   group('Controls'),
+  entry(
+    'button() · iconButton() · buttonRow()',
+    'Buttons',
+    'The emphasis ladder — primary, secondary, ghost, plain — plus block, icon-only and the ' +
+      'busy state. Never hand-write a button element: the class ladder existed long before ' +
+      'the component did, and every app that had to remember it got it wrong.',
+    panel(
+      buttonRow(
+        button({ label: 'Export', emphasis: 'primary', icon: ICONS.download, onClick: () => toast('Primary') }),
+        button({ label: 'Save', emphasis: 'secondary', onClick: () => toast('Secondary') }),
+        button({ label: 'Cancel', emphasis: 'ghost', onClick: () => toast('Ghost') }),
+      ),
+      row(
+        busyDemo,
+        iconButton({ icon: ICONS.rotateLeft, label: 'Reset view', onClick: () => toast('Icon button') }),
+        button({ label: 'Disabled', disabled: true }),
+      ),
+      button({ label: 'Full-width action', emphasis: 'primary', block: true, onClick: () => toast('Block') }),
+    ),
+  ),
   entry(
     'toggleSwitch() · segmentedControl()',
     'Toggle & segmented',
@@ -196,6 +262,98 @@ app.append(
   ),
 );
 
+/* ---------- Elements (the primitives adopted from Opal) ---------- */
+const prog = progressBar({ value: 0.35, label: 'Carving keycaps' });
+let progVal = 0.35;
+
+const menuAnchor = button({
+  label: 'Open menu',
+  emphasis: 'secondary',
+  icon: ICONS.help,
+  onClick: () =>
+    openMenu({
+      anchor: menuAnchor,
+      entries: [
+        { label: 'Duplicate', icon: ICONS.save, onSelect: () => toast('Duplicate') },
+        { label: 'Rename', icon: ICONS.text, onSelect: () => toast('Rename') },
+        { separator: true },
+        { label: 'Delete', icon: ICONS.undo, onSelect: () => toast('Delete', { kind: 'warn' }) },
+        { label: 'Unavailable', disabled: true },
+      ],
+    }),
+});
+
+app.append(
+  group('Elements'),
+  entry(
+    'chip()',
+    'Chips',
+    'A small filter/tag toggle. State lives in aria-pressed, which is also what the stylesheet ' +
+      'keys the filled look off, so the two cannot disagree.',
+    panel(
+      row(
+        chip({ label: 'PLA', pressed: true, onToggle: (p) => toast('PLA ' + (p ? 'on' : 'off')) }),
+        chip({ label: 'PETG', onToggle: (p) => toast('PETG ' + (p ? 'on' : 'off')) }),
+        chip({ label: 'TPU', onToggle: () => {} }),
+        chip({ label: 'Discontinued', disabled: true }),
+      ),
+    ),
+  ),
+  entry(
+    'checkbox() · textareaField()',
+    'Checkbox & textarea',
+    'A checkbox is not a toggle switch: a switch means "on now", a checkbox means "include ' +
+      'this when I commit". Both wrap the native control, so keyboard and form semantics survive.',
+    panel(
+      checkbox({ label: 'Include a hanging hole', checked: true, onChange: (v) => toast('Hole ' + v) }),
+      checkbox({ label: 'Emboss the logo', onChange: (v) => toast('Logo ' + v) }),
+      checkbox({ label: 'Not available yet', disabled: true }),
+      textareaField({
+        label: 'Engraving text',
+        placeholder: 'Up to three lines…',
+        rows: 3,
+        onInput: () => {},
+      }),
+    ),
+  ),
+  entry(
+    'progressBar() · skeleton()',
+    'Progress & skeleton',
+    'Indeterminate is the honest default for work of unknown length — a bar parked at a guessed ' +
+      'percentage is worse than one that admits it does not know.',
+    panel(
+      prog,
+      row(
+        button({ label: '-10%', onClick: () => { progVal = Math.max(0, progVal - 0.1); prog.setValue(progVal); } }),
+        button({ label: '+10%', onClick: () => { progVal = Math.min(1, progVal + 0.1); prog.setValue(progVal); } }),
+        button({ label: 'Indeterminate', emphasis: 'ghost', onClick: () => prog.setValue(null) }),
+      ),
+      skeleton({ height: '14px', width: '70%' }),
+      skeleton({ height: '14px', width: '45%' }),
+    ),
+  ),
+  entry(
+    'emptyState()',
+    'Empty state',
+    'Always says what to do next, never just "no results".',
+    panel(
+      emptyState({
+        icon: ICONS.image,
+        title: 'No design yet',
+        body: 'Drop an image or pick a sample to start. Everything else is already set up.',
+        action: button({ label: 'Browse samples', emphasis: 'primary', onClick: () => toast('Browse') }),
+      }),
+    ),
+  ),
+  entry(
+    'openMenu()',
+    'Menu',
+    'An anchored popover for commands. Positioned fixed so a scrolling sidebar cannot clip it; ' +
+      'closes on select, Escape, outside click, scroll and resize. Arrow keys move between items.',
+    panel(row(menuAnchor)),
+  ),
+);
+
 /* ---------- Overlays ---------- */
 app.append(
   group('Overlays'),
@@ -204,9 +362,9 @@ app.append(
     'Toasts',
     'Transient status messages, bottom-center, colored by kind. Safe to call from anywhere.',
     row(
-      el('button', { className: 'vl-btn', text: 'Info', attrs: { type: 'button' }, on: { click: () => toast('Just so you know') } }),
-      el('button', { className: 'vl-btn', text: 'Success', attrs: { type: 'button' }, on: { click: () => toast('Saved', { kind: 'ok' }) } }),
-      el('button', { className: 'vl-btn', text: 'Error', attrs: { type: 'button' }, on: { click: () => toast('Something broke', { kind: 'error' }) } }),
+      button({ label: 'Info', onClick: () => toast('Just so you know') }),
+      button({ label: 'Success', onClick: () => toast('Saved', { kind: 'ok' }) }),
+      button({ label: 'Error', onClick: () => toast('Something broke', { kind: 'error' }) }),
     ),
   ),
   entry(
@@ -214,21 +372,17 @@ app.append(
     'Dialog',
     'Accessible modal: Esc and backdrop click close it, focus returns where it was. Now with a proper surface behind it.',
     row(
-      el('button', {
-        className: 'vl-btn',
-        text: 'Open dialog',
-        attrs: { type: 'button' },
-        on: {
-          click: () =>
-            dialog({
-              title: 'Discard changes?',
-              content: 'Your current settings will be lost. This cannot be undone.',
-              actions: [
-                { label: 'Keep editing' },
-                { label: 'Discard', primary: true, onClick: () => toast('Discarded', { kind: 'warn' }) },
-              ],
-            }),
-        },
+      button({
+        label: 'Open dialog',
+        onClick: () =>
+          dialog({
+            title: 'Discard changes?',
+            content: 'Your current settings will be lost. This cannot be undone.',
+            actions: [
+              { label: 'Keep editing' },
+              { label: 'Discard', primary: true, onClick: () => toast('Discarded', { kind: 'warn' }) },
+            ],
+          }),
       }),
     ),
   ),
@@ -237,19 +391,15 @@ app.append(
     "What's new",
     'A changelog card with a dismiss-forever checkbox, shown once per release.',
     row(
-      el('button', {
-        className: 'vl-btn',
-        text: 'Show card',
-        attrs: { type: 'button' },
-        on: {
-          click: () =>
-            showWhatsNew({
-              items: [
-                { lead: 'Sharper image tracing', text: 'high-quality resampling keeps fine text intact.' },
-                { lead: 'Multiple switches', text: 'use up to three MX switches for bigger designs.' },
-              ],
-            }),
-        },
+      button({
+        label: 'Show card',
+        onClick: () =>
+          showWhatsNew({
+            items: [
+              { lead: 'Sharper image tracing', text: 'high-quality resampling keeps fine text intact.' },
+              { lead: 'Multiple switches', text: 'use up to three MX switches for bigger designs.' },
+            ],
+          }),
       }),
     ),
   ),
@@ -269,9 +419,9 @@ app.append(
     'License modals',
     'The post-download modal and the lighter corner reminder for repeat downloads.',
     row(
-      el('button', { className: 'vl-btn', text: 'Commercial modal', attrs: { type: 'button' }, on: { click: () => openCommercialModal() } }),
-      el('button', { className: 'vl-btn', text: 'Post-download modal', attrs: { type: 'button' }, on: { click: () => openLicenseModal() } }),
-      el('button', { className: 'vl-btn', text: 'Corner reminder', attrs: { type: 'button' }, on: { click: () => licenseReminderToast() } }),
+      button({ label: 'Commercial modal', onClick: () => openCommercialModal() }),
+      button({ label: 'Post-download modal', onClick: () => openLicenseModal() }),
+      button({ label: 'Corner reminder', onClick: () => licenseReminderToast() }),
     ),
   ),
 );

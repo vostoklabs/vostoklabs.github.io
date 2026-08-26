@@ -27,7 +27,9 @@
   --hub-shadow-card: 0 8px 24px rgba(0, 0, 0, 0.25);
 
   /* Transitions */
-  --hub-ease: 0.2s ease;
+  /* Points at the kit's motion tiers, so the hub follows the same ladder (and the
+     same reduced-motion switch) as every generator. */
+  --hub-ease: var(--dur-in-md) var(--ease-standard);
 }
 
 
@@ -142,7 +144,9 @@
   font-weight: 700;
   text-decoration: none;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    border-color var(--dur-hover) var(--ease-standard);
 }
 
 .hub-nav__cta:hover {
@@ -316,7 +320,8 @@
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 9px;
-  transition: border-color 0.15s;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard);
 }
 
 .hub-search:focus-within {
@@ -328,7 +333,26 @@
   color: var(--muted);
 }
 
-.hub-search__input {
+/* The field is a kit textField(); flatten its label+input grid into the pill
+   and keep the label for screen readers only (the icon carries it visually,
+   same as before). */
+.hub-search .vl-field {
+  display: contents;
+}
+
+.hub-search .vl-field > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.hub-search .vl-field input {
   border: none;
   background: none;
   color: var(--text);
@@ -340,7 +364,13 @@
   padding: 0;
 }
 
-.hub-search__input::placeholder {
+.hub-search .vl-field input:hover,
+.hub-search .vl-field input:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.hub-search .vl-field input::placeholder {
   color: var(--muted);
 }
 
@@ -760,7 +790,7 @@
     flex: 1 1 auto;
   }
 
-  .hub-search__input {
+  .hub-search .vl-field input {
     width: 100%;
     max-width: none;
   }

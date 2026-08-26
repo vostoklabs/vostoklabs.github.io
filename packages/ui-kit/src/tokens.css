@@ -1,32 +1,44 @@
-/* Vostok Labs design tokens, extracted 1:1 from the shipped Clicker Generator
-   (src/style.css) so every new app looks like the existing ones.
-   Dark is the default; light via <html data-theme="light"> (same as the clicker). */
+/* Vostok Labs design tokens. Dark is the default; light via <html data-theme="light">.
+
+   The neutrals were adopted from the Opal suite (2026-08-25) so the desktop app and the
+   generators are one product rather than two that look similar. They are a touch cooler and
+   bluer than the originals extracted from the clicker — `--bg` #15171c -> #101620 and so on.
+   The accent, accent-text and the whole radius ladder needed no change: they already matched
+   Opal byte-for-byte, which is why this shift is small enough to be worth making.
+
+   `--accent-2` was deliberately NOT changed. Opal's teal reads differently from the green
+   that every generator uses for its "Download started" badge and every toggle's on-state, and
+   that is a brand decision rather than a merge detail. */
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #f3f4f6;
+  --bg: #eef1f6;
   --panel: #ffffff;
-  --panel-2: #edf0f5;
-  --line: #d1d5db;
-  --text: #1f2937;
-  --muted: #6b7280;
+  --panel-2: #e4e9f2;
+  --line: #cfd7e4;
+  --text: #16202f;
+  --muted: #5d6b80;
   --accent: #2563eb;
   --accent-text: #ffffff;
   --accent-2: #10b981;
+  --accent-rgb: 37 99 235;
+  --accent-hover: #1d4ed8;
 }
 
 :root[data-theme='dark'],
 :root:not([data-theme='light']) {
   color-scheme: dark;
-  --bg: #15171c;
-  --panel: #1d2027;
-  --panel-2: #252932;
-  --line: #2f3440;
-  --text: #e6e9ef;
-  --muted: #9aa3b2;
+  --bg: #101620;
+  --panel: #171e2a;
+  --panel-2: #1e2735;
+  --line: #2b3648;
+  --text: #e6ebf2;
+  --muted: #909bad;
   --accent: #5b9dff;
   --accent-text: #08122a;
   --accent-2: #36c08a;
+  --accent-rgb: 91 157 255;
+  --accent-hover: #74acff;
 }
 
 :root {
@@ -47,6 +59,22 @@
   --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
   --fs-base: 17.5px;
   --fs-body: var(--fs-base);
+
+  /* The type scale, adopted from the Opal suite so both products name the same sizes.
+     `--fs-base`/`--fs-body` above stay the generators' 17.5px; these are the fixed rungs
+     that density and the individual components point at. */
+  --fs-micro: 11px;      /* tags, metadata floor */
+  --fs-small: 12px;      /* dense chrome */
+  --fs-compact: 13px;    /* Opal's body size — what compact density resolves to */
+  --fs-medium: 15px;     /* today's de-facto control size, finally named */
+  --fs-strong: 16px;     /* heading inside a panel */
+  --fs-subtitle: 18px;
+  --fs-title: 24px;
+
+  /* Icon sizes, so an icon inside a control cannot drift from the control. */
+  --icon-inline: 14px;
+  --icon-control: 16px;
+  --icon-heading: 20px;
 
   /* Spacing scale (4px base) used for layout rhythm across apps. */
   --space-1: 4px;
@@ -77,4 +105,46 @@
 
   /* Focus ring (single source so every control matches). */
   --ring: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ==========================================================================
+   DENSITY
+
+   The third member of the `data-*` family, alongside `data-theme` and `data-motion`:
+
+     (no attribute)            comfortable — a generator's sidebar, touch-friendly
+     data-density="compact"    Opal's desktop chrome, ~13px base
+
+   This is the knob that lets Opal and the generators share one component set instead of
+   maintaining two. Opal's shell wants dense controls; a generator panel wants roomy ones.
+   That was the ONLY real disagreement between the two systems — the accent, both radii and
+   the body font already matched byte-for-byte.
+
+   The comfortable values below are today's shipped numbers, promoted from literals to
+   tokens and nothing more, so adopting them is a no-op until something sets the attribute.
+   The `pnpm check:ui` snapshot is what proves that: swapping a literal for a token here
+   must produce a byte-identical computed style.
+   ========================================================================== */
+
+:root {
+  --control-fs: var(--fs-medium);   /* 15px — .vl-btn, .vl-tab, fields */
+  --control-pad-y: 10px;
+  --control-pad-x: 15px;
+  --field-pad-y: 10px;
+  --field-pad-x: 11px;
+  --field-fs: var(--fs-base);       /* 17.5px — what `font: inherit` already gave */
+  --label-fs: var(--fs-medium);     /* 15px — field labels, control captions */
+  --icon-btn-size: 38px;
+}
+
+:root[data-density='compact'] {
+  --fs-body: var(--fs-compact);     /* 13px — reaches `body` via root.css */
+  --control-fs: var(--fs-compact);
+  --control-pad-y: 7px;
+  --control-pad-x: 13px;
+  --field-pad-y: 7px;
+  --field-pad-x: 10px;
+  --field-fs: var(--fs-compact);
+  --label-fs: var(--fs-small);      /* 12px */
+  --icon-btn-size: 28px;
 }
