@@ -20,6 +20,7 @@ import {
   sliderRow,
   toggleSwitch,
   button,
+  changelogButton,
   toast,
   dialog,
   openLicenseModal,
@@ -33,6 +34,7 @@ import { mountPlatePicker } from '@vostok/plates';
 import { downloadThreeMF, type ExportPart } from '@vostok/export';
 import { DEFAULT_SETTINGS, coerceSettings, type TagSettings, type RGB } from './state';
 import { buildTag } from './geometry';
+import { CHANGELOG } from './changelog';
 
 /*
   Vostok Labs generator template — a small but COMPLETE generator.
@@ -414,6 +416,10 @@ const shell = appShell({
       ...(quality ? [quality] : []),
       shapeSection,
       detailSection,
+      // The Updates drawer, under the last section rather than in the sticky footer. Keep
+      // `src/changelog.ts` current as you ship: it is how someone who wrote in about a bug
+      // finds out that the fix landed.
+      changelogButton({ entries: CHANGELOG }),
     ],
   },
   stage: [

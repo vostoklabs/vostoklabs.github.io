@@ -31,6 +31,10 @@ export interface SheetSpec {
   sheetLayers: number;
   hingeLayers: number;
   hingeWidthMm: number;
+  /** How thick anything that tucks INSIDE the box is built, in layers. 0 or absent derives
+   *  it from the sheet — see `sandwichThicknessMm`. Optional so a caller that only wants to
+   *  describe a sheet still satisfies this type. */
+  flapLayers?: number;
 }
 
 export function sheetThicknessMm(o: SheetSpec): number {
@@ -104,11 +108,27 @@ const PRINT_CLEAR_MM = 0.2;
  *  flap or a tuck lug. TWO for a webbed corner, whose halves fold onto each other
  *  before the fold-over end comes down and traps the pair — budgeting a web the whole
  *  gap puts two of them in it and the corner will not close.
+ *
+ *  `flapLayers` overrides the derivation. It exists because the derived figure is a
+ *  CLEARANCE fit and not every box wants one: at the default two-layer sheet it lands on
+ *  a single layer, and a one-layer flap on a two-layer wall is floppy enough that people
+ *  ask for it to match the sheet. Building the flap the full width of the gap it drops
+ *  into turns that clearance fit into a friction one — it grips instead of rattling, at
+ *  the cost of having to be pushed home — so it is the user's call, not ours.
+ *
+ *  Clamped to what a sheet can physically hold: never under the crease it folds on, never
+ *  over the sheet itself. And single-ply only — a webbed corner puts TWO of itself in one
+ *  gap, so that budget is not the user's to spend.
  */
 export function sandwichThicknessMm(o: SheetSpec, plies = 1): number {
   const sheet = sheetThicknessMm(o);
+  const hinge = hingeThicknessMm(o);
+  const asked = o.flapLayers ?? 0;
+  if (plies === 1 && asked > 0) {
+    return Math.min(sheet, Math.max(hinge, asked * o.layerHeightMm));
+  }
   const layers = Math.floor((sheet - PRINT_CLEAR_MM) / (plies * o.layerHeightMm) + 1e-9);
-  return Math.min(sheet, Math.max(hingeThicknessMm(o), layers * o.layerHeightMm));
+  return Math.min(sheet, Math.max(hinge, layers * o.layerHeightMm));
 }
 
 /** Half the groove's full opening at the TOP of the sheet: the flat band, plus the

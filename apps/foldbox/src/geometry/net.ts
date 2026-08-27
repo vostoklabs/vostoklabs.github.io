@@ -342,7 +342,7 @@ export function assemblySteps(net: Net): string[] {
     // Cricut and every scoring tool fold INTO the score, so a crease that folds the
     // other way has to be worked from the back or it cracks along the outside face.
     prep.push(
-      `${mountains} of those fold the opposite way to the rest — crease those from the other side of the sheet.`,
+      `${mountains} of those fold the opposite way to the rest. Crease those from the other side of the sheet.`,
     );
   }
   return [...prep, ...net.assembly];

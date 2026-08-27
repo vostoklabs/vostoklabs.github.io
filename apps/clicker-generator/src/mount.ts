@@ -1287,7 +1287,23 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
 
   function rebuild(quiet = false) {
-    if (!regionSet || regionSet.regions.length === 0) return;
+    // Nothing to build yet, and SAYING so is the whole point of this branch.
+    //
+    // Every control in the sidebar is live from the moment the app opens, and every one of
+    // them ends up here: Size, Top thickness, Image depth, the base shape, the edges, the
+    // keychain, the switch pad. With no image loaded this used to be a bare `return`, so
+    // the slider moved, the number changed, and the model did not — silently, with no hint
+    // that the app was waiting on something. That is indistinguishable from a broken
+    // slider, and it is what one was reported as.
+    //
+    // The guard below has always explained itself. This one now does too.
+    if (!regionSet || regionSet.regions.length === 0) {
+      store.set({
+        building: false,
+        status: 'Nothing to build yet: choose an image, SVG, icon or text at the top first.',
+      });
+      return;
+    }
     if (!assetsReady) {
       store.set({ status: 'Waiting for switch assets…' });
       return;

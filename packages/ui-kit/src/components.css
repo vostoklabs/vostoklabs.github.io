@@ -370,8 +370,65 @@
 
 /* ---------- Slider row (label + value badge + range) ---------- */
 .vl-slider-row { display: flex; flex-direction: column; gap: 6px; }
-.vl-slider-head { display: flex; justify-content: space-between; align-items: center; }
+.vl-slider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  /* A readout that has grown to fit itself may end up right beside its label, and a grey
+     caption touching a bordered field reads as a bug. */
+  gap: var(--space-2);
+  /* The last resort for a readout no line can hold — a fold mode that says "no groove"
+     rather than a number. The box drops under the label and stays right-aligned, rather
+     than crushing the label or scrolling its own text out of view. */
+  flex-wrap: wrap;
+}
 .vl-slider-head > label { color: var(--muted); font-size: var(--label-fs); }
+.vl-slider-head > .vl-val-fit { margin-left: auto; }
+
+/*
+  The value box, sized to what it is actually showing.
+
+  It was a flat 82px, which fits "2.4 mm" and stops at about eleven characters. Fine, until
+  a `format` had something to say: foldbox's sheet row prints `2 layers · 0.40 mm` and lost
+  the unit off the end, and its groove row prints `1.3 mm (floor)` and lost the bracket.
+  Nothing ever reported it, because an <input> that overflows SCROLLS rather than wrapping —
+  the text is still in the field, just not on screen, so it does not look truncated. It
+  looks like the app rounded.
+
+  The width comes from a pseudo-element carrying the same string in the same font, stacked
+  in the same grid cell as the input: the cell is as wide as the wider of the two, and the
+  input stretches to fill it. Nothing is measured in JS, which is what makes it correct at
+  the times measurement is not — on the first paint (a detached element has no computed
+  font to measure from), in a background tab (no rAF), and after a density or font change
+  (nothing to re-run). `size="1"` on the input is load-bearing: an <input>'s intrinsic
+  width comes from `size`, and at the default 20 it would set the grid track instead of the
+  copy.
+*/
+.vl-val-fit {
+  display: inline-grid;
+  min-width: 96px;
+  max-width: 100%;
+}
+.vl-val-fit > .vl-val {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.vl-val-fit::after {
+  grid-area: 1 / 1;
+  content: attr(data-value);
+  visibility: hidden;
+  white-space: pre;
+  /* The copy has to measure exactly as the input does, plus a pixel so a caret at the end
+     of the text is not flush against the border. */
+  box-sizing: border-box;
+  padding: 5px 7px 5px 6px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
 .vl-val {
   width: 82px;
   background: var(--panel-2);
@@ -391,6 +448,19 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
 }
+
+/* The -/+ bar under a `stepperRow` caption. The readout stretches between the two
+   buttons and centres its text, because a number with a control on each side reads as
+   belonging to both — right-aligned it looks like it belongs to the plus. */
+.vl-stepper-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.vl-stepper-bar > .vl-val-fit { flex: 1; }
+.vl-stepper-bar .vl-val { text-align: center; }
+.vl-stepper-bar .vl-btn { flex: none; font-size: 18px; }
+.vl-stepper-bar .vl-btn:disabled { opacity: 0.4; }
 
 /* ---------- Field (label + input/select) ---------- */
 .vl-field { display: grid; gap: 8px; }
@@ -442,12 +512,29 @@
 .vl-control-label { color: var(--muted); font-size: var(--label-fs); }
 
 /* ---------- "?" help tip + bubble ---------- */
+/*
+  `padding: 0` and `flex: none` are the load-bearing lines here, not decoration.
+
+  This is a <button>, and it was the ONE kit control that never declared its own padding.
+  The clicker's stylesheet carries a bare `button { padding: 10px 15px }` element rule,
+  which therefore won by default — and under border-box a 16px width loses to 30px of
+  padding, so the round `?` rendered as a 31 x 21 OVAL in that app and a circle everywhere
+  else. Nothing catches that: the class is present, the token resolves, and only looking at
+  it finds it.
+
+  So the badge now states every property that defines its box. A component has to be able to
+  survive the stylesheet of the app it is dropped into; an element selector in app CSS is
+  not a thing the kit gets to assume away.
+*/
 .vl-help {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
+  box-sizing: border-box;
   width: 16px;
   height: 16px;
+  padding: 0;
   margin-left: 5px;
   border-radius: 50%;
   border: 1px solid var(--line);

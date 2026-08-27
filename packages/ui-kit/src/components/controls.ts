@@ -131,9 +131,62 @@ export interface SliderOptions {
    *
    * Needed whenever the two differ: the clicker's smoothing slider stores 0–1 but displays a
    * percentage, so typing "50%" must become 0.5, not 50 clamped to the top of the range.
-   * Receives the number parsed out of the box, with any unit characters already stripped.
+   * Receives the first number found in the box, and the raw text behind it — because some
+   * formats are not one number: foldbox prints an imperial length as `3 1/2"`, and only the
+   * raw string still has the fraction in it.
    */
-  parse?: (typed: number) => number;
+  parse?: (typed: number, raw: string) => number;
+}
+
+/** The FIRST number in the box, not every digit in it run together.
+ *
+ *  `text.replace(/[^0-9.-]/g, '')` was the old reading and it is wrong for any format that
+ *  puts a second number on screen. Foldbox writes a sheet as `2 layers · 0.40 mm`, which it
+ *  smashed into `20.40`, and an imperial length as `3 1/2"`, which became `312`; both then
+ *  clamp to the top of the range, so the box looks like it ignored what was typed. Anything
+ *  a format leaves after the number — a unit, a `%`, a parenthetical — is now simply not
+ *  part of it. */
+function firstNumber(text: string): number {
+  const m = /-?\d*\.?\d+/.exec(text);
+  return m ? Number(m[0]) : NaN;
+}
+
+/**
+ * The editable readout that both row shapes hang off: the input, the wrapper that sizes it
+ * to its own text, and the writer that keeps the two in step.
+ *
+ * `size: '1'` is not cosmetic. An <input>'s intrinsic width comes from `size`, and the
+ * wrapper is a one-cell grid holding the input and a hidden copy of its text — at the
+ * default size of 20 the INPUT would set the grid track and the copy would never matter.
+ * See `.vl-val-fit` in components.css for why the width is done in CSS rather than by
+ * measuring: a detached element has no computed font to measure from, so measuring is
+ * wrong at exactly the moment it matters, the first paint.
+ */
+function valueField(ariaLabel: string): {
+  input: HTMLInputElement;
+  fit: HTMLElement;
+  show(text: string): void;
+} {
+  const input = el('input', {
+    className: 'vl-val',
+    attrs: { type: 'text', inputmode: 'decimal', size: '1', 'aria-label': ariaLabel },
+  }) as HTMLInputElement;
+  const fit = el('span', { className: 'vl-val-fit' }, [input]);
+  // While someone is typing, the box is showing THEIR text rather than ours, so the copy
+  // has to follow the keystrokes or a long entry scrolls out of its own field.
+  input.addEventListener('input', () => {
+    fit.dataset.value = input.value;
+  });
+  return {
+    input,
+    fit,
+    /** Every assignment to `input.value` goes through here — one that did not would leave
+     *  the field the width of the previous reading. */
+    show(text) {
+      input.value = text;
+      fit.dataset.value = text;
+    },
+  };
 }
 
 /** Label + editable value box + range, kept in sync both directions. */
@@ -162,11 +215,8 @@ export function sliderRow(opts: SliderOptions): ValueRow<number> {
     },
   });
 
-  const valBox = el('input', {
-    className: 'vl-val',
-    attrs: { type: 'text', inputmode: 'decimal', 'aria-label': opts.label },
-  });
-  valBox.value = fmt(opts.value);
+  const { input: valBox, fit: valFit, show: showValue } = valueField(opts.label);
+  showValue(fmt(opts.value));
 
   let current = opts.value;
 
@@ -182,24 +232,24 @@ export function sliderRow(opts: SliderOptions): ValueRow<number> {
   const commit = (v: number, syncRange = true, notify = true) => {
     current = snap(v);
     if (syncRange) range.value = String(current);
-    valBox.value = fmt(current);
+    showValue(fmt(current));
     paintFill();
     if (notify) opts.onInput?.(current);
   };
 
   range.addEventListener('input', () => commit(Number(range.value), false));
   valBox.addEventListener('change', () => {
-    // Strip the unit the format added ('50%', '2.4 mm') before reading the number back.
-    const parsed = parseFloat(valBox.value.replace(/[^0-9.-]/g, ''));
+    const raw = valBox.value;
+    const parsed = firstNumber(raw);
     if (!Number.isFinite(parsed)) return commit(current);
-    commit(opts.parse ? opts.parse(parsed) : parsed);
+    commit(opts.parse ? opts.parse(parsed, raw) : parsed);
   });
 
   const labelEl = el('label', { text: opts.label });
   if (opts.help) labelEl.append(helpTip(opts.help));
 
   const row = el('div', { className: 'vl-slider-row' }, [
-    el('div', { className: 'vl-slider-head' }, [labelEl, valBox]),
+    el('div', { className: 'vl-slider-head' }, [labelEl, valFit]),
     range,
   ]) as unknown as ValueRow<number>;
   /*
@@ -215,11 +265,113 @@ export function sliderRow(opts: SliderOptions): ValueRow<number> {
     const typing = document.activeElement === valBox;
     current = snap(value);
     range.value = String(current);
-    if (!typing) valBox.value = fmt(current);
+    if (!typing) showValue(fmt(current));
     paintFill();
     if (notify) opts.onInput?.(current);
   };
   paintFill();
+  return row;
+}
+
+/* ---------------- Stepper row ---------------- */
+
+export interface StepperRowOptions {
+  label: string;
+  min: number;
+  max: number;
+  value: number;
+  /** How much one press moves it. Default 1. */
+  step?: number;
+  /** Optional "?" tooltip text next to the label. */
+  help?: string;
+  /** Fired on every press or committed edit, with the clamped, stepped value. */
+  onInput?: (value: number) => void;
+  /** Render the readout. Default: the number plus an optional unit. */
+  format?: (value: number) => string;
+  /** Appended to the default readout, e.g. 'mm'. Ignored if format is set. */
+  unit?: string;
+  /** Turn what the user typed into the stored value. See `SliderOptions.parse`. */
+  parse?: (typed: number, raw: string) => number;
+}
+
+/**
+ * Label, then a minus/plus pair around an editable readout.
+ *
+ * `sliderRow`'s sibling, for a value that is COUNTED rather than swept. A printed sheet is
+ * two layers or three; there is no 2.4, and dragging a thumb across a range of eight to
+ * move by one is both harder to land and easy to land wrongly. The rule of thumb: if the
+ * whole range is small enough to press through, press it.
+ *
+ * Deliberately the same contract as `sliderRow` — a `ValueRow<number>` with the same
+ * `format`, `parse` and `onInput` — so swapping one for the other is a one-word change at
+ * the call site, and nothing downstream (a sync pass, Load-project) can tell the
+ * difference.
+ */
+export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
+  const step = opts.step ?? 1;
+  const fmt = opts.format ?? ((v: number) => (opts.unit ? `${v} ${opts.unit}` : String(v)));
+
+  const clamp = (v: number) => Math.min(opts.max, Math.max(opts.min, v));
+  const snap = (v: number) => {
+    const snapped = Math.round((v - opts.min) / step) * step + opts.min;
+    return Number(clamp(snapped).toFixed(6));
+  };
+
+  const { input: valBox, fit: valFit, show: showValue } = valueField(opts.label);
+  let current = snap(opts.value);
+
+  const minus = el('button', {
+    className: 'vl-btn vl-btn--icon',
+    text: '−',
+    attrs: { type: 'button', 'aria-label': `Decrease ${opts.label}` },
+  }) as HTMLButtonElement;
+  const plus = el('button', {
+    className: 'vl-btn vl-btn--icon',
+    text: '+',
+    attrs: { type: 'button', 'aria-label': `Increase ${opts.label}` },
+  }) as HTMLButtonElement;
+
+  const commit = (v: number, notify = true) => {
+    current = snap(v);
+    showValue(fmt(current));
+    // The ends are shown, not just enforced: a button that still looks pressable and does
+    // nothing reads as the control being broken.
+    minus.disabled = current <= opts.min + 1e-9;
+    plus.disabled = current >= opts.max - 1e-9;
+    if (notify) opts.onInput?.(current);
+  };
+
+  minus.addEventListener('click', () => commit(current - step));
+  plus.addEventListener('click', () => commit(current + step));
+  valBox.addEventListener('change', () => {
+    const raw = valBox.value;
+    const parsed = firstNumber(raw);
+    if (!Number.isFinite(parsed)) return commit(current, false);
+    commit(opts.parse ? opts.parse(parsed, raw) : parsed);
+  });
+
+  const labelEl = el('label', { text: opts.label });
+  if (opts.help) labelEl.append(helpTip(opts.help));
+
+  // `.vl-slider-row` for the outer column, because the caption/control rhythm is the same
+  // one and a second name for it would drift.
+  const row = el('div', { className: 'vl-slider-row' }, [
+    el('div', { className: 'vl-slider-head' }, [labelEl]),
+    el('div', { className: 'vl-stepper-bar' }, [minus, valFit, plus]),
+  ]) as unknown as ValueRow<number>;
+
+  row.setValue = (value, notify = false) => {
+    // Same guard as `sliderRow`: a rebuild landing mid-keystroke must not replace what is
+    // being typed, or the caret jumps and the half-typed number is gone.
+    const typing = document.activeElement === valBox;
+    current = snap(value);
+    if (!typing) showValue(fmt(current));
+    minus.disabled = current <= opts.min + 1e-9;
+    plus.disabled = current >= opts.max - 1e-9;
+    if (notify) opts.onInput?.(current);
+  };
+
+  commit(current, false);
   return row;
 }
 

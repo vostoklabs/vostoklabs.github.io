@@ -15,13 +15,16 @@ import {
   button,
   slider,
   sliderRow,
+  stepperRow,
   toggleSwitch,
   segmentedControl,
   selectField,
   setFieldOptions,
   toast,
   dialog,
+  changelogButton,
   closeAllDialogs,
+  closeAllDrawers,
   openLicenseModal,
   licenseReminderToast,
   bindExternalLinks,
@@ -44,6 +47,7 @@ import { solve, fitToSheet, machineById, sheetById, stockById } from './geometry
 import { STYLES, styleEcma, styleMeta, insideDims, hangModes } from './geometry/styles';
 import { buildRig, type FoldRig } from './fold/rig';
 import { createFlatView, styleIcon } from './ui/flatView';
+import { CHANGELOG } from './changelog';
 import { downloadCutFiles } from 'virtual:cut-pack';
 import { downloadFile } from '@vostok/export';
 import {
@@ -265,6 +269,31 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     return `${whole ? `${whole} ` : ''}${num}/${den}"`;
   }
 
+  /** The inverse of `lenFormat`, and the reason typing a size used to be broken.
+   *
+   *  Every length row stores MILLIMETRES and displays whatever `lenFormat` makes of them.
+   *  With no parse the two only agreed in mm: in inches the box showed `3 9/16"`, typing
+   *  `4` for four inches set four MILLIMETRES (which then clamped to the slider's floor of
+   *  20), and simply blurring the field re-read its own `3 9/16` as three-hundred-and-
+   *  twelve. The slider worked, so it looked like the number box specifically.
+   *
+   *  Fractions are read, not just tolerated — Cricut's user base types "3 1/2", not 3.5,
+   *  and it is what the field prints back at them. */
+  function lenParse(typed: number, raw: string): number {
+    if (params.units === 'mm') return typed;
+    // "3 1/2", "1/2", "3 1/2\"" — a whole part is optional, and so is the fraction.
+    const frac = /(-?\d+(?:\.\d+)?)?\s*(\d+)\s*\/\s*(\d+)/.exec(raw);
+    if (frac) {
+      const den = Number(frac[3]);
+      if (den > 0) {
+        const whole = frac[1] ? Number(frac[1]) : 0;
+        const inches = Math.abs(whole) + Number(frac[2]) / den;
+        return (whole < 0 ? -inches : inches) * 25.4;
+      }
+    }
+    return typed * 25.4;
+  }
+
   /** The words for each mode, per family. Which panel a tab hangs off is the whole
    *  difference between them and it is invisible on the dieline, so it goes in the label
    *  rather than buried in the help. Which modes a style actually offers comes from
@@ -272,7 +301,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const HANG_LABEL: Record<string, Record<string, string>> = {
     mailer: {
       none: 'None',
-      single: 'Lid tab — the lid runs on past one end',
+      single: 'Lid tab: the lid runs on past one end',
     },
     tube: {
       none: 'None',
@@ -306,7 +335,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         { value: 'outside', label: 'Outside' },
       ],
       value: params.dimBasis,
-      help: 'Inside is what has to fit your product — the blank is grown by the card thickness on every wall it wraps. Outside is the finished box. Two free generators disagree about this, which is why it says so on screen.',
+      help: 'Inside is what has to fit your product: the blank is grown by the card thickness on every wall it wraps. Outside is the finished box. Two free generators disagree about this, which is why it says so on screen.',
       onChange: (b) => setParam('dimBasis', b),
     }),
     length: sliderRow({
@@ -316,6 +345,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       step: 1,
       value: params.lengthMm,
       format: lenFormat,
+      parse: lenParse,
       onInput: (v) => setParam('lengthMm', v),
     }),
     width: sliderRow({
@@ -325,6 +355,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       step: 1,
       value: params.widthMm,
       format: lenFormat,
+      parse: lenParse,
       onInput: (v) => setParam('widthMm', v),
     }),
     height: sliderRow({
@@ -334,6 +365,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       step: 1,
       value: params.heightMm,
       format: lenFormat,
+      parse: lenParse,
       onInput: (v) => setParam('heightMm', v),
     }),
 
@@ -344,6 +376,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       step: 1,
       value: params.lidHeightMm,
       format: lenFormat,
+      parse: lenParse,
       help: 'How far the lid comes down over the tray. A third of the box height looks right; the whole height gives you a shoe box.',
       onInput: (v) => setParam('lidHeightMm', v),
     }),
@@ -353,7 +386,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       max: 1.5,
       step: 0.05,
       value: params.lidPlayMm,
-      format: (v) => `${v.toFixed(2)} mm${v < 0.3 ? ' — snug' : v > 0.8 ? ' — loose' : ''}`,
+      format: (v) => `${v.toFixed(2)} mm${v < 0.3 ? ' (snug)' : v > 0.8 ? ' (loose)' : ''}`,
       help: 'Play per side, on TOP of the two card thicknesses the lid already has to clear. A percentage would be wrong at both ends: 7% of 30 mm is sloppy and 7% of 300 mm falls off.',
       onInput: (v) => setParam('lidPlayMm', v),
     }),
@@ -364,14 +397,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       step: 1,
       value: params.tuckDepthMm,
       format: (v) => (v === 0 ? 'auto' : lenFormat(v)),
-      help: 'Auto sizes it against both the width and the height. A fixed depth — which is what the carton standards use — hangs off the end of a short box.',
+      parse: lenParse,
+      help: 'Auto sizes it against both the width and the height. A fixed depth, which is what the carton standards use, hangs off the end of a short box.',
       onInput: (v) => setParam('tuckDepthMm', v),
     }),
     tuckLock: selectField({
       label: 'Tuck lock',
       options: [
-        { value: 'slit', label: 'Slit lock — nicks that catch' },
-        { value: 'friction', label: 'Friction — plain squeeze' },
+        { value: 'slit', label: 'Slit lock: nicks that catch' },
+        { value: 'friction', label: 'Friction: plain squeeze' },
         { value: 'none', label: 'None' },
       ],
       value: params.tuckLock,
@@ -402,7 +436,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     handle: toggleSwitch({
       label: 'Carry handle',
       checked: params.handle,
-      help: 'On a tray this raises the two long walls into grips you can pick it up by. On the carry box it currently does nothing — that style is known broken and being redesigned.',
+      help: 'On a tray this raises the two long walls into grips you can pick it up by. On the carry box it currently does nothing: that style is known broken and being redesigned.',
       onChange: (v) => setParam('handle', v),
     }),
     handHoles: toggleSwitch({
@@ -418,14 +452,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       step: 1,
       value: params.handleHeightMm,
       format: lenFormat,
-      help: 'How far the handle rises above the rim. The hand hole is placed well clear of the top edge — any nearer and it tears out the first time the box is carried.',
+      parse: lenParse,
+      help: 'How far the handle rises above the rim. The hand hole is placed well clear of the top edge; any nearer and it tears out the first time the box is carried.',
       onInput: (v) => setParam('handleHeightMm', v),
     }),
 
     window: toggleSwitch({
       label: 'Window',
       checked: params.window,
-      help: 'An aperture in the front face. It is kept at least 15 mm clear of every fold and cut — closer than that and the panel loses its stiffness and creases where it should not.',
+      help: 'An aperture in the front face. It is kept at least 15 mm clear of every fold and cut; closer than that and the panel loses its stiffness and creases where it should not.',
       onChange: (v) => setParam('window', v),
     }),
     windowScale: sliderRow({
@@ -435,6 +470,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       step: 0.01,
       value: params.windowScale,
       format: (v) => `${Math.round(v * 100)}% of the panel`,
+      parse: (typed) => typed / 100,
       onInput: (v) => setParam('windowScale', v),
     }),
     windowRadius: sliderRow({
@@ -454,7 +490,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           filmInsert: toggleSwitch({
             label: 'Cut a film insert too',
             checked: params.filmInsert,
-            help: 'Adds a matching outline on its own layer, to cut from acetate or PET. Never cut PVC on a laser — it releases hydrogen chloride.',
+            help: 'Adds a matching outline on its own layer, to cut from acetate or PET. Never cut PVC on a laser: it releases hydrogen chloride.',
             onChange: (v) => setParam('filmInsert', v),
           }),
           filmMargin: sliderRow({
@@ -490,30 +526,30 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       label: 'Hang tab',
       options: hangOptions(params.style),
       value: params.hangTab,
-      help: 'The keyhole that hangs a package on a shop peg (ISO 15348), kept 4 mm clear of every edge so the card does not tear off it. A header is an extra panel above the box — doubled, the slot goes through two plies, which is what stops it tearing under any real weight. A header takes over the back wall’s top edge, so the lid moves to the front.',
+      help: 'The keyhole that hangs a package on a shop peg (ISO 15348), kept 4 mm clear of every edge so the card does not tear off it. A header is an extra panel above the box; doubled, the slot goes through two plies, which is what stops it tearing under any real weight. A header takes over the back wall’s top edge, so the lid moves to the front.',
       onChange: (v) => setParam('hangTab', v as BoxParams['hangTab']),
     }),
     windowFace: selectField({
       label: 'Window on',
       options: [{ value: '', label: 'Default' }],
       value: params.windowFace,
-      help: 'Which panel the aperture is cut in. On a mailer this is how you follow the hang tab: the tab is the lid carrying on past an end, so the LID goes against the shop’s board and the base is what faces out — put the window and the artwork there.',
+      help: 'Which panel the aperture is cut in. On a mailer this is how you follow the hang tab: the tab is the lid carrying on past an end, so the LID goes against the shop’s board and the base is what faces out, so put the window and the artwork there.',
       onChange: (v) => setParam('windowFace', v),
     }),
     lidWings: toggleSwitch({
       label: 'Wings on the lid',
       checked: params.lidWings,
-      help: 'A flap on each short edge of the lid, folding down inside the rolled ends so the lid cannot lift at the corners. It changes the lid itself: with wings it NESTS inside the rim instead of capping over it, which is ECMA cover 53 rather than 50. An end carrying a hang tab goes without a wing — they want the same edge.',
+      help: 'A flap on each short edge of the lid, folding down inside the rolled ends so the lid cannot lift at the corners. It changes the lid itself: with wings it NESTS inside the rim instead of capping over it, which is ECMA cover 53 rather than 50. An end carrying a hang tab goes without a wing, because they want the same edge.',
       onChange: (v) => setParam('lidWings', v),
     }),
     hangHole: selectField({
       label: 'Hole shape',
       options: [
-        { value: 'euro', label: 'Euro slot — wide, with a round crown' },
+        { value: 'euro', label: 'Euro slot (wide, with a round crown)' },
         { value: 'round', label: 'Round hole' },
       ],
       value: params.hangHole,
-      help: 'The two a shop actually has. The euro slot is the wide low slot with a round crown on top that most European retail packaging uses. A plain round hole is what a bare peg or a J-hook wants, and it still fits panels too narrow for a slot. Both stay 4 mm clear of every edge — that is the number that stops the sheet tearing off the peg.',
+      help: 'The two a shop actually has. The euro slot is the wide low slot with a round crown on top that most European retail packaging uses. A plain round hole is what a bare peg or a J-hook wants, and it still fits panels too narrow for a slot. Both stay 4 mm clear of every edge, which is the number that stops the sheet tearing off the peg.',
       onChange: (v) => setParam('hangHole', v as BoxParams['hangHole']),
     }),
     hangEnd: selectField({
@@ -524,7 +560,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         { value: 'both', label: 'Both ends' },
       ],
       value: params.hangEnd,
-      help: 'Which short end the tab reaches past. Either way the box hangs long-side-down rather than jutting out at the customer — that is the point of putting the tab on an end rather than on a wall. Both ends keeps the blank symmetric and lets you hang it from whichever end suits the shelf.',
+      help: 'Which short end the tab reaches past. Either way the box hangs long-side-down rather than jutting out at the customer; that is the point of putting the tab on an end rather than on a wall. Both ends keeps the blank symmetric and lets you hang it from whichever end suits the shelf.',
       onChange: (v) => setParam('hangEnd', v as BoxParams['hangEnd']),
     }),
     hangTabHeight: sliderRow({
@@ -544,7 +580,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       step: 1,
       value: params.roofPitchDeg,
       unit: '°',
-      help: 'The gable’s slope from horizontal. Everything about the roof follows from it — the rise, how long the roof panel is in the flat, and how far the ears have to lean in to catch the handle blades.',
+      help: 'The gable’s slope from horizontal. Everything about the roof follows from it: the rise, how long the roof panel is in the flat, and how far the ears have to lean in to catch the handle blades.',
       onInput: (v) => setParam('roofPitchDeg', v),
     }),
   };
@@ -635,7 +671,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           { value: 'print', label: '3D print it' },
         ],
         value: params.makeMode,
-        help: 'Cutting gives you an SVG and a DXF for a laser, a blade cutter or a pair of scissors. Printing gives you a 3MF of the same net as a thin sheet — about as thick as card — with the fold lines already grooved into it.',
+        help: 'Cutting gives you an SVG and a DXF for a laser, a blade cutter or a pair of scissors. Printing gives you a 3MF of the same net as a thin sheet, about as thick as card, with the fold lines already grooved into it.',
         onChange: (m) => {
           params = { ...params, makeMode: m, sheetId: defaultSheetFor(m === 'print' ? 'plate' : 'sheet') };
           triggerRebuild(true);
@@ -648,7 +684,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         step: 0.01,
         value: params.caliperMm,
         format: (v) => `${v.toFixed(2)} mm`,
-        help: 'The one number everything is built from — every tab, slot and lid clearance comes from it. The figure on the packet is not it: 300 gsm card is anywhere from 0.30 to 0.46 mm. Stack ten sheets, measure, divide by ten.',
+        help: 'The one number everything is built from: every tab, slot and lid clearance comes from it. The figure on the packet is not it: 300 gsm card is anywhere from 0.30 to 0.46 mm. Stack ten sheets, measure, divide by ten.',
         onInput: (v) => setParam('caliperMm', v),
       }),
       // A four-way segmented control in a 280 px column gives each option 70 px, and
@@ -658,7 +694,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         label: 'How to mark the folds',
         options: [
           { value: 'score', label: 'Laser score' },
-          { value: 'perf', label: 'Perforate — a dashed cut' },
+          { value: 'perf', label: 'Perforate (a dashed cut)' },
           { value: 'draw', label: 'Draw a pen line' },
           { value: 'none', label: 'Do not mark them' },
         ],
@@ -672,14 +708,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         max: 0.4,
         step: 0.01,
         value: params.kerfMm,
-        format: (v) => (v === 0 ? 'none — blade' : `${v.toFixed(2)} mm`),
+        format: (v) => (v === 0 ? 'none (blade)' : `${v.toFixed(2)} mm`),
         help: 'How much material the laser burns away. Every cut is grown by half of it so the finished part measures what it was drawn as. A blade removes nothing, so leave it at zero.',
         onInput: (v) => setParam('kerfMm', v),
       }),
       perfAuto: toggleSwitch({
         label: 'Size dashes automatically',
         checked: params.perfAuto,
-        help: 'Each fold gets a dash size worked out from its own length and how thick the card is. A short tuck tab needs finer dashes than a long body fold — one setting for both leaves the short folds hinging on two big slots.',
+        help: 'Each fold gets a dash size worked out from its own length and how thick the card is. A short tuck tab needs finer dashes than a long body fold; one setting for both leaves the short folds hinging on two big slots.',
         onChange: (v) => setParam('perfAuto', v),
       }),
       perfCut: sliderRow({
@@ -739,30 +775,66 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         label: `${v.toFixed(2)} mm`,
       })),
       value: String(params.layerHeightMm),
-      onChange: (v) => setParam('layerHeightMm', Number(v)),
+      onChange: (v) => {
+        setParam('layerHeightMm', Number(v));
+        refreshSheetRows();
+      },
     }),
-    sheetLayers: sliderRow({
-      label: 'Sheet thickness',
+    sheetLayers: stepperRow({
+      label: 'Sheet layers',
       min: 1,
       max: 8,
       step: 1,
       value: params.sheetLayers,
       format: (v) => `${v} layer${v === 1 ? '' : 's'} · ${(v * params.layerHeightMm).toFixed(2)} mm`,
-      help: 'Two layers of 0.2 is 0.40 mm, and 300 gsm card measures 0.38 — which is the whole idea. Thicker is stiffer and folds worse.',
-      onInput: (v) => setParam('sheetLayers', v),
+      help: 'Two layers of 0.2 is 0.40 mm, and 300 gsm card measures 0.38, which is the whole idea. Thicker is stiffer and folds worse.',
+      onInput: (v) => {
+        setParam('sheetLayers', v);
+        refreshSheetRows();
+      },
     }),
-    hingeLayers: sliderRow({
-      label: 'Hinge thickness',
+    hingeLayers: stepperRow({
+      label: 'Hinge layers',
       min: 1,
       max: 8,
       step: 1,
       value: params.hingeLayers,
       format: (v) =>
         v >= params.sheetLayers
-          ? 'no groove — fold on the line'
+          ? 'no groove'
           : `${v} layer${v === 1 ? '' : 's'} · ${(v * params.layerHeightMm).toFixed(2)} mm`,
       help: 'What is left under a fold line. One layer folds beautifully and is the reason a printed net folds at all; set it equal to the sheet and you get a plain slab with no fold marks on it.',
-      onInput: (v) => setParam('hingeLayers', v),
+      onInput: (v) => {
+        setParam('hingeLayers', v);
+        refreshSheetRows();
+      },
+    }),
+    /* Flaps. Everything that ends up SANDWICHED between two plies of the finished box —
+       a dust flap, a corner ear, a tuck lug — is built thinner than the wall, because the
+       gap it drops into is one sheet wide and PLA does not crush the way card does.
+
+       Derived, that lands on a single layer at the default 2-layer sheet, which is the
+       first thing people printing this box wrote in about: a one-layer flap on a two-layer
+       wall is floppy, and at three layers it is floppier still. So the derivation is now a
+       default rather than the only answer. */
+    flapLayers: stepperRow({
+      label: 'Flap layers',
+      min: 0,
+      max: 8,
+      step: 1,
+      value: params.flapLayers,
+      format: (v) => {
+        if (v === 0) {
+          return `auto · ${sandwichThicknessMm({ ...params, flapLayers: 0 }).toFixed(2)} mm`;
+        }
+        // What the exporter will actually build, not what the slider says: a flap can be
+        // neither thinner than the crease it folds on nor thicker than the sheet.
+        const mm = sandwichThicknessMm({ ...params, flapLayers: v });
+        const layers = Math.round(mm / params.layerHeightMm);
+        return `${layers} layer${layers === 1 ? '' : 's'} · ${mm.toFixed(2)} mm`;
+      },
+      help: 'How thick the flaps that tuck INSIDE the box are built: the corner ears, the dust flaps, the tuck lugs. Auto leaves them one clearance under the gap they drop into, so they slide. Raise it for a flap that grips, up to the full thickness of the sheet, though that one has to be pushed home and on a box you plan to open and close a lot it is worth staying a layer under.',
+      onInput: (v) => setParam('flapLayers', v),
     }),
     hingeWidth: sliderRow({
       label: 'Groove width',
@@ -774,10 +846,25 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         const floor = minHingeWidthMm(params);
         return v < floor - 1e-6 ? `${floor.toFixed(1)} mm (floor)` : `${v.toFixed(1)} mm`;
       },
-      help: 'A 90 degree fold needs roughly pi × thickness ÷ 2 of band before the outer face has to stretch, and folding flat needs pi × thickness — about 1.3 mm on a 0.4 mm sheet. That figure is a floor, not a suggestion: below it the two halves meet before the fold does, so it is enforced and rises with the sheet. Wider folds easier and stands up less straight.',
+      help: 'A 90 degree fold needs roughly pi × thickness ÷ 2 of band before the outer face has to stretch, and folding flat needs pi × thickness, about 1.3 mm on a 0.4 mm sheet. That figure is a floor, not a suggestion: below it the two halves meet before the fold does, so it is enforced and rises with the sheet. Wider folds easier and stands up less straight.',
       onInput: (v) => setParam('hingeWidthMm', v),
     }),
   };
+
+  /** Restate the four sheet rows from the current params.
+   *
+   *  They are not four independent numbers: every one of them prints a millimetre figure
+   *  derived from the other three, so moving any one leaves the rest lying. Raising the
+   *  sheet to three layers left "Flap thickness · auto · 0.20 mm" on screen while the
+   *  flaps were being built at 0.40, and the groove kept claiming a floor computed for the
+   *  old sheet. `setValue` re-runs each row's own `format`, and it will not touch a box
+   *  someone is typing in. */
+  function refreshSheetRows(): void {
+    printControls.sheetLayers.setValue(params.sheetLayers);
+    printControls.hingeLayers.setValue(params.hingeLayers);
+    printControls.flapLayers.setValue(params.flapLayers);
+    printControls.hingeWidth.setValue(params.hingeWidthMm);
+  }
 
   // ---------------------------------------------------------------------------
   // 5. RESULTS
@@ -847,7 +934,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         'ECMA A × B × H',
         `${r.ecmaDimsMm[0].toFixed(1)} × ${r.ecmaDimsMm[1].toFixed(1)} × ${r.ecmaDimsMm[2].toFixed(1)} mm`,
         undefined,
-        'The industry convention: measured centre to centre of the crease lines, per the ECMA Code of Folding Carton Design Styles. Quote these to a trade printer — they are the numbers a die is cut to.',
+        'The industry convention: measured centre to centre of the crease lines, per the ECMA Code of Folding Carton Design Styles. Quote these to a trade printer: they are the numbers a die is cut to.',
       ),
       stat('Panels · folds', `${r.net.panels.length} · ${r.net.creases.length}`),
       cutting
@@ -860,7 +947,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             'Sheet · flaps',
             `${sheetThicknessMm(r.params).toFixed(2)} mm · ${sandwichThicknessMm(r.params).toFixed(2)} mm`,
             undefined,
-            'The sheet is what a wall is built from. Anything that tucks INSIDE one — a dust flap, a tuck lug, a corner ear — is built thinner, because the gap it drops into is one sheet wide and PLA does not crush the way card does. It follows the sheet: one clearance under it, rounded down to whole layers.',
+            'The sheet is what a wall is built from. Anything that tucks INSIDE one, such as a dust flap, a tuck lug or a corner ear, is built thinner, because the gap it drops into is one sheet wide and PLA does not crush the way card does. It follows the sheet: one clearance under it, rounded down to whole layers.',
           ),
     );
 
@@ -1236,12 +1323,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const footer = sidebarFooter({
     formats: EXPORT_FORMATS,
     exportNote: CUT
-      ? 'Every file carries a 100 mm rectangle — measure it before you cut a real sheet.'
-      : 'Prints flat, no supports. The fold lines are grooved in — fold it by hand off the plate.',
+      ? 'Every file carries a 100 mm rectangle: measure it before you cut a real sheet.'
+      : 'Prints flat, no supports. The fold lines are grooved in, so fold it by hand off the plate.',
     onExport: async (format) => {
       if (!result) return toast('Nothing to export yet', { kind: 'warn' });
       if (result.diagnostics.some((d) => d.level === 'error')) {
-        return toast('Fix the problems in Results first — this box would not fold.', {
+        return toast('Fix the problems in Results first: this box would not fold.', {
           kind: 'error',
         });
       }
@@ -1269,10 +1356,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         }
 
         const mountains = stats.mountains
-          ? ` ${stats.mountains} fold${stats.mountains === 1 ? '' : 's'} go the other way — press those from the underside.`
+          ? ` ${stats.mountains} fold${stats.mountains === 1 ? '' : 's'} go the other way; press those from the underside.`
           : '';
         toast(
-          `${headline} — ${stats.sheetMm.toFixed(2)} mm sheet, ${stats.hingeMm.toFixed(2)} mm hinges.${mountains}`,
+          `${headline}: ${stats.sheetMm.toFixed(2)} mm sheet, ${stats.hingeMm.toFixed(2)} mm hinges.${mountains}`,
           { kind: 'ok' },
         );
         nudgeLicense();
@@ -1285,7 +1372,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           params,
           buildId: import.meta.env.VITE_BUILD_ID,
         });
-        toast(`${files.baseName}.zip — SVG, DXF and an assembly sheet.`, { kind: 'ok' });
+        toast(`${files.baseName}.zip: SVG, DXF and an assembly sheet.`, { kind: 'ok' });
         nudgeLicense();
         return;
       }
@@ -1311,7 +1398,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // lasers it cannot export for promises something it does not do.
         content: [
           CUT
-            ? 'Pick a box, set the size, then say how you are making it — cut from card, or printed ' +
+            ? 'Pick a box, set the size, then say how you are making it: cut from card, or printed ' +
               'flat on a 3D printer. The button under the model runs the fold both ways: it folds a ' +
               'flat blank up, and unfolds a finished box back to the sheet, so you can watch it ' +
               'either way.'
@@ -1324,28 +1411,28 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           '(B20.04.00.00) locks by folding each corner double on a 45° crease instead.',
           'The gable box (A55.75.01.03) is the handled one: two roof panels lean in to a ridge, ' +
           'the two handle blades meet face to face above it, and an ear at each end drops its slot ' +
-          'over BOTH blades at once — that notch in the blades\u2019 shoulders is the lock. It needs ' +
+          'over BOTH blades at once, and that notch in the blades\u2019 shoulders is the lock. It needs ' +
           'the one glued lap every tube box needs, and nothing else.',
           'To hang a box on a shop peg, the hang tab adds a euro slot (ISO 15348). A header above ' +
           'the back wall doubled over on itself puts the slot through two plies, which is what stops ' +
-          'it tearing off the peg — and it moves the lid to the front, because the header now owns ' +
+          'it tearing off the peg, and it moves the lid to the front, because the header now owns ' +
           'the back wall\u2019s top edge.',
           ...(CUT
             ? [
                 'CUTTING IT. The one number that matters is how thick your card actually is: every ' +
                   'tab, slot and lid clearance is built from it. The number on the packet is not it ' +
-                  '— 300 gsm runs anywhere from 0.30 to 0.46 mm. Stack ten sheets, measure, divide ' +
+                  ': 300 gsm runs anywhere from 0.30 to 0.46 mm. Stack ten sheets, measure, divide ' +
                   'by ten.',
               ]
             : []),
           'PRINTING IT. The thickness is worked out for you: layers times layer height. Two layers ' +
-            'of 0.2 mm is 0.40 mm, which is exactly what 300 gsm card measures — so it folds like ' +
+            'of 0.2 mm is 0.40 mm, which is exactly what 300 gsm card measures, so it folds like ' +
             'card. Fold lines come out as grooves down to one layer.',
           CUT
-            ? 'Boxes eat a lot of paper — far more than anyone expects. If the blank does not fit, ' +
+            ? 'Boxes eat a lot of paper, far more than anyone expects. If the blank does not fit, ' +
               'press "Resize to fit" rather than hunting for the number by hand. On A4 or a Cricut ' +
               'mat this is a small-box tool.'
-            : 'A blank is much wider than the box it makes — a mailer\u2019s is L + 4H across before ' +
+            : 'A blank is much wider than the box it makes: a mailer\u2019s is L + 4H across before ' +
               'it is anything else. If it does not fit the plate, press "Resize to fit" rather than ' +
               'hunting for the number by hand.',
           ...(CUT
@@ -1353,7 +1440,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
                 'No cutter can crease, so fold lines come out as a laser score, a perforation, or a ' +
                   'pen line you fold by hand. The machine preset picks the right one.',
                 'Every export carries a 100 mm rectangle. Measure it in your cutting software ' +
-                  'before you cut a real sheet — if it reads 133 mm your importer guessed the wrong ' +
+                  'before you cut a real sheet: if it reads 133 mm your importer guessed the wrong ' +
                   'DPI, and the DXF will fix it.',
               ]
             : []),
@@ -1420,6 +1507,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       printControls.layerHeight,
       printControls.sheetLayers,
       printControls.hingeLayers,
+      printControls.flapLayers,
       printControls.hingeWidth,
     ],
   });
@@ -1447,6 +1535,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         }),
         optionsSection,
         advancedSection,
+        // The Updates drawer. Under the last section rather than in the sticky footer:
+        // most of what is in it arrived as an email about a box someone had already
+        // printed, so it earns a button — but not one competing with Export for the block
+        // that is on screen the whole time.
+        changelogButton({ entries: CHANGELOG, title: 'Fold-Up Box updates' }),
       ],
     },
     stage: [
@@ -1586,9 +1679,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       const sel = f.querySelector('select');
       if (sel && [...sel.options].some((o) => o.value === params.sheetId)) sel.value = params.sheetId;
     }
-    printControls.sheetLayers.setValue(params.sheetLayers);
-    printControls.hingeLayers.setValue(params.hingeLayers);
-    printControls.hingeWidth.setValue(params.hingeWidthMm);
+    const lhSel = printControls.layerHeight.querySelector('select');
+    if (lhSel) lhSel.value = String(params.layerHeightMm);
+    refreshSheetRows();
   }
 
   // ---------------------------------------------------------------------------
@@ -1641,9 +1734,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   void mode;
 
   return () => {
-    // Dialogs and toasts render on <body>, outside the container the host clears, so a
-    // stranded one would outlive the generator that opened it.
+    // Dialogs, drawers and toasts render on <body>, outside the container the host clears,
+    // so a stranded one would outlive the generator that opened it. The Updates panel is a
+    // drawer, which is why the second line arrived with it.
     closeAllDialogs();
+    closeAllDrawers();
     stop();
     clearTimeout(rebuildQueued);
     rig?.dispose();

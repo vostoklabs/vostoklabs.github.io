@@ -178,7 +178,7 @@ const tubeFaces = (prefix: string): { id: string; label: string }[] => [
  *  through two plies, which is the hand hole's job and a different piece of geometry. */
 const MAILER_FACES = [
   { id: 'ml-lid', label: 'Lid (top)' },
-  { id: 'ml-base', label: 'Base (bottom) — the face out when it hangs' },
+  { id: 'ml-base', label: 'Base (bottom): the face out when it hangs' },
   { id: 'ml-front', label: 'Front wall' },
   { id: 'ml-back', label: 'Back wall' },
 ];
@@ -267,7 +267,7 @@ export const STYLES: StyleMeta[] = [
         'tray with 2 double walls · fold-over ends with nib locks · no dust flaps · tuck-in flap cover · X32 "tuck in closure with locking lugs"',
       basis: 'nearest',
       note:
-        'The COVER is unchanged from the plain mailer — still a tuck-in flap, still digit 50. What is added is a securing feature on the tuck itself, so it takes a fifth digit pair from Group X rather than a different cover digit: X32, "tuck in closure with locking lugs" (p.88). Notation follows the standard’s own rule that an X code is appended to the design code as a fifth pair. Marked nearest rather than catalogue because ECMA lists X32 without drawing it on a Group B tray, so the lug’s shape and reach are ours.',
+        'The COVER is unchanged from the plain mailer: still a tuck-in flap, still digit 50. What is added is a securing feature on the tuck itself, so it takes a fifth digit pair from Group X rather than a different cover digit: X32, "tuck in closure with locking lugs" (p.88). Notation follows the standard’s own rule that an X code is appended to the design code as a fifth pair. Marked nearest rather than catalogue because ECMA lists X32 without drawing it on a Group B tray, so the lug’s shape and reach are ours.',
     },
     variants: [
       { when: (p) => p.lidWings, ecma: MAILER_FLAPS_53 },
@@ -301,7 +301,7 @@ export const STYLES: StyleMeta[] = [
     name: 'Webbed-corner tray',
     short: 'Webbed tray',
     blurb:
-      'A closed-corner tray. Each corner is a 45° web that folds double and locks itself — no tabs, no slots, no gap.',
+      'A closed-corner tray. Each corner is a 45° web that folds double and locks itself: no tabs, no slots, no gap.',
     glueFree: true,
     webbedCorners: true,
     ecma: {
@@ -358,7 +358,7 @@ export const STYLES: StyleMeta[] = [
     ecma: {
       code: 'A20.20.01.03',
       reads:
-        'tuck-in flap bottom · tuck-in flap top · bottom tuck on panel 1 · top tuck on panel 3 — opposite panels, which is what makes it REVERSE rather than straight (A20.20.01.01)',
+        'tuck-in flap bottom · tuck-in flap top · bottom tuck on panel 1 · top tuck on panel 3: opposite panels, which is what makes it REVERSE rather than straight (A20.20.01.01)',
       basis: 'catalogue',
       page: 24,
     },
@@ -371,7 +371,7 @@ export const STYLES: StyleMeta[] = [
             'tuck-in flap bottom · tuck-in flap top WITH EXTENDED BACK PANEL · bottom on panel 1 · extended back panel on panel 3',
           basis: 'nearest',
           note:
-            'The header moves the top closure digit from 20 to 21 — ECMA’s own name for closure 21 is "tuck in flap closure system with extended back panel", so a header is not a decoration on a 20, it is a different closure. The catalogue draws A20.21.03.03 (p.20); ours differs in the third pair only, because our bottom tuck hangs off panel 1. The euroslot itself is X61/X62 (p.88), reported separately in the hang tab control.',
+            'The header moves the top closure digit from 20 to 21: ECMA’s own name for closure 21 is "tuck in flap closure system with extended back panel", so a header is not a decoration on a 20, it is a different closure. The catalogue draws A20.21.03.03 (p.20); ours differs in the third pair only, because our bottom tuck hangs off panel 1. The euroslot itself is X61/X62 (p.88), reported separately in the hang tab control.',
         },
       },
     ],
@@ -384,7 +384,7 @@ export const STYLES: StyleMeta[] = [
     id: 'snap-lock',
     name: 'Self-locking bottom carton',
     short: 'Snap-lock',
-    blurb: 'Tuck lid over a base that locks itself — fold three flaps in sequence and it stays shut.',
+    blurb: 'Tuck lid over a base that locks itself: fold three flaps in sequence and it stays shut.',
     glueFree: false,
     ecma: {
       code: 'A55.20.01.03',
@@ -404,7 +404,7 @@ export const STYLES: StyleMeta[] = [
           basis: 'catalogue',
           page: 27,
           note:
-            'Drawn in the catalogue with the hang slots in it — the header, the moved top closure and the euroslot through both plies are all on ECMA’s own page, which makes this the best-anchored code in the app.',
+            'Drawn in the catalogue with the hang slots in it: the header, the moved top closure and the euroslot through both plies are all on ECMA’s own page, which makes this the best-anchored code in the app.',
         },
       },
     ],
@@ -567,7 +567,7 @@ function hangSteps(p: BoxParams): string[] {
     ];
   }
   if (hangMode(p) === 'single') {
-    return ['The header above the back wall is one ply — hang light contents only, or switch it to the double header.'];
+    return ['The header above the back wall is one ply: hang light contents only, or switch it to the double header.'];
   }
   return [];
 }
@@ -663,8 +663,8 @@ function mailerHangSteps(p: BoxParams): string[] {
   const end = p.hangEnd === 'both' ? 'each end' : `the ${p.hangEnd} end`;
   if (hangMode(p) === 'single') {
     return [
-      `The lid runs on past ${end} into a one-ply tab. Nothing to fold and, on most sizes, no extra card — it nests in the waste beside the rolled end.`,
-      'Two things to know before you use it. It hangs the box the other way up from the double tab: the LID goes against the board and the customer sees the base, so put your artwork there. And the whole weight goes through the lid, which is held on by its tuck flap — keep the contents light, and use the locking-lug mailer, whose lugs are the only thing stopping the tuck pulling back out.',
+      `The lid runs on past ${end} into a one-ply tab. Nothing to fold and, on most sizes, no extra card: it nests in the waste beside the rolled end.`,
+      'Two things to know before you use it. It hangs the box the other way up from the double tab: the LID goes against the board and the customer sees the base, so put your artwork there. And the whole weight goes through the lid, which is held on by its tuck flap, so keep the contents light, and use the locking-lug mailer, whose lugs are the only thing stopping the tuck pulling back out.',
     ];
   }
   return [];
@@ -789,7 +789,7 @@ function buildTray(p: BoxParams): StyleParts {
     assembly: [
       'Fold the two long walls up, then fold the ear at each of their four corners inward.',
       'Roll each end over the ears: the wall up, the narrow strip across the top, the inner panel straight back down inside.',
-      'Push the two tabs on each inner panel through the slots in the floor. The ears are now trapped between the two plies of the end and the tray holds itself square — nothing is glued and nothing needs to be.',
+      'Push the two tabs on each inner panel through the slots in the floor. The ears are now trapped between the two plies of the end and the tray holds itself square: nothing is glued and nothing needs to be.',
       ...(rise > 0
         ? ['Carry it by the two raised grips. Under 300 gsm, fold a spare strip over the top edge of each grip before you load it up.']
         : []),
@@ -830,9 +830,9 @@ function buildWebbedTray(p: BoxParams): StyleParts {
     rootId: 'wt-base',
     loose: [],
     assembly: [
-      'Bring all four walls up together, not one at a time. Each corner web is joined to two walls at once, so it cannot lie flat while they rise — it folds itself on its diagonal crease as they go, and by the time the walls stand up the web is already doubled. Let it.',
+      'Bring all four walls up together, not one at a time. Each corner web is joined to two walls at once, so it cannot lie flat while they rise: it folds itself on its diagonal crease as they go, and by the time the walls stand up the web is already doubled. Let it.',
       'Now swing each doubled web flat against the end of the tray, and press the diagonal home with a bone folder.',
-      'Roll each end up over the webs: the wall up, the narrow strip across the top, the inner panel straight back down inside. The webs are now trapped between the two plies and the tray is locked — there are no tabs on this one and it does not need any.',
+      'Roll each end up over the webs: the wall up, the narrow strip across the top, the inner panel straight back down inside. The webs are now trapped between the two plies and the tray is locked: there are no tabs on this one and it does not need any.',
     ],
   };
 }
@@ -891,9 +891,9 @@ function buildFlapCover(p: BoxParams): StyleParts {
     rootId: 'fc-base',
     loose: [],
     assembly: [
-      'Build the tray first: bring all four walls up together — the corner webs fold themselves double on the diagonal as they rise — then swing each doubled web flat against the end.',
+      'Build the tray first: bring all four walls up together and the corner webs fold themselves double on the diagonal as they rise, then swing each doubled web flat against the end.',
       'Roll each end up over the webs and press the inner panel down inside. The tray is now locked.',
-      'Fold the lid over the top. Press its two front corner webs flat the same way as the tray’s, then bring the front skirt down — the webs tuck in behind the side skirts and the lid closes square on all four corners.',
+      'Fold the lid over the top. Press its two front corner webs flat the same way as the tray’s, then bring the front skirt down: the webs tuck in behind the side skirts and the lid closes square on all four corners.',
     ],
   };
 }
@@ -957,7 +957,7 @@ function buildTrayLid(p: BoxParams): StyleParts {
     assembly: [
       'Fold the two long walls up, then fold the ear at each of their four corners inward.',
       'Roll each end over the ears: the wall up, the narrow strip across the top, the inner panel straight back down inside.',
-      'Push the two tabs on each inner panel through the slots in the floor. That is what holds the tray square — nothing is glued and nothing needs to be.',
+      'Push the two tabs on each inner panel through the slots in the floor. That is what holds the tray square: nothing is glued and nothing needs to be.',
       'Build the lid exactly the same way, then drop it over the tray.',
     ],
   };
@@ -1039,7 +1039,7 @@ function buildTuckTop(p: BoxParams): StyleParts {
     rootId: front.id,
     loose: [],
     assembly: [
-      'Glue the lap behind the far wall and let it set — this is the only glued joint.',
+      'Glue the lap behind the far wall and let it set: this is the only glued joint.',
       'Close the base first: dust flaps in, then the bottom panel down and its tuck inside.',
       'Fill the box, then close the top the same way.',
       ...hangSteps(p),
@@ -1106,7 +1106,7 @@ function buildSnapLock(p: BoxParams): StyleParts {
     assembly: [
       'Glue the lap behind the far wall.',
       'Fold the slotted base panel in, then both side flaps in on top of it.',
-      'Fold the last base panel down and push its tongue through the slot — the base now holds itself shut.',
+      'Fold the last base panel down and push its tongue through the slot: the base now holds itself shut.',
       ...hangSteps(p),
     ],
   };
@@ -1381,9 +1381,22 @@ function buildMailer(p: BoxParams): StyleParts {
   // hang down the ends: they hold the lid flat but do nothing to stop the tuck pulling
   // back out, which is the joint that actually opens.
   if (sideFlaps) {
-    // How far the lug reaches into the box. It has to bite properly — this is the
-    // whole lock — but past about a third of the depth it starts fouling the contents.
-    const lugD = clamp(W * 0.35, 6, Math.max(6, W * 0.5));
+    // How far the lug reaches into the box.
+    //
+    // Off the TUCK's depth, not off the box's width, and the difference is the whole of a
+    // customer report. The lug is a feature of the tuck flap — it stands in the end wall's
+    // plane, as tall as the tuck is deep — so its reach belongs in proportion to that. W is
+    // simply the wrong axis to take it from, and it fails in exactly the case a mailer is
+    // for: on a 100 × 100 × 20 shipper `W * 0.35` drew a 35 mm paddle 14.6 mm tall, on a
+    // box only 20 mm deep. Folded in, it reached over a third of the way across the floor
+    // and lay on whatever was in the box; the reporter cut both of them down by hand.
+    //
+    // Two ceilings on top of it, for two different reasons. The reach goes into the box's
+    // DEPTH, so a lug longer than the box is deep cannot fold in at all: hence the cap on
+    // W. And past about 20 mm it stops being a lock and becomes a shelf across the
+    // contents, whatever the box measures — the grip comes from the lug's HEIGHT, which is
+    // the full depth of the tuck, not from how far it reaches.
+    const lugD = clamp(tuckD * 0.5, 5, Math.max(5, Math.min(W * 0.35, 20)));
     // The lug runs almost the full depth of the tuck, stopping just clear of the
     // rounded far corner. Anything less and it is gripping the top of the end wall
     // only, which is the part that flexes most.
@@ -1433,17 +1446,17 @@ function buildMailer(p: BoxParams): StyleParts {
     assembly: [
       'Stand the front and back walls up, then fold the four corner ears inward so they lie flat against the ends.',
       'Now roll each end over the ears: the wall up, the narrow strip across the top, the inner panel straight back down inside.',
-      'Push the two tabs on each inner panel through the slots in the floor. That is the whole lock — the ends are now double-walled and nothing can spring open.',
+      'Push the two tabs on each inner panel through the slots in the floor. That is the whole lock: the ends are now double-walled and nothing can spring open.',
       ...(sideFlaps
         ? [
             'Fold the lid over the rim, then fold the two small lugs on the ends of the tuck flap inward to a right angle.',
-            'Slide the tuck down inside the front wall. As it goes in, the two lugs pass the end walls and spring out flat against them on the inside — the chamfered corners are what lets them find their way past the rim, so keep the tuck square as it goes down.',
+            'Slide the tuck down inside the front wall. As it goes in, the two lugs pass the end walls and spring out flat against them on the inside: the chamfered corners are what lets them find their way past the rim, so keep the tuck square as it goes down.',
             'That is the lock: the tuck cannot pull back out without both lugs folding again, and they cannot fold while the box is shut.',
           ]
         : ['Fold the lid over and slide its tuck down inside the front wall.']),
       ...(p.lidWings
         ? [
-            'The lid nests INSIDE the rim rather than capping over it, so bring it down square and pinch the two wings inward as it goes — the chamfered corners are what lets them find their way past the rolled ends. Once they are in, the lid cannot lift at the ends.',
+            'The lid nests INSIDE the rim rather than capping over it, so bring it down square and pinch the two wings inward as it goes: the chamfered corners are what lets them find their way past the rolled ends. Once they are in, the lid cannot lift at the ends.',
           ]
         : []),
       ...mailerHangSteps(p),
@@ -1712,11 +1725,11 @@ function buildGable(p: BoxParams): StyleParts {
     loose: [],
     assembly: [
       'Glue the lap behind the far wall and square the tube up.',
-      'Fold the slotted base panel in, then both side flaps on top of it, then the last panel down and its tongue through the slot — the base now holds itself shut.',
+      'Fold the slotted base panel in, then both side flaps on top of it, then the last panel down and its tongue through the slot: the base now holds itself shut.',
       'Bring both roof panels up until the two handle blades meet face to face.',
       locks
-        ? 'Swing each end ear inward and thread its slot down over BOTH blades at once. It stops in the notch cut into their shoulders — that notch is the lock, and the roof cannot open while the ears are home.'
-        : 'Swing each end ear inward to close the gable. At this size there is no room for the slot lock, so the ears cover the ends but do not catch — tape or a sticker holds the roof shut.',
+        ? 'Swing each end ear inward and thread its slot down over BOTH blades at once. It stops in the notch cut into their shoulders: that notch is the lock, and the roof cannot open while the ears are home.'
+        : 'Swing each end ear inward to close the gable. At this size there is no room for the slot lock, so the ears cover the ends but do not catch, so tape or a sticker holds the roof shut.',
     ],
   };
 }
@@ -1816,7 +1829,7 @@ function buildDivider(p: BoxParams): StyleParts {
     loose,
     assembly: [
       'Slide the slotted edges together so the strips cross at half height.',
-      'Drop the finished grid into the box — it holds itself square without glue.',
+      'Drop the finished grid into the box: it holds itself square without glue.',
     ],
   };
 }

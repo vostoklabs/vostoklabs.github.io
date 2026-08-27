@@ -1,0 +1,121 @@
+/* The update timeline — see components/changelog.ts. Lives inside a `.vl-drawer__body`,
+   which is a column flex box with `overflow: hidden`, so the scroll belongs to the list
+   rather than to the drawer. */
+
+.vl-changelog-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.vl-changelog {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* The rail the dots sit on. One border on the container rather than a pseudo-element
+     per entry, so it cannot break between entries. */
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--line);
+}
+
+.vl-changelog__entry {
+  position: relative;
+  padding-bottom: var(--space-4);
+}
+
+.vl-changelog__entry:last-child {
+  padding-bottom: 0;
+}
+
+/* The dot on the rail, centred on the date line. */
+.vl-changelog__entry::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-4) * -1 - 5px);
+  top: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--panel);
+}
+
+/* Everything after the first entry is history: the dot goes quiet so the newest one
+   reads as the newest without a badge saying so. */
+.vl-changelog__entry:not(:first-child)::before {
+  background: var(--line);
+}
+
+.vl-changelog__date {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vl-changelog__title {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-strong);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* One block per kind: the word, then its bullets. */
+.vl-changelog__group {
+  margin-top: var(--space-3);
+}
+
+.vl-changelog__kind {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+/* The label is the hue pulled 45% of the way toward the theme's own text colour, which
+   darkens it on light and lightens it on dark — one ratio, both directions. The raw token
+   is not readable at 11 pt on the panel: `--accent-2` measures about 2:1 in the light theme,
+   well under AA for text this size. Measured after the change at 9.6/5.7 (new), 9.0/9.0
+   (fixed) and 9.0/9.1 (changed), dark/light. */
+.vl-changelog__kind--added {
+  color: color-mix(in srgb, var(--accent-2) 55%, var(--text));
+}
+
+.vl-changelog__kind--fixed {
+  color: color-mix(in srgb, var(--accent) 55%, var(--text));
+}
+
+.vl-changelog__kind--changed {
+  color: color-mix(in srgb, var(--muted) 55%, var(--text));
+}
+
+.vl-changelog__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: 1.1em;
+  list-style: disc;
+}
+
+.vl-changelog__item {
+  font-size: var(--fs-medium);
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.vl-changelog__item::marker {
+  color: var(--muted);
+}
+
+.vl-changelog__empty {
+  margin: 0;
+  font-size: var(--fs-medium);
+  color: var(--muted);
+}

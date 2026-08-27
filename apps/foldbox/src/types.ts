@@ -189,11 +189,11 @@ export interface Stock {
 export const STOCKS: Stock[] = [
   { id: 'card200', name: 'Light card 200 gsm (12 pt)', gsm: 200, caliperMm: 0.25, note: 'Lightweight cartons. Folds easily, holds little.' },
   { id: 'card250', name: 'Card 250 gsm (14 pt)', gsm: 250, caliperMm: 0.31, note: "Bambu's own A4 cardstock. Standard retail and soap boxes." },
-  { id: 'card300', name: 'Cardstock 300 gsm (16 pt)', gsm: 300, caliperMm: 0.38, note: 'The maker sweet spot — cosmetics and tuck cartons.' },
+  { id: 'card300', name: 'Cardstock 300 gsm (16 pt)', gsm: 300, caliperMm: 0.38, note: 'The maker sweet spot: cosmetics and tuck cartons.' },
   { id: 'card350', name: 'Heavy cardstock 350 gsm (18 pt)', gsm: 350, caliperMm: 0.46, note: 'Premium feel. At the H2D blade module’s 0.5 mm ceiling.' },
   { id: 'kraft300', name: 'Kraft 300 gsm', gsm: 300, caliperMm: 0.4, note: 'Laser-scores brown, which reads as intentional on kraft.' },
-  { id: 'card400', name: 'Board 400 gsm (24 pt)', gsm: 400, caliperMm: 0.55, note: 'Exceeds the H2D blade’s 0.5 mm limit — laser or hand-cut only.' },
-  { id: 'eflute', name: 'E-flute corrugated 1.6 mm', gsm: 0, caliperMm: 1.6, note: 'Laser only — the blade module cannot cut corrugated.' },
+  { id: 'card400', name: 'Board 400 gsm (24 pt)', gsm: 400, caliperMm: 0.55, note: 'Exceeds the H2D blade’s 0.5 mm limit, so laser or hand-cut only.' },
+  { id: 'eflute', name: 'E-flute corrugated 1.6 mm', gsm: 0, caliperMm: 1.6, note: 'Laser only: the blade module cannot cut corrugated.' },
 ];
 
 /** A cutting machine, and the constraints it actually imposes on the file.
@@ -226,18 +226,18 @@ export type FoldMode = 'score' | 'perf' | 'draw' | 'none';
 export const MACHINES: Machine[] = [
   {
     id: 'h2d-blade',
-    name: 'Bambu H2D — blade + pen',
+    name: 'Bambu H2D (blade + pen)',
     areaMm: [300, 285],
     foldMode: 'draw',
     kerfMm: 0,
     maxCaliperMm: 0.5,
     mirror: false,
     format: 'svg',
-    note: 'Basic cut for the outline, Drawing line for the fold marks — one plate, one pen swap, and the machine pauses for it. No scorch. Bambu Suite has no crease operation, so the folds are pen marks you fold by hand.',
+    note: 'Basic cut for the outline, Drawing line for the fold marks: one plate, one pen swap, and the machine pauses for it. No scorch. Bambu Suite has no crease operation, so the folds are pen marks you fold by hand.',
   },
   {
     id: 'h2d-laser',
-    name: 'Bambu H2D — 40 W laser',
+    name: 'Bambu H2D (40 W laser)',
     areaMm: [310, 250],
     foldMode: 'score',
     kerfMm: 0.17,
@@ -248,14 +248,14 @@ export const MACHINES: Machine[] = [
   },
   {
     id: 'h2d-laser10',
-    name: 'Bambu H2D — 10 W laser',
+    name: 'Bambu H2D (10 W laser)',
     areaMm: [310, 270],
     foldMode: 'score',
     kerfMm: 0.07,
     maxCaliperMm: 0,
     mirror: false,
     format: 'svg',
-    note: 'Smaller spot than the 40 W, so a finer kerf and a tidier score — but slower on anything above 250 gsm.',
+    note: 'Smaller spot than the 40 W, so a finer kerf and a tidier score, but slower on anything above 250 gsm.',
   },
   {
     id: 'cricut-maker',
@@ -266,7 +266,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 2.4,
     mirror: true,
     format: 'svg',
-    note: 'Scoring Wheel scores properly, but 100 lb+ cardstock needs the Double wheel. Import, set the blue layer to Score, then ATTACH — without Attach the folds lose registration.',
+    note: 'Scoring Wheel scores properly, but 100 lb+ cardstock needs the Double wheel. Import, set the blue layer to Score, then ATTACH. Without Attach the folds lose registration.',
   },
   {
     id: 'cricut-explore',
@@ -277,7 +277,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 1,
     mirror: true,
     format: 'svg',
-    note: 'No scoring wheel on this machine — the Scoring Stylus is light-duty only, so perforated folds are the reliable default here.',
+    note: 'No scoring wheel on this machine: the Scoring Stylus is light-duty only, so perforated folds are the reliable default here.',
   },
   {
     id: 'cricut-long',
@@ -299,7 +299,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 2,
     mirror: false,
     format: 'dxf',
-    note: 'The free edition of Silhouette Studio cannot open SVG at all — use the DXF, and re-set the size after import because DXF import drops it.',
+    note: 'The free edition of Silhouette Studio cannot open SVG at all, so use the DXF, and re-set the size after import because DXF import drops it.',
   },
   {
     id: 'glowforge',
@@ -508,6 +508,12 @@ export interface BoxParams {
   sheetLayers: number;
   /** What is left under a fold line. Equal to `sheetLayers` means no groove. */
   hingeLayers: number;
+  /** How thick anything that tucks INSIDE the finished box is built — a dust flap, a
+   *  corner ear, a tuck lug — in layers. 0 derives it from the sheet, which is what every
+   *  box printed before this setting existed got: one clearance under the gap, rounded
+   *  down to whole layers. Raise it to build the flaps as thick as the walls. See
+   *  `sandwichThicknessMm`. */
+  flapLayers: number;
   /** Width of the thinned band. A 90 degree fold in a sheet of thickness t needs
    *  roughly pi·t/2 of band before the outer face has to stretch. */
   hingeWidthMm: number;
@@ -570,6 +576,9 @@ export const DEFAULT_PARAMS: BoxParams = {
   layerHeightMm: 0.2,
   sheetLayers: 2,
   hingeLayers: 1,
+  // Derived, so the flaps follow the sheet exactly as they always have. It is a knob for
+  // the people who want a tighter flap, not a new default.
+  flapLayers: 0,
   hingeWidthMm: 1.2,
   machineId: 'h2d-blade',
   sheetId: 'a4-land',

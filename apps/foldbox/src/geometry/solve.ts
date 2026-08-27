@@ -212,8 +212,8 @@ export function solve(input: BoxParams): SolveResult {
       message: `The blank is ${netW.toFixed(0)} × ${netH.toFixed(0)} mm and ${sheet.name} gives you ${availW.toFixed(0)} × ${availH.toFixed(0)} mm.`,
       fix:
         cube > 20
-          ? `A cube up to about ${cube} mm fits this sheet in this style. Boxes eat a lot of paper — go smaller, pick a bigger sheet, or use the 12 × 24 mat.`
-          : 'Pick a larger sheet — this box will not fit any orientation of the current one.',
+          ? `A cube up to about ${cube} mm fits this sheet in this style. Boxes eat a lot of paper: go smaller, pick a bigger sheet, or use the 12 × 24 mat.`
+          : 'Pick a larger sheet: this box will not fit any orientation of the current one.',
     });
   }
 
@@ -254,12 +254,12 @@ export function solve(input: BoxParams): SolveResult {
         level: 'warning',
         code: 'lock-fit',
         message:
-          `The locking slots come out ${fit.widthMm.toFixed(2)} mm for a ${p.caliperMm.toFixed(2)} mm tab — ` +
+          `The locking slots come out ${fit.widthMm.toFixed(2)} mm for a ${p.caliperMm.toFixed(2)} mm tab, ` +
           `${(fit.widthMm - p.caliperMm - 2 * fit.clearMm).toFixed(2)} mm wider than the fit needs.`,
         fix:
           p.makeMode === 'print'
             ? `A slot under ${fit.minFeatureMm.toFixed(2)} mm would print closed at this layer height. Drop the layer height, or add a layer so the tab is thicker relative to the slot.`
-            : `${machine.name} cannot cut a slot narrower than about ${fit.minFeatureMm.toFixed(2)} mm and have the waste come out. On a laser it can go to ${(2 * 0.17).toFixed(2)} mm — the lock will be noticeably tighter.`,
+            : `${machine.name} cannot cut a slot narrower than about ${fit.minFeatureMm.toFixed(2)} mm and have the waste come out. On a laser it can go to ${(2 * 0.17).toFixed(2)} mm, and the lock will be noticeably tighter.`,
       });
     }
   }
@@ -269,7 +269,7 @@ export function solve(input: BoxParams): SolveResult {
       level: 'error',
       code: 'caliper',
       message: `${stock.name} is ${p.caliperMm.toFixed(2)} mm and ${machine.name} tops out at ${machine.maxCaliperMm} mm.`,
-      fix: 'Drop to a lighter stock, or cut this one on the laser instead — the laser has no thickness limit here.',
+      fix: 'Drop to a lighter stock, or cut this one on the laser instead: the laser has no thickness limit here.',
     });
   }
 
@@ -285,7 +285,7 @@ export function solve(input: BoxParams): SolveResult {
       level: 'warning',
       code: 'window-margin',
       message: `The window leaves a ${windowInsetMm.toFixed(0)} mm border, where a converter would leave ${TRADE_INSET} mm.`,
-      fix: 'Fine on a hand-folded box, but that face is now the weak one — it will bow if you stack anything on it. Shrink the window or make the box taller to get the full border back.',
+      fix: 'Fine on a hand-folded box, but that face is now the weak one: it will bow if you stack anything on it. Shrink the window or make the box taller to get the full border back.',
     });
   }
 
@@ -296,7 +296,7 @@ export function solve(input: BoxParams): SolveResult {
     diagnostics.push({
       level: 'error',
       code: 'divider',
-      message: 'A 1 x 1 grid has no dividers in it — there is nothing to cut.',
+      message: 'A 1 x 1 grid has no dividers in it: there is nothing to cut.',
       fix: 'Take columns or rows to 2 or more. One divider strip splits a box in two.',
     });
   }
@@ -336,7 +336,7 @@ export function solve(input: BoxParams): SolveResult {
         level: 'warning',
         code: 'perf',
         message: `${p.perfCutMm} mm dashes are below what ${machine.name} can reliably cut.`,
-        fix: `Keep dashes at ${minFeature} mm or more — below that the blade tip cannot make the move.`,
+        fix: `Keep dashes at ${minFeature} mm or more: below that the blade tip cannot make the move.`,
       });
     }
   }
@@ -349,7 +349,7 @@ export function solve(input: BoxParams): SolveResult {
       level: 'info',
       code: 'grain',
       message: `At ${stock.gsm} gsm the creases running across the grain may crack.`,
-      fix: 'Score them a little deeper, or fold slowly over a straight edge. Turning the sheet only trades one set of folds for the other — they run at right angles.',
+      fix: 'Score them a little deeper, or fold slowly over a straight edge. Turning the sheet only trades one set of folds for the other: they run at right angles.',
     });
   }
 
@@ -373,7 +373,7 @@ export function solve(input: BoxParams): SolveResult {
         level: 'info',
         code: 'mountain',
         message: `${mountains} of the ${net.creases.length} folds go the opposite way to the rest.`,
-        fix: 'The grooves are all on the top face, so press those ones in from underneath — over the edge of a table works. They still fold; they just fold against their groove.',
+        fix: 'The grooves are all on the top face, so press those ones in from underneath; the edge of a table works well. They still fold; they just fold against their groove.',
       });
     }
     if (p.hingeLayers >= p.sheetLayers) {

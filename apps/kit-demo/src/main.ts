@@ -9,6 +9,7 @@ import {
   licenseReminderToast,
   topbarLinks,
   showWhatsNew,
+  changelogButton,
   supportLinks,
   exportPanel,
   sidebarFooter,
@@ -17,6 +18,7 @@ import {
   readParamsFromHash,
   toggleSwitch,
   sliderRow,
+  stepperRow,
   segmentedControl,
   selectField,
   helpTip,
@@ -231,6 +233,26 @@ app.append(
     ),
   ),
   entry(
+    'stepperRow()',
+    'Stepper row',
+    "sliderRow()'s sibling, for a value that is COUNTED rather than swept. A printed sheet is " +
+      'two layers or three; there is no 2.4, and dragging a thumb across a range of eight to move ' +
+      'by one is both harder to land and easy to land wrongly. Same contract as sliderRow — a ' +
+      'ValueRow<number> with the same format and parse — so swapping one for the other is a ' +
+      'one-word change at the call site.',
+    panel(
+      stepperRow({
+        label: 'Sheet layers',
+        min: 1,
+        max: 8,
+        value: 2,
+        format: (v) => `${v} layer${v === 1 ? '' : 's'} · ${(v * 0.2).toFixed(2)} mm`,
+        help: 'The ends disable themselves, so a button that does nothing never looks pressable.',
+        onInput: (v) => toast(`${v} layers`),
+      }),
+    ),
+  ),
+  entry(
     'sliderRow() · selectField() · helpTip()',
     'Slider, field & help',
     'A labelled slider with an editable value box, a select field, and an inline help tip that explains a parameter on hover.',
@@ -400,6 +422,37 @@ app.append(
               { lead: 'Multiple switches', text: 'use up to three MX switches for bigger designs.' },
             ],
           }),
+      }),
+    ),
+  ),
+  entry(
+    'changelogButton() · openChangelog()',
+    'Update timeline',
+    'The other half of the release story, and the one people ask for by name: a dated list of ' +
+      'what was fixed and added, in an edge drawer so the model stays on screen while they read. ' +
+      'Where showWhatsNew() is pushed at someone on load, this is pressed. Bullets are grouped ' +
+      'by kind and entries sorted by date, so an app just keeps appending to its own ' +
+      'src/changelog.ts. Keep each line to a few words — it is scanned, not read.',
+    row(
+      changelogButton({
+        block: false,
+        label: 'Open updates',
+        title: 'Kit updates',
+        entries: [
+          {
+            date: '2026-08-27',
+            changes: [
+              { kind: 'added', text: 'Flap thickness setting' },
+              { kind: 'fixed', text: 'Typing a size in inches' },
+              { kind: 'fixed', text: 'Long readouts cut off in the value boxes' },
+              { kind: 'changed', text: 'Locking lugs sized from the tuck, not the box width' },
+            ],
+          },
+          {
+            date: '2026-08-26',
+            changes: [{ kind: 'added', text: 'Everything' }],
+          },
+        ],
       }),
     ),
   ),

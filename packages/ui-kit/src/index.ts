@@ -34,6 +34,16 @@ export {
 export { sidebarFooter, type SidebarFooterOptions } from './components/sidebar-footer';
 export { appShell, type AppShellOptions, type AppShell, type PanelOptions } from './components/app-shell';
 export { showWhatsNew, maybeShowWhatsNew, type WhatsNewItem, type WhatsNewOptions } from './components/whats-new';
+export {
+  openChangelog,
+  changelogButton,
+  changelogList,
+  type ChangeKind,
+  type ChangelogChange,
+  type ChangelogEntry,
+  type ChangelogOptions,
+  type ChangelogButtonOptions,
+} from './components/changelog';
 export { supportLinks } from './components/support-links';
 export { exportPanel, buildExportMetadata, type ExportFormat, type ExportPanelOptions } from './components/export-panel';
 export { captureCover, type RendererLike } from './components/cover-image';
@@ -50,6 +60,7 @@ export {
   toggleSwitch,
   slider,
   sliderRow,
+  stepperRow,
   segmentedControl,
   selectField,
   setFieldOptions,
@@ -58,6 +69,7 @@ export {
   type BareSliderOptions,
   type SliderHandle,
   type SliderOptions,
+  type StepperRowOptions,
   type ValueRow,
   type SegmentedOption,
   type SegmentedOptions,
