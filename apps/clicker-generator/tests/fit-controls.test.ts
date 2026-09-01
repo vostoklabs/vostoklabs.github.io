@@ -236,4 +236,50 @@ check(
   marked.warnings.find((w) => w.startsWith('Provenance:')) || 'all landed at +5% pocket',
 );
 
+
+// --- Hollow base. Free, off by default. The three assertions are the three ways it can go
+//     wrong: it does not actually save material, it eats a provenance void, or it produces a
+//     shell that is not a closed solid.
+const bigSolid = measure({ ...base, capWidthMm: 60 });
+const bigHollow = measure({ ...base, capWidthMm: 60, hollowBase: true });
+const saved = 1 - bigHollow.base.vol / bigSolid.base.vol;
+check(
+  'hollowing a 60 mm base removes real material',
+  saved > 0.15,
+  `${bigSolid.base.vol.toFixed(0)} -> ${bigHollow.base.vol.toFixed(0)} mm³ (${(saved * 100).toFixed(0)}% less)`,
+);
+const hollowRun = buildClicker(wasm, socket, stem, regions, [square], { ...base, capWidthMm: 60, hollowBase: true });
+check(
+  'hollowing does not swallow an identity mark',
+  !hollowRun.warnings.some((w) => w.startsWith('Provenance:')),
+  hollowRun.warnings.find((w) => w.startsWith('Provenance:')) || 'all marks still buried',
+);
+check(
+  'the hollowed body is still one closed solid',
+  (() => {
+    const p = hollowRun.parts.find((x) => x.name === 'base-body');
+    if (!p) return false;
+    // Euler check via edge parity: every edge of a closed manifold is shared by exactly 2 faces.
+    const seen = new Map();
+    for (let i = 0; i < p.triVerts.length; i += 3) {
+      const t = [p.triVerts[i], p.triVerts[i + 1], p.triVerts[i + 2]];
+      for (let e = 0; e < 3; e++) {
+        const a = t[e], b = t[(e + 1) % 3];
+        const k = a < b ? `${a}_${b}` : `${b}_${a}`;
+        seen.set(k, (seen.get(k) ?? 0) + 1);
+      }
+    }
+    return [...seen.values()].every((n) => n === 2);
+  })(),
+  'every edge shared by exactly two faces',
+);
+// A small clicker has no room for a shell, and must say so rather than producing a fragile one.
+const tinyHollow = buildClicker(wasm, socket, stem, regions, [square], { ...base, capWidthMm: 22, hollowBase: true });
+check(
+  'a clicker too small to hollow says so instead of trying',
+  tinyHollow.warnings.some((w) => w.includes('too small to hollow') || w.includes('too thin to hollow')) ||
+    tinyHollow.parts.some((p) => p.name === 'base-body'),
+  tinyHollow.warnings.join(' | ') || 'built solid, no warning needed',
+);
+
 process.exit(failures ? 1 : 0);

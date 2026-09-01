@@ -157,6 +157,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     topThickness: 1.5,
     imageDepth: 0.8,
     capProud: 4.0,
+    hollowBase: false,
     tolerance: 0.4,
     stemFitPct: 0,
     socketFitPct: 0,
@@ -339,6 +340,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // The same colour the real cap gets, so the strip prints in what they are looking at.
         colorRgb: st.baseColorOverride ?? deriveFrameColor(st),
       });
+    },
+    onHollowBase: (on) => {
+      store.set({ hollowBase: on });
+      debouncedRebuild();
     },
     onCapProud: (mm) => {
       // The builder clamps this against the available border height, so a value that cannot
@@ -778,7 +783,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const HISTORY_FIELDS = [
     'palette', 'paletteOverrides', 'partOverrides', 'bodyColorRgb', 'baseColorOverride',
     'componentHeights', 'edgeSettings', 'extrudeChamfer', 'baseShape', 'capWidthMm', 'topThickness',
-    'imageDepth', 'capProud', 'tolerance', 'stemFitPct', 'socketFitPct', 'switches', 'keychain',
+    'imageDepth', 'capProud', 'hollowBase', 'tolerance', 'stemFitPct', 'socketFitPct', 'switches', 'keychain',
   ] as const;
   let history: string[] = [];
   let histIndex = -1;
@@ -1430,6 +1435,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       imageMargin: isText ? 2.5 : 1.2,
       borderWidth: isText ? 3.5 : 2.6,
       capProud: s.capProud,
+      hollowBase: s.hollowBase,
       tolerance: s.tolerance,
       stemFitPct: s.stemFitPct,
       socketFitPct: s.socketFitPct,
@@ -1566,6 +1572,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         topThickness: s.topThickness,
         imageDepth: s.imageDepth,
         capProud: s.capProud,
+        hollowBase: s.hollowBase,
         tolerance: s.tolerance,
         stemFitPct: s.stemFitPct,
         socketFitPct: s.socketFitPct,
@@ -1751,6 +1758,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         topThickness: set.topThickness ?? store.get().topThickness,
         imageDepth: set.imageDepth ?? store.get().imageDepth,
         capProud: set.capProud ?? 4.0,
+        hollowBase: set.hollowBase ?? false,
         tolerance: set.tolerance ?? store.get().tolerance,
         // v3 projects stored `stemTolerance` in mm against the old scale-the-whole-post code,
         // where even the clamp extreme moved the gripping slot ~0.15 mm. There is no honest

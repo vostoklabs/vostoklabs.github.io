@@ -46,6 +46,8 @@ export interface UiState {
   imageDepth: number;
   /** How far the cap stands proud of the body border at rest, mm. */
   capProud: number;
+  /** Hollow the body's underside instead of printing it solid. */
+  hollowBase: boolean;
   /** Top ↔ base slip-fit clearance, mm. Baseline 0.4 reads as a 0 offset in the UI. */
   tolerance: number;
   /** Cap stem fit, % of the cross socket that grips the switch. 0 = the asset as authored. */
@@ -119,6 +121,8 @@ export interface UiCallbacks {
   onImageDepth(mm: number): void;
   /** Button height above the bezel at rest, mm. */
   onCapProud(mm: number): void;
+  /** Hollow the body's underside. */
+  onHollowBase(on: boolean): void;
   /** Export the printable stem fit test. */
   onFitTest(): void;
   /** Top ↔ base slip fit, absolute mm (+ looser, − tighter). */
@@ -503,6 +507,7 @@ export function createUi(
         <div class="prow-stacked">
           <div id="capProudMount"></div>
         </div>
+        <div class="prow-stacked"><div id="hollowMount"></div></div>
         <!-- The three fit controls. They are three because they are three different pairs of
              surfaces, and the old two were named after parts they did not touch. -->
         <div class="prow-stacked"><div id="gapTolMount"></div></div>
@@ -1495,6 +1500,16 @@ export function createUi(
   });
   $('capProudMount').append(capProudRow);
 
+  // Free, and off by default. Off because it changes what an existing saved design renders
+  // as, and because the wall thickness wants a real print before anyone's default moves.
+  const hollowToggle = toggleSwitch({
+    label: 'Hollow the base',
+    help: 'Prints the base as a shell instead of a solid block, which saves a lot of filament on bigger clickers. The switch column and its surround stay solid. Off by default.',
+    checked: initial.hollowBase,
+    onChange: (v) => cb.onHollowBase(v),
+  });
+  $('hollowMount').append(hollowToggle);
+
   // The answer to "what number do I type". Ghost, and under the fit controls rather than
   // beside Export, because it is a diagnostic you reach for once and then never again.
   $('fitTestMount').append(button({
@@ -1977,6 +1992,7 @@ export function createUi(
     topthickRow.setValue(state.topThickness);
     imgdepthRow.setValue(state.imageDepth);
     capProudRow.setValue(state.capProud);
+    hollowToggle.setValue(state.hollowBase);
     gapTolRow.setValue(state.tolerance);
     stemFitRow.setValue(state.stemFitPct);
     socketFitRow.setValue(state.socketFitPct);
@@ -2098,7 +2114,7 @@ export function createUi(
     // number, and it changes nothing. This is CLAUDE.md's "grep for the container, not just the
     // buttons" a second time, so these now name the mounts, which are the things the markup
     // actually declares and which `$()` would have thrown on.
-    for (const mount of ['topthickMount', 'imgdepthMount', 'capProudMount', 'gapTolMount', 'socketFitMount', 'fitTestMount']) {
+    for (const mount of ['topthickMount', 'imgdepthMount', 'capProudMount', 'hollowMount', 'gapTolMount', 'socketFitMount', 'fitTestMount']) {
       hideForBlocks(document.getElementById(mount)?.closest('.prow-stacked') as HTMLElement | null);
     }
     // The keychain stays, but a block set has no round edge to slide a loop around, so it

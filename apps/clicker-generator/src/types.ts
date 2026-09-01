@@ -164,6 +164,10 @@ export interface BuildParams {
   edgeSettings: EdgeSetting[];
   /** Global toggle: chamfer the top edge of every raised (extruded) color part. */
   extrudeChamfer: boolean;
+  /** Hollow the body's underside, leaving walls and a floor instead of a solid block.
+   *  Off by default: it changes what an existing saved design renders as, and the walls
+   *  want a print before anyone's default moves. */
+  hollowBase?: boolean;
   // ---- Letter-block mode ----
   /** Arrangement: a row, a column, or a grid that wraps at `blockColumns`. */
   blockOrientation?: BlockOrientation;

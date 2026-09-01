@@ -69,6 +69,24 @@ export function buildClicker(
   const socketBB = socketSized.boundingBox();
   /** Half-extent of the switch pocket in XY — the radius inside which nothing can be buried. */
   const sbbHalf = Math.max(socketBB.max[0], socketBB.max[1], -socketBB.min[0], -socketBB.min[1]);
+
+  /* Smallest radius at which a void of diameter `d` sits entirely outside the switch pocket,
+     along the bearing `thetaRad`.
+     
+     The pocket is a SQUARE, so its boundary is further from the centre off-axis than on it —
+     `sbbHalf / max(|cos|, |sin|)`, which is `sbbHalf` on an axis and `sbbHalf * sqrt(2)` at 45°.
+     Using the bare half-extent instead (the first attempt at this) under-clears every void that
+     is not on an axis: the one at 201.9° needs 9.03 mm and a flat clamp gave it 8.57, so it went
+     on failing exactly as before and the fix looked like it had done nothing.
+     
+     `socketBB` is the real asset's bounds, so this follows the CAD rather than a constant that
+     would rot the moment the socket is re-cut. The 0.15 mm is margin, not clearance: the void
+     must be BURIED, and a sphere merely tangent to the cavity fails the 0.98 volume test. */
+  const voidClearR = (d: number, thetaRad: number): number => {
+    const c = Math.abs(Math.cos(thetaRad));
+    const sn = Math.abs(Math.sin(thetaRad));
+    return sbbHalf / Math.max(c, sn, 1e-6) + d / 2 + 0.15;
+  };
   const stemBB = stem.boundingBox();
   const socketDim = Math.max(
     socketBB.max[0] - socketBB.min[0],
@@ -817,6 +835,65 @@ export function buildClicker(
   body = track(body.subtract(well));
   for (const sk of socketAts) body = track(body.subtract(sk));
 
+  /* Hollow the underside.
+
+     Most of a 60-70 mm body is solid plastic doing nothing, which a user measured, fixed by hand
+     in Fusion 360, and posted screenshots of. The cavity is the body footprint inset by a wall,
+     rising from a floor to just under the well, so what is left is a shell.
+
+     Three things stay solid, and each is load-bearing rather than cautious:
+
+      - A ring around every switch. The socket is cut into the well floor and the switch bottoms
+        out against it on every click; that column is the load path and hollowing it is how a
+        clicker fails after a week rather than in the slicer.
+      - The keychain lobe, which is welded on further down and needs material to weld to.
+      - The band the identity voids occupy. `voidClearR` already pushes them outboard of the
+        pocket, so the inset alone does not protect them - the cavity's OUTER edge has to stay
+        inboard of them too, which is what `voidBandInner` below is for.
+
+     Done BEFORE the void loops so their buried test sees the final shape: a cavity that would
+     swallow a void makes the counter report it instead of erasing it silently. */
+  if (params.hollowBase) {
+    // 1.6 mm of wall and floor. CLAUDE.md's printability numbers put the minimum at 1.2 mm and
+    // 1.5 mm for parts that get handled; a clicker is handled constantly, so this is the floor
+    // of the range and not the middle of it.
+    const WALL = 1.6;
+    const FLOOR = 1.6;
+    /* Keep the cavity OUTBOARD of the identity voids.
+       
+       The first cut of this had it the other way round — cavity inside the void band, switch
+       column punched out — and removed exactly nothing, because the two regions do not overlap:
+       the voids sit just outside the pocket (r about 9-11), and the pocket keep-out reaches
+       8.97, so "inside the voids AND outside the pocket" is an empty annulus. The solid part of
+       a clicker is its CENTRE — the switch column and the void ring around it — and the material
+       worth removing is the plate outside all of that. */
+    const voidBandOuter = Math.max(
+      ...[...markVoids(getMarkSeed() || 'x'), ...hardcodedVoids()].map(
+        (v) => Math.max(v.r, voidClearR(v.d, (v.thetaDeg * Math.PI) / 180)) + v.d / 2 + 0.3,
+      ),
+    );
+    const cavityTopZ = wellFloorZ - FLOOR;
+    const cavityBottomZ = bodyBottomZ + FLOOR;
+    if (cavityTopZ - cavityBottomZ > 0.6) {
+      let cavityFp: Section = shrink(bodyFootprint, WALL, bodyFootprint);
+      // One solid column per switch, wide enough to carry the socket, the load path under it and
+      // the whole void ring. Whichever of those reaches furthest sets the radius.
+      const columnR = Math.max(sbbHalf + 1.2, voidBandOuter);
+      for (const sw of applied) {
+        const keepOut = track(track(CrossSection.circle(columnR, 64)).translate([sw.x, sw.y]));
+        cavityFp = track(cavityFp.subtract(keepOut));
+      }
+      if (!sectionIsEmpty(cavityFp)) {
+        const cavity = extrudeAt(simp(cavityFp), cavityTopZ - cavityBottomZ, cavityBottomZ);
+        body = track(body.subtract(cavity));
+      } else {
+        warnings.push('This clicker is too small to hollow — the base stayed solid.');
+      }
+    } else {
+      warnings.push('This clicker is too thin to hollow — the base stayed solid.');
+    }
+  }
+
   /* How many identity voids were attempted, and how many actually landed.
      Both loops below skip a sphere that is not fully buried, which is right — a void
      breaking the surface would be visible on a print, and invariant #2 says the mark is
@@ -826,23 +903,6 @@ export function buildClicker(
   let marksAttempted = 0;
   let marksLanded = 0;
 
-  /* Smallest radius at which a void of diameter `d` sits entirely outside the switch pocket,
-     along the bearing `thetaRad`.
-     
-     The pocket is a SQUARE, so its boundary is further from the centre off-axis than on it —
-     `sbbHalf / max(|cos|, |sin|)`, which is `sbbHalf` on an axis and `sbbHalf * sqrt(2)` at 45°.
-     Using the bare half-extent instead (the first attempt at this) under-clears every void that
-     is not on an axis: the one at 201.9° needs 9.03 mm and a flat clamp gave it 8.57, so it went
-     on failing exactly as before and the fix looked like it had done nothing.
-     
-     `socketBB` is the real asset's bounds, so this follows the CAD rather than a constant that
-     would rot the moment the socket is re-cut. The 0.15 mm is margin, not clearance: the void
-     must be BURIED, and a sphere merely tangent to the cavity fails the 0.98 volume test. */
-  const voidClearR = (d: number, thetaRad: number): number => {
-    const c = Math.abs(Math.cos(thetaRad));
-    const sn = Math.abs(Math.sin(thetaRad));
-    return sbbHalf / Math.max(c, sn, 1e-6) + d / 2 + 0.15;
-  };
 
   // Covert identity mark: subtract a seeded void constellation anchored to switch #0's
   // socket, buried in the always-solid ring (invisible on prints, visible in a slicer
