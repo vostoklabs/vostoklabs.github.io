@@ -15,4 +15,20 @@ declare module 'virtual:makerlab' {
     message: string;
     type?: string;
   }): Promise<void>;
+
+  // ---- paid features (partial_buyout) ----
+  // `isUnlocked` draws the UI; `ensureAccess` is the only thing that decides whether paid
+  // logic runs, and it is called before EVERY execution. Both answer false in the public
+  // build's stub, so app code can import them unconditionally.
+  export const SELLER_PACK: string;
+  export function isUnlocked(key: string): boolean;
+  export function paymentInfo(key: string): unknown | null;
+  export function isUserCancelled(err: unknown): boolean;
+  export function ensureAccess(key: string): Promise<boolean>;
+  export function formatPrice(price: unknown): string;
+  export function currentPrice(key: string): {
+    current: string;
+    original: string | null;
+    endsAt: number | null;
+  } | null;
 }

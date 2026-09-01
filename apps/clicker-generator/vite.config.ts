@@ -64,6 +64,17 @@ function makerlabPlugin(enabled: boolean) {
           'export const can = () => false;',
           'export async function sdkExport() { throw new Error("MakerLab SDK not available in this build"); }',
           'export async function sdkToast() {}',
+          // The paid surface, hard-locked. Identical module shape so app code can import it
+          // unconditionally, and a public build where every gate answers `false` and every
+          // price answers `null` — the paid features are fenced behind MAKERLAB anyway, so
+          // this is belt and braces rather than the only thing stopping them.
+          'export const SELLER_PACK = "seller_pack";',
+          'export const isUnlocked = () => false;',
+          'export const paymentInfo = () => null;',
+          'export const isUserCancelled = () => false;',
+          'export async function ensureAccess() { return false; }',
+          'export const formatPrice = () => "";',
+          'export const currentPrice = () => null;',
         ].join('\n');
       }
       return null;
