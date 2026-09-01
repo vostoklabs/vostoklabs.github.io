@@ -191,6 +191,24 @@ export interface TextareaFieldOptions {
   rows?: number;
   disabled?: boolean;
   onInput?: (value: string) => void;
+  /** Optional "?" tooltip shown next to the label. */
+  help?: string;
+  /** Hard cap on characters, enforced by the browser. */
+  maxLength?: number;
+  /**
+   * A word or a name rather than a list: drops the 140 px floor to something a two-line
+   * legend fits in, and stops the drag handle widening it out of a sidebar column.
+   *
+   * The default stays tall because the first caller was a list people keep adding to, and
+   * changing that default now would resize every one of those.
+   */
+  compact?: boolean;
+  /**
+   * Off by default. Text destined to be carved is a legend, not prose — a browser
+   * "correcting" a deliberately odd name has no way to know better, and the red underline
+   * under someone's own surname reads as an error the app is reporting.
+   */
+  spellcheck?: boolean;
 }
 
 export type TextareaHandle = HTMLElement & {
@@ -203,9 +221,13 @@ export type TextareaHandle = HTMLElement & {
 /** A labelled multi-line field, sharing `.vl-field` with `selectField()`. */
 export function textareaField(opts: TextareaFieldOptions): TextareaHandle {
   const area = el('textarea', {
+    className: opts.compact ? 'vl-textarea--compact' : '',
     attrs: {
       rows: String(opts.rows ?? 3),
+      autocomplete: 'off',
+      spellcheck: String(opts.spellcheck ?? false),
       ...(opts.placeholder ? { placeholder: opts.placeholder } : {}),
+      ...(opts.maxLength ? { maxlength: String(opts.maxLength) } : {}),
     },
   }) as HTMLTextAreaElement;
   area.value = opts.value ?? '';
@@ -213,6 +235,7 @@ export function textareaField(opts: TextareaFieldOptions): TextareaHandle {
   area.addEventListener('input', () => opts.onInput?.(area.value));
 
   const label = el('label', { text: opts.label });
+  if (opts.help) label.append(helpTip(opts.help));
   const id = `vl-ta-${Math.round(performance.now() * 1000)}`;
   area.id = id;
   label.setAttribute('for', id);

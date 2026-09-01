@@ -228,7 +228,7 @@ export function prepareBlockAssets(wasm: Wasm, socket: Solid, raw: RawBlocks): B
 }
 
 /** Build the keycap shell (+ stem) once, centred on the switch axis. */
-function buildCapBlank(wasm: Wasm, keycap: KeycapAsset, stemTolerance: number): Solid {
+function buildCapBlank(wasm: Wasm, keycap: KeycapAsset, stemFitPct: number): Solid {
   const shell = meshToSolid(wasm, keycap.shell.positions, keycap.shell.indices);
   const [ccx, ccy] = keycap.meta.center;
   const centredShell = shell.translate([-ccx, -ccy, 0]);
@@ -238,18 +238,16 @@ function buildCapBlank(wasm: Wasm, keycap: KeycapAsset, stemTolerance: number): 
   const stemRaw = meshToSolid(wasm, keycap.stem.positions, keycap.stem.indices);
   let stem = stemRaw.translate([-ccx, -ccy, 0]);
   stemRaw.delete();
-  // Same semantics as the flat clicker cap: grow/shrink the stem's XY footprint so the
-  // cross socket opens up (+, easier to press on) or closes (−). Z is untouched so the
-  // cap's rest height never moves.
-  if (Math.abs(stemTolerance) > 0.001) {
-    const sb = stem.boundingBox();
-    const dim = Math.max(sb.max[0] - sb.min[0], sb.max[1] - sb.min[1]);
-    if (dim > 0.1) {
-      const f = Math.max(0.5, (dim + stemTolerance) / dim);
-      const scaled = stem.scale([f, f, 1]);
-      stem.delete();
-      stem = scaled;
-    }
+  // Same semantics as the flat clicker cap, including the clip that keeps the outer post
+  // still while the cross socket moves — the reason for it is written out at the stem fit in
+  // buildClicker. Z is untouched so the cap's rest height never moves.
+  if (Math.abs(stemFitPct) > 0.01) {
+    const f = 1 + stemFitPct / 100;
+    const scaled = stem.scale([f, f, 1]);
+    const clipped = f > 1 ? scaled.intersect(stem) : scaled.add(stem);
+    scaled.delete();
+    stem.delete();
+    stem = clipped;
   }
   const cap = centredShell.add(stem);
   centredShell.delete();
@@ -412,7 +410,7 @@ export function buildBlocks(
   });
 
   // ---------- Keycaps + debossed letters ----------
-  const capBlank = track(buildCapBlank(wasm, keycap, params.stemTolerance ?? 0));
+  const capBlank = track(buildCapBlank(wasm, keycap, params.stemFitPct ?? 0));
 
   // Seat the cap AT REST on the switch stem.
   //
@@ -616,7 +614,9 @@ export function buildBlocks(
     const cx = dir[0] * (Math.abs(face) + loopR);
     const cy = dir[1] * (Math.abs(face) + loopR);
 
-    const disc = track(CrossSection.circle(loopR, 64).translate([cx, cy]));
+    // See the note in buildClicker's keychain loop: the outer track() frees the translated
+    // result, not the circle it came from.
+    const disc = track(track(CrossSection.circle(loopR, 64)).translate([cx, cy]));
     // The bridge starts inside the block (so the union is volumetric, never a tangent
     // kiss) and runs out to the loop centre.
     const bridgeLen = loopR + 3;
@@ -641,7 +641,7 @@ export function buildBlocks(
       if (cutter) loop = track(loop.subtract(cutter));
     }
     const hole = track(
-      track(Manifold.extrude(track(CrossSection.circle(holeR, 48).translate([cx, cy])), th + 2))
+      track(Manifold.extrude(track(track(CrossSection.circle(holeR, 48)).translate([cx, cy])), th + 2))
         .translate([0, 0, zBottom - 1]),
     );
     loop = track(loop.subtract(hole));
@@ -738,7 +738,7 @@ export function buildBlocks(
     for (const v of all) {
       const ang = (v.thetaDeg * Math.PI) / 180;
       const sphere = track(
-        Manifold.sphere(v.d / 2, 16).translate([
+        track(Manifold.sphere(v.d / 2, 16)).translate([
           v.r * Math.cos(ang),
           v.r * Math.sin(ang),
           v.z,

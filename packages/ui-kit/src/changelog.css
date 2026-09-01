@@ -58,7 +58,7 @@
 .vl-changelog__title {
   margin: 2px 0 0;
   font-family: var(--font-display);
-  font-size: var(--fs-strong);
+  font-size: var(--fs-medium);
   font-weight: 700;
   color: var(--text);
 }
@@ -104,9 +104,12 @@
   list-style: disc;
 }
 
+/* Smaller than a control label, and given more air than one. An update list is scanned by
+   someone hunting for a single line, often not in their first language, so the win is in the
+   leading and the shorter measure rather than in the type size. */
 .vl-changelog__item {
-  font-size: var(--fs-medium);
-  line-height: 1.45;
+  font-size: var(--fs-compact);
+  line-height: 1.6;
   color: var(--text);
 }
 
@@ -116,6 +119,6 @@
 
 .vl-changelog__empty {
   margin: 0;
-  font-size: var(--fs-medium);
+  font-size: var(--fs-compact);
   color: var(--muted);
 }

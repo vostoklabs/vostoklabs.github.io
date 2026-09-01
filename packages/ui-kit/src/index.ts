@@ -100,6 +100,7 @@ export {
   dropZone,
   uploadCta,
   sampleGrid,
+  thumbTile,
   type SourceOption,
   type SourceCards,
   type SourceCardsOptions,
@@ -107,6 +108,7 @@ export {
   type UploadCtaOptions,
   type SampleItem,
   type SampleGridOptions,
+  type ThumbTileOptions,
 } from './components/sources';
 export {
   modeBar,

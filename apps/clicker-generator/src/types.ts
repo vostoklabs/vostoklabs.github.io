@@ -126,10 +126,23 @@ export interface BuildParams {
   borderWidth: number; // raised body border around the cap (the bezel wall)
   capProud: number; // how far the cap top sticks up above the body border at rest (≈ travel → flush when pressed)
   tolerance: number; // slip-fit gap between cap outer wall and body well wall ("switch socket" fit)
-  /** XY scale offset (mm) applied to the cap's keycap-mount stem so it fits the MX
-   *  switch: +looser (opens the cross socket, easier to press on), −tighter. 0 = as
-   *  authored. Only the XY footprint scales — Z is kept so the cap rest height is fixed. */
-  stemTolerance: number;
+  /** Cap stem fit, as a PERCENTAGE of the stem's cross socket: + opens the socket (easier
+   *  to press onto the switch), − tightens the grip. 0 = the asset exactly as authored.
+   *
+   *  Percent, not mm, because the thing being moved is the HOLE. The old mm control scaled
+   *  the whole stem solid by a factor derived from its 7.9 mm outer bbox, so the ~1.2 mm slot
+   *  that actually grips the switch moved about a seventh of the millimetres on the label —
+   *  one "+0.2 mm" press opened it 0.03 mm, under a single extrusion width. Every setting was
+   *  mechanically the same part, which is what "I tried all of them and it still doesn't fit"
+   *  meant. `stemFit` in buildClicker moves the hole and leaves the outer post alone, so a
+   *  percentage of the hole is the only unit that stays honest. */
+  stemFitPct: number;
+  /** Body switch-pocket fit, as a PERCENTAGE of the imported socket footprint: + opens the
+   *  pocket (switch drops in more easily), − grips harder. 0 = the asset as authored.
+   *
+   *  Nothing could size the pocket before this — the socket solid was only ever rotated and
+   *  translated. It is subtracted from the body, so scaling the cutter IS the pocket. */
+  socketFitPct: number;
   /** Nudge (mm) of the design within a preset base shape. The shape grows to keep
    *  containing it, so the artwork can sit off-centre (a heart reads better with its
    *  design a little high). Ignored when the base follows the outline. */
@@ -240,6 +253,14 @@ export type GeometryRequest =
       type: 'buildBlocks';
       regions: BuildRegion[];
       params: BuildParams;
+    }
+  | {
+      /** The printable fit test. `labels` carries one tile per setting, with the outlines of
+       *  the number to deboss on it — text becomes outlines on the main thread, because the
+       *  fonts live there. */
+      type: 'buildFitStrip';
+      labels: { pct: number; rings: Ring[] }[];
+      colorRgb: RGB;
     };
 
 export type GeometryResponse =

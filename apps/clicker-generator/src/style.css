@@ -28,7 +28,6 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
 #viewport { position: relative; min-width: 0; height: 100%; background: #3a3f47; }
 #app { position: absolute; inset: 0; }
 
-
 /* Theme button shows only the icon for the mode you'll switch to */
 #themeToggle svg { display: none; }
 :root[data-theme="dark"] #themeToggle svg.icon-sun,
@@ -197,7 +196,7 @@ button {
     border-color var(--dur-hover) var(--ease-standard),
     color var(--dur-hover) var(--ease-standard);
 }
-button:hover { border-color: var(--accent); }
+button:hover:not(:disabled) { border-color: var(--accent); }
 button.primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   width: 100%; padding: 11px 16px; border: none; border-radius: 6px; cursor: pointer;
@@ -217,7 +216,7 @@ button.secondary {
     color var(--dur-hover) var(--ease-standard);
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
 }
-button.secondary:hover { border-color: var(--accent); color: var(--accent); }
+button.secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 button.secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -341,23 +340,6 @@ button.secondary:disabled { opacity: 0.45; cursor: not-allowed; }
   display: flex; align-items: center; justify-content: space-between; gap: 15px;
   margin-top: 15px;
 }
-.switch-row .switch-label { font-size: 15.5px; color: var(--text); }
-.toggle { position: relative; display: inline-block; width: 50px; height: 29px; flex: 0 0 50px; cursor: pointer; }
-.toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
-.toggle .slider {
-  position: absolute; inset: 0; background: var(--line); border-radius: 999px;
-  transition:
-    background var(--dur-in-sm) var(--ease-standard);
-}
-.toggle .slider::before {
-  content: ""; position: absolute; height: 23px; width: 23px; left: 3px; top: 3px;
-  background: #fff; border-radius: 50%; transition:
-    transform var(--dur-in-sm) var(--ease-standard);
-  box-shadow: 0 1px 2px rgba(0,0,0,.45);
-}
-.toggle input:checked + .slider { background: var(--accent-2); }
-.toggle input:checked + .slider::before { transform: translateX(21px); }
-.toggle input:focus-visible + .slider { box-shadow: 0 0 0 2px var(--accent); }
 
 .drop {
   border: 2px dashed var(--accent);
@@ -530,138 +512,9 @@ button.secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-.welcome-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  width: min(540px, 94vw);
-  padding: 36px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-.welcome-card h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-}
-.welcome-card p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1.55;
-}
-.welcome-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.welcome-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-.welcome-step-num {
-  flex: 0 0 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 15px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.welcome-step-text {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.welcome-step-text strong {
-  font-size: 15.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-.welcome-step-text span {
-  font-size: 14px;
-  color: var(--muted);
-  line-height: 1.4;
-}
-.welcome-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
 /* ---- "What's new" update notification ---- */
 .whats-new-card {
   gap: 16px;
-}
-.whats-new-badge {
-  align-self: flex-start;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--accent-text);
-  background: var(--accent);
-  padding: 4px 10px;
-  border-radius: 999px;
-}
-.whats-new-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.whats-new-list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  font-size: 14.5px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-.whats-new-list li strong {
-  color: var(--text);
-  font-weight: 600;
-}
-.whats-new-list li em {
-  font-style: normal;
-  color: var(--text);
-  font-weight: 500;
-}
-.whats-new-check {
-  flex: 0 0 auto;
-  margin-top: 1px;
-  color: var(--accent);
-}
-.whats-new-foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-top: 4px;
-}
-.whats-new-dismiss {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
-.whats-new-dismiss input {
-  margin: 0;
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
 }
 
 /* ---- Onboarding Tutorial ---- */
@@ -681,111 +534,6 @@ body.tutorial-active.focus-center #viewport {
   z-index: 1000;
 }
 
-.tutorial-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 990;
-  pointer-events: none;
-  background: transparent;
-  animation: fadeIn var(--dur-in-lg) var(--ease-enter);
-}
-
-.tutorial-card-container {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fadeIn var(--dur-in-lg) var(--ease-enter);
-}
-
-.tutorial-card {
-  pointer-events: auto;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  width: 520px;
-  padding: 32px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  position: relative;
-}
-
-.tutorial-card h3 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.tutorial-card p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 16px;
-  line-height: 1.6;
-}
-
-.tutorial-card-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition:
-    background var(--dur-in-md) var(--ease-standard),
-    color var(--dur-in-md) var(--ease-standard);
-}
-
-.tutorial-card-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
-}
-
-.tutorial-card-close svg {
-  width: 14px;
-  height: 14px;
-}
-
-.tutorial-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 12px;
-}
-
-.tutorial-nav {
-  display: flex;
-  gap: 8px;
-}
-
-.tutorial-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
-
-.tutorial-checkbox input {
-  margin: 0;
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
 @keyframes bounceRight {
   0%, 100% { transform: translateX(0); }
   50% { transform: translateX(12px); }
@@ -803,50 +551,6 @@ body.tutorial-active.focus-center #viewport {
   50% { transform: translateY(-12px); }
 }
 
-.tutorial-pointer {
-  position: fixed;
-  z-index: 2001;
-  pointer-events: none;
-  width: 56px;
-  height: 56px;
-  color: var(--accent);
-  transition:
-    top var(--dur-in-lg) var(--ease-enter),
-    left var(--dur-in-lg) var(--ease-enter);
-  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4));
-}
-
-.tutorial-pointer-inner {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tutorial-pointer svg {
-  width: 100%;
-  height: 100%;
-}
-
-.tutorial-pointer.point-right .tutorial-pointer-inner {
-  transform: rotate(0deg);
-}
-.tutorial-pointer.point-left .tutorial-pointer-inner {
-  transform: rotate(180deg);
-}
-.tutorial-pointer.point-down .tutorial-pointer-inner {
-  transform: rotate(90deg);
-}
-.tutorial-pointer.point-up .tutorial-pointer-inner {
-  transform: rotate(-90deg);
-}
-
-.tutorial-pointer.point-right { animation: bounceRight 1.2s infinite ease-in-out; }
-.tutorial-pointer.point-left { animation: bounceLeft 1.2s infinite ease-in-out; }
-.tutorial-pointer.point-down { animation: bounceDown 1.2s infinite ease-in-out; }
-.tutorial-pointer.point-up { animation: bounceUp 1.2s infinite ease-in-out; }
-
 /* Highlight the target element during onboarding */
 .tutorial-highlight {
   outline: 3px solid var(--accent) !important;
@@ -856,130 +560,7 @@ body.tutorial-active.focus-center #viewport {
     outline var(--dur-in-md) var(--ease-standard),
     box-shadow var(--dur-in-md) var(--ease-standard);
   z-index: 1002 !important;
-}
-
-/* ---- License reminder: full-screen modal (first download) ---- */
-.license-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fadeIn var(--dur-in-lg) var(--ease-enter);
-}
-.license-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  width: min(520px, 94vw);
-  padding: 32px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.license-badge {
-  align-self: flex-start;
-  background: var(--accent-2);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: 999px;
-}
-.license-card h2 { margin: 0; font-size: 23px; font-weight: 700; }
-.license-card p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
-.license-card a { color: var(--accent); font-weight: 600; }
-
-/* The commercial block is the visual focal point. */
-.license-commercial {
-  background: rgba(239, 68, 68, 0.08);
-  border: 2px solid #ef4444;
-  border-radius: 14px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.license-commercial-title {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text);
-}
-.license-commercial-title span { color: #ef4444; text-decoration: underline; }
-.license-price { color: #ef4444; }
-.license-cta {
-  align-self: flex-start;
-  background: #ef4444;
-  color: #fff !important;
-  font-weight: 700;
-  font-size: 15px;
-  padding: 11px 20px;
-  border-radius: 10px;
-  text-decoration: none;
-  transition:
-    background var(--dur-hover) var(--ease-standard),
-    transform var(--dur-press) var(--ease-standard);
-}
-.license-cta:hover { background: #dc2626; }
-.license-cta:active { transform: scale(0.98); }
-.license-foot { display: flex; justify-content: flex-end; }
-
-/* ---- License reminder: corner toast (subsequent downloads) ---- */
-.license-toast {
-  position: fixed;
-  top: 70px;
-  right: 24px;
-  z-index: 300;
-  width: min(320px, 88vw);
-  background: var(--panel);
-  border: 2px solid #ef4444;
-  border-radius: 14px;
-  padding: 16px 18px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  transform: translateX(calc(100% + 32px));
-  opacity: 0;
-  transition:
-    transform var(--dur-in-lg) var(--ease-enter),
-    opacity var(--dur-in-lg) var(--ease-enter);
-}
-.license-toast.show { transform: translateX(0); opacity: 1; }
-.license-toast-title { font-size: 15px; font-weight: 700; color: var(--accent-2); }
-.license-toast p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--muted); }
-.license-toast-cta {
-  align-self: flex-start;
-  margin-top: 2px;
-  background: #ef4444;
-  color: #fff;
-  font-weight: 700;
-  font-size: 13.5px;
-  padding: 8px 14px;
-  border-radius: 9px;
-  text-decoration: none;
-  transition:
-    background var(--dur-hover) var(--ease-standard);
-}
-.license-toast-cta:hover { background: #dc2626; }
-.license-toast-x {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0;
-}
-.license-toast-x:hover { color: var(--text); }
-
-/* Import Grid Selector (2x2 Cards Layout + a full-width row for Blocks) */
+}/* Import Grid Selector (2x2 Cards Layout + a full-width row for Blocks) */
 .import-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1330,7 +911,10 @@ body.tutorial-active.focus-center #viewport {
   width: 100%;
   padding: 12px;
   background: var(--accent);
-  color: #08122a;
+  /* Was #08122a — the DARK theme's --accent-text written out, so in light mode this painted
+     near-black-on-blue at about 2.5:1. The token is the same colour in dark and the right one
+     in light. */
+  color: var(--accent-text);
   border: none;
   border-radius: 10px;
   cursor: pointer;
@@ -1363,13 +947,24 @@ body.tutorial-active.focus-center #viewport {
   opacity: 1;
   transition:
     opacity var(--dur-in-lg) var(--ease-enter),
+    visibility var(--dur-in-lg) var(--ease-enter),
     backdrop-filter var(--dur-in-lg) var(--ease-enter);
   color: #ffffff;
 }
 
+/* `display: none` cannot be transitioned, so the 240 ms crossfade declared above never ran once
+   — the overlay hard-cut in and out on every rebuild, which is every parameter change, which
+   makes it the most-seen animation in the app and the one most worth having. `visibility` gets
+   the same "gone, and not hit-testable" result while still being animatable, so the fade the
+   author wrote actually plays. `display` had to be `!important` to beat the `[hidden]` UA rule;
+   `visibility` does not fight anything, but the UA `display: none` for `[hidden]` does — hence
+   the explicit `display: flex` here. */
 .loading-overlay[hidden] {
-  display: none !important;
+  display: flex;
+  visibility: hidden;
   opacity: 0;
+  backdrop-filter: blur(0);
+  -webkit-backdrop-filter: blur(0);
   pointer-events: none;
 }
 
@@ -1410,6 +1005,10 @@ button.fil-chip {
     border-color var(--dur-press) var(--ease-standard);
   outline: none;
 }
+/* `outline: none` above kills the ring for the mouse, which is the point; putting one back for
+   the keyboard is not optional. Without this the whole colour-picking flow — the filament chips
+   and the swatch popover below — could be tabbed into with no visible focus at all. */
+button.fil-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button.fil-chip:hover {
   transform: scale(1.08);
   border-color: var(--accent);
@@ -1564,6 +1163,7 @@ button.fil-chip:active {
     box-shadow var(--dur-press) var(--ease-standard);
   outline: none;
 }
+.color-popover button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .color-popover button:hover {
   transform: scale(1.15);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.25);
@@ -1716,61 +1316,7 @@ button.fil-chip:active {
   background: var(--accent);
   color: var(--accent-text);
   border-color: var(--accent);
-}
-
-/* ===== Edit Mode Bar (viewport overlay) ===== */
-.edit-mode-bar {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--panel) 82%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--line);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-  pointer-events: auto;
-}
-.edit-mode-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border: none;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background var(--dur-hover) var(--ease-standard),
-    color var(--dur-hover) var(--ease-standard),
-    box-shadow var(--dur-hover) var(--ease-standard);
-  white-space: nowrap;
-  line-height: 1;
-}
-.edit-mode-btn svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-}
-.edit-mode-btn:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--text);
-}
-.edit-mode-btn.active {
-  background: var(--accent);
-  color: var(--accent-text);
-  box-shadow: 0 1px 6px rgba(91, 157, 255, 0.35);
-}
-
-/* ===== Separate-letters toggle (text mode, floating under the mode bar) ===== */
+}/* ===== Separate-letters toggle (text mode, floating under the mode bar) ===== */
 .letters-toggle {
   position: absolute;
   top: 62px;
@@ -1982,7 +1528,6 @@ button.fil-chip:active {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; margin-top: 12px; font-size: 13px; color: var(--text);
 }
-.extrude-chamfer-row .toggle { flex: 0 0 auto; }
 
 /* Small explanatory line at the bottom of the floating panels. */
 .panel-hint {

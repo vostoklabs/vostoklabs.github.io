@@ -1,12 +1,23 @@
 import { BRAND } from '@vostok/brand';
 import {
   button,
+  type ButtonHandle,
+  buttonRow,
+  changelogButton,
+  iconButton,
+  modeBar,
+  textareaField,
+  thumbTile,
+  toggleSwitch,
+  type ValueRow,
   dpad,
   generatorHeader,
+  ICONS,
   qualityCallout,
   segmentedControl,
   sidebarFooter,
   sliderRow,
+  stepperRow,
   makeCollapsible,
 } from '@vostok/ui-kit';
 import { MAKERLAB } from 'virtual:makerlab';
@@ -18,10 +29,7 @@ import type { RgbaImage } from '../image/decode';
 import type { FontOption } from '../image/letter';
 import { FONT_OPTIONS, loadBundledFonts } from '../image/letter';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from '../image/lucideIcons';
-
-/** Neutral top↔base clearance (mm). The "Switch socket tolerance" stepper shows the
- *  offset from this baseline, so a fresh design reads 0. Keep in sync with the store default. */
-const BASE_SOCKET_TOL = 0.4;
+import { CHANGELOG } from '../changelog';
 
 /** Fallback swatch for the keycap row before the build derives a contrasting frame. */
 const DEFAULT_CAP_RGB: RGB = [240, 240, 240];
@@ -36,10 +44,14 @@ export interface UiState {
   capWidthMm: number;
   topThickness: number;
   imageDepth: number;
-  /** Top↔base slip-fit clearance, mm ("switch socket" tolerance). Baseline 0.4 = 0 offset. */
+  /** How far the cap stands proud of the body border at rest, mm. */
+  capProud: number;
+  /** Top ↔ base slip-fit clearance, mm. Baseline 0.4 reads as a 0 offset in the UI. */
   tolerance: number;
-  /** XY scale offset (mm) on the cap's keycap-mount stem — "switch stem" tolerance. 0 = as authored. */
-  stemTolerance: number;
+  /** Cap stem fit, % of the cross socket that grips the switch. 0 = the asset as authored. */
+  stemFitPct: number;
+  /** Body switch-pocket fit, % of the socket footprint. 0 = the asset as authored. */
+  socketFitPct: number;
   /** MX switch placements (1..3): each x/y offset (mm) + rotation (deg) from centre. */
   switches: SwitchPlacement[];
   /** Which switch the d-pad drives (0-based). */
@@ -105,10 +117,16 @@ export interface UiCallbacks {
   onWidth(mm: number): void;
   onTopThickness(mm: number): void;
   onImageDepth(mm: number): void;
-  /** Step the top↔base ("switch socket") tolerance by delta mm (+ looser, − tighter). */
-  onSocketTolStep(delta: number): void;
-  /** Step the "switch stem" tolerance by delta mm (+ looser / bigger stem, − tighter). */
-  onStemTolStep(delta: number): void;
+  /** Button height above the bezel at rest, mm. */
+  onCapProud(mm: number): void;
+  /** Export the printable stem fit test. */
+  onFitTest(): void;
+  /** Top ↔ base slip fit, absolute mm (+ looser, − tighter). */
+  onGapTolerance(mm: number): void;
+  /** Cap stem fit, absolute % of the cross socket (+ looser, − tighter grip). */
+  onStemFit(pct: number): void;
+  /** Body switch-pocket fit, absolute % of the socket footprint (+ looser, − tighter). */
+  onSocketFit(pct: number): void;
   /** Nudge the active switch by a step (mm). +dx = right, +dy = toward the design's top. */
   onSwitchNudge(dx: number, dy: number): void;
   /** Rotate the active switch by a step (degrees, + = clockwise / right). */
@@ -259,11 +277,19 @@ const friendlyTargetLabel = (t: string): string => {
   return t;
 };
 
+/** Whether the base reads as an outline. Icon line-art makes a broken outline body, so
+ *  an icon design is always a solid shape whatever `baseShape` says. */
+const isOutlineBase = (s: Pick<UiState, 'baseShape' | 'importMode'>) =>
+  s.baseShape === 'outline' && s.importMode !== 'icon';
+
 export function createUi(
   sidebarLeft: HTMLElement,
   sidebarRight: HTMLElement,
   statusEl: HTMLElement,
-  cb: UiCallbacks
+  cb: UiCallbacks,
+  /** The state the store was created with. Every control below seeds its starting
+   *  value from this instead of restating it, so the two cannot drift apart. */
+  initial: UiState
 ) {
   /**
    * Everything this UI attaches outside the two sidebars it was handed.
@@ -275,6 +301,23 @@ export function createUi(
    * runs them.
    */
   const cleanups: (() => void)[] = [];
+
+  /** Neutral top-to-base clearance (mm): the tolerance the store starts at, so the
+   *  "Top / base gap" stepper reads a 0 offset on a fresh design. */
+  const BASE_SOCKET_TOL = initial.tolerance;
+
+  /* Two toggles live on panels that float over the viewport rather than in a sidebar, so
+     they are built further down but read by the sync pass at the bottom. */
+  let undoBtn: ButtonHandle;
+  let refreshBtn: ButtonHandle;
+  let redoBtn: ButtonHandle;
+  let editModes: ReturnType<typeof modeBar<EditMode>> | null = null;
+  let separateLettersToggle: ValueRow<boolean> | null = null;
+  let extrudeChamferToggle: ValueRow<boolean> | null = null;
+
+  /** Signed millimetre offset, for a control whose 0 is a baseline rather than zero. */
+  const fmtSignedMm = (v: number, dec: number) =>
+    (v > 0.0001 ? '+' : v < -0.0001 ? '−' : '') + Math.abs(v).toFixed(dec) + ' mm';
 
   // Small "?" help marker with a hover tooltip (tooltip itself is rendered to
   // <body> by the handler below so it is never clipped by the scrolling sidebar).
@@ -289,7 +332,7 @@ export function createUi(
   // The quality callout links to an external MakerWorld page — suppress when embedded
   // in MakerLab (the link won't work in the sandboxed iframe).
   const qualityEl = MAKERLAB ? null : qualityCallout({
-    html: 'For the best quality printed clicker, please use the print profile and instructions available on <a class="hint-link" href="https://makerworld.com/en/models/2980346" target="_blank" rel="noopener">MakerWorld</a>.',
+    html: `For the best quality printed clicker, please use the print profile and instructions available on <a class="hint-link" href="${BRAND.urls.clickerListing}" target="_blank" rel="noopener">MakerWorld</a>.`,
     storageKey: 'clicker-quality-callout',
   });
 
@@ -302,10 +345,7 @@ export function createUi(
     <div class="section" id="previewViewSection">
       <span class="label">Preview &amp; View</span>
       <div id="viewTabsMount" style="margin-bottom: 12px;"></div>
-      <div class="switch-row">
-        <span class="switch-label">Show MX switch ${tip('Shows a reference MX switch in the preview so you can check the fit. It is not part of the exported model.')}</span>
-        <label class="toggle"><input id="showswitch" type="checkbox" /><span class="slider"></span></label>
-      </div>
+      <div id="showSwitchMount"></div>
     </div>
 
     <!-- Letter blocks: the shape controls for the chain live here, next to the preview,
@@ -383,10 +423,7 @@ export function createUi(
         <summary>2 · More Settings</summary>
         <div class="vl-section__body">
         <div class="keychain-panel" style="margin-bottom: 16px;">
-          <div class="switch-row" style="margin-bottom: 12px;">
-            <span class="switch-label">Keychain ${tip('Adds a keyring attachment to the body so you can clip the clicker to a keychain.')}</span>
-            <label class="toggle"><input id="keychain" type="checkbox" /><span class="slider"></span></label>
-          </div>
+          <div id="keychainMount" style="margin-bottom: 12px;"></div>
           <div id="keychainOpts" style="display:none;">
             <!-- Blocks mode: the loop welds onto an end block's outer face, so the only
                  choice is which end of the chain it hangs from. -->
@@ -464,24 +501,16 @@ export function createUi(
           <div id="imgdepthMount"></div>
         </div>
         <div class="prow-stacked">
-          <div class="prow-header">
-            <label>Switch socket tolerance ${tip('Clearance between the top part and the base it presses into. Press + if the two halves are hard to fit together, − if they feel loose. 0 = default fit.')}</label>
-          </div>
-          <div class="tol-stepper" id="socketTolStepper">
-            <button class="btn" id="socketTolMinus" type="button" aria-label="Tighter fit">−</button>
-            <span class="tol-val" id="socketTolVal">0.00 mm</span>
-            <button class="btn" id="socketTolPlus" type="button" aria-label="Looser fit">+</button>
-          </div>
+          <div id="capProudMount"></div>
         </div>
+        <!-- The three fit controls. They are three because they are three different pairs of
+             surfaces, and the old two were named after parts they did not touch. -->
+        <div class="prow-stacked"><div id="gapTolMount"></div></div>
+        <div class="prow-stacked"><div id="stemFitMount"></div></div>
+        <div class="prow-stacked"><div id="socketFitMount"></div></div>
         <div class="prow-stacked">
-          <div class="prow-header">
-            <label>Switch stem (top part) tolerance ${tip('Scales the stem under the top part that grips your MX switch. If the stem is too tight to push onto the switch, press + to loosen it; press − for a firmer grip. Adjusts in 0.2 mm steps.')}</label>
-          </div>
-          <div class="tol-stepper" id="stemTolStepper">
-            <button class="btn" id="stemTolMinus" type="button" aria-label="Tighter stem">−</button>
-            <span class="tol-val" id="stemTolVal">0.0 mm</span>
-            <button class="btn" id="stemTolPlus" type="button" aria-label="Looser stem">+</button>
-          </div>
+          <p class="switch-pad-hint">Not sure what to set the two fits to? Print the test, try each tile on a real switch, then type the number that fits.</p>
+          <div id="fitTestMount"></div>
         </div>
         </div>
       </details>
@@ -499,20 +528,15 @@ export function createUi(
         <button class="secondary" id="switchResetAll" type="button" style="display:none; width:100%; margin-top:8px;">Reset all switches</button>
         </div>
       </details>
+
+      <!-- The Updates drawer, under the last section rather than in the sticky footer: it is
+           read once in a while, and should not compete with the controls that are on screen
+           the whole time. Same placement as the fold-up box generator. -->
+      <div id="updatesMount"></div>
     </div>
 
     <div class="sidebar-sticky-footer">
-      <div class="btn-row" id="historyControls">
-        <button id="undoBtn" class="secondary" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled style="display: flex; justify-content: center; align-items: center;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
-        </button>
-        <button id="refreshBtn" class="secondary" type="button" title="Refresh to Original" aria-label="Refresh" disabled style="display: flex; justify-content: center; align-items: center;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-        </button>
-        <button id="redoBtn" class="secondary" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled style="display: flex; justify-content: center; align-items: center;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
-        </button>
-      </div>
+      <div id="historyControls"></div>
     </div>
   `;
 
@@ -595,7 +619,7 @@ export function createUi(
 
       <!-- Image Panel -->
       <div id="imagePanel" class="mode-panel">
-        <div class="drop" id="drop">
+        <div class="drop" id="drop" role="button" tabindex="0" aria-label="Upload image. Drop a file here, or activate to browse.">
           <svg class="drop-icon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
@@ -606,14 +630,11 @@ export function createUi(
           <span style="font-size:10px; opacity:0.8; display:block; margin-top:4px;">PNG with transparency works best</span>
         </div>
         <input type="file" id="file" accept="image/*" hidden />
-        <div class="switch-row">
-          <span class="switch-label">Remove background ${tip('Automatically removes a solid or near-uniform background from the uploaded image so only the subject is traced.')}</span>
-          <label class="toggle"><input id="removebg" type="checkbox" /><span class="slider"></span></label>
-        </div>
+        <div id="removeBgMount"></div>
         <span class="sample-heading">Choose a sample image</span>
         <div class="sample-inline-grid" id="sampleGrid">
           ${SAMPLES.map((s, idx) => `
-            <div class="sample-inline-item" data-idx="${idx}">
+            <div class="sample-inline-item" data-idx="${idx}" role="button" tabindex="0" aria-label="Use the ${s.name} sample">
               <img src="${s.src}" alt="${s.name}" />
               <span>${s.name}</span>
             </div>
@@ -632,10 +653,7 @@ export function createUi(
           Upload SVG file(s)
           <input id="svgUpload" type="file" accept=".svg,image/svg+xml" multiple />
         </label>
-        <div class="switch-row">
-          <span class="switch-label">Remove background ${tip('Drops a solid rectangle painted behind the artwork so only the logo is kept. Turn off to keep the SVG background.')}</span>
-          <label class="toggle"><input id="removebgSvg" type="checkbox" /><span class="slider"></span></label>
-        </div>
+        <div id="removeBgSvgMount"></div>
       </div>
 
       <!-- Icon Panel -->
@@ -650,16 +668,10 @@ export function createUi(
 
       <!-- Text / Blocks Panel (shared: both modes are driven by text + a font) -->
       <div id="letterPanel" class="mode-panel" hidden>
-        <div class="field" id="textOnlyField">
-          <label for="letterText">Custom Text</label>
-          <textarea id="letterText" rows="2" maxlength="30" autocomplete="off" spellcheck="false" style="width: 100%; resize: vertical; min-height: 48px;">Custom\nText</textarea>
-        </div>
+        <div id="textOnlyField"></div>
 
         <!-- Blocks-only: the chain, one chip per printed block -->
-        <div class="field" id="blocksTextField" hidden>
-          <label for="blocksText">Text</label>
-          <textarea id="blocksText" rows="1" maxlength="24" autocomplete="off" spellcheck="false" style="width: 100%; resize: none; min-height: 34px;">Name</textarea>
-        </div>
+        <div id="blocksTextField" hidden></div>
         <div class="field" id="blocksChainField" hidden>
           <label>Add symbol or emoji ${tip('One chip is one printed block. Click a chip to change its letter or swap in a symbol; the small + between chips drops a symbol anywhere in the row.')}</label>
           <p class="hint-text" style="margin: 0 0 6px;">
@@ -706,7 +718,6 @@ export function createUi(
       projFileInput.files = dt.files;
       projFileInput.dispatchEvent(new Event('change', { bubbles: true }));
     },
-    onHelp: () => showTutorialPrompt(),
     themeStorageKey: 'clicker_theme',
   });
 
@@ -731,9 +742,14 @@ export function createUi(
   });
 
   // --- History bindings ---
-  $('undoBtn')?.addEventListener('click', () => cb.onUndo());
-  $('redoBtn')?.addEventListener('click', () => cb.onRedo());
-  $('refreshBtn')?.addEventListener('click', () => cb.onRefresh());
+  // Three, in one row. They used to be hand-built `<button class="secondary">` inside
+  // `.btn-row`, which is a TWO-column grid — so the third wrapped onto its own line and sat
+  // there looking like a mistake. `.vl-btn-row` is flex, so the count lives in the markup
+  // rather than in a CSS column template that has to be kept in step with it.
+  undoBtn = iconButton({ icon: ICONS.undo, label: 'Undo (Ctrl+Z)', emphasis: 'secondary', disabled: true, onClick: () => cb.onUndo() });
+  refreshBtn = iconButton({ icon: ICONS.rotateRight, label: 'Refresh to original', emphasis: 'secondary', disabled: true, onClick: () => cb.onRefresh() });
+  redoBtn = iconButton({ icon: ICONS.redo, label: 'Redo (Ctrl+Shift+Z)', emphasis: 'secondary', disabled: true, onClick: () => cb.onRedo() });
+  $('historyControls').append(buttonRow(undoBtn, refreshBtn, redoBtn));
 
   /** The host's library if there is one, the hidden input if there is not. */
   async function pickOrBrowse(
@@ -800,7 +816,23 @@ export function createUi(
 
   // Choose Sample Picker Modal
   // Inline sample grid: click a thumbnail to load it directly
+  /* `role="button"` makes a div ANNOUNCE as a button; it does not make Enter and Space
+     activate it. That is the half everyone forgets, and without it the drop zone and the sample
+     tiles are focusable and still dead — arguably worse than before, because focus now stops
+     somewhere that does nothing. Space is prevented from scrolling the panel, which is what a
+     real <button> does too. */
+  const activateOnKey = (el: HTMLElement) => {
+    el.addEventListener('keydown', (e) => {
+      const k = (e as KeyboardEvent).key;
+      if (k !== 'Enter' && k !== ' ') return;
+      e.preventDefault();
+      (e.target as HTMLElement).closest<HTMLElement>('[role="button"]')?.click();
+    });
+  };
+  activateOnKey(drop);
+
   const sampleGrid = $('sampleGrid');
+  activateOnKey(sampleGrid);
   sampleGrid.addEventListener('click', (e) => {
     const item = (e.target as HTMLElement).closest('.sample-inline-item') as HTMLElement | null;
     if (item) {
@@ -809,12 +841,23 @@ export function createUi(
     }
   });
 
-  $<HTMLInputElement>('removebg').addEventListener('change', (e) =>
-    cb.onRemoveBg((e.target as HTMLInputElement).checked)
-  );
-  $<HTMLInputElement>('removebgSvg').addEventListener('change', (e) =>
-    cb.onRemoveBg((e.target as HTMLInputElement).checked)
-  );
+  // Two views of one setting: the Image tab and the SVG tab each show it and either can
+  // change it, so the sync pass pushes the store value back into both.
+  const removeBgToggle = toggleSwitch({
+    label: 'Remove background',
+    help: 'Automatically removes a solid or near-uniform background from the uploaded image so only the subject is traced.',
+    checked: initial.removeBg,
+    onChange: (v) => cb.onRemoveBg(v),
+  });
+  $('removeBgMount').append(removeBgToggle);
+
+  const removeBgSvgToggle = toggleSwitch({
+    label: 'Remove background',
+    help: 'Drops a solid rectangle painted behind the artwork so only the logo is kept. Turn off to keep the SVG background.',
+    checked: initial.removeBg,
+    onChange: (v) => cb.onRemoveBg(v),
+  });
+  $('removeBgSvgMount').append(removeBgSvgToggle);
 
   // --- SVG Panel Setup ---
   const svgUpload = $<HTMLInputElement>('svgUpload');
@@ -850,15 +893,12 @@ export function createUi(
     name: string,
     onClick: (el: HTMLElement) => void
   ) {
-    const el = document.createElement('div');
-    el.className = 'icon';
-    el.title = name;
-    const img = document.createElement('img');
-    img.src = thumbUrl;
-    img.alt = name;
-    el.appendChild(img);
-    el.addEventListener('click', () => onClick(el));
-    return el;
+    // The kit's tile, not a hand-built one. Every gallery entry is a control and there are about
+    // 1,500 of them — as `<div class="icon">` they were the largest single block of the app a
+    // keyboard could not reach, and the drift checker could not see them either, because a div
+    // is not a control it counts. `.icon` still carries the app's sizing; `thumbTile` carries
+    // the button semantics and the focus ring.
+    return thumbTile({ src: thumbUrl, label: name, className: 'icon', onClick });
   }
 
   function addUploadedSvg(svgText: string, name: string, select = true) {
@@ -972,14 +1012,19 @@ export function createUi(
   rebuildGallery();
 
   // --- Text Panel Setup ---
-  const letterText = $<HTMLTextAreaElement>('letterText');
+  const letterTextRow = textareaField({
+    label: 'Custom Text',
+    value: 'Custom\nText',
+    rows: 2,
+    maxLength: 30,
+    compact: true,
+    onInput: (v) => cb.onTextChange(v),
+  });
+  $('textOnlyField').append(letterTextRow);
   const fontGrid = $('fontGrid');
   const fontUpload = $<HTMLInputElement>('fontUpload');
   let selectedFontBtn: HTMLElement | null = null;
 
-  letterText.addEventListener('input', () => {
-    cb.onTextChange(letterText.value);
-  });
   fontUpload.parentElement?.addEventListener('click', (e) => {
     if (!cb.pickFile) return;
     e.preventDefault();
@@ -1000,7 +1045,16 @@ export function createUi(
   // Clicking a chip edits that block — type a letter, pick a symbol, empty it, or remove
   // it — which is the only way to author a grid, where a text box no longer maps.
   const blockChipsEl = $('blockChips');
-  const blocksTextEl = $<HTMLTextAreaElement>('blocksText');
+  const blocksTextRow = textareaField({
+    label: 'Text',
+    value: 'Name',
+    rows: 1,
+    maxLength: 24,
+    compact: true,
+    onInput: (v) => cb.onBlockText(v),
+  });
+  $('blocksTextField').append(blocksTextRow);
+  const blocksTextEl = blocksTextRow.field;
   let renderedSlots: BlockSlot[] = [];
 
   blocksTextEl.addEventListener('input', () => cb.onBlockText(blocksTextEl.value));
@@ -1184,7 +1238,7 @@ export function createUi(
       { value: 'top', label: 'Top' },
       { value: 'bottom', label: 'Bottom' },
     ],
-    value: 'left',
+    value: initial.keychainEnd,
     onChange: (v) => cb.onKeychainEnd(v),
   });
   $('keychainEndMount').append(keychainEndTabs);
@@ -1194,7 +1248,7 @@ export function createUi(
       { value: 'horizontal', label: 'Horizontal' },
       { value: 'vertical', label: 'Vertical' },
     ],
-    value: 'horizontal',
+    value: initial.blockOrientation,
     onChange: (v) => cb.onBlockOrientation(v),
   });
   $('blockOrientMount').append(blockOrientTabs);
@@ -1204,7 +1258,7 @@ export function createUi(
      Enter/blur. `sliderRow()` is all of it, and `format`/`parse` carry the per-slider units. */
   const legendSizeRow = sliderRow({
     label: 'Letter size', help: 'Scales the letter or symbol on the keycap. 100% fills the flat top of the cap.',
-    min: 0.5, max: 1.4, step: 0.05, value: 1,
+    min: 0.5, max: 1.4, step: 0.05, value: initial.legendScale,
     format: (v) => `${Math.round(v * 100)}%`,
     parse: (typed) => typed / 100,
     onInput: (v) => cb.onLegendScale(v),
@@ -1213,7 +1267,7 @@ export function createUi(
 
   const legendBoldRow = sliderRow({
     label: 'Boldness', help: 'Thickens (or thins) the legend outline in mm. Symbols are hairline strokes, so a little boldness is what makes them print cleanly.',
-    min: -0.3, max: 0.8, step: 0.05, value: 0,
+    min: -0.3, max: 0.8, step: 0.05, value: initial.legendBold,
     format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)} mm`,
     onInput: (v) => cb.onLegendBold(v),
   });
@@ -1255,29 +1309,33 @@ export function createUi(
       viewport.appendChild(overlay);
     }
 
-    // --- Edit Mode Bar (Color / Extrude / Edges) ---
-    const modeBar = document.createElement('div');
-    modeBar.id = 'editModeBar';
-    modeBar.className = 'edit-mode-bar';
-    modeBar.innerHTML = `
-      <button class="edit-mode-btn active" data-editmode="color" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
-        Color
-      </button>
-      <button class="edit-mode-btn" data-editmode="extrude" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
-        Extrude
-      </button>
-      <button class="edit-mode-btn" data-editmode="edges" type="button" style="display:none;">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" ry="4"/></svg>
-        Edges
-      </button>
-    `;
-    viewport.appendChild(modeBar);
-    modeBar.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest('[data-editmode]') as HTMLElement | null;
-      if (btn) cb.onEditMode(btn.dataset.editmode as EditMode);
+    // --- Edit Mode Bar (Color / Extrude) ---
+    //
+    // The kit's `modeBar()`, which is where this control came from in the first place. What it
+    // buys is the thing the hand-built version could not have: one pill that TRAVELS between the
+    // two labels over `--dur-in-md`, instead of one background switching off in the same frame
+    // another switches on. Five other tab rows in this app already slide; this was the one that
+    // blinked, which is what made it read as unfinished next to them.
+    //
+    // It also deletes two duplicate sync loops that both toggled `.active` from
+    // `[data-editmode]`, and the `is-ready` guard means the selection still paints correctly in
+    // a background tab, where the ResizeObserver behind the indicator never fires.
+    //
+    // 'edges' is deliberately NOT an option here. Its button carried a hardcoded
+    // `style="display:none"` and nothing ever removed it, so the mode has shipped unreachable —
+    // even though its panel, empty state and rebuild path are all complete. Listing it would be
+    // enabling an untested mode as a side effect of a UI migration; that is Ian's call to make
+    // deliberately, and `editMode: 'edges'` still works the moment it is added back.
+    editModes = modeBar<EditMode>({
+      modes: [
+        { value: 'color', label: 'Color', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>' },
+        { value: 'extrude', label: 'Raise', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>' },
+      ],
+      value: initial.editMode,
+      onChange: (m) => cb.onEditMode(m),
     });
+    editModes.root.id = 'editModeBar';
+    viewport.appendChild(editModes.root);
 
     // --- Separate-letters toggle (text mode, Color + Extrude) ---
     // Off: the whole word is one element (select/recolor/extrude all letters together).
@@ -1287,15 +1345,13 @@ export function createUi(
     lettersToggle.id = 'lettersToggle';
     lettersToggle.className = 'letters-toggle';
     lettersToggle.setAttribute('hidden', '');
-    lettersToggle.innerHTML = `
-      <span>Separate letters</span>
-      <label class="toggle"><input type="checkbox" id="separateLetters" /><span class="slider"></span></label>
-    `;
-    viewport.appendChild(lettersToggle);
-    const separateEl = lettersToggle.querySelector('#separateLetters') as HTMLInputElement | null;
-    separateEl?.addEventListener('change', () => {
-      cb.onSeparateLetters(separateEl.checked);
+    separateLettersToggle = toggleSwitch({
+      label: 'Separate letters',
+      checked: initial.separateLetters,
+      onChange: (v) => cb.onSeparateLetters(v),
     });
+    lettersToggle.append(separateLettersToggle);
+    viewport.appendChild(lettersToggle);
 
     // --- Extrude Panel ---
     const extrudePanel = document.createElement('div');
@@ -1303,29 +1359,28 @@ export function createUi(
     extrudePanel.className = 'edges-panel';
     extrudePanel.setAttribute('hidden', '');
     extrudePanel.innerHTML = `
-      <div class="edges-title">Extrude Part</div>
+      <div class="edges-title">Raise Part</div>
       <div id="extrudeLevelLabel" style="text-align:center; margin-top:8px; font-size:13px; color:var(--muted);">Level: 0</div>
       <div style="display:flex; gap:8px; margin-top:8px;">
         <button type="button" class="btn" id="extrudeMinus" style="flex:1; font-size:18px;">-</button>
         <button type="button" class="btn" id="extrudePlus" style="flex:1; font-size:18px;">+</button>
       </div>
-      <div class="extrude-chamfer-row">
-        <span>Chamfer edges</span>
-        <label class="toggle"><input type="checkbox" id="extrudeChamfer" /><span class="slider"></span></label>
-      </div>
-      <div class="panel-hint">Raises or lowers the selected color. Shift-click parts to select several.</div>
+      <div class="extrude-chamfer-row" id="extrudeChamferMount"></div>
+      <div class="panel-hint">Raises or lowers the selected colour. Shift-click parts to select several.<br><br>No AMS? Raise one colour and print in a single filament, then swap filament at that layer.</div>
     `;
     viewport.appendChild(extrudePanel);
 
     extrudePanel.querySelector('#extrudeMinus')?.addEventListener('click', () => cb.onExtrudeStep(-1));
     extrudePanel.querySelector('#extrudePlus')?.addEventListener('click', () => cb.onExtrudeStep(1));
-    // Plain uncontrolled checkbox: let the browser flip it natively on click, then
-    // push the new value to the app. update() only re-syncs `.checked` for programmatic
-    // changes (undo/redo, project load) — it won't fight the user's click.
-    const chamferEl = extrudePanel.querySelector('#extrudeChamfer') as HTMLInputElement | null;
-    chamferEl?.addEventListener('change', () => {
-      cb.onExtrudeChamfer(chamferEl.checked);
+    // The kit toggle stays uncontrolled the way the raw checkbox was: the browser flips it on
+    // click and we push the value out. update() only calls setValue() for programmatic changes
+    // (undo/redo, project load), so it never fights the user's click.
+    extrudeChamferToggle = toggleSwitch({
+      label: 'Chamfer edges',
+      checked: initial.extrudeChamfer,
+      onChange: (v) => cb.onExtrudeChamfer(v),
     });
+    extrudePanel.querySelector('#extrudeChamferMount')?.append(extrudeChamferToggle);
 
     // --- Edges Panel ---
     const edgesPanel = document.createElement('div');
@@ -1370,10 +1425,11 @@ export function createUi(
 
   // --- Colors ---
   const ccount = $<HTMLSelectElement>('ccount');
+  ccount.value = String(initial.colorCount);
   ccount.addEventListener('change', () => cb.onColorCount(+ccount.value));
   const smoothRow = sliderRow({
     label: 'Smoothing', help: 'Simplifies and smooths the traced outlines. Higher values give fewer, cleaner edges; lower keeps more fine detail.',
-    min: 0, max: 1, step: 0.05, value: 0.5,
+    min: 0, max: 1, step: 0.05, value: initial.smoothing,
     // Stored 0-1, shown as a percentage: `parse` is what makes typing "50%" mean 0.5
     // rather than 50 clamped to the top of the range.
     format: (v) => `${Math.round(v * 100)}%`,
@@ -1395,7 +1451,7 @@ export function createUi(
       { value: 'outline', label: 'Outline' },
       { value: 'shape', label: 'Shape' },
     ],
-    value: 'shape',
+    value: isOutlineBase(initial) ? 'outline' : 'shape',
     onChange: (v) => cb.onShape(v === 'outline' ? 'outline' : (shapeSelect.value as BaseShapeKind)),
   });
   $('shapeTypeTabsMount').append(shapeTypeTabs);
@@ -1407,14 +1463,14 @@ export function createUi(
   // --- Size sliders ---
   const widthRow = sliderRow({
     label: 'Size', help: 'Overall size of the clicker (its longest side, in mm). This scales the whole model proportionally, not just the width.',
-    min: 20, max: 70, step: 1, value: 40, unit: 'mm',
+    min: 20, max: 70, step: 1, value: initial.capWidthMm, unit: 'mm',
     onInput: (v) => cb.onWidth(v),
   });
   $('widthMount').append(widthRow);
 
   const topthickRow = sliderRow({
     label: 'Top thickness', help: 'Thickness of the solid top layer beneath the colored image, in mm.',
-    min: 1, max: 4, step: 0.1, value: 2,
+    min: 1, max: 4, step: 0.1, value: initial.topThickness,
     format: (v) => `${v.toFixed(1)} mm`,
     onInput: (v) => cb.onTopThickness(v),
   });
@@ -1422,18 +1478,77 @@ export function createUi(
 
   const imgdepthRow = sliderRow({
     label: 'Image depth', help: 'How far the colored image is raised into the top surface, in mm.',
-    min: 0.2, max: 3, step: 0.1, value: 1,
+    min: 0.2, max: 3, step: 0.1, value: initial.imageDepth,
     format: (v) => `${v.toFixed(1)} mm`,
     onInput: (v) => cb.onImageDepth(v),
   });
   $('imgdepthMount').append(imgdepthRow);
 
-  // --- Fit steppers: socket (top↔base) 0.05 mm steps, stem (keycap mount) 0.2 mm steps.
-  //     Both are 0-based (+ looser, − tighter). ---
-  $('socketTolMinus').addEventListener('click', () => cb.onSocketTolStep(-0.05));
-  $('socketTolPlus').addEventListener('click', () => cb.onSocketTolStep(0.05));
-  $('stemTolMinus').addEventListener('click', () => cb.onStemTolStep(-0.2));
-  $('stemTolPlus').addEventListener('click', () => cb.onStemTolStep(0.2));
+  // The geometry for this shipped long ago — `capProud` sets where the body border sits
+  // relative to the cap top, so pressing the cap by one travel brings the two flush. There
+  // was just never a control, and a user was told the option did not exist.
+  const capProudRow = sliderRow({
+    label: 'Button height',
+    help: 'How far the button stands above its surround before you press it. Lower makes the two halves sit closer to flush; higher gives a taller press. The build lowers this on its own if the border is too short for it.',
+    min: 0.4, max: 6, step: 0.2, value: initial.capProud, unit: 'mm',
+    onInput: (v) => cb.onCapProud(v),
+  });
+  $('capProudMount').append(capProudRow);
+
+  // The answer to "what number do I type". Ghost, and under the fit controls rather than
+  // beside Export, because it is a diagnostic you reach for once and then never again.
+  $('fitTestMount').append(button({
+    label: 'Print a fit test',
+    emphasis: 'secondary',
+    icon: ICONS.target,
+    block: true,
+    onClick: () => cb.onFitTest(),
+  }));
+
+  /* --- The three fit controls ---------------------------------------------------------
+     Every one of them reads 0 on a fresh design and 0 means the geometry that ships today,
+     so nobody's working settings move. What changed is that each is now named after the pair
+     of surfaces it actually moves. The old pair had one control labelled "Switch socket
+     tolerance" that only ever set the cap-to-body gap, and one labelled in millimetres that
+     moved the gripping slot by about a seventh of them — between them they produced both
+     open fit complaints on the listing, from opposite directions.
+
+     The two stem/pocket controls are percentages because what they scale is a hole, and a
+     percentage of a hole is a number that stays true. See `stemFitPct` in types.ts. */
+  const pct = (v: number) => (v > 0.001 ? '+' : v < -0.001 ? '−' : '') + Math.abs(v).toFixed(1) + '%';
+
+  const gapTolRow = stepperRow({
+    label: 'Top / base gap',
+    help: 'Clearance between the top part and the base it presses into. Press + if the two halves are hard to fit together or the top scrapes, − if they feel loose. 0 = the default fit.',
+    min: 0.1, max: 1.0, step: 0.05, value: initial.tolerance,
+    format: (v) => fmtSignedMm(v - BASE_SOCKET_TOL, 2),
+    parse: (typed) => typed + BASE_SOCKET_TOL,
+    onInput: (v) => cb.onGapTolerance(v),
+  });
+  $('gapTolMount').append(gapTolRow);
+
+  const stemFitRow = stepperRow({
+    label: 'Switch stem fit (top part)',
+    help: 'How tightly the top part grips the stem of your MX switch. Press + if the top is hard to push on or the post splits, − for a firmer grip. 0 = as designed.',
+    min: -5, max: 5, step: 0.5, value: initial.stemFitPct,
+    format: pct,
+    onInput: (v) => cb.onStemFit(v),
+  });
+  $('stemFitMount').append(stemFitRow);
+
+  const socketFitRow = stepperRow({
+    label: 'Switch pocket fit (base)',
+    help: 'How tightly the switch itself sits in the base. Press + if the switch is hard to push in, − if it rattles or falls out. 0 = as designed.',
+    min: -5, max: 5, step: 0.5, value: initial.socketFitPct,
+    format: pct,
+    onInput: (v) => cb.onSocketFit(v),
+  });
+  $('socketFitMount').append(socketFitRow);
+
+  // What used to open itself on load, telling first-time visitors what had changed "since your
+  // last visit". It is the answer to "has my bug been fixed", so it is worth keeping — but it is
+  // a question people ask, not one to interrupt them with.
+  $('updatesMount').append(changelogButton({ entries: CHANGELOG, title: 'Clicker updates' }));
 
   /* --- The two directional pads ---
 
@@ -1482,7 +1597,7 @@ export function createUi(
       { value: '2', label: '2' },
       { value: '3', label: '3' },
     ],
-    value: '1',
+    value: String(initial.switches.length) as '1' | '2' | '3',
     onChange: (v) => cb.onSwitchCount(+v),
   });
   $('switchCountMount').append(switchCountTabs);
@@ -1492,8 +1607,13 @@ export function createUi(
   });
   $('switchResetAll').addEventListener('click', () => cb.onSwitchResetAll());
 
-  const keychain = $<HTMLInputElement>('keychain');
-  keychain.addEventListener('change', () => cb.onKeychainToggle(keychain.checked));
+  const keychainToggle = toggleSwitch({
+    label: 'Keychain',
+    help: 'Adds a keyring attachment to the body so you can clip the clicker to a keychain.',
+    checked: initial.keychain.enabled,
+    onChange: (v) => cb.onKeychainToggle(v),
+  });
+  $('keychainMount').append(keychainToggle);
 
   $('keychainRotMinus').addEventListener('click', () => cb.onKeychainRotate(-15));
   $('keychainRotPlus').addEventListener('click', () => cb.onKeychainRotate(15));
@@ -1538,14 +1658,18 @@ export function createUi(
       { value: 'assembled', label: 'Assembled' },
       { value: 'exploded', label: 'Exploded' },
     ],
-    value: 'assembled',
+    value: initial.view,
     onChange: (v) => cb.onView(v),
   });
   $('viewTabsMount').append(viewTabs);
 
-  $<HTMLInputElement>('showswitch').addEventListener('change', (e) =>
-    cb.onShowSwitch((e.target as HTMLInputElement).checked)
-  );
+  const showSwitchToggle = toggleSwitch({
+    label: 'Show MX switch',
+    help: 'Shows a reference MX switch in the preview so you can check the fit. It is not part of the exported model.',
+    checked: initial.showSwitch,
+    onChange: (v) => cb.onShowSwitch(v),
+  });
+  $('showSwitchMount').append(showSwitchToggle);
 
   // --- Export and Utility actions ---
   // Export / Save / Load / Help / theme now live in the shared ui-kit sidebar
@@ -1603,370 +1727,6 @@ export function createUi(
     document.removeEventListener('focusout', onTipOut);
   });
 
-  // --- Welcome / intro modal ---
-  // Shown on every load (even on refresh) and re-openable via the header "?" button.
-  function showWelcome() {
-    // Avoid stacking duplicates if the help button is clicked repeatedly.
-    if (document.querySelector('.welcome-overlay')) return;
-    const wm = document.createElement('div');
-    wm.className = 'welcome-overlay';
-    wm.innerHTML = `
-      <div class="welcome-card">
-        <h2>Welcome to Clicker Generator</h2>
-        <p>Turn any image, SVG, icon, or text into a multi-color 3D printable clicker, ready for Bambu Studio or PrusaSlicer.</p>
-        <div class="welcome-steps">
-          <div class="welcome-step">
-            <div class="welcome-step-num">1</div>
-            <div class="welcome-step-text">
-              <strong>Import your design</strong>
-              <span>Drop an image or choose a sample, upload an SVG, pick a Lucide icon, or type custom text.</span>
-            </div>
-          </div>
-          <div class="welcome-step">
-            <div class="welcome-step-num">2</div>
-            <div class="welcome-step-text">
-              <strong>Configure the clicker</strong>
-              <span>Pick colors &amp; filaments, choose a shape, adjust the size and depth.</span>
-            </div>
-          </div>
-          <div class="welcome-step">
-            <div class="welcome-step-num">3</div>
-            <div class="welcome-step-text">
-              <strong>Export &amp; print</strong>
-              <span>Download the 3MF file and load it directly into your slicer. Each color is a separate part.</span>
-            </div>
-          </div>
-        </div>
-        <div class="welcome-foot">
-          <button class="primary" id="welcomeClose" style="min-width:150px">Get started →</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(wm);
-    const close = () => {
-      wm.remove();
-      showUpdate();
-    };
-    wm.querySelector('#welcomeClose')!.addEventListener('click', close);
-    // Also dismiss on backdrop click.
-    wm.addEventListener('click', (e) => {
-      if (e.target === wm) close();
-    });
-  }
-
-  // --- "What's new" update notification ---
-  // Shown once after the welcome modal, before the tutorial. Its "Don't show
-  // again" flag is independent of the tutorial / welcome dismissal keys.
-  // Bump the key whenever the list below changes, so the note shows again to people who
-  // already ticked "Don't show again" for the previous round.
-  const UPDATE_KEY = 'clicker_update_dismissed_2026_08_blocks';
-
-  // Continue the on-load chain after welcome + update: open the tutorial unless
-  // the user has permanently dismissed it.
-  function continueAfterWelcome() {
-    if (localStorage.getItem('clicker_tutorial_dismissed') !== 'true') {
-      showTutorial();
-    }
-  }
-
-  function showUpdate() {
-    // Already dismissed for good → skip straight to the tutorial gate.
-    if (localStorage.getItem(UPDATE_KEY) === 'true') {
-      continueAfterWelcome();
-      return;
-    }
-    if (document.querySelector('.welcome-overlay')) return;
-    const wm = document.createElement('div');
-    wm.className = 'welcome-overlay';
-    const check = `<svg class="whats-new-check" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
-    wm.innerHTML = `
-      <div class="welcome-card whats-new-card">
-        <div class="whats-new-badge">What's new</div>
-        <h2>Latest updates</h2>
-        <p>A few improvements landed since your last visit:</p>
-        <ul class="whats-new-list">
-          <li>${check}<span><strong>Letter blocks</strong>: a new <em>Blocks</em> tab that turns a word into a row of snap-together blocks, each with its own MX switch and a real keycap with the letter printed into the top.</span></li>
-          <li>${check}<span><strong>Symbols on the caps</strong>: drop a heart, a star, a rocket or any of 60 curated symbols anywhere in the row, and set the letter size and boldness to taste.</span></li>
-          <li>${check}<span><strong>Sharper image tracing</strong>: high-quality resampling, perceptual color matching, and detail-preserving smoothing keep fine text and small features intact.</span></li>
-          <li>${check}<span><strong>Multiple switches</strong>: use 1 to 3 MX switches for bigger designs, each moving and rotating on its own from the <em>Switch</em> section.</span></li>
-        </ul>
-        <div class="whats-new-foot">
-          <label class="whats-new-dismiss">
-            <input type="checkbox" id="updateDontShow" />
-            Don't show again
-          </label>
-          <button class="primary" id="updateClose" style="min-width:130px">Got it →</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(wm);
-    const dontShow = wm.querySelector('#updateDontShow') as HTMLInputElement;
-    const close = () => {
-      if (dontShow.checked) localStorage.setItem(UPDATE_KEY, 'true');
-      wm.remove();
-      continueAfterWelcome();
-    };
-    wm.querySelector('#updateClose')!.addEventListener('click', close);
-    // Also dismiss on backdrop click (respects the checkbox too).
-    wm.addEventListener('click', (e) => {
-      if (e.target === wm) close();
-    });
-  }
-
-
-  interface TutorialStep {
-    focus: 'left' | 'center' | 'right';
-    target: string;
-    title: string;
-    text: string;
-    arrow: 'left' | 'right' | 'up' | 'down' | 'none';
-    cardPosition?: 'left' | 'right';
-  }
-
-  const TUTORIAL_STEPS: TutorialStep[] = [
-    {
-      focus: 'right',
-      target: '#importTabs',
-      title: 'Import Source',
-      text: 'Choose how to generate your 3D clicker model. You can upload any custom <strong>Image</strong> (PNG with transparency works best), choose from <strong>1700+ vector icons</strong>, import custom <strong>SVG</strong> files, enter your own custom <strong>Text</strong>, or pick <strong>Blocks</strong> to turn a word into a row of snap-together letter blocks, each with its own switch and keycap.',
-      arrow: 'right'
-    },
-    {
-      focus: 'right',
-      target: '#export',
-      title: 'Export 3MF Model',
-      text: 'Once you are satisfied with your clicker design, click here to download the high-quality, print-ready <strong>3MF file</strong>. 3MF is the modern standard format which contains multi-color data, ready to open directly in your favorite slicer (such as Bambu Studio, OrcaSlicer, or PrusaSlicer).',
-      arrow: 'right'
-    },
-    {
-      focus: 'right',
-      target: '#projectSettingsContainer',
-      title: 'Project Settings',
-      text: 'Save your work-in-progress clicker as a <code>.json</code> file to resume editing later, load previous projects, toggle between dark and light themes, or access this help guide.',
-      arrow: 'right'
-    },
-    {
-      focus: 'center',
-      target: '#app',
-      title: '3D Preview Viewport',
-      text: 'This is where you can preview your design in 3D. Tip: <strong>Left-click & drag</strong> to orbit, <strong>Right-click & drag</strong> to pan, and <strong>Scroll</strong> to zoom.',
-      arrow: 'none',
-      cardPosition: 'left'
-    },
-    {
-      focus: 'center',
-      target: '#editModeBar',
-      title: 'Paint & Height Modes',
-      text: 'Switch between <strong>Color Mode</strong> (paint individual segments with different filament colors) and <strong>Extrude Mode</strong> (raise parts of the design, adjust their thickness and height, and chamfer the raised edges). Working with custom <strong>Text</strong>? Toggle <strong>Separate letters</strong> here to color or extrude each letter on its own.',
-      arrow: 'up',
-      cardPosition: 'left'
-    },
-    {
-      focus: 'left',
-      target: '#previewViewSection',
-      title: 'Assembly Preview',
-      text: 'Preview your model in an <strong>Assembled</strong> state or view it <strong>Exploded</strong> to see how all the 3D-printable parts fit together. You can also show a reference mechanical keyboard MX switch to check fitment.',
-      arrow: 'left'
-    },
-    {
-      focus: 'left',
-      target: '#baseStyleSection',
-      title: 'Base Outline Shape',
-      text: 'Select the overall base shape for your clicker. You can choose a <strong>Custom Outline</strong> (which matches your imported graphic\'s boundaries), or standard geometries like a <strong>Circle</strong> or <strong>Hexagon</strong>. You can also scale the overall size here.',
-      arrow: 'left'
-    },
-    {
-      focus: 'left',
-      target: '#geometrySettingsContainer',
-      title: 'Geometry & Style Settings',
-      text: 'Fine-tune your model in collapsible sections. <strong>1 · Colors &amp; Smoothing</strong> picks filament colors and smooths the outline. <strong>2 · More Settings</strong> adds a keychain loop, changes thicknesses, and dials in the <strong>switch socket &amp; stem fit tolerances</strong> that control how tightly the top and bottom parts clip together.',
-      arrow: 'left'
-    },
-    {
-      focus: 'left',
-      target: '#sectionSwitch',
-      title: 'Position the Switch',
-      text: 'Open the <strong>3 · Switch</strong> section to <strong>move and rotate</strong> the MX switch. Handy when the switch doesn\'t sit neatly in the centre of your design.',
-      arrow: 'left'
-    },
-    {
-      focus: 'left',
-      target: '#historyControls',
-      title: 'Undo, Redo & Refresh',
-      text: 'Use these buttons to easily undo or redo your design steps, or refresh the model to its original state.',
-      arrow: 'left'
-    }
-  ];
-
-  function showTutorial() {
-    if (document.querySelector('.tutorial-card-container')) return;
-    let stepIndex = 0;
-
-    const backdrop = document.createElement('div');
-    backdrop.className = 'tutorial-backdrop';
-
-    const cardContainer = document.createElement('div');
-    cardContainer.className = 'tutorial-card-container';
-    
-    const card = document.createElement('div');
-    card.className = 'tutorial-card';
-    
-    const pointer = document.createElement('div');
-    
-    const renderStep = () => {
-      const step = TUTORIAL_STEPS[stepIndex];
-      document.body.className = `tutorial-active focus-${step.focus}`;
-      
-      // Explicitly set positioning inline to bypass CSS caching
-      cardContainer.style.justifyContent = 'center';
-      cardContainer.style.alignItems = 'center';
-      cardContainer.style.paddingLeft = '0';
-      cardContainer.style.paddingRight = '0';
-      
-      if (step.cardPosition === 'left') {
-        cardContainer.style.justifyContent = 'flex-start';
-        cardContainer.style.paddingLeft = '60px';
-      } else if (step.cardPosition === 'right') {
-        cardContainer.style.justifyContent = 'flex-end';
-        cardContainer.style.paddingRight = '60px';
-      }
-
-      // Remove any existing highlights
-      document.querySelectorAll('.tutorial-highlight').forEach(el => {
-        el.classList.remove('tutorial-highlight');
-      });
-
-      // Highlight the target element
-      const targetEl = document.querySelector(step.target) as HTMLElement;
-      if (targetEl) {
-        targetEl.classList.add('tutorial-highlight');
-        // If it's a collapsible section, open it so its contents are visible
-        // while the step describes them (e.g. the Switch move/rotate pad).
-        if (targetEl instanceof HTMLDetailsElement) targetEl.open = true;
-      }
-
-      card.innerHTML = `
-        <button class="tutorial-card-close" aria-label="Close">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-        <h3>${step.title} (${stepIndex + 1}/${TUTORIAL_STEPS.length})</h3>
-        <p>${step.text}</p>
-        <div class="tutorial-controls">
-          <label class="tutorial-checkbox">
-            <input type="checkbox" id="tutDontShow" ${localStorage.getItem('clicker_tutorial_dismissed') === 'true' ? 'checked' : ''} />
-            Don't show again
-          </label>
-          <div class="tutorial-nav">
-            <button class="secondary" id="tutPrev" ${stepIndex === 0 ? 'disabled' : ''}>Previous</button>
-            <button class="primary" id="tutNext">${stepIndex === TUTORIAL_STEPS.length - 1 ? 'Finish' : 'Next'}</button>
-          </div>
-        </div>
-      `;
-
-      card.querySelector('.tutorial-card-close')!.addEventListener('click', closeTutorial);
-      
-      const dontShow = card.querySelector('#tutDontShow') as HTMLInputElement;
-      dontShow.addEventListener('change', () => {
-        if (dontShow.checked) {
-          localStorage.setItem('clicker_tutorial_dismissed', 'true');
-        } else {
-          localStorage.removeItem('clicker_tutorial_dismissed');
-        }
-      });
-
-      card.querySelector('#tutPrev')?.addEventListener('click', () => {
-        if (stepIndex > 0) { stepIndex--; renderStep(); }
-      });
-      card.querySelector('#tutNext')?.addEventListener('click', () => {
-        if (stepIndex < TUTORIAL_STEPS.length - 1) { stepIndex++; renderStep(); }
-        else closeTutorial();
-      });
-
-      // Position the pointer
-      if (targetEl && step.arrow !== 'none') {
-        const rect = targetEl.getBoundingClientRect();
-        pointer.className = `tutorial-pointer point-${step.arrow}`;
-        pointer.style.display = 'block';
-        
-        let arrowOffsetTop = 0;
-        let arrowOffsetLeft = 0;
-        
-        if (step.arrow === 'right') {
-          arrowOffsetTop = rect.top + rect.height / 2 - 28;
-          arrowOffsetLeft = rect.left - 70;
-        } else if (step.arrow === 'left') {
-          arrowOffsetTop = rect.top + rect.height / 2 - 28;
-          arrowOffsetLeft = rect.right + 14;
-        } else if (step.arrow === 'down') {
-          arrowOffsetTop = rect.top - 70;
-          arrowOffsetLeft = rect.left + rect.width / 2 - 28;
-        } else if (step.arrow === 'up') {
-          arrowOffsetTop = rect.bottom + 14;
-          arrowOffsetLeft = rect.left + rect.width / 2 - 28;
-        }
-        
-        pointer.style.top = `${arrowOffsetTop}px`;
-        pointer.style.left = `${arrowOffsetLeft}px`;
-        
-        pointer.innerHTML = `
-          <div class="tutorial-pointer-inner">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-              <polyline points="12 5 19 12 12 19"></polyline>
-            </svg>
-          </div>
-        `;
-      } else {
-        pointer.style.display = 'none';
-      }
-    };
-
-    const closeTutorial = () => {
-      document.body.classList.remove('tutorial-active', 'focus-left', 'focus-center', 'focus-right');
-      document.querySelectorAll('.tutorial-highlight').forEach(el => {
-        el.classList.remove('tutorial-highlight');
-      });
-      backdrop.remove();
-      cardContainer.remove();
-      pointer.remove();
-    };
-
-    cardContainer.appendChild(card);
-    document.body.appendChild(backdrop);
-    document.body.appendChild(cardContainer);
-    document.body.appendChild(pointer);
-    
-    renderStep();
-  }
-
-  function showTutorialPrompt() {
-    if (document.querySelector('.welcome-overlay') || document.querySelector('.tutorial-backdrop')) return;
-    
-    const wm = document.createElement('div');
-    wm.className = 'welcome-overlay';
-    wm.innerHTML = `
-      <div class="welcome-card" style="align-items: center; text-align: center; width: 380px; padding: 32px;">
-        <h2 style="margin-bottom: 8px;">Getting Started</h2>
-        <p style="margin-bottom: 24px;">Do you want to see the interactive tutorial?</p>
-        <div style="display: flex; gap: 12px; justify-content: center; width: 100%;">
-          <button class="secondary" id="tutPromptNo" style="flex: 1;">No</button>
-          <button class="primary" id="tutPromptYes" style="flex: 1;">Yes</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(wm);
-    
-    const close = () => wm.remove();
-    wm.querySelector('#tutPromptNo')!.addEventListener('click', close);
-    wm.querySelector('#tutPromptYes')!.addEventListener('click', () => {
-      close();
-      showTutorial();
-    });
-  }
-
-  // Always greet on load. The footer's Help button re-opens the tutorial prompt
-  // (wired via the sidebarFooter onHelp callback above).
-  showWelcome();
 
   function getFilamentNameAndHex(rgb: RGB): [string, string] {
     let bestHex = rgbHex(rgb);
@@ -2216,13 +1976,10 @@ export function createUi(
     widthRow.setValue(state.capWidthMm);
     topthickRow.setValue(state.topThickness);
     imgdepthRow.setValue(state.imageDepth);
-    // Fit steppers show a signed offset from neutral, so a default design reads 0.
-    const fmtSigned = (v: number, dec: number) =>
-      (v > 0.0001 ? '+' : v < -0.0001 ? '−' : '') + Math.abs(v).toFixed(dec) + ' mm';
-    const socketValEl = document.getElementById('socketTolVal');
-    if (socketValEl) socketValEl.textContent = fmtSigned(state.tolerance - BASE_SOCKET_TOL, 2);
-    const stemValEl = document.getElementById('stemTolVal');
-    if (stemValEl) stemValEl.textContent = fmtSigned(state.stemTolerance, 1);
+    capProudRow.setValue(state.capProud);
+    gapTolRow.setValue(state.tolerance);
+    stemFitRow.setValue(state.stemFitPct);
+    socketFitRow.setValue(state.socketFitPct);
     const switchCountN = state.switches.length;
     const activeIdx = Math.min(state.activeSwitchIndex, switchCountN - 1);
     const active = state.switches[activeIdx] ?? { x: 0, y: 0, rotation: 0 };
@@ -2257,7 +2014,7 @@ export function createUi(
     const resetAllEl = document.getElementById('switchResetAll');
     if (resetAllEl) resetAllEl.style.display = switchCountN > 1 ? 'block' : 'none';
     const kc = state.keychain;
-    keychain.checked = kc.enabled;
+    keychainToggle.setValue(kc.enabled);
     const kcOpts = document.getElementById('keychainOpts');
     if (kcOpts) kcOpts.style.display = kc.enabled ? '' : 'none';
 
@@ -2267,9 +2024,9 @@ export function createUi(
     if (kcOffsetEl) kcOffsetEl.textContent = `${(kc.offsetMm ?? 0.0).toFixed(1)} mm`;
     const kcSizeEl = document.getElementById('keychainSizeVal');
     if (kcSizeEl) kcSizeEl.textContent = `${kc.holeDiameterMm.toFixed(1)} mm`;
-    $<HTMLInputElement>('removebg').checked = state.removeBg;
-    $<HTMLInputElement>('removebgSvg').checked = state.removeBg;
-    $<HTMLInputElement>('showswitch').checked = state.showSwitch;
+    removeBgToggle.setValue(state.removeBg);
+    removeBgSvgToggle.setValue(state.removeBg);
+    showSwitchToggle.setValue(state.showSwitch);
 
     // Update Import Mode tabs and panels
     for (const b of importTabs.querySelectorAll<HTMLElement>('[data-mode]')) {
@@ -2313,7 +2070,7 @@ export function createUi(
     // line-art makes a broken body), so the Outline tab is hidden for icon mode
     // and the body is always a solid shape.
     shapeTypeTabs.setOptionVisible('outline', state.importMode !== 'icon');
-    const treatAsOutline = state.baseShape === 'outline' && state.importMode !== 'icon';
+    const treatAsOutline = isOutlineBase(state);
     $('shapeSelectField').style.display = treatAsOutline ? 'none' : 'block';
     // Moving the design only applies to a preset shape: on an outline base the shape IS
     // the design, so there is nothing to move it against.
@@ -2333,15 +2090,23 @@ export function createUi(
       if (el) el.style.display = isBlockMode ? 'none' : '';
     };
     hideForBlocks(document.getElementById('baseStyleSection'));
-    hideForBlocks(document.getElementById('topthick')?.closest('.prow-stacked') as HTMLElement | null);
-    hideForBlocks(document.getElementById('imgdepth')?.closest('.prow-stacked') as HTMLElement | null);
+    // By MOUNT id, not by the id of whatever the mount happens to contain. The three lookups
+    // that used to live here asked for `topthick`, `imgdepth` and `socketTolStepper`: the first
+    // two never existed at all, and the third stopped existing when the fit controls were
+    // renamed. `undefined?.closest()` is a silent no-op, so each one quietly stopped hiding its
+    // row and left a control on screen that `buildBlocks` does not read — it moves, it prints a
+    // number, and it changes nothing. This is CLAUDE.md's "grep for the container, not just the
+    // buttons" a second time, so these now name the mounts, which are the things the markup
+    // actually declares and which `$()` would have thrown on.
+    for (const mount of ['topthickMount', 'imgdepthMount', 'capProudMount', 'gapTolMount', 'socketFitMount', 'fitTestMount']) {
+      hideForBlocks(document.getElementById(mount)?.closest('.prow-stacked') as HTMLElement | null);
+    }
     // The keychain stays, but a block set has no round edge to slide a loop around, so it
     // welds to one side of the set instead.
     const kcEndField = document.getElementById('keychainEndField');
     if (kcEndField) kcEndField.style.display = isBlockMode ? '' : 'none';
     hideForBlocks(document.getElementById('keychainAngleRow'));
     hideForBlocks(document.getElementById('keychainOffsetRow'));
-    hideForBlocks(document.getElementById('socketTolStepper')?.closest('.prow-stacked') as HTMLElement | null);
     hideForBlocks(document.getElementById('sectionSwitch'));
 
     shapeTypeTabs.setValue(treatAsOutline ? 'outline' : 'shape');
@@ -2394,21 +2159,12 @@ export function createUi(
       });
     }
 
-    // --- Edit mode bar ---
-    const modeBarEl = document.getElementById('editModeBar');
-    if (modeBarEl) {
-      for (const b of modeBarEl.querySelectorAll<HTMLElement>('[data-editmode]')) {
-        b.classList.toggle('active', b.dataset.editmode === state.editMode);
-      }
-    }
+    editModes?.setValue(state.editMode);
 
     // --- Undo / redo / refresh toolbar ---
-    const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement | null;
-    const redoBtn = document.getElementById('redoBtn') as HTMLButtonElement | null;
-    const refreshBtn = document.getElementById('refreshBtn') as HTMLButtonElement | null;
-    if (undoBtn) undoBtn.disabled = !state.canUndo;
-    if (redoBtn) redoBtn.disabled = !state.canRedo;
-    if (refreshBtn) refreshBtn.disabled = !state.canRefresh;
+    undoBtn.setDisabled(!state.canUndo);
+    redoBtn.setDisabled(!state.canRedo);
+    refreshBtn.setDisabled(!state.canRefresh);
 
     // --- Extrude tooltip ---
     const extrudeTooltipEl = document.getElementById('extrudeTooltip');
@@ -2416,20 +2172,13 @@ export function createUi(
       extrudeTooltipEl.classList.toggle('hidden', state.editMode !== 'extrude');
     }
 
-    // --- Edit mode UI toggles ---
-    const modeBarBtns = document.querySelectorAll('.edit-mode-btn');
-    modeBarBtns.forEach(b => {
-      b.classList.toggle('active', (b as HTMLElement).dataset.editmode === state.editMode);
-    });
-
     // --- Separate-letters toggle: text mode only, in Color + Extrude ---
     const lettersToggleEl = document.getElementById('lettersToggle');
     if (lettersToggleEl) {
       const showLetters = state.importMode === 'text'
         && (state.editMode === 'color' || state.editMode === 'extrude');
       lettersToggleEl.toggleAttribute('hidden', !showLetters);
-      const sepInput = lettersToggleEl.querySelector('#separateLetters') as HTMLInputElement | null;
-      if (sepInput) sepInput.checked = state.separateLetters;
+      separateLettersToggle?.setValue(state.separateLetters);
     }
 
     // --- Extrude panel ---
@@ -2440,13 +2189,8 @@ export function createUi(
         const plusBtn = extrudePanelEl.querySelector('#extrudePlus') as HTMLButtonElement;
         const minusBtn = extrudePanelEl.querySelector('#extrudeMinus') as HTMLButtonElement;
         const labelEl = extrudePanelEl.querySelector('#extrudeLevelLabel');
-        const chamferToggle = extrudePanelEl.querySelector('#extrudeChamfer') as HTMLInputElement | null;
-
-        if (chamferToggle) {
-          // Global, part-independent toggle: always pressable, reflects the single flag.
-          chamferToggle.disabled = false;
-          chamferToggle.checked = state.extrudeChamfer;
-        }
+        // Global, part-independent toggle: always reflects the single flag.
+        extrudeChamferToggle?.setValue(state.extrudeChamfer);
 
         if (state.selectedParts.length === 0) {
           if (plusBtn) plusBtn.disabled = true;
@@ -2580,7 +2324,7 @@ export function createUi(
         try { fn(); } catch { /* one failure must not strand the rest */ }
       }
       cleanups.length = 0;
-      for (const sel of ['.slot-editor', '.welcome-overlay', '.tutorial-card-container', '.license-overlay', '.license-toast']) {
+      for (const sel of ['.slot-editor', '.vl-overlay', '.vl-license-toast']) {
         document.querySelectorAll(sel).forEach((n) => n.remove());
       }
     },

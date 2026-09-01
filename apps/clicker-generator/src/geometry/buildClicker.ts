@@ -52,7 +52,21 @@ export function buildClicker(
   };
 
   // --- Switch assets: drive the Z stack AND the minimum cap size ---
-  const socketBB = socket.boundingBox();
+  // Pocket fit is applied FIRST, before anything is measured, so everything derived from the
+  // socket — its bbox, the clear column over each switch, the minimum cap size — follows the
+  // pocket the user actually asked for rather than the authored one.
+  //
+  // The socket is a pure cutter (subtracted from the body further down), so scaling the cutter
+  // IS scaling the pocket. The worker hands it to us already centred on its own XY bbox, so
+  // scaling about the origin scales about its own centre. Z is never touched: the socket's top
+  // face sits at Z 0 and the whole switch stack is hung off that.
+  const socketFit = params.socketFitPct ?? 0;
+  const socketSized: Solid =
+    Math.abs(socketFit) > 0.01
+      ? track(socket.scale([1 + socketFit / 100, 1 + socketFit / 100, 1]))
+      : socket;
+
+  const socketBB = socketSized.boundingBox();
   const stemBB = stem.boundingBox();
   const socketDim = Math.max(
     socketBB.max[0] - socketBB.min[0],
@@ -92,13 +106,36 @@ export function buildClicker(
   const minCap = switchClear + 1.0;
   const isOutline = params.baseShape === 'outline';
 
+  // Declared here rather than beside the first push, because the size clamp immediately below
+  // is the earliest thing that has something to say to the user.
+  const warnings: string[] = [];
+
   let imageScale = Math.max(2, params.capWidthMm - 2 * border);
   let imgW = nW * imageScale;
   let imgH = nH * imageScale;
   if (isOutline && Math.min(imgW, imgH) + 2 * border < minCap) {
+    // The base follows the artwork, so a design narrower than the switch has to grow until its
+    // SHORT side clears it. Scaling is uniform, which means the long side is dragged along and
+    // `capWidthMm` — the number on the Size slider — stops being what the user gets.
+    //
+    // For a 4:1 logo that is not subtle: Size 20, 30, 40, 50 and 60 all produce the same 71 mm
+    // part. Five positions of a slider, byte-identical geometry, and nothing said. It reads as a
+    // broken slider, and it is behind "it makes the clicker quite large compared to the single
+    // switch", "is there a way to scale the picture bigger when using the Base Style", and
+    // "even when I size it up".
+    //
+    // Growing only the BASE instead (the way a preset shape already does, via `wellFp`) is the
+    // real fix and it changes the geometry of every outline clicker anyone has printed. Until
+    // that is worth doing, the least the build can do is say what size it actually used and
+    // which control gets the user out of it.
     imageScale *= (minCap - 2 * border) / Math.min(imgW, imgH);
     imgW = nW * imageScale;
     imgH = nH * imageScale;
+    const actual = Math.max(imgW, imgH) + 2 * border;
+    warnings.push(
+      `Your design is too narrow for the switch, so it was scaled up to ${actual.toFixed(0)} mm `
+      + `instead of ${params.capWidthMm.toFixed(0)} mm. Switch Base style to Shape to keep the size you set.`,
+    );
   }
   const sR = imageScale;
 
@@ -390,25 +427,36 @@ export function buildClicker(
       }
     }
   }
-  const warnings: string[] = [];
   if (pinched && requested.length > 1) {
     warnings.push('Switches were pulled together to fit the cap. Increase Size for more room.');
   }
 
-  // Stem fit: scale the keycap-mount stem in XY so its cross socket opens up (positive
-  // = looser, easier to press onto the switch) or closes (negative = tighter grip).
-  // The offset is applied to the stem's footprint, so e.g. +0.2 grows it 0.2 mm across.
-  // Z is left at scale 1 so the cap rest height, travel and skirt alignment don't move
-  // (stemBB — used for the Z stack — stays valid because only XY changes). Computed once
-  // and reused for every switch placement.
+  // Stem fit: move the cross socket INSIDE the cap's keycap-mount post without moving the
+  // post itself.
+  //
+  // This used to scale the whole stem solid by a factor derived from its 7.9 mm outer bbox,
+  // which is wrong twice over: it dragged the outer post along with the hole, and it meant the
+  // ~1.2 mm slot that actually grips the switch moved about a seventh of the millimetres shown
+  // on the control. A "+0.2 mm" press opened the slot 0.03 mm — under one extrusion width, so
+  // every setting printed as the same part.
+  //
+  // Clipping fixes both. The stem is material (unioned into the cap at `base.add(st)`), so:
+  //
+  //   looser  (f > 1): the grown copy has a bigger hole — INTERSECT with the original to clip
+  //                    the outside back to the post as authored.
+  //   tighter (f < 1): the shrunk copy fills part of the hole — UNION with the original to keep
+  //                    the outer profile as authored.
+  //
+  // Either way the outer footprint is exactly `stem`, so `stemBB` — which drives the Z stack at
+  // `slabBottomZ` / `skirtBottomZ` — stays valid and the cap's rest height cannot move. Z is
+  // never scaled. The worker hands the stem to us XY-centred, so scaling about the origin
+  // scales about its own centre. Computed once and reused for every switch placement.
   let stemSized: Solid = stem;
-  const stemTol = params.stemTolerance ?? 0;
-  if (Math.abs(stemTol) > 0.001) {
-    const stemDim = Math.max(stemBB.max[0] - stemBB.min[0], stemBB.max[1] - stemBB.min[1]);
-    if (stemDim > 0.1) {
-      const f = Math.max(0.5, (stemDim + stemTol) / stemDim);
-      stemSized = track(stem.scale([f, f, 1]));
-    }
+  const stemFit = params.stemFitPct ?? 0;
+  if (Math.abs(stemFit) > 0.01) {
+    const f = 1 + stemFit / 100;
+    const scaled = track(stem.scale([f, f, 1]));
+    stemSized = track(f > 1 ? scaled.intersect(stem) : scaled.add(stem));
   }
 
   // The cached socket/stem solids are owned by the worker — rotate/translate into
@@ -419,7 +467,7 @@ export function buildClicker(
     const r = Math.abs(sw.rotation) > 0.001 ? track(s.rotate([0, 0, sw.rotation])) : s;
     return Math.abs(sw.x) > 0.001 || Math.abs(sw.y) > 0.001 ? track(r.translate([sw.x, sw.y, 0])) : r;
   };
-  const socketAts: Solid[] = applied.map((sw) => placeSolidAt(socket, sw));
+  const socketAts: Solid[] = applied.map((sw) => placeSolidAt(socketSized, sw));
   const stemAts: Solid[] = applied.map((sw) => placeSolidAt(stemSized, sw));
 
   // Well = cap footprint (slip-fit) UNIONED with a guaranteed clear column over EACH
@@ -428,13 +476,26 @@ export function buildClicker(
   // notch would otherwise block a switch. Each column rotates with its switch so its
   // clearance stays aligned even at an angle.
   const socketColumnBase = roundedRect(switchClear, switchClear, 2.5);
-  let wellFp: Section = grow(plate, tol); // cap slips in with `tol`
+  const capFp: Section = grow(plate, tol); // cap slips in with `tol`
+  let wellFp: Section = capFp;
   for (const sw of applied) {
     const col = track(
       (Math.abs(sw.rotation) > 0.001 ? track(socketColumnBase.rotate(sw.rotation)) : socketColumnBase)
         .translate([sw.x, sw.y]),
     );
     wellFp = track(wellFp.add(col));
+  }
+  // If a column reached outside the cap footprint the body border wraps it, and the base grows
+  // a rounded lobe that is nowhere in the artwork. That is the "what is this oval, it's there
+  // even with the keychain off" report — the keychain loop is gated further down and is not the
+  // culprit. This is the only place that knows it happened, so say so rather than leaving people
+  // to guess. Threshold rather than "non-empty": a square column against a curved cap always
+  // pokes out by a sliver, and a sliver is not what anyone photographs.
+  const bulgeArea = sectionArea(track(wellFp.subtract(capFp)));
+  if (bulgeArea > 2) {
+    warnings.push(
+      'The base was widened to clear the switch. Increase Size, or move the switch, to keep the base the shape of your design.',
+    );
   }
   // Simplify the well far more finely than anything else in the build. `simplify(eps)`
   // may move a boundary by up to eps in EITHER direction, and this is the one outline
@@ -658,6 +719,15 @@ export function buildClicker(
         // so the expanded area is level with the top surface — no step, no ledge.
         const capFill = extrudeAt(skirtExtension, slabTopZ - skirtBottomZ, skirtBottomZ);
         base = track(base.add(capFill));
+        // Running the fill to `slabTopZ` puts it on the PRINTED FACE: a blank base-colour lobe
+        // appended to the user's artwork. It is load-bearing (the skirt needs something solid
+        // above it) so it is not simply removable here, but it is the thing people screenshot,
+        // and silently altering someone's picture is worse than explaining it.
+        if (sectionArea(skirtExtension) > 2) {
+          warnings.push(
+            'The top was widened around the switch, so a plain patch shows on the design. Increase Size, or move the switch, to clear it.',
+          );
+        }
       }
     }
   }
@@ -714,10 +784,16 @@ export function buildClicker(
     // connects the loop back into the body, extending deep to avoid gaps on concave curves.
     const loopR = Math.max(3.2, holeR + 1.8);
     const outward = loopR; // full radius → circle just touches the body edge
-    const localLoop = track(CrossSection.circle(loopR, 64).translate([0, outward]));
+    // `track()` on the outside only frees what `translate` RETURNED; the circle it was
+    // translated from is its own WASM object and nothing deleted it. Same shape of leak at
+    // every constructor-then-transform below — small each time, and this runs on every
+    // keystroke in a worker that never restarts.
+    const localLoop = track(track(CrossSection.circle(loopR, 64)).translate([0, outward]));
     // Bridge from the body edge into the back of the loop circle, going deep
     const bridgeH = outward + loopR * 3.5;
-    const localBridge = track(CrossSection.square([loopR * 2, bridgeH], true).translate([0, outward - bridgeH / 2]));
+    const localBridge = track(
+      track(CrossSection.square([loopR * 2, bridgeH], true)).translate([0, outward - bridgeH / 2]),
+    );
     let localFp: Section = track(localLoop.add(localBridge));
     const rotDeg = (kc.angleDeg ?? 90) - 90;
     if (Math.abs(rotDeg) > 0.001) localFp = track(localFp.rotate(rotDeg));
@@ -731,7 +807,7 @@ export function buildClicker(
     const rr = (rotDeg * Math.PI) / 180;
     const hcx = -outward * Math.sin(rr) + px;
     const hcy = outward * Math.cos(rr) + py;
-    const hole = extrudeAt(track(CrossSection.circle(holeR, 48).translate([hcx, hcy])), th + 2, zb - 1);
+    const hole = extrudeAt(track(track(CrossSection.circle(holeR, 48)).translate([hcx, hcy])), th + 2, zb - 1);
     body = track(body.subtract(hole));
   }
 
@@ -752,7 +828,7 @@ export function buildClicker(
       const ang = (v.thetaDeg * Math.PI) / 180 + rot0;
       const cx = sw0.x + v.r * Math.cos(ang);
       const cy = sw0.y + v.r * Math.sin(ang);
-      const sphere = track(Manifold.sphere(v.d / 2, 16).translate([cx, cy, v.z]));
+      const sphere = track(track(Manifold.sphere(v.d / 2, 16)).translate([cx, cy, v.z]));
       let buried = false;
       try {
         const inter = track(body.intersect(sphere));
@@ -776,7 +852,7 @@ export function buildClicker(
       const ang = (v.thetaDeg * Math.PI) / 180 + rot0;
       const cx = sw0.x + v.r * Math.cos(ang);
       const cy = sw0.y + v.r * Math.sin(ang);
-      const sphere = track(Manifold.sphere(v.d / 2, 16).translate([cx, cy, v.z]));
+      const sphere = track(track(Manifold.sphere(v.d / 2, 16)).translate([cx, cy, v.z]));
       let buried = false;
       try {
         const inter = track(body.intersect(sphere));
@@ -873,6 +949,16 @@ export function buildClicker(
       vertProperties: new Float32Array(mesh.vertProperties),
       triVerts: new Uint32Array(mesh.triVerts),
     };
+  }
+}
+
+/** Area of a section in mm², or 0 if the build doesn't expose `area()`. Used for
+ *  "is this big enough for a person to notice" tests, never for geometry. */
+function sectionArea(cs: Section): number {
+  try {
+    return typeof cs.area === 'function' ? cs.area() : 0;
+  } catch {
+    return 0;
   }
 }
 

@@ -507,6 +507,17 @@
   resize: vertical;
 }
 
+/* `textareaField({ compact: true })` is the other kind: a word or a name, not a list. The
+   140 px floor above is right for something people keep adding to and wrong for a two-line
+   legend. It needs `.vl-field .vl-textarea--compact` rather than a bare class, because the
+   rule it overrides is (0,1,1) and would otherwise win. `resize: none` because these sit in
+   a fixed-width sidebar column, where a dragged-wider textarea overlaps its neighbours. */
+.vl-field .vl-textarea--compact {
+  min-height: 38px;
+  line-height: 1.4;
+  resize: none;
+}
+
 /* ---------- Captioned control (segmented control with a label + tooltip) ---------- */
 .vl-control { display: grid; gap: 8px; }
 .vl-control-label { color: var(--muted); font-size: var(--label-fs); }

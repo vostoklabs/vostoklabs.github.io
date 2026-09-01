@@ -93,12 +93,32 @@ const BUDGET = {
   // 93 -> 71 on 2026-08-26: the final sweep across the independent app files. What is left
   // is concentrated in clicker/ui/ui.ts, plus a handful of controls the kit deliberately
   // does not express (a floating colour popover, a live-glyph font card).
-  button: 71,
+  // 71 -> 61 on 2026-08-31: the clicker's welcome modal, "what's new" modal and ten-step
+  // tour, deleted rather than migrated. Three overlays stacked on first load, and the middle
+  // one told first-time visitors what had changed "since your last visit". What was worth
+  // keeping — the changelog — is now `changelogButton()` behind a button people press.
+  // 61 -> 58 on 2026-08-31: the edit-mode bar (Color / Extrude), migrated to the kit's
+  // modeBar(). It was the last hand-built tab row in an app where five others already slide,
+  // which is what made it read as unfinished. Also deleted the two duplicate sync loops that
+  // both toggled .active from [data-editmode].
+  // 58 -> 56 on 2026-08-31: the licence modal and reminder toast, which the clicker had
+  // re-derived locally. The kit pair guards on isDesktop(), reads prices from @vostok/brand and
+  // manages focus; the local copy did none of those and hardcoded a creativecommons.org URL.
+  // 56 -> 53 on 2026-09-01: undo / refresh / redo. They were hand-built inside `.btn-row`, a
+  // TWO-column grid, so the third wrapped onto its own line. `buttonRow()` is flex, so the count
+  // lives in the markup instead of in a column template nobody remembers to update.
+  button: 53,
   select: 2,
   // 44 -> 38, range 11 -> 5 on 2026-08-26: the clicker's six sliders. Each was a label + a
   // text readout + a bare range, wired by a local `bindValInput()` that re-derived
   // clamp-on-type, select-on-focus and commit-on-Enter. `sliderRow()` is all of it.
-  input: 15,
+  // 15 -> 14 on 2026-08-31, and the number is a bigger win than it looks: the comment
+  // stripper above was fixed in the same commit, which handed this check 130 lines of the
+  // clicker's import panel that it had never been able to see (5 inputs and 2 textareas
+  // hiding in the blind spot). Six hand-built `<label class="toggle">` switches moved to
+  // `toggleSwitch()` and the two textareas to `textareaField()`, which absorbed the newly
+  // visible debt and still came out one under the old budget.
+  input: 14,
   textarea: 0,
   range: 2,
 };
@@ -190,9 +210,17 @@ const PATTERNS = {
   This check caught its own documentation the first time it ran: the line telling the next
   author never to hand-write a `<button>` counted as a hand-written button. A commented-out
   control is not a control either. The URL guard keeps `https://` from starting a comment.
+
+  A block comment must OPEN at a boundary — start of line, or after whitespace or one of
+  `(,;={`. Without that guard an `accept="image/[star]"` attribute opened one, and it ran to
+  the next comment-close in the file. In the clicker that was the JSDoc 130 lines later, so
+  the entire right-hand import panel — exactly where a hand-built control is most likely to
+  appear — was invisible to this check while it reported a clean pass. Counting nothing looks
+  identical to counting zero, which is the failure mode a ratchet can least afford.
+  (Written as [star] above for the obvious reason.)
 */
 const stripComments = (src) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  src.replace(/(^|[\s(,;={])\/\*[\s\S]*?\*\//gm, '$1 ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
 const counts = Object.fromEntries(Object.keys(BUDGET).map((k) => [k, 0]));
 const byFile = [];

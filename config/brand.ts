@@ -14,6 +14,9 @@ export const BRAND = {
     github: 'https://github.com/vostoklabs',
     // TODO(ian): verify — assumed from the repo name vostoklabs/Clicker-Generator
     clickerApp: 'https://vostoklabs.github.io/Clicker-Generator/',
+    // The MakerWorld listing itself — the clicker links to it for the print profiles. It was
+    // hardcoded in the app's sidebar copy, which is exactly what invariant #4 exists to stop.
+    clickerListing: 'https://makerworld.com/en/models/2980346',
     keycapApp: 'https://vostoklabs.github.io/SVG-keycap-generator/',
     // TODO: license/terms page on the hub once it exists
     licenseTerms: 'TODO_LICENSE_PAGE_URL',

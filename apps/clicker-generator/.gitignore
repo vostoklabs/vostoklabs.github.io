@@ -20,3 +20,4 @@ __MACOSX/
 src/makerlab/lib/
 makerlab/server.cjs
 makerlab/*.zip
+.fit-test.mjs

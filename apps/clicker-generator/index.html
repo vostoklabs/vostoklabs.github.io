@@ -4,9 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Clicker Generator</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- No webfont link here on purpose. @vostok/ui-kit bundles Chakra Petch at these exact
+         three weights as local woff2 (packages/ui-kit/src/fonts.css), so a CDN request would
+         be a second copy of a font we already ship — and invariant #5 is "zero external
+         network calls; an app must work offline and from file://". This was the only app in
+         the repo still linking Google Fonts, and the swap was visible on every first paint. -->
     <!-- Favicon: black logo (dark ink) reads on light backgrounds; white logo on dark. -->
     <link rel="icon" type="image/png" href="./assets/favicon/Vostokfaviconblack.png" />
     <link rel="icon" type="image/png" href="./assets/favicon/vostokfaviconwhite.png" media="(prefers-color-scheme: dark)" />

@@ -20,7 +20,10 @@
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import '@vostok/plates/plates.css';
-import { topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile, listRow } from '@vostok/ui-kit';
+import {
+  topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks,
+  chooseFile, listRow, openLicenseModal, licenseReminderToast,
+} from '@vostok/ui-kit';
 import './style.css';
 import { createStore } from './store/store';
 import { createViewer } from './viewer/viewer';
@@ -55,6 +58,7 @@ import type {
   PaletteEntry,
   RegionSet,
   RGB,
+  Ring,
   SwitchPlacement,
 } from './types';
 import { FILAMENTS } from './types';
@@ -152,8 +156,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     capWidthMm: 35,
     topThickness: 1.5,
     imageDepth: 0.8,
+    capProud: 4.0,
     tolerance: 0.4,
-    stemTolerance: 0,
+    stemFitPct: 0,
+    socketFitPct: 0,
     switches: [{ x: 0, y: 0, rotation: 0 }],
     activeSwitchIndex: 0,
     smoothing: 0.1,
@@ -301,18 +307,60 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ imageDepth: mm });
       debouncedRebuild();
     },
-    onSocketTolStep: (delta) => {
-      // "Switch socket" fit = clearance between the top and the base it presses into.
-      // Baseline is 0.4 mm (shown as 0); + loosens, − tightens. Clamp to a safe range.
-      const next = Math.round(Math.max(0.1, Math.min(1.0, store.get().tolerance + delta)) * 100) / 100;
-      store.set({ tolerance: next });
+    onFitTest: () => {
+      // Five settings either side of the current one. The numbers are debossed on the tiles,
+      // so the print answers "what do I type" without the user writing anything down.
+      // A FIXED sweep, not one centred on the current setting. Two reasons, both practical:
+      // a calibration strip should read in the absolute numbers you type into the control,
+      // and centring on a half-step turned the labels into '-3.5%' — five glyphs, which at
+      // this tile size deboss about 2 mm tall and cannot be read. Three characters always.
+      // The control's range is -5..+5, so this spans nearly all of it.
+      const steps = [-4, -2, 0, 2, 4];
+      let labels: { pct: number; rings: Ring[] }[];
+      try {
+        labels = steps.map((pct) => {
+          // parseLetter normalises to a unit box, which is exactly what the strip wants — it
+          // scales each label to a fixed millimetre size itself.
+          // WITH the per-cent sign: the tile has to say the same thing the control says, or
+          // the number on the print is a riddle. The control reads '+2.0%'; this reads '+2%'.
+          const rs = parseLetter(`${pct > 0 ? '+' : ''}${pct}%`, currentFontId, 6, false);
+          return { pct, rings: rs.regions.flatMap((r) => r.components.flatMap((c) => c.rings)) };
+        });
+      } catch {
+        // A font that cannot render digits is not a reason to withhold the test.
+        labels = steps.map((pct) => ({ pct, rings: [] }));
+      }
+      pendingFitStrip = true;
+      store.set({ building: true, status: 'Building the fit test…' });
+      const st = store.get();
+      worker.postMessage({
+        type: 'buildFitStrip',
+        labels,
+        // The same colour the real cap gets, so the strip prints in what they are looking at.
+        colorRgb: st.baseColorOverride ?? deriveFrameColor(st),
+      });
+    },
+    onCapProud: (mm) => {
+      // The builder clamps this against the available border height, so a value that cannot
+      // fit simply lands at the maximum rather than breaking the bezel.
+      store.set({ capProud: mm });
       debouncedRebuild();
     },
-    onStemTolStep: (delta) => {
-      // "Switch stem" fit = XY scale offset on the cap's keycap-mount stem (0.2 mm steps).
-      // + loosens (opens the cross socket), − tightens. 0 = as authored.
-      const next = Math.round(Math.max(-1.0, Math.min(1.0, store.get().stemTolerance + delta)) * 10) / 10;
-      store.set({ stemTolerance: next });
+    // The three fit controls, each on a different pair of surfaces. They used to be two, one
+    // of which was named after a part it never touched — see the UI for the naming.
+    onGapTolerance: (mm) => {
+      // Top ↔ base: the slip fit between the cap's skirt and the body's well.
+      store.set({ tolerance: Math.round(Math.max(0.1, Math.min(1.0, mm)) * 100) / 100 });
+      debouncedRebuild();
+    },
+    onStemFit: (pct) => {
+      // Cap stem ↔ switch stem: opens or closes the cross socket inside the cap's post.
+      store.set({ stemFitPct: Math.round(Math.max(-5, Math.min(5, pct)) * 10) / 10 });
+      debouncedRebuild();
+    },
+    onSocketFit: (pct) => {
+      // Body pocket ↔ switch body: how tightly the switch itself sits in the base.
+      store.set({ socketFitPct: Math.round(Math.max(-5, Math.min(5, pct)) * 10) / 10 });
       debouncedRebuild();
     },
     onSwitchNudge: (dx, dy) => {
@@ -721,7 +769,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onUndo: () => undo(),
     onRedo: () => redo(),
     onRefresh: () => refreshDesign(),
-  });
+  }, store.get());
 
   // ---- Undo / redo ----------------------------------------------------------
   // History snapshots the editable "document" fields (colors, heights, edges,
@@ -730,7 +778,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const HISTORY_FIELDS = [
     'palette', 'paletteOverrides', 'partOverrides', 'bodyColorRgb', 'baseColorOverride',
     'componentHeights', 'edgeSettings', 'extrudeChamfer', 'baseShape', 'capWidthMm', 'topThickness',
-    'imageDepth', 'tolerance', 'stemTolerance', 'switches', 'keychain',
+    'imageDepth', 'capProud', 'tolerance', 'stemFitPct', 'socketFitPct', 'switches', 'keychain',
   ] as const;
   let history: string[] = [];
   let histIndex = -1;
@@ -738,6 +786,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let pendingHistoryReset = false;
   /** Set when the next build should re-frame the camera (new subject, not an edit). */
   let pendingReframe = true;
+  /* The fit strip is built by the same worker and comes back down the same `parts` message,
+     but it is a file to download rather than a design to look at. This flag is what tells the
+     handler which one arrived; it is cleared there whatever happens, so a failed strip cannot
+     leave the next real rebuild exporting itself. */
+  let pendingFitStrip = false;
 
   function snapshotHistory(): string {
     const s = store.get() as any;
@@ -1060,6 +1113,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         }
         break;
       case 'parts': {
+        if (pendingFitStrip) {
+          pendingFitStrip = false;
+          store.set({
+            building: false,
+            status: msg.warnings?.[0] ?? 'Fit test exported.',
+          });
+          downloadThreeMF(msg.parts, 'clicker-fit-test.3mf');
+          break;
+        }
         latestParts = msg.parts;
         // Re-frame the camera only when the SUBJECT changed (a new image, icon, SVG, or a
         // different import mode). Editing what is already on screen — the text, the font,
@@ -1077,8 +1139,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         store.set({
           building: false,
           hasParts: msg.parts.length > 0,
-          // Surface any non-fatal build note (switches pinched, no keychain room) or clear.
-          status: msg.warnings && msg.warnings.length ? msg.warnings[0] : '',
+          // Surface every non-fatal build note (switches pinched, base widened for the switch,
+          // no keychain room) or clear. `warnings[0]` dropped the rest on the floor, which
+          // matters now that a single build can raise two of them at once — the base was
+          // widened AND the patch reached the printed face are different sentences with
+          // different fixes, and the second one is the one people photograph.
+          status: msg.warnings && msg.warnings.length ? msg.warnings.join(' ') : '',
         });
         isInitialLoad = false;
 
@@ -1297,6 +1363,25 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // slider, and it is what one was reported as.
     //
     // The guard below has always explained itself. This one now does too.
+    // …and the previous version of that comment was written about a slider that did nothing
+    // while the app was genuinely empty. This one is about the case it did not cover: the app
+    // is NOT empty. On startup the prebuilt `default-clicker.json` is painted straight into the
+    // viewer for a fast first frame, and `defaultClickerLoaded` then suppresses the trace of the
+    // sample image that would have filled `regionSet`. So every control in that list arrived
+    // here, printed "nothing to build yet", and did nothing — with a finished clicker on screen
+    // and a sample image already decoded in memory.
+    //
+    // Recovering needed the user to click an import tab (even the one already selected), which
+    // nobody would guess. It is the best explanation on offer for the "nothing is loading" /
+    // "the generator is not working" / "there's no customize" reports on both listings.
+    //
+    // Tracing lazily rather than at startup keeps the fast first paint: the cost is paid once,
+    // on the first control the user actually touches. `reprocess()` fills `regionSet` and calls
+    // `rebuild()` itself, so this returns rather than falling through.
+    if (!regionSet && originalImage && store.get().importMode === 'image') {
+      reprocess();
+      return;
+    }
     if (!regionSet || regionSet.regions.length === 0) {
       store.set({
         building: false,
@@ -1344,9 +1429,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       imageDepth: s.imageDepth,
       imageMargin: isText ? 2.5 : 1.2,
       borderWidth: isText ? 3.5 : 2.6,
-      capProud: 4.0,
+      capProud: s.capProud,
       tolerance: s.tolerance,
-      stemTolerance: s.stemTolerance,
+      stemFitPct: s.stemFitPct,
+      socketFitPct: s.socketFitPct,
       imageOffset: s.imageOffset,
       colorBleed: 0.12,
       stepHeight: 0.6,
@@ -1415,71 +1501,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // In-memory only (resets on refresh) so the big modal reappears for new sessions.
   let downloadCount = 0;
 
-  const COMMERCIAL_URL = BRAND.urls.mwCommercial;
-  const LICENSE_URL = 'https://creativecommons.org/licenses/by-nc-nd/4.0/';
-
-  function showLicenseModal() {
-    if (document.querySelector('.license-overlay')) return;
-    const wm = document.createElement('div');
-    wm.className = 'license-overlay';
-    wm.innerHTML = `
-      <div class="license-card">
-        <div class="license-badge">✓ Download started</div>
-        <h2>Free for personal use</h2>
-        <p>
-          This generator and the designs it creates are released under a
-          <a href="${LICENSE_URL}" target="_blank" rel="noopener noreferrer">CC BY-NC-ND 4.0 license</a>.
-          Print as many as you like for yourself, completely free.
-        </p>
-        <div class="license-commercial">
-          <div class="license-commercial-title">Want to <span>sell</span> your prints?</div>
-          <p>
-            If you plan to sell these as 3D-printed products, you need a
-            <strong>commercial license membership</strong>, it's just
-            <strong class="license-price">$${BRAND.pricing.subscription.month}&nbsp;/&nbsp;month</strong> and unlocks full commercial rights.
-          </p>
-          <a class="license-cta" href="${COMMERCIAL_URL}" target="_blank" rel="noopener noreferrer">
-            Get the commercial license →
-          </a>
-        </div>
-        <div class="license-foot">
-          <button class="primary" id="licenseClose" style="min-width:150px">Got it</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(wm);
-    const close = () => wm.remove();
-    wm.querySelector('#licenseClose')!.addEventListener('click', close);
-    wm.addEventListener('click', (e) => {
-      if (e.target === wm) close();
-    });
-  }
-
-  let licenseToastTimer: number | undefined;
-  function showLicenseToast() {
-    document.querySelector('.license-toast')?.remove();
-    if (licenseToastTimer) window.clearTimeout(licenseToastTimer);
-    const t = document.createElement('div');
-    t.className = 'license-toast';
-    t.innerHTML = `
-      <button class="license-toast-x" aria-label="Dismiss">×</button>
-      <div class="license-toast-title">✓ Free for personal use</div>
-      <p>Selling printed designs? You need a commercial license.</p>
-      <a class="license-toast-cta" href="${COMMERCIAL_URL}" target="_blank" rel="noopener noreferrer">
-        Get commercial license →
-      </a>
-    `;
-    document.body.appendChild(t);
-    // Trigger the slide-in transition on the next frame.
-    requestAnimationFrame(() => t.classList.add('show'));
-    const dismiss = () => {
-      t.classList.remove('show');
-      window.setTimeout(() => t.remove(), 300);
-    };
-    t.querySelector('.license-toast-x')!.addEventListener('click', dismiss);
-    // Linger long enough not to miss it.
-    licenseToastTimer = window.setTimeout(dismiss, 9000);
-  }
+  // The kit's pair, not a local copy of it. The two functions that used to live here were
+  // a re-derivation of `openLicenseModal` / `licenseReminderToast` that had drifted in three
+  // ways that matter: they hardcoded a creativecommons.org URL (invariant #4), they had no
+  // `isDesktop()` guard so they popped over a host that has already sold the user a licence
+  // (invariant #7), and they were missing the focus handling and `role="dialog"` the kit
+  // grew later. Seven apps call the kit pair; this was the eighth going its own way, and it
+  // is the highest-traffic one.
+  const showLicenseModal = () => { openLicenseModal(); };
+  const showLicenseToast = () => { licenseReminderToast(); };
 
   // ---- Render / project save-load / AI prompt ----
   function downloadBlob(blob: Blob, fileName: string) {
@@ -1535,8 +1565,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         capWidthMm: s.capWidthMm,
         topThickness: s.topThickness,
         imageDepth: s.imageDepth,
+        capProud: s.capProud,
         tolerance: s.tolerance,
-        stemTolerance: s.stemTolerance,
+        stemFitPct: s.stemFitPct,
+        socketFitPct: s.socketFitPct,
         imageOffset: s.imageOffset,
         switches: s.switches,
         keychain: s.keychain,
@@ -1718,8 +1750,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         capWidthMm: set.capWidthMm ?? store.get().capWidthMm,
         topThickness: set.topThickness ?? store.get().topThickness,
         imageDepth: set.imageDepth ?? store.get().imageDepth,
+        capProud: set.capProud ?? 4.0,
         tolerance: set.tolerance ?? store.get().tolerance,
-        stemTolerance: set.stemTolerance ?? 0,
+        // v3 projects stored `stemTolerance` in mm against the old scale-the-whole-post code,
+        // where even the clamp extreme moved the gripping slot ~0.15 mm. There is no honest
+        // conversion to the new percentage, and 0 (the asset as authored) is within one
+        // extrusion width of whatever they had — so old values are dropped rather than guessed.
+        stemFitPct: set.stemFitPct ?? 0,
+        socketFitPct: set.socketFitPct ?? 0,
         // v3 stores `switches`; older (v2) projects carried scalar offsets — synthesize
         // a single-switch array from them for back-compat.
         switches: Array.isArray(set.switches) && set.switches.length

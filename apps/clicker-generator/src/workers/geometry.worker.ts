@@ -3,6 +3,7 @@
 import Module from 'manifold-3d';
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
 import { parse3MF } from '../geometry/threemfImport';
+import { buildFitStrip } from '../geometry/fitStrip';
 import { buildClicker } from '../geometry/buildClicker';
 import { buildBlocks, prepareBlockAssets, type BlockAssets, type KeycapAsset } from '../geometry/buildBlocks';
 import type { GeometryRequest, GeometryResponse } from '../types';
@@ -185,6 +186,19 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
       post({ type: 'parts', parts, switchPlacements, warnings }, transfer);
+      return;
+    }
+
+    if (msg.type === 'buildFitStrip') {
+      if (!stem) throw new Error('Assets not initialized');
+      const { parts, warnings } = buildFitStrip(wasm, stem, {
+        labels: msg.labels,
+        colorRgb: msg.colorRgb,
+      });
+      const transfer: Transferable[] = [];
+      for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
+      // No switches to report: the strip has no sockets, only the posts under test.
+      post({ type: 'parts', parts, switchPlacements: [], warnings }, transfer);
       return;
     }
   } catch (err) {

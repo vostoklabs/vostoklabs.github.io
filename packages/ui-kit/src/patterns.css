@@ -258,6 +258,20 @@ details.vl-section--collapsible[open] > summary {
 }
 
 /* ----------------------------------------------------------------- samples */
+/* `thumbTile()` — one focusable image tile, for galleries that build their own grid. Carries
+   only the button reset and the focus ring; size and spacing stay with the caller's own class,
+   because a 1,500-item icon gallery and a six-item sample row want different ones. */
+.vl-thumb {
+  padding: 0;
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  display: block;
+  color: inherit;
+  font: inherit;
+}
+.vl-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .vl-samples__heading {
   display: block;
   margin-top: 14px;
@@ -392,7 +406,10 @@ details.vl-section--collapsible[open] > summary {
   opacity: 0;
   border-radius: 9px;
   background: var(--accent);
-  box-shadow: 0 1px 6px rgba(91, 157, 255, 0.35);
+  /* Derived from --accent, not the dark theme's #5b9dff frozen as an rgba() literal. The
+     literal was invisible in dark mode (where it happens to be right) and wrong in light,
+     and being in the kit it would have been inherited by every generator that adopts this. */
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 35%, transparent);
   pointer-events: none;
   transition:
     transform var(--dur-in-md) var(--ease-standard),

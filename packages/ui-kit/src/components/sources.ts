@@ -166,6 +166,38 @@ export interface SampleGridOptions {
   onPick: (item: SampleItem, index: number) => void;
 }
 
+export interface ThumbTileOptions {
+  /** Thumbnail URL — an import, a data URI, a blob URL. */
+  src: string;
+  /** The tile's whole accessible name; also its tooltip. */
+  label: string;
+  /** Extra class for placement or app-specific sizing. Never a restyle. */
+  className?: string;
+  onClick?: (tile: HTMLButtonElement) => void;
+}
+
+/**
+ * One focusable image tile.
+ *
+ * `sampleGrid` above builds a fixed handful of these from a list. A gallery cannot: the clicker
+ * renders ~1,500 Lucide icons, adds uploaded SVGs one at a time, and filters them as you type,
+ * so it needs the tile without the grid around it. Lacking one, it hand-rolled a `<div class=
+ * "icon">` with a click listener — which is not focusable, announces as nothing, and does not
+ * respond to Enter or Space. About fifteen hundred of them, and they were the only route to the
+ * icon library.
+ *
+ * Lazy loading here, unlike `sampleGrid`: a gallery is long and most of it is below the fold.
+ */
+export function thumbTile(opts: ThumbTileOptions): HTMLButtonElement {
+  const btn = el('button', {
+    className: `vl-thumb${opts.className ? ` ${opts.className}` : ''}`,
+    attrs: { type: 'button', title: opts.label, 'aria-label': opts.label },
+  }) as HTMLButtonElement;
+  btn.append(el('img', { attrs: { src: opts.src, alt: '', decoding: 'async', loading: 'lazy' } }));
+  if (opts.onClick) btn.addEventListener('click', () => opts.onClick!(btn));
+  return btn;
+}
+
 /** Square sample thumbnails. Returns a fragment holder, heading included. */
 export function sampleGrid(opts: SampleGridOptions): HTMLElement {
   const wrap = el('div');
