@@ -216,4 +216,24 @@ check(
 );
 
 console.log(failures ? `\n${failures} FAILED` : '\nall fit controls move the geometry they name');
+
+// --- Provenance. Invariant #2 says the identity mark is never removed, and both void loops
+//     skip any sphere that is not fully buried WITHOUT saying so. A normal build must land all
+//     of them; if a future cavity or deboss takes their material, this is what notices.
+const normal = buildClicker(wasm, socket, stem, regions, [square], base);
+check(
+  'a normal build lands every identity mark (one used to clip the switch pocket)',
+  !normal.warnings.some((w) => w.startsWith('Provenance:')),
+  normal.warnings.filter((w) => w.startsWith('Provenance:')).join(' | ') || 'no provenance warning, as expected',
+);
+// The clamp is what makes the first check pass, so assert it directly: a void must clear the
+// SQUARE pocket along its own bearing, which is further out than the axis-aligned half-extent
+// everywhere except on an axis. Getting this wrong is silent — the void simply never lands.
+const marked = buildClicker(wasm, socket, stem, regions, [square], { ...base, socketFitPct: 5 });
+check(
+  'a wider switch pocket still leaves every mark buried',
+  !marked.warnings.some((w) => w.startsWith('Provenance:')),
+  marked.warnings.find((w) => w.startsWith('Provenance:')) || 'all landed at +5% pocket',
+);
+
 process.exit(failures ? 1 : 0);

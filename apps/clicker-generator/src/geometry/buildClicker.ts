@@ -67,6 +67,8 @@ export function buildClicker(
       : socket;
 
   const socketBB = socketSized.boundingBox();
+  /** Half-extent of the switch pocket in XY — the radius inside which nothing can be buried. */
+  const sbbHalf = Math.max(socketBB.max[0], socketBB.max[1], -socketBB.min[0], -socketBB.min[1]);
   const stemBB = stem.boundingBox();
   const socketDim = Math.max(
     socketBB.max[0] - socketBB.min[0],
@@ -815,6 +817,33 @@ export function buildClicker(
   body = track(body.subtract(well));
   for (const sk of socketAts) body = track(body.subtract(sk));
 
+  /* How many identity voids were attempted, and how many actually landed.
+     Both loops below skip a sphere that is not fully buried, which is right — a void
+     breaking the surface would be visible on a print, and invariant #2 says the mark is
+     never visible. What was wrong was the SILENCE: any change that removes the material
+     the voids sit in erases the watermark with nothing anywhere to say so. Hollowing the
+     base and the underside brand mark both do exactly that, so this counts. */
+  let marksAttempted = 0;
+  let marksLanded = 0;
+
+  /* Smallest radius at which a void of diameter `d` sits entirely outside the switch pocket,
+     along the bearing `thetaRad`.
+     
+     The pocket is a SQUARE, so its boundary is further from the centre off-axis than on it —
+     `sbbHalf / max(|cos|, |sin|)`, which is `sbbHalf` on an axis and `sbbHalf * sqrt(2)` at 45°.
+     Using the bare half-extent instead (the first attempt at this) under-clears every void that
+     is not on an axis: the one at 201.9° needs 9.03 mm and a flat clamp gave it 8.57, so it went
+     on failing exactly as before and the fix looked like it had done nothing.
+     
+     `socketBB` is the real asset's bounds, so this follows the CAD rather than a constant that
+     would rot the moment the socket is re-cut. The 0.15 mm is margin, not clearance: the void
+     must be BURIED, and a sphere merely tangent to the cavity fails the 0.98 volume test. */
+  const voidClearR = (d: number, thetaRad: number): number => {
+    const c = Math.abs(Math.cos(thetaRad));
+    const sn = Math.abs(Math.sin(thetaRad));
+    return sbbHalf / Math.max(c, sn, 1e-6) + d / 2 + 0.15;
+  };
+
   // Covert identity mark: subtract a seeded void constellation anchored to switch #0's
   // socket, buried in the always-solid ring (invisible on prints, visible in a slicer
   // section view). Only active when VITE_MARK_SEED is set (deployed build); dev builds
@@ -826,8 +855,11 @@ export function buildClicker(
     const rot0 = ((sw0.rotation ?? 0) * Math.PI) / 180;
     for (const v of markVoids(markSeed)) {
       const ang = (v.thetaDeg * Math.PI) / 180 + rot0;
-      const cx = sw0.x + v.r * Math.cos(ang);
-      const cy = sw0.y + v.r * Math.sin(ang);
+      // Push out only if the authored radius could not clear the pocket. A void that already
+      // clears keeps its exact position, so models generated before this still match.
+      const vr = Math.max(v.r, voidClearR(v.d, (v.thetaDeg * Math.PI) / 180));
+      const cx = sw0.x + vr * Math.cos(ang);
+      const cy = sw0.y + vr * Math.sin(ang);
       const sphere = track(track(Manifold.sphere(v.d / 2, 16)).translate([cx, cy, v.z]));
       let buried = false;
       try {
@@ -836,7 +868,11 @@ export function buildClicker(
       } catch {
         buried = false;
       }
-      if (buried) body = track(body.subtract(sphere));
+      marksAttempted += 1;
+      if (buried) {
+        body = track(body.subtract(sphere));
+        marksLanded += 1;
+      }
     }
   }
 
@@ -850,8 +886,11 @@ export function buildClicker(
     const rot0 = ((sw0.rotation ?? 0) * Math.PI) / 180;
     for (const v of hardcodedVoids()) {
       const ang = (v.thetaDeg * Math.PI) / 180 + rot0;
-      const cx = sw0.x + v.r * Math.cos(ang);
-      const cy = sw0.y + v.r * Math.sin(ang);
+      // Push out only if the authored radius could not clear the pocket. A void that already
+      // clears keeps its exact position, so models generated before this still match.
+      const vr = Math.max(v.r, voidClearR(v.d, (v.thetaDeg * Math.PI) / 180));
+      const cx = sw0.x + vr * Math.cos(ang);
+      const cy = sw0.y + vr * Math.sin(ang);
       const sphere = track(track(Manifold.sphere(v.d / 2, 16)).translate([cx, cy, v.z]));
       let buried = false;
       try {
@@ -860,8 +899,23 @@ export function buildClicker(
       } catch {
         buried = false;
       }
-      if (buried) body = track(body.subtract(sphere));
+      marksAttempted += 1;
+      if (buried) {
+        body = track(body.subtract(sphere));
+        marksLanded += 1;
+      }
     }
+  }
+
+  // Invariant #2: the provenance mark is never removed. It is forensic evidence, so a build
+  // that quietly ships without it is worse than one that fails — the file looks fine and proves
+  // nothing. This does not block the export (a legitimately thin body may genuinely have no room)
+  // but it stops the loss being invisible.
+  if (marksAttempted > 0 && marksLanded < marksAttempted) {
+    warnings.push(
+      `Provenance: ${marksLanded} of ${marksAttempted} identity marks landed. `
+      + 'The body may be too thin, or a cavity has taken the material they sit in.',
+    );
   }
 
   if (!body.isEmpty()) {
