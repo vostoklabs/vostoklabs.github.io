@@ -12,19 +12,30 @@ Thumbs.db
 .claude/
 CLAUDE.md
 
-# Internal planning/business docs (pricing, decisions, NDA-adjacent notes) — local reference
-# only, never part of the public shipped project.
-docs/decisions.md
-docs/briefs/
-# The UI unification plan: describes the unreleased Opal suite's internals and file layout.
-docs/ui-unification.md
-# The migration handover: session-by-session instructions, references Opal internals.
-docs/ui-migration-handover.md
+# docs/ is INTERNAL BY DEFAULT.
+#
+# This used to be a deny-list: docs/ was tracked, and each internal file was ignored by name.
+# That is backwards for a folder whose whole purpose is internal, and it failed exactly the way
+# a deny-list fails — on 2026-09-01 six untracked files were sitting here waiting for a
+# `git add -A`, including a 437-line forensic analysis naming a third party as having copied
+# the clicker, and a plan carrying unreleased pricing. Nothing had been committed yet, so
+# nothing leaked; the next careless stage would have published all of it, to a PUBLIC repo.
+#
+# So: the folder is ignored, and the genuinely public bits are un-ignored one at a time below.
+# Getting it wrong now means a doc is missing from a clone, which someone notices. The other
+# way round means a contract or an accusation is on the internet, which nobody notices.
+#
+# Covers, among others: decisions.md, briefs/, ui-unification.md, ui-migration-handover.md,
+# licenses/ (real customer names and purchase references), reference/, openscad-ai-research/,
+# and the provenance analyses.
+# `docs/**`, not `docs/` — git will not descend into an excluded DIRECTORY, so a negation
+# under `docs/` can never fire. Excluding the contents instead leaves the directory itself
+# visible, which is what makes the exception below work. (Checked: with `docs/` the listing
+# files stayed ignored no matter what followed.)
+docs/**
 
-# Commercial licence documents. These are contracts, not product: the subscription and
-# lifetime terms are what customers are sold, and the per-customer ones carry a real name and
-# a purchase reference. The licence text that belongs in public is the per-app LICENSE.md.
-docs/licenses/
+# Listing copy is written to be published — it is the text that goes on the MakerWorld page.
+!docs/*-listing.md
 
 # External reference clone (unlicensed upstream — reference only, re-clone if missing):
 # git clone --depth 1 https://github.com/nelsonjchen/unofficial-makerworld-parametric-model-maker-openscad-docs vendor/pmm-docs
@@ -35,10 +46,6 @@ vendor/pmm-docs/
 
 # pnpm content-addressable store (local cache)
 .pnpm-store/
-
-# Third-party reference code (competitor .scad, upstream sources) — reference only.
-# Keep OUT of this public repo to avoid redistributing others' code.
-docs/reference/
 
 # opal-suite planning & research docs (local working notes, not part of the shipped app)
 apps/opal-suite/*.md
@@ -51,7 +58,16 @@ apps/opal-suite/planning/
 # MakerLab submissions and private packages
 **/makerlab/
 **/source 3d models/
+# Tests are ignored WHOLESALE because five of foldbox's eight reference the unlaunched cut
+# half (cutPack / cutFiles / lac), which is fenced out of this repo for the same reason the
+# source is. A test that imports fenced code leaks the design just as effectively as the code.
+#
+# Per-app exceptions below, for apps with nothing fenced to leak. The clicker's suite is the
+# only thing proving the fit controls move the geometry they name, and losing it to a blanket
+# rule aimed at a different app is the wrong trade.
 **/tests/
+!apps/clicker-generator/tests/
+!apps/clicker-generator/tests/**
 packages/manifold-noeval/README.md
 
 # Paid feature source (anything sold rather than given away). The public
@@ -106,5 +122,3 @@ apps/foldbox/README.internal.md
 # Bambu Studio CLI slicing output, dropped in the repo root by whatever ran last.
 result.json
 
-# AI OpenSCAD Research
-docs/openscad-ai-research/
