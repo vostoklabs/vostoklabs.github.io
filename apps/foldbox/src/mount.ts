@@ -699,7 +699,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           { value: 'none', label: 'Do not mark them' },
         ],
         value: params.foldMode,
-        help: 'No machine here can actually crease. A laser scores and browns the outside, a blade perforates, a pen draws a line you fold by hand. Pick the one your machine can do.',
+        help: 'No machine here can actually crease. A laser scores and browns the outside, a blade perforates, a pen draws a line you fold by hand. Pick the one your machine can do. On a Bambu, perforate: it is the one fold the blade makes in a single pass, with no pen swap and no scorch.',
         onChange: (m) => setParam('foldMode', m as FoldMode),
       }) as HTMLElement & { setValue?(v: FoldMode): void },
       kerf: sliderRow({

@@ -89,6 +89,19 @@ export interface Panel {
    *  the wall it is parented to; `b` is the half folded back over `a` on the diagonal.
    *  See the web driver in fold/rig.ts for the kinematics. */
   web?: 'a' | 'b';
+  /** The INNER PLY of a hem — a wall folded back on itself, built by `rollEnd`.
+   *
+   *  Its crease and its parent's sit exactly `layerStep(t)` = 2 x caliper apart: 0.76 mm
+   *  on the default card. That matters to the dieline, because a perforation cannot be
+   *  put on both. The strip between them would be severed from both sides at every dash
+   *  station and become a row of loose tabs, and one perforation through a strip that
+   *  narrow relieves both folds anyway.
+   *
+   *  Marked at the source rather than found by measuring, because proximity cannot tell
+   *  a hem from a genuinely short wall: on a 30 x 30 x 6 mm mailer in 2 mm board a
+   *  distance test also matches {base -> wall} and {back -> lid}, and drops the LID's
+   *  fold line. `rollEnd` is the only thing in the app that builds one of these. */
+  hem?: true;
   /** Root panels only. Where this subtree's base plane sits in the assembled view,
    *  and whether it arrives upside down. A two-piece box has two roots: the tray at
    *  the origin, and the lid coming down over it from above. */
@@ -218,6 +231,21 @@ export interface Machine {
   mirror: boolean;
   /** Preferred export for this machine, shown in the README. */
   format: 'svg' | 'dxf';
+  /** How a fold line has to be DRAWN in the SVG and DXF for this machine's front-end.
+   *
+   *  'solid'  — the front-end keeps layer names, or steps per colour, so the user
+   *             assigns the blue CREASE layer to Score or Draw themselves. A
+   *             continuous line is what a scoring wheel wants, and dashing it would
+   *             leave them no fold layer to select.
+   *  'dashed' — the front-end reads SHAPE ONLY. It drops layer names and treats colour
+   *             as decoration, so a solid fold line arrives as a cut and the box comes
+   *             off the mat as loose panels. Geometry is the only channel left.
+   *
+   *  Not a guess: Bambu Suite re-saved an import of our own SVG with all sixteen blue
+   *  fold lines put back on the blade, and the user had reassigned exactly one by hand
+   *  before giving up. A project file states the operation outright and needs none of
+   *  this; an SVG has no way to say it. */
+  svgFold: 'solid' | 'dashed';
   note: string;
 }
 
@@ -228,12 +256,17 @@ export const MACHINES: Machine[] = [
     id: 'h2d-blade',
     name: 'Bambu H2D (blade + pen)',
     areaMm: [300, 285],
-    foldMode: 'draw',
+    // Perforate, not draw. A pen line means the fold objects arrive in Suite as Drawing
+    // lines and it tries to PEN-PLOT them — reported from a real cut, where they had to be
+    // deleted by hand — and it costs a pen swap the machine stops for. A dashed Basic Cut
+    // is one tool, one pass, and it folds faster.
+    foldMode: 'perf',
     kerfMm: 0,
     maxCaliperMm: 0.5,
     mirror: false,
     format: 'svg',
-    note: 'Basic cut for the outline, Drawing line for the fold marks: one plate, one pen swap, and the machine pauses for it. No scorch. Bambu Suite has no crease operation, so the folds are pen marks you fold by hand.',
+    svgFold: 'dashed',
+    note: 'Basic cut for the outline. Bambu Suite has no crease operation, so a fold is either a perforation — a dashed Basic Cut, one plate, one tool, no pause — or a Drawing line, which is a pen mark you fold by hand and costs a pen swap the machine stops for. Neither scorches.',
   },
   {
     id: 'h2d-laser',
@@ -244,6 +277,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 0,
     mirror: false,
     format: 'svg',
+    svgFold: 'dashed',
     note: 'Laser cut outline + low-power Laser line folds, one plate, no tool change. Laser-scoring paper is controlled charring: expect a brown line down every fold. Bambu forbid leaving paper jobs unattended.',
   },
   {
@@ -255,6 +289,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 0,
     mirror: false,
     format: 'svg',
+    svgFold: 'dashed',
     note: 'Smaller spot than the 40 W, so a finer kerf and a tidier score, but slower on anything above 250 gsm.',
   },
   {
@@ -266,6 +301,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 2.4,
     mirror: true,
     format: 'svg',
+    svgFold: 'solid',
     note: 'Scoring Wheel scores properly, but 100 lb+ cardstock needs the Double wheel. Import, set the blue layer to Score, then ATTACH. Without Attach the folds lose registration.',
   },
   {
@@ -277,6 +313,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 1,
     mirror: true,
     format: 'svg',
+    svgFold: 'solid',
     note: 'No scoring wheel on this machine: the Scoring Stylus is light-duty only, so perforated folds are the reliable default here.',
   },
   {
@@ -288,6 +325,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 2.4,
     mirror: true,
     format: 'svg',
+    svgFold: 'solid',
     note: 'The long mat is the only way to get a box much past 70 mm on a Cricut.',
   },
   {
@@ -299,6 +337,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 2,
     mirror: false,
     format: 'dxf',
+    svgFold: 'solid',
     note: 'The free edition of Silhouette Studio cannot open SVG at all, so use the DXF, and re-set the size after import because DXF import drops it.',
   },
   {
@@ -310,6 +349,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 0,
     mirror: false,
     format: 'svg',
+    svgFold: 'solid',
     note: 'Colour maps to operation directly. Give every path a stroke and no fill, or a fill becomes an engrave.',
   },
   {
@@ -321,6 +361,7 @@ export const MACHINES: Machine[] = [
     maxCaliperMm: 0,
     mirror: false,
     format: 'svg',
+    svgFold: 'solid',
     note: 'Fold lines print as light dashes. Score them with a bone folder or an empty ballpoint against a ruler before folding.',
   },
 ];
@@ -582,13 +623,20 @@ export const DEFAULT_PARAMS: BoxParams = {
   hingeWidthMm: 1.2,
   machineId: 'h2d-blade',
   sheetId: 'a4-land',
-  foldMode: 'draw',
+  // Agrees with `h2d-blade` above, which is the default machine — otherwise the dropdown
+  // opens on a mode the chosen machine would not have picked. Print mode renders a fold as
+  // a plain crease whatever this says, so the shipped print-only dieline is unaffected.
+  foldMode: 'perf',
   kerfMm: 0,
   perfAuto: true,
   // Only reached when the user turns auto off. Seeds the sliders with the mid-range of
   // what `perfSpec` produces, so switching to manual is not a visible jump.
-  perfCutMm: 2.5,
-  perfGapMm: 1.2,
+  // The validated pair from a real cut on an H2D: 2 on, 4 off is a 33% duty perforation
+  // — a perf SCORE, which relieves the fold and leaves the panel attached. The old
+  // 2.5/1.2 was 68%, nearer a tear-off coupon, and turning auto sizing off dropped the
+  // user straight into it.
+  perfCutMm: 2.0,
+  perfGapMm: 4.0,
 };
 
 /** A problem the user has to fix, in the user's language, with what to do about it. */

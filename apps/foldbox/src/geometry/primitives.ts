@@ -569,6 +569,8 @@ export function rollEnd(o: RollEndOpts): { panels: Panel[]; slots: Poly[] } {
     parent: roll.id,
     foldAngle: fold,
     order: o.order + 2,
+    // This crease and the roll's sit `step` (= 2t) apart. See `Panel.hem`.
+    hem: true,
   };
 
   // The slots live in the BASE, on the far side of the crease from everything above.

@@ -275,55 +275,71 @@ export function arcPoints(
  *  The line always starts AND ends with a bridge, never a cut: a dash that runs into
  *  the blank's edge tears out, and the two ends of a fold are exactly where the board
  *  carries the most load. */
-/** Dash geometry for ONE fold, sized to that fold rather than to a global number.
+/** The dash a fold gets: how much is cut, how much is left.
  *
- *  Two things decide whether a perforated fold works, and neither of them is a fixed
- *  dash length:
+ *  DUTY — the fraction severed — is the number that matters, and it is nearly constant.
+ *  33% is a perf SCORE: the fold is relieved and the panel stays firmly attached. 60%+
+ *  is a TEAR-OFF perforation, the coupon/ticket-stub kind, which is what this used to
+ *  produce and what "the dashes are too fine" was really describing. The reference is a
+ *  real cut on an H2D through 200 gsm kraft — 2.0 mm on, 4.0 mm off — which is 33%.
  *
- *  1. **How much of the line is severed.** Heavy board cracks its outer liner instead
- *     of hinging unless more fibre is taken out; light card tears off the panel if too
- *     much is. So the cut/land ratio follows caliper, not preference.
- *  2. **How many dashes the fold gets.** A 20 mm tuck tab carrying four 5 mm slots
- *     hinges around the slots and the fold wanders between them; the same pitch on a
- *     200 mm body fold is fine. One global dash length cannot serve both, which is why
- *     the pitch is a fraction of the fold's own length.
+ *  CALIPER MOVES THE PITCH, NOT THE DUTY. This is the correction that matters: heavy
+ *  board does not want a larger FRACTION taken out, it wants a longer land in absolute
+ *  millimetres, and a caliper-driven pitch gives exactly that at constant duty. The old
+ *  rule raised duty to 80% on thick stock, which is the direction that tears.
  *
- *  Both are then floored by what the blade can physically do: a dash shorter than the
- *  tip's swivel arc (0.36 mm radius, visible as `G2 … I0 J-.36` at every corner in the
- *  emitted gcode) is more turn than cut.
- */
+ *  LENGTH IS A GUARD, NOT AN AXIS. A pitch is a property of the board, so a 200 mm fold
+ *  and a 40 mm fold on the same card get the same dash. Length only intervenes at the
+ *  short end, to keep a few dashes on a small flap. */
 export function perfSpec(
   lengthMm: number,
   caliperMm: number,
   minCutMm: number,
 ): { cutMm: number; gapMm: number } {
-  /** Dashes we would like on a fold. Below ~8 the fold wanders; above ~20 the object
-   *  count starts to hurt import, because every dash is its own path. */
-  const TARGET_DASHES = 14;
-  /** Thinnest bridge that survives being handled before the box is folded. */
-  const MIN_LAND_MM = 0.8;
+  const duty = Math.min(0.4, Math.max(0.33, 0.33 + (caliperMm - 0.25) * 0.06));
+  /** Thinnest bridge that survives the fold itself. Only binds on a short fold — the
+   *  normal land is pitch x (1 - duty), i.e. 3 to 5 mm. */
+  const MIN_LAND_MM = 1.5;
   /** Past this the gaps read as slots rather than a perforation. */
-  const MAX_PITCH_MM = 4.5;
+  const MAX_PITCH_MM = 8;
+  /** A fold keeps at least this many dashes while its length allows it. Fewer and it
+   *  hinges about the dashes and the fold wanders between them. */
+  const MIN_DASHES = 5;
 
-  // 0.25 mm card -> half the line cut. 0.55 mm board -> a little over three quarters.
-  const ratio = Math.min(0.8, Math.max(0.5, 0.5 + (caliperMm - 0.25) * 0.7));
-  const pitch = Math.min(MAX_PITCH_MM, Math.max(minCutMm + MIN_LAND_MM, lengthMm / TARGET_DASHES));
+  let pitch = Math.min(5 + 4 * caliperMm, MAX_PITCH_MM, lengthMm / MIN_DASHES);
+  // Both machine floors are applied by pushing the PITCH out, never by letting `cut` or
+  // `gap` rise on their own: `cut = max(minCut, pitch * duty)` silently inflates the duty
+  // exactly where the floor binds, which is on the short folds that can least afford it.
+  pitch = Math.max(pitch, minCutMm / duty, MIN_LAND_MM / (1 - duty), minCutMm + MIN_LAND_MM);
+  // 0.1 mm because Suite's Dash and Gap fields step in tenths: an unrounded 2.53 snaps to
+  // 2.5 the moment a user touches the box, and the dashes stop landing where the geometry
+  // says. Round the PITCH, then split it, so the period stays on the guard above.
+  pitch = Math.max(Math.round(pitch * 10) / 10, minCutMm + MIN_LAND_MM);
 
-  const cutMm = Math.max(minCutMm, pitch * ratio);
-  const gapMm = Math.max(MIN_LAND_MM, pitch - cutMm);
-  // 2 dp because that is what the README prints and what a caliper can check.
-  return { cutMm: Math.round(cutMm * 100) / 100, gapMm: Math.round(gapMm * 100) / 100 };
+  const cutMm = Math.max(minCutMm, Math.round(pitch * duty * 10) / 10);
+  const gapMm = Math.max(MIN_LAND_MM, Math.round((pitch - cutMm) * 10) / 10);
+  return { cutMm, gapMm };
 }
 
 export function dashSegment(a: Pt, b: Pt, cutMm: number, gapMm: number): Poly[] {
   const total = dist(a, b);
-  const period = cutMm + gapMm;
-  if (total < period || cutMm <= 0) return [[a, b]];
+  if (total < EPS) return [[a, b]];
+  // A fold too short for one whole dash gets ONE SHORT DASH, never an unbroken line. An
+  // unbroken fold line is a cut straight THROUGH the fold on any importer that reads
+  // shape and not layers, which is the failure this whole path exists to prevent.
+  const cut = Math.min(cutMm, total * 0.6);
+  if (cut <= 0) return [[a, b]];
+  const gap = Math.max(gapMm, 0);
+  const period = cut + gap;
 
-  // Fit a whole number of periods so the pattern is symmetric, and start half a gap
-  // in from each end.
-  const n = Math.max(1, Math.round((total - gapMm) / period));
-  const span = n * period - gapMm;
+  // FLOOR, not round. `floor(total / period)` is the largest count whose span leaves a
+  // whole gap spare, and that buys the guarantee `round((total - gap) / period)` did not
+  // have: the lead is never negative, so the pattern cannot run off the end of the fold.
+  // It did run off. At 80% duty — which the old perfSpec reached on E-flute — a 47 mm
+  // fold came out spanning -0.10 to 47.10 and put a blade plunge in the cut ring at both
+  // ends. Anything past 75% duty (cut > 3 x gap) overran.
+  const n = Math.max(1, Math.floor(total / period));
+  const span = n * period - gap;
   const lead = (total - span) / 2;
 
   const dir: Pt = [(b[0] - a[0]) / total, (b[1] - a[1]) / total];

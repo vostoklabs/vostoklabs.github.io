@@ -4,7 +4,7 @@
 
 import { el } from '@vostok/ui-kit';
 import type { Pt, SolveResult } from '../types';
-import { OP_COLOR, collectPaths } from '../export/paths';
+import { OP_COLOR, collectPaths, explodeDashes } from '../export/paths';
 import { sheetById } from '../geometry/solve';
 import { bboxOf } from '../geometry/poly';
 
@@ -19,7 +19,11 @@ export function createFlatView(): FlatView {
   function render(result: SolveResult, opts: { showLabels: boolean; showSheet: boolean }): void {
     const { net, params } = result;
     const sheet = sheetById(params.sheetId);
-    const paths = collectPaths(result);
+    // Dashes become real geometry here for the same reason they do in the file: the
+    // preview must BE the file. Not `stroke-dasharray` — the strokes carry
+    // `vector-effect="non-scaling-stroke"`, under which a dash pattern resolves in
+    // screen space and would drift with zoom.
+    const paths = explodeDashes(collectPaths(result));
 
     // Frame whichever is bigger: the sheet when it is shown, or the blank when the
     // blank has outgrown it. A net that overflows must stay visible — hiding the

@@ -328,7 +328,21 @@ export function solve(input: BoxParams): SolveResult {
     });
   }
 
-  // Auto sizing is floored by `minPerfCutMm` already, so it cannot produce this.
+  // The hem collapse takes a fold line OFF the dieline, and it comes back when the fold
+  // mode changes. A line that appears and disappears with no explanation is a landmine,
+  // so say it out loud. `Panel.hem` is set by `rollEnd`, the only thing that builds one.
+  const hems = net.panels.filter((x) => x.hem).length;
+  const dashedFolds =
+    p.makeMode === 'cut' && p.foldMode !== 'none' && (p.foldMode === 'perf' || machine.svgFold === 'dashed');
+  if (hems > 0 && dashedFolds) {
+    diagnostics.push({
+      level: 'info',
+      code: 'hem',
+      message: `The double-ply ends carry one perforated line each, not two.`,
+      fix: `Their two creases sit ${(2 * p.caliperMm).toFixed(2)} mm apart — the thickness of your card. Perforating both would cut that strip out. Choose Laser score or Draw a pen line to get both lines marked.`,
+    });
+  }
+
   if (p.makeMode === 'cut' && p.foldMode === 'perf' && !p.perfAuto) {
     const minFeature = minPerfCutMm(machine);
     if (p.perfCutMm < minFeature) {
