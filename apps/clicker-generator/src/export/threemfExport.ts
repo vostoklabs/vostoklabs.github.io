@@ -16,8 +16,9 @@ import {
   projectSettings, colorGroupXml, paletteOf, plateItemTransform, type PlateBounds,
   BBL_NS, BBL_VERSION_META, BBL_APPLICATION,
 } from '@vostok/export';
-import type { ClickerPart, PartGroup, RGB } from '../types';
-import { assemblyMinZ, place, plateLayout, type Placement } from './plateLayout';
+import { plateSize, type PlateChoice } from '@vostok/plates';
+import type { ClickerPart, RGB } from '../types';
+import { assemblyMinZ, objectKeyOf, objectKeys, place, plateLayout, type Placement } from './plateLayout';
 
 const f = (n: number): string => String(Math.round(n * 1e4) / 1e4);
 
@@ -69,24 +70,35 @@ function meshXml(p: ClickerPart, minZ: number, pl: Placement): string {
   return `<mesh><vertices>${verts.join('')}</vertices><triangles>${tris.join('')}</triangles></mesh>`;
 }
 
-export function buildThreeMF(parts: ClickerPart[]): Uint8Array {
+export interface ThreeMFOptions {
+  /** The bed to lay the model out on. Defaults to the plate picker's shared preference —
+   *  the plate the user is looking at is the plate the file is written for. */
+  plate?: PlateChoice;
+}
+
+/** What a plate object is called in the slicer's object list. */
+function labelFor(parts: ClickerPart[], key: string): string {
+  const p = parts.find((x) => objectKeyOf(x) === key);
+  return p?.objectLabel ?? (p?.group === 'top' ? 'clicker_top' : 'clicker_base');
+}
+
+export function buildThreeMF(parts: ClickerPart[], opts: ThreeMFOptions = {}): Uint8Array {
   // Drop the whole assembly onto the build plate (min Z -> 0), keeping relative
   // positions.
   const minZ = assemblyMinZ(parts);
 
   const extruders = assignExtruders(parts);
 
-  // Two movable objects, each a <components> wrapper over its colored sub-parts,
-  // so the slicer lets you orient "clicker top" and "clicker base" independently.
-  const groups: { id: PartGroup; label: string }[] = [
-    { id: 'top', label: 'clicker_top' },
-    { id: 'base', label: 'clicker_base' },
-  ].filter((g) => parts.some((p) => p.group === g.id)) as { id: PartGroup; label: string }[];
+  // One movable object per plate object, each a <components> wrapper over its colored
+  // sub-parts, so the slicer lets you orient every piece independently. For one clicker that
+  // is "clicker_top" and "clicker_base", as it always was; for a batch run it is two per row.
+  const groups = objectKeys(parts).map((id) => ({ id, label: labelFor(parts, id) }));
 
-  // Arrange parts for print — side by side, top flipped face-down. The
+  // Arrange parts for print — packed onto the chosen bed, tops flipped face-down. The
   // placement is BAKED INTO THE VERTICES rather than expressed as an
   // `<item transform>`; see plateLayout() for why.
-  const placementFor = plateLayout(parts, minZ);
+  const layout = plateLayout(parts, minZ, { plate: opts.plate });
+  const placementFor = (key: string): Placement => layout.placementFor(key);
 
   const baseMaterials = parts
     .map((p) => `<base name="${p.name}" displaycolor="${hex(p.colorRgb)}"/>`)
@@ -95,7 +107,7 @@ export function buildThreeMF(parts: ClickerPart[]): Uint8Array {
     .map(
       (p, i) =>
         `<object id="${i + 2}" type="model" pid="1" pindex="${i}">` +
-        `${meshXml(p, minZ, placementFor(p.group))}</object>`,
+        `${meshXml(p, minZ, placementFor(objectKeyOf(p)))}</object>`,
     )
     .join('');
 
@@ -103,7 +115,7 @@ export function buildThreeMF(parts: ClickerPart[]): Uint8Array {
   const wrapperObjects = groups
     .map((g, gi) => {
       const comps = parts
-        .map((p, i) => (p.group === g.id ? `<component objectid="${i + 2}"/>` : ''))
+        .map((p, i) => (objectKeyOf(p) === g.id ? `<component objectid="${i + 2}"/>` : ''))
         .join('');
       return `<object id="${firstWrapperId + gi}" type="model"><components>${comps}</components></object>`;
     })
@@ -116,7 +128,7 @@ export function buildThreeMF(parts: ClickerPart[]): Uint8Array {
   // Without any transform the mesh origin lands on the bed's front-left corner.
   const bounds: PlateBounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
   for (const p of parts) {
-    const pl = placementFor(p.group);
+    const pl = placementFor(objectKeyOf(p));
     for (let i = 0; i < p.vertProperties.length; i += p.numProp) {
       const [x, y] = place(p.vertProperties[i], p.vertProperties[i + 1], 0, pl);
       if (x < bounds.minX) bounds.minX = x;
@@ -125,7 +137,7 @@ export function buildThreeMF(parts: ClickerPart[]): Uint8Array {
       if (y > bounds.maxY) bounds.maxY = y;
     }
   }
-  const transform = plateItemTransform(bounds);
+  const transform = plateItemTransform(bounds, plateSize(layout.plate));
   const buildItems = groups
     .map((_g, gi) => `<item objectid="${firstWrapperId + gi}" transform="${transform}" printable="1"/>`)
     .join('');
@@ -177,7 +189,7 @@ export function buildThreeMF(parts: ClickerPart[]): Uint8Array {
     .map((g, gi) => {
       const partsCfg = parts
         .map((p, i) =>
-          p.group === g.id
+          objectKeyOf(p) === g.id
             ? `<part id="${i + 2}" subtype="normal_part">` +
               `<metadata key="name" value="${p.name}"/>` +
               `<metadata key="extruder" value="${extruders[i]}"/>` +
@@ -241,8 +253,8 @@ export function buildThreeMF(parts: ClickerPart[]): Uint8Array {
   );
 }
 
-export function downloadThreeMF(parts: ClickerPart[], fileName = 'clicker.3mf') {
-  const bytes = buildThreeMF(parts);
+export function downloadThreeMF(parts: ClickerPart[], fileName = 'clicker.3mf', opts: ThreeMFOptions = {}) {
+  const bytes = buildThreeMF(parts, opts);
   const blob = new Blob([bytes as unknown as BlobPart], { type: 'model/3mf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

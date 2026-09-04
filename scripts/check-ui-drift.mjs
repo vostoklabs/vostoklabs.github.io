@@ -107,8 +107,25 @@ const BUDGET = {
   // 56 -> 53 on 2026-09-01: undo / refresh / redo. They were hand-built inside `.btn-row`, a
   // TWO-column grid, so the third wrapped onto its own line. `buttonRow()` is flex, so the count
   // lives in the markup instead of in a column template nobody remembers to update.
-  button: 53,
-  select: 2,
+  // 53 -> 49 on 2026-09-03: the clicker's keyring position controls. Two hand-built
+  // `.tol-stepper` rows — rotate around the edge, slide along it — became one `dpad()`. They
+  // were asking almost the same question twice: both move the loop ALONG the body edge, and on
+  // a circle they are the same motion.
+  // 49 -> 26 on 2026-09-04: the clicker's import-source cards, active-switch chips and both
+  // edge-style pickers (segmentedControl(), the last four hand-built tab rows in the file);
+  // the keychain hole-size and Raise-panel steppers (stepperRow()); and the palette rows
+  // (filamentRow()), which took most of the count with them since each `.fil-row` carried
+  // its own `<button class="fil-chip">`.
+  // 26 -> 22 on 2026-09-04: continued palette-row migration in the same pass.
+  button: 22,
+  // 2 -> 1 on 2026-09-02: the clicker's base-shape `<select>`. It held seven options and the
+  // shape directory now holds several hundred, which a dropdown cannot show you — a shape is a
+  // picture. It became the kit's symbol picker (widened to take an SVG preview per item), so
+  // the search, the category chips and the paging came free.
+  // 1 -> 0 on 2026-09-04: the clicker's colour-count `<select id="ccount">`, onto
+  // selectField() (paired with the new setFieldOptions() for the synthetic limited-mode
+  // option).
+  select: 0,
   // 44 -> 38, range 11 -> 5 on 2026-08-26: the clicker's six sliders. Each was a label + a
   // text readout + a bare range, wired by a local `bindValInput()` that re-derived
   // clamp-on-type, select-on-focus and commit-on-Enter. `sliderRow()` is all of it.
@@ -137,7 +154,11 @@ const KNOWN_ORPHAN_CLASSES = new Set([
   'vl-topbar-btn--theme',
   'vl-stage-panel__body',
   // clicker-generator
-  'keychain-panel', 'edge-radius-label', 'symbol-overlay', 'reset-part-colors',
+  // `edge-size-minus`/`edge-size-plus`: read only via `classList.contains(...)` in a
+  // delegated click handler (ui.ts), which this check's query-hook detector does not parse
+  // (it only recognises querySelector/closest/matches and classList add/remove/toggle) —
+  // a real JS hook, not a missed style, same as `reset-part-colors` beside it.
+  'edge-radius-label', 'reset-part-colors', 'edge-size-minus', 'edge-size-plus',
   // magnet-generator
   'body-row', 'region-row', 'mg-magnet-step',
   // the rest

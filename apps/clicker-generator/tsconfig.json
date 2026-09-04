@@ -17,5 +17,5 @@
     "noEmit": true
   },
   "include": ["src"],
-  "exclude": ["src/makerlab/glue.ts", "src/makerlab/lib"]
+  "exclude": ["src/makerlab/glue.ts", "src/makerlab/lib", "src/**/*.test.ts"]
 }

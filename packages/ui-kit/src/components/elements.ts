@@ -352,6 +352,10 @@ export interface TextFieldOptions {
 
 export type TextFieldHandle = HTMLElement & {
   setValue(value: string, notify?: boolean): void;
+  /** Same pair as every other `ValueRow` in the kit, so a text field can stand in for one —
+   *  house-number's controls map already declares this as a `ValueRow<string>`. */
+  getValue(): string;
+  setDisabled(disabled: boolean): void;
   readonly value: string;
   /** The input itself, for callers that focus, select or measure it. */
   readonly field: HTMLInputElement;
@@ -398,6 +402,12 @@ export function textField(opts: TextFieldOptions): TextFieldHandle {
     if (document.activeElement === input) return;
     input.value = value;
     if (notify) opts.onInput?.(value);
+  };
+  root.getValue = () => input.value;
+  root.setDisabled = (disabled: boolean) => {
+    root.classList.toggle('vl-control--disabled', disabled);
+    root.setAttribute('aria-disabled', String(disabled));
+    input.disabled = disabled;
   };
   return root;
 }

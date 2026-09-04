@@ -24,6 +24,134 @@ interface Box {
 const ALPHA_THRESHOLD = 128;
 const KMEANS_ITERS = 6;
 
+/*
+  The two numbers that stop anti-aliasing from eating the palette.
+
+  ## The bug they fix
+
+  k-means models every foreground pixel as a COLOUR. An anti-aliased pixel is not a colour, it
+  is a mixture of the two either side of an edge — and there is one of them along every edge in
+  the drawing, so there are a lot. Ask for four colours from a black-on-white line drawing and
+  two of the four get fitted to the grey ramp between the black and the white. Those two then
+  become filaments, and because they are a one-pixel band tracking every contour, they trace
+  into thousands of slivers.
+
+  Measured on the artwork that reported this, at colourCount 4, counting connected components
+  in the label map:
+
+    ghost.png    16,013 components  ->    509
+    skull.png     4,138             ->    604
+    web.png       1,810             ->    148
+    pumpkin       1,521             ->    631
+    dog.png       6,645             ->  3,438   (a bundled sample, for regression)
+    radiation     9,723             ->    785   (ditto)
+
+  ## EDGE_GRAD — what counts as an edge
+
+  The largest Oklab distance from a pixel to its four neighbours. 0.04 is about a tenth of the
+  black-to-white span, so it catches every real boundary while leaving the interior of a soft
+  gradient alone — on the five Halloween files it marks 7.6% to 31% of the foreground, which is
+  what a one-to-two-pixel band round every contour should be. Push it much lower and flat noise
+  starts registering as edges, which starves the model; much higher and a low-contrast boundary
+  (grey on white) stops being seen as one.
+
+  ## MERGE_TOL — when two centres are the same colour
+
+  k-means always returns K clusters, even when the image does not contain K distinguishable
+  colours. The ghost's three centres were 0,0,0 / 254,254,254 / 255,255,255: the last two differ
+  by 0.003 in Oklab, and splitting a flat white body between two filaments is exactly the blue
+  speckle that was reported. Anything closer than 0.04 is merged.
+
+  0.04 and not more: at 0.08 the bundled cheese sample loses its genuine highlight (250,202,37
+  merges into 240,180,5). At 0.02 the pumpkin keeps two near-blacks it should not. The margin is
+  narrow on purpose — the point is to merge what is indistinguishable, not to posterise.
+*/
+const EDGE_GRAD = 0.04;
+const MERGE_TOL = 0.04;
+/** The channel-space half of the merge test — see `mergeCentres` for why Oklab alone fails. */
+const MERGE_RGB = 8;
+
+/*
+  Below this share of flat pixels, do not fit the palette to interiors only.
+
+  A photograph is edges everywhere: there is no flat interior to model, and fitting to the
+  little there is would produce a palette drawn from whatever happened to be smooth — a patch of
+  sky, a blurred background. 25% is well under every piece of flat art measured (the worst was
+  69% flat) and well over a photograph. Merging still applies in that case; merging two
+  indistinguishable centres is right whatever the image is.
+*/
+const MIN_FLAT_FRACTION = 0.25;
+
+/**
+ * Which foreground pixels sit on a boundary.
+ *
+ * The largest Oklab step to a 4-neighbour. A transparent neighbour counts as maximally
+ * different, because the outside of the artwork is a boundary too — that band is where the
+ * coloured halo round a cut-out comes from.
+ */
+function edgePixels(img: RgbaImage, okL: Float32Array, okA: Float32Array, okB: Float32Array,
+                    fgPixel: number[], indexOfPixel: Int32Array): Uint8Array {
+  const { data, width, height } = img;
+  const isEdge = new Uint8Array(fgPixel.length);
+  for (let i = 0; i < fgPixel.length; i++) {
+    const p = fgPixel[i];
+    const x = p % width;
+    const y = (p / width) | 0;
+    let worst = 0;
+    const test = (q: number) => {
+      const j = indexOfPixel[q];
+      // A background neighbour is the artwork's own outline: always a boundary.
+      if (j < 0) { worst = 1; return; }
+      const dl = okL[i] - okL[j];
+      const da = okA[i] - okA[j];
+      const db = okB[i] - okB[j];
+      const d = Math.sqrt(dl * dl + da * da + db * db);
+      if (d > worst) worst = d;
+    };
+    if (x > 0) test(p - 1);
+    if (x < width - 1) test(p + 1);
+    if (y > 0) test(p - width);
+    if (y < height - 1) test(p + width);
+    isEdge[i] = worst > EDGE_GRAD ? 1 : 0;
+  }
+  void data;
+  return isEdge;
+}
+
+/**
+ * Fold every centre into the first one it is indistinguishable from, and return the mapping.
+ *
+ * TWO tests, because one is not enough near black. Oklab's lightness is a cube root, so the
+ * step from RGB 0 to RGB 5 is about 0.11 in L — nearly three times MERGE_TOL — while the same
+ * five-step difference up at white is 0.01. On a Oklab test alone the cobweb's two blacks
+ * (0,0,0 and 5,4,4) stayed apart and printed as two filaments of the same colour.
+ *
+ * So a channel test sits beside it: eight sRGB steps on every channel is under half a percent
+ * of the range, which no filament pair can express and no eye can see on a printed part.
+ */
+function mergeCentres(
+  cL: Float32Array, cA: Float32Array, cB: Float32Array, rgb: RGB[], K: number,
+): Int16Array {
+  const map = new Int16Array(K);
+  const kept: number[] = [];
+  for (let k = 0; k < K; k++) {
+    let into = -1;
+    for (const j of kept) {
+      const dl = cL[k] - cL[j];
+      const da = cA[k] - cA[j];
+      const db = cB[k] - cB[j];
+      const near = Math.sqrt(dl * dl + da * da + db * db) <= MERGE_TOL
+        || (Math.abs(rgb[k][0] - rgb[j][0]) <= MERGE_RGB
+          && Math.abs(rgb[k][1] - rgb[j][1]) <= MERGE_RGB
+          && Math.abs(rgb[k][2] - rgb[j][2]) <= MERGE_RGB);
+      if (near) { into = j; break; }
+    }
+    if (into >= 0) map[k] = into;
+    else { map[k] = k; kept.push(k); }
+  }
+  return map;
+}
+
 export function quantize(img: RgbaImage, colorCount: number, customColors?: RGB[]): QuantizeResult {
   const { data, width, height } = img;
   const n = width * height;
@@ -47,6 +175,9 @@ export function quantize(img: RgbaImage, colorCount: number, customColors?: RGB[
   if (M === 0) {
     return { palette: [], indices, width, height };
   }
+  // Pixel index -> foreground index, so a pixel's neighbours can be compared without a search.
+  const indexOfPixel = new Int32Array(n).fill(-1);
+  for (let i = 0; i < M; i++) indexOfPixel[fgPixel[i]] = i;
 
   // Oklab coordinates for every foreground pixel (clustering + mapping happen here).
   const okL = new Float32Array(M);
@@ -59,24 +190,84 @@ export function quantize(img: RgbaImage, colorCount: number, customColors?: RGB[
     okB[i] = lab[2];
   }
 
+  /* Which pixels sit on a boundary. Computed once, before either branch, because both need
+     it — see `edgePixels` and the EDGE_GRAD note for what goes wrong without it. */
+  const isEdge = edgePixels(img, okL, okA, okB, fgPixel, indexOfPixel);
+
   if (customColors && customColors.length > 0) {
-    // Map each pixel to the nearest custom filament by Oklab distance (fixes the
-    // "wrong filament chosen" complaints where a mid-blue mapped to gray in RGB).
+    /*
+      A chosen palette, and the same anti-aliasing problem in its sharpest form.
+
+      Mapping every pixel to the nearest filament is right for a pixel that is a colour and
+      badly wrong for one that is a blend, because Oklab distance is not kind to the extremes:
+      black sits at L=0 and white at L=1, so a mid-grey edge pixel is 0.4 to 0.6 away from BOTH
+      of the colours it is actually made of, while any mid-lightness filament in the list is
+      within about 0.2 of it on lightness alone. Measured against this app's own filament table
+      for a 50% grey: Green 0.17, Pink 0.18, Orange 0.20, Red 0.22 — against White 0.40 and
+      Black 0.60. Every one of the saturated ones wins.
+
+      That is the whole mechanism behind a red fringe on a drawing containing no red. It is
+      worse here than in the automatic mode, because there a cluster centre is always a mean of
+      pixels that exist in the image, so a drawing with no red cannot produce a red centre. A
+      fixed list can, and does.
+
+      So the edge band does not get to choose from the whole list. It gets to choose between
+      the colours its own neighbours already settled on.
+    */
     const cl = customColors.map((c) => srgbToOklab(c));
     const counts = new Array(customColors.length).fill(0);
-    for (let i = 0; i < M; i++) {
-      let bestK = 0;
+    const nearestOf = (i: number, from: number[] | null) => {
+      let bestK = -1;
       let bestD = Infinity;
-      for (let k = 0; k < cl.length; k++) {
+      const pool = from ?? cl.map((_, k) => k);
+      for (const k of pool) {
         const dl = okL[i] - cl[k][0];
         const da = okA[i] - cl[k][1];
         const db = okB[i] - cl[k][2];
         const d = dl * dl + da * da + db * db;
-        if (d < bestD) {
-          bestD = d;
-          bestK = k;
-        }
+        if (d < bestD) { bestD = d; bestK = k; }
       }
+      return bestK;
+    };
+
+    // Pass one: the flat interior, nearest of the whole palette. Unchanged behaviour — a real
+    // fill with no close match in the user's spools is their choice to make, not a bug.
+    const label = new Int16Array(M).fill(-1);
+    for (let i = 0; i < M; i++) if (!isEdge[i]) label[i] = nearestOf(i, null);
+
+    /* Pass two: the edges, restricted to what their settled neighbours chose.
+
+       One or two distinct neighbouring labels is a boundary between two colours, and the pixel
+       belongs to whichever of those two it is nearer — never to a third the drawing does not
+       have there. Zero (the middle of a band thicker than one pixel) or three or more (a real
+       corner where three colours meet) are cases this model does not describe, so they fall
+       back to the old behaviour: never worse than before, only better where the answer is
+       actually knowable. */
+    for (let i = 0; i < M; i++) {
+      if (!isEdge[i]) continue;
+      const p = fgPixel[i];
+      const x = p % width;
+      const y = (p / width) | 0;
+      const near: number[] = [];
+      const look = (q: number) => {
+        if (q < 0 || q >= n) return;
+        const j = indexOfPixel[q];
+        if (j < 0 || label[j] < 0) return;
+        if (!near.includes(label[j])) near.push(label[j]);
+      };
+      if (x > 0) look(p - 1);
+      if (x < width - 1) look(p + 1);
+      if (y > 0) look(p - width);
+      if (y < height - 1) look(p + width);
+      if (x > 0 && y > 0) look(p - width - 1);
+      if (x < width - 1 && y > 0) look(p - width + 1);
+      if (x > 0 && y < height - 1) look(p + width - 1);
+      if (x < width - 1 && y < height - 1) look(p + width + 1);
+      label[i] = near.length >= 1 && near.length <= 2 ? nearestOf(i, near) : nearestOf(i, null);
+    }
+
+    for (let i = 0; i < M; i++) {
+      const bestK = label[i] >= 0 ? label[i] : nearestOf(i, null);
       indices[fgPixel[i]] = bestK;
       counts[bestK]++;
     }
@@ -96,8 +287,28 @@ export function quantize(img: RgbaImage, colorCount: number, customColors?: RGB[
     return { palette, indices, width, height };
   }
 
+  /*
+    The palette is fitted to the FLAT INTERIOR, not to every pixel.
+
+    An anti-aliased pixel is a mixture of the two colours either side of an edge, not a colour
+    of its own, and there is a band of them along every contour in the drawing. Left in the
+    model they capture clusters — and a cluster that tracks every contour at one pixel wide
+    traces into thousands of slivers, each of which becomes its own filament region. That is
+    the fringe and the speckle both. See EDGE_GRAD above for the measurements.
+
+    Every pixel still gets a label at the end; only the FITTING ignores the edges. So the
+    colours come from the drawing's flat areas and the anti-aliased band falls to whichever of
+    them it is nearest, which puts it on one side of the boundary instead of between them.
+  */
+  let flat: number[] = [];
+  for (let i = 0; i < M; i++) if (!isEdge[i]) flat.push(i);
+  // A photograph is edges everywhere: there is no flat interior to model, and fitting to the
+  // little there is would draw the palette from whatever happened to be smooth. Fall back to
+  // modelling everything, exactly as before.
+  if (flat.length < M * MIN_FLAT_FRACTION) flat = fgR.map((_, i) => i);
+
   // --- Median cut (RGB) to SEED the cluster centers. ---
-  let boxes: Box[] = [{ pixels: fgR.map((_, i) => i) }];
+  let boxes: Box[] = [{ pixels: flat.slice() }];
   const target = Math.max(1, Math.min(colorCount, 16));
   while (boxes.length < target) {
     // Pick the box with the largest channel range to split.
@@ -144,8 +355,10 @@ export function quantize(img: RgbaImage, colorCount: number, customColors?: RGB[
   // --- k-means refinement in Oklab (assign → recompute means). Oklab is already
   //     perceptually uniform, so all three channels are weighted equally. ---
   const assign = new Int16Array(M);
-  const assignNearest = () => {
-    for (let i = 0; i < M; i++) {
+  /** Nearest centre, over `over` — the model set while fitting, every pixel at the end. */
+  const assignNearest = (over: ArrayLike<number>) => {
+    for (let x = 0; x < over.length; x++) {
+      const i = over[x];
       let bestK = 0;
       let bestD = Infinity;
       for (let k = 0; k < K; k++) {
@@ -162,12 +375,12 @@ export function quantize(img: RgbaImage, colorCount: number, customColors?: RGB[
     }
   };
   for (let iter = 0; iter < KMEANS_ITERS; iter++) {
-    assignNearest();
+    assignNearest(flat);
     const sL = new Float64Array(K);
     const sA = new Float64Array(K);
     const sB = new Float64Array(K);
     const cnt = new Float64Array(K);
-    for (let i = 0; i < M; i++) {
+    for (const i of flat) {
       const k = assign[i];
       sL[k] += okL[i];
       sA[k] += okA[i];
@@ -183,11 +396,122 @@ export function quantize(img: RgbaImage, colorCount: number, customColors?: RGB[
     }
   }
 
-  // Final per-pixel assignment (nearest center in Oklab) + coverage counts.
+  /*
+    Collapse centres that are the same colour.
+
+    k-means returns K clusters whether or not the image contains K distinguishable ones, so a
+    two-colour drawing asked for four gets its white split across two filaments — which prints
+    as a flat area speckled with the other colour. Done AFTER the fit rather than by lowering K
+    up front, because how many colours an image really has is not knowable until they have been
+    found.
+  */
+  const centreRgb: RGB[] = [];
+  for (let k = 0; k < K; k++) centreRgb.push(oklabToSrgb([cL[k], cA[k], cB[k]]));
+  const merged = mergeCentres(cL, cA, cB, centreRgb, K);
+
+  /*
+    Final per-pixel assignment — and the edge band does NOT get to pick from the whole palette.
+
+    Fitting the palette to flat interiors stops the anti-aliased band from CAPTURING a cluster.
+    It does not tell the band where to go afterwards, and "nearest centre over the whole
+    palette" is the wrong answer for a pixel that is a blend, in a way that is worst exactly
+    where the artwork is cleanest. Oklab lightness puts black at 0 and white at 1, so the grey
+    halfway down a black outline is ~0.5 from BOTH of the colours it is actually made of —
+    while any mid-lightness third colour in the drawing is nearer than either. Measured on the
+    potion, at colourCount 4:
+
+      129 slivers of the light-green bubble colour, every one of them lying between the green
+          liquid and the white glass — the blend of those two IS light green
+      107 slivers of the green liquid colour, every one lying between the black outline and
+          the white glass — mid-grey is nearer green (0.55 L) than black or white
+
+    None of that is despeckling's job. The pixels are not noise: they are a one-pixel band
+    tracking every contour in the drawing, and they are wrong before anything counts them. A
+    black outline came out with a green thread down the middle of it, which survives every
+    downstream filter because it is a legitimate, connected, correctly-traced region of a
+    colour the drawing really does contain — somewhere else.
+
+    So an edge pixel chooses only between the colours ADJACENT to it, growing inward from the
+    settled interiors one ring at a time. A band of any thickness resolves in as many rounds as
+    it is pixels wide, and a third colour that is merely near in Oklab is never a candidate,
+    because it is not there. This is the same rule the chosen-palette branch above already
+    uses; the automatic branch never got it.
+  */
+  assignNearest(flat); // the flat interiors settle first, on the final centres
+  const settled = new Uint8Array(M);
+  for (const i of flat) settled[i] = 1;
+
+  const allCentres: number[] = [];
+  for (let k = 0; k < K; k++) allCentres.push(k);
+  /** Nearest centre restricted to `pool` — squared Oklab distance, same metric as the fit. */
+  const nearestAmong = (i: number, pool: number[]) => {
+    let bestK = pool[0];
+    let bestD = Infinity;
+    for (const k of pool) {
+      const dl = okL[i] - cL[k];
+      const da = okA[i] - cA[k];
+      const db = okB[i] - cB[k];
+      const d = dl * dl + da * da + db * db;
+      if (d < bestD) { bestD = d; bestK = k; }
+    }
+    return bestK;
+  };
+
+  let pending: number[] = [];
+  for (let i = 0; i < M; i++) if (!settled[i]) pending.push(i);
+  while (pending.length) {
+    const stalled: number[] = [];
+    const chosen: [number, number][] = [];
+    for (const i of pending) {
+      const p = fgPixel[i];
+      const x = p % width;
+      const y = (p / width) | 0;
+      const near: number[] = [];
+      const look = (q: number) => {
+        const j = indexOfPixel[q];
+        if (j < 0 || !settled[j]) return;
+        if (!near.includes(assign[j])) near.push(assign[j]);
+      };
+      if (x > 0) look(p - 1);
+      if (x < width - 1) look(p + 1);
+      if (y > 0) look(p - width);
+      if (y < height - 1) look(p + width);
+      if (x > 0 && y > 0) look(p - width - 1);
+      if (x < width - 1 && y > 0) look(p - width + 1);
+      if (x > 0 && y < height - 1) look(p + width - 1);
+      if (x < width - 1 && y < height - 1) look(p + width + 1);
+      if (near.length) chosen.push([i, nearestAmong(i, near)]);
+      else stalled.push(i);
+    }
+    // A run with nothing to grow from is an island every pixel of which is an edge pixel —
+    // there is no adjacent colour to restrict it to, so it keeps the old global answer.
+    if (chosen.length === 0) {
+      for (const i of stalled) assign[i] = nearestAmong(i, allCentres);
+      break;
+    }
+    for (const [i, k] of chosen) {
+      assign[i] = k;
+      settled[i] = 1;
+    }
+    pending = stalled;
+  }
+
+  /*
+    NOT dissolved here: a cluster that looks like a band rather than a colour.
+
+    The obvious rule — "almost every pixel in this cluster is an edge pixel, so it is a ramp,
+    not a colour" — was written, measured and removed. It is not separable: the skull is line
+    art, so its black outline IS almost entirely edge pixels, and at any threshold that caught
+    the cobweb's mid grey the skull came out as a single white blob with no outline at all.
+
+    What is left of the band problem is a handful of clusters with many tiny components, and
+    `traceRegions` already absorbs those — after this change the pumpkin's leftover green
+    traces to one component, not 438. The place to tighten it further is there, where component
+    areas are already computed, not here where they would have to be computed again.
+  */
   const counts = new Float64Array(K);
-  assignNearest();
   for (let i = 0; i < M; i++) {
-    const k = assign[i];
+    const k = merged[assign[i]];
     counts[k]++;
     indices[fgPixel[i]] = k;
   }

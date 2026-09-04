@@ -129,80 +129,106 @@ export async function importFontFile(file: File): Promise<FontOption> {
   return option;
 }
 
+/** Text-mode typography. Every field defaults to the value that reproduces the old layout. */
+export interface TextTypography {
+  /** Multiplier on the default line gap (1 = the shipped spacing). */
+  lineSpacing?: number;
+  /** Tracking added between glyphs, as a fraction of the em (0 = the font's own advance). */
+  letterSpacing?: number;
+}
+
 /**
  * Build a RegionSet from text.
  * @param separate  When false (default) every letter is merged into one element so the
  *   whole word selects/recolors/extrudes together. When true each glyph becomes its own
  *   region (part `top-color-{k}-0`), so letters can be picked and colored individually.
  */
-export function parseLetter(text: string, fontId: string, maxLen = 30, separate = false): RegionSet {
+export function parseLetter(
+  text: string,
+  fontId: string,
+  maxLen = 30,
+  separate = false,
+  typo: TextTypography = {},
+): RegionSet {
   if (!text.trim()) throw new Error('Type a letter first.');
 
   const option = FONT_OPTIONS.find((font) => font.id === fontId) || FONT_OPTIONS[0];
-  // Each glyph is a group of rings (its outline + any holes), kept grouped so we can
-  // either merge them all into one element or expose each letter on its own.
-  const glyphs: Ring[][] = [];
-  const box = new THREE.Box2(
-    new THREE.Vector2(Infinity, Infinity),
-    new THREE.Vector2(-Infinity, -Infinity)
-  );
 
-  const lines = text.split('\n');
-  let currentY = 0;
-
-  for (const rawLine of lines) {
-    const value = Array.from((rawLine || '').trim()).slice(0, maxLen).join('');
-    if (!value) continue;
-
-    const shapes = option.font.generateShapes(value, 100);
-    const lineBox = new THREE.Box2(
+  const layout = (t: TextTypography) => {
+    const SIZE = 100;
+    const lineSpacing = t.lineSpacing ?? 1;
+    const tracking = (t.letterSpacing ?? 0) * SIZE;
+    // Each glyph is a group of rings (its outline + any holes), kept grouped so we can
+    // either merge them all into one element or expose each letter on its own.
+    const glyphs: Ring[][] = [];
+    const box = new THREE.Box2(
       new THREE.Vector2(Infinity, Infinity),
       new THREE.Vector2(-Infinity, -Infinity)
     );
-    const lineGlyphs: Ring[][] = [];
 
-    for (const shape of shapes) {
-      const extracted = shape.extractPoints(16);
-      const glyphRings: Ring[] = [];
-      if (extracted.shape.length >= 3) {
-        const ring: Ring = [];
-        for (const p of extracted.shape) {
-          lineBox.expandByPoint(p);
-          ring.push([p.x, p.y]);
-        }
-        glyphRings.push(ring);
-      }
-      for (const hole of extracted.holes) {
-        if (hole.length >= 3) {
-          const ring: Ring = [];
-          for (const p of hole) {
-            lineBox.expandByPoint(p);
-            ring.push([p.x, p.y]);
+    const lines = text.split('\n');
+    let currentY = 0;
+
+    for (const rawLine of lines) {
+      const value = Array.from((rawLine || '').trim()).slice(0, maxLen);
+      if (!value.length) continue;
+
+      const lineBox = new THREE.Box2(
+        new THREE.Vector2(Infinity, Infinity),
+        new THREE.Vector2(-Infinity, -Infinity)
+      );
+      const lineGlyphs: Ring[][] = [];
+
+      // Laid out one character at a time (what three's generateShapes does internally) so the
+      // tracking can go between glyphs, and so a two-piece glyph like "i" stays ONE glyph
+      // instead of a stem and a dot that select separately.
+      let penX = 0;
+      for (const ch of value) {
+        const glyphRings: Ring[] = [];
+        for (const shape of option.font.generateShapes(ch, SIZE)) {
+          const extracted = shape.extractPoints(16);
+          for (const pts of [extracted.shape, ...extracted.holes]) {
+            if (pts.length < 3) continue;
+            const ring: Ring = [];
+            for (const p of pts) {
+              const x = p.x + penX;
+              lineBox.expandByPoint(new THREE.Vector2(x, p.y));
+              ring.push([x, p.y]);
+            }
+            glyphRings.push(ring);
           }
-          glyphRings.push(ring);
         }
+        if (glyphRings.length) lineGlyphs.push(glyphRings);
+        penX += glyphAdvance(option.font, ch, SIZE) + tracking;
       }
-      if (glyphRings.length) lineGlyphs.push(glyphRings);
+
+      if (lineGlyphs.length === 0) continue;
+
+      const lineWidth = lineBox.max.x - lineBox.min.x;
+      const offsetX = -(lineBox.min.x + lineWidth / 2);
+
+      for (const glyphRings of lineGlyphs) {
+        for (const ring of glyphRings) {
+          for (const pt of ring) {
+            pt[0] += offsetX;
+            pt[1] += currentY;
+            box.expandByPoint(new THREE.Vector2(pt[0], pt[1]));
+          }
+        }
+        glyphs.push(glyphRings);
+      }
+
+      currentY -= 130 * lineSpacing; // Move down for the next line
     }
 
-    if (lineGlyphs.length === 0) continue;
+    return { glyphs, box };
+  };
 
-    const lineWidth = lineBox.max.x - lineBox.min.x;
-    const offsetX = -(lineBox.min.x + lineWidth / 2);
-
-    for (const glyphRings of lineGlyphs) {
-      for (const ring of glyphRings) {
-        for (const pt of ring) {
-          pt[0] += offsetX;
-          pt[1] += currentY;
-          box.expandByPoint(new THREE.Vector2(pt[0], pt[1]));
-        }
-      }
-      glyphs.push(glyphRings);
-    }
-
-    currentY -= 130; // Move down for the next line
-  }
+  const { glyphs, box } = layout(typo);
+  // Spacing must not shrink the letters: the caller scales the whole part by this instead.
+  const longest = (b: THREE.Box2) => Math.max(b.max.x - b.min.x, b.max.y - b.min.y) || 1;
+  const tuned = (typo.lineSpacing ?? 1) !== 1 || (typo.letterSpacing ?? 0) !== 0;
+  const sizeMul = tuned && glyphs.length ? longest(box) / longest(layout({}).box) : 1;
 
   if (!glyphs.length) throw new Error('No drawable outlines found in this font.');
 
@@ -235,12 +261,19 @@ export function parseLetter(text: string, fontId: string, maxLen = 30, separate 
         coverage: 1.0,
       }];
 
-  return { regions, outline, aspect };
+  return { regions, outline, aspect, sizeMul };
 }
 
 // ---------------------------------------------------------------------------
 // Letter blocks
 // ---------------------------------------------------------------------------
+
+/** Horizontal advance of one character at `size`, the way three's FontLoader lays it out. */
+function glyphAdvance(font: Font, ch: string, size: number): number {
+  const data = font.data as { resolution: number; glyphs: Record<string, { ha: number }> };
+  const glyph = data.glyphs[ch] || data.glyphs['?'];
+  return (glyph?.ha ?? 0) * (size / data.resolution);
+}
 
 /** Rings of one glyph, in the font's own units (Y-up), positioned as the font laid it. */
 function glyphRings(font: Font, ch: string): Ring[] {

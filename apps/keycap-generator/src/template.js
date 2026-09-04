@@ -26,16 +26,11 @@ export const TEMPLATE = `
              renders nothing, so there is one shell rather than two. -->
         <div id="kcModeTabs"></div>
 
-        <!-- mw:strip:start — this callout points users off-platform to a MakerWorld model
-             page, which the host doesn't want surfaced inside the embed. main.js removes it
-             at runtime too, but stripping the markup here keeps it from flashing before the
-             module loads (and keeps the copy out of the shipped file entirely). -->
-        <div class="vl-callout" id="qualityCallout">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <div class="vl-callout__body">For the best quality printed keycap, please use the print profile and instructions available on <a class="hint-link" id="qualityCalloutLink" href="https://makerworld.com/en/models/2959969" target="_blank" rel="noopener">MakerWorld</a>.</div>
-          <button class="vl-callout__dismiss" id="qualityCalloutDismiss" type="button" aria-label="Dismiss">&times;</button>
-        </div>
-        <!-- mw:strip:end -->
+        <!-- Print-quality callout. Built in mount.js from the kit's qualityCallout(), so the
+             copy and the MakerWorld listing URL live in code (behind !MAKERLAB) rather than in
+             this string: the mw:strip fence is an index.html-only mechanism and never reached
+             the template, so the embed shipped the copy and deleted it again at runtime. -->
+        <div id="qualityCalloutMount"></div>
 
       <div class="section">
         <div class="label">Keycap</div>
@@ -167,11 +162,15 @@ export const TEMPLATE = `
         <!-- The labels are in spans so a mode that adds a second legend can renumber the first
              one ("Legend" → "Legend 1"); a bare text node has nothing to address. -->
         <div class="colors">
-          <div class="color"><input id="capColor" type="color" value="#1c1c1e" /> <span class="color-label">Keycap</span></div>
-          <div class="color"><input id="logoColor" type="color" value="#f2f2f2" /> <span class="color-label" id="logoColorLabel">Legend</span></div>
+          <div class="color"><input id="capColor" type="color" value="#1c1c1e" /> <label class="color-label" for="capColor">Keycap</label></div>
+          <div class="color"><input id="logoColor" type="color" value="#f2f2f2" /> <label class="color-label" for="logoColor" id="logoColorLabel">Legend</label></div>
         </div>
-        <button id="exportBlank" class="vl-btn vl-btn--secondary vl-btn--block" type="button" disabled>Export blank keycap</button>
+        <div id="exportBlankMount"></div>
       </div>
+      <!-- The Updates drawer, the same one the clicker and foldbox carry. It replaced a
+           "What's new" modal that opened itself on load and told first-time visitors what had
+           changed "since you were last here". -->
+      <div id="updatesMount"></div>
       </div><!-- .vl-panel__scroll -->
 
       <!-- Bottom-left credit slot. Only the MakerLab build fills this: per MakerWorld's
@@ -182,9 +181,9 @@ export const TEMPLATE = `
 
     <div id="viewport" class="vl-stage">
       <p class="vl-stage__label">Live 3D Preview</p>
-      <div id="busy">generating…</div>
+      <div id="busy"><span class="busy-spinner" aria-hidden="true"></span><span id="busyText">generating…</span><span id="busyCancel"></span></div>
       <p id="hint" class="vl-stage__hint">Hold left click to rotate, right click to pan, scroll to zoom.</p>
-      <div id="status">Loading…</div>
+      <div id="status" role="status" aria-live="polite" aria-atomic="true">Loading…</div>
       <div class="meta" id="meta"></div>
     </div>
 
@@ -201,15 +200,15 @@ export const TEMPLATE = `
                the type cards because in set mode it says WHICH key the cards are editing. -->
           <div id="kcLegendExtra"></div>
           <div class="import-grid" role="tablist" aria-label="Legend type">
-            <button id="iconMode" class="import-card active" type="button">
+            <button id="iconMode" class="import-card active" type="button" role="tab" aria-selected="true">
               <span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg></span>
               <span class="card-label">Icon</span>
             </button>
-            <button id="uploadMode" class="import-card" type="button">
+            <button id="uploadMode" class="import-card" type="button" role="tab" aria-selected="false">
               <span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
               <span class="card-label">SVG</span>
             </button>
-            <button id="letterMode" class="import-card" type="button">
+            <button id="letterMode" class="import-card" type="button" role="tab" aria-selected="false">
               <span class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg></span>
               <span class="card-label">Letter</span>
             </button>
@@ -223,15 +222,12 @@ export const TEMPLATE = `
             <div id="gallery"></div>
           </div>
           <div id="uploadPanel" class="mode-panel" hidden>
-            <p class="hint-text">
-              Drop any SVG here. For brand/app logos, browse <a class="hint-link" href="https://simpleicons.org/" target="_blank" rel="noopener">simpleicons.org</a> and download what you need.
-            </p>
             <div id="uploadGallery"></div>
-            <label class="upload-cta">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Upload SVG file(s)
-              <input id="upload" type="file" accept=".svg,image/svg+xml" multiple />
-            </label>
+            <!-- The kit's dropZone(), built in mount.js: a real drop target. The panel used to
+                 read "Drop any SVG here" above a file-picker label with no drop handler on it,
+                 so a dropped file did nothing, or navigated the tab away and took the session
+                 with it. The simpleicons pointer moved into the zone's own note. -->
+            <div id="uploadDrop"></div>
           </div>
           <div id="letterPanel" class="mode-panel" hidden>
             <div class="field">
@@ -247,7 +243,7 @@ export const TEMPLATE = `
               </label>
             </div>
             <div class="switch-block" id="alphabetBlock">
-              <button id="alphabetSet" class="vl-btn vl-btn--secondary vl-btn--block" type="button">Get full alphabet set (A–Z)</button>
+              <div id="alphabetSetMount"></div>
               <p class="switch-help" id="alphabetHelp">Generates 26 keycaps (A–Z) in the current font &amp; settings, zipped as 3MF files.</p>
             </div>
           </div>
@@ -259,7 +255,7 @@ export const TEMPLATE = `
            live outside #keycapFooter: mounting the footer replaces #keycapFooter,
            which would otherwise destroy these and crash main.js ($('export') etc.). -->
       <div id="keycapLegacyControls" hidden>
-        <button id="export" class="primary" disabled>Download 3MF</button>
+        <button id="export" type="button" disabled></button>
         <button id="saveProj"></button>
         <input type="file" id="projFile" accept="application/json" hidden />
       </div>
@@ -269,28 +265,4 @@ export const TEMPLATE = `
     </aside>
     </main><!-- .vl-app -->
 
-    <div id="whatsNew" class="modal-overlay" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="whatsNewTitle">
-        <h2 id="whatsNewTitle">What's new</h2>
-        <p class="modal-sub">A few additions since you were last here:</p>
-        <ul class="whatsnew-list">
-          <li>
-            <span class="wn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 11h.01M10 11h.01M14 11h.01M18 11h.01"/></svg></span>
-            <span class="wn-body"><strong>Choc v1 profile</strong><span>Low-profile caps for Kailh Choc v1 switches, in 1u, 1.5u and 2u. Pick “Choc v1” in the Keycap → Profile dropdown. Print them standing on their side, as modelled, with supports for the stems. There's a note in the panel to remind you.</span></span>
-          </li>
-          <li>
-            <span class="wn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
-            <span class="wn-body"><strong>Thocky profile</strong><span>A new keycap profile. Pick it in the Keycap → Profile dropdown alongside Standard and Low.</span></span>
-          </li>
-          <li>
-            <span class="wn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
-            <span class="wn-body"><strong>Stem fit tolerance</strong><span>A new “Stem fit” slider under Placement &amp; size loosens or tightens how the stem grips the switch. Nudge up if the cap is too tight, down if it's loose.</span></span>
-          </li>
-        </ul>
-        <div class="modal-foot">
-          <label class="whatsnew-dismiss"><input id="whatsNewHide" type="checkbox" /> Don't show this again</label>
-          <button id="whatsNewClose" class="primary" type="button">Got it</button>
-        </div>
-      </div>
-    </div>
 `;

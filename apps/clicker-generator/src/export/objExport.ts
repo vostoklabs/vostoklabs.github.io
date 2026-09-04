@@ -1,5 +1,6 @@
 import type { ClickerPart, RGB } from '../types';
-import { assemblyMinZ, place, plateLayout } from './plateLayout';
+import type { PlateChoice } from '@vostok/plates';
+import { assemblyMinZ, objectKeyOf, place, plateLayout } from './plateLayout';
 
 /*
  * OBJ + MTL writer for the MakerLab host export path.
@@ -45,11 +46,15 @@ export interface ObjMtlResult {
 }
 
 /** Build an OBJ (+ matching MTL) for one print plate from the same parts buildThreeMF() takes. */
-export function buildObjMtl(parts: ClickerPart[], mtlFileName = 'clicker.mtl'): ObjMtlResult {
-  // Drop the whole assembly onto the build plate (min Z -> 0), then lay the halves
-  // out side by side — identical to buildThreeMF().
+export function buildObjMtl(
+  parts: ClickerPart[],
+  mtlFileName = 'clicker.mtl',
+  opts: { plate?: PlateChoice } = {},
+): ObjMtlResult {
+  // Drop the whole assembly onto the build plate (min Z -> 0), then pack the pieces onto the
+  // chosen bed — identical to buildThreeMF(), which is the point of sharing plateLayout().
   const minZ = assemblyMinZ(parts);
-  const placementFor = plateLayout(parts, minZ);
+  const { placementFor } = plateLayout(parts, minZ, { plate: opts.plate });
 
   // One material per unique colour, in first-seen order — mirrors assignExtruders()
   // so OBJ material slots line up with the 3MF's filament slots.
@@ -91,7 +96,7 @@ export function buildObjMtl(parts: ClickerPart[], mtlFileName = 'clicker.mtl'): 
 
     const vp = p.vertProperties;
     const np = p.numProp;
-    const pl = placementFor(p.group);
+    const pl = placementFor(objectKeyOf(p));
     for (let i = 0; i < vp.length; i += np) {
       const [x, y, z] = place(vp[i], vp[i + 1], vp[i + 2] - minZ, pl);
       lines.push(`v ${f(x)} ${f(y)} ${f(z)}`);

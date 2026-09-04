@@ -27,6 +27,28 @@ export function themeColorHex(token: string, fallback: number): number {
   return parseColor(raw) ?? fallback;
 }
 
+/**
+ * The same read, as the CSS colour STRING — for a 2D canvas.
+ *
+ * `themeColorHex` returns a 24-bit number because its caller is three.js. A canvas context
+ * wants `ctx.fillStyle = '#8ab4ff'`; handing it the number 9089791 sets nothing at all and
+ * throws nothing either — the assignment is silently ignored and the shape paints in whatever
+ * colour was set last. So a canvas that reached for `themeColorHex` would look like it worked
+ * on the first fill and be wrong on every one after it.
+ *
+ * Two functions rather than one that guesses, because the two callers genuinely want two types.
+ * Both read the live computed value, so both follow a theme change without being told.
+ *
+ * @param token    property name, e.g. `'--accent'`
+ * @param fallback a CSS colour used when the property is missing — a canvas drawn before the
+ *                 stylesheet loads must not paint in `''`, which is also silently ignored.
+ */
+export function themeColor(token: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+  return raw || fallback;
+}
+
 /** `#abc`, `#aabbcc`, and `rgb()/rgba()` — the three forms the tokens actually use. */
 function parseColor(value: string): number | null {
   if (!value) return null;

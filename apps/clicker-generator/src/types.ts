@@ -32,6 +32,10 @@ export interface RegionSet {
   outline: Ring[];
   /** Aspect (width/height) of the source silhouette, for reference. */
   aspect: number;
+  /** Text only: longest side relative to the same text laid out with default typography.
+   *  Spacing makes the word bigger, and the clicker grows with it rather than the letters
+   *  shrinking to fit — on a printer a bigger part is the cheaper trade. */
+  sizeMul?: number;
 }
 
 /** A color slot for the image/svg/text. */
@@ -41,7 +45,18 @@ export interface PaletteEntry {
   coverage: number; // fraction of foreground pixels
 }
 
-export type BaseShapeKind = 'outline' | 'circle' | 'square' | 'rect' | 'hexagon' | 'heart' | 'star' | 'egg';
+/** The base silhouette. `outline` follows the artwork; the rest are presets.
+ *
+ *  `custom` is the one that is not built in code: its rings arrive on `BuildParams` as
+ *  `baseShapeRings`, traced from an SVG. That is what lets a seasonal pack (a pumpkin, a bat,
+ *  a coffin) be a folder of SVGs and a manifest rather than another `case` in the geometry —
+ *  see src/packs/. */
+export type BaseShapeKind =
+  | 'outline' | 'circle' | 'square' | 'rect' | 'hexagon' | 'heart' | 'star' | 'egg'
+  // Parametric: one knob each, and the knob is what makes a directory out of a list.
+  | 'ngon' | 'cross' | 'squircle' | 'capsule'
+  | 'shield' | 'tag' | 'arch'
+  | 'custom';
 export type ViewMode = 'assembled' | 'exploded' | 'section';
 
 /** Which interaction mode the viewport is in. */
@@ -168,6 +183,55 @@ export interface BuildParams {
    *  Off by default: it changes what an existing saved design renders as, and the walls
    *  want a print before anyone's default moves. */
   hollowBase?: boolean;
+  /** How much of the room inside the frame the artwork takes, 0.3-1. Absent = 1 = fills it,
+   *  which is what every clicker built before this control existed did.
+   *
+   *  Size scales the base and the design together and always did; their ratio was welded shut
+   *  by `imageMargin`, a hardcoded literal in mount.ts that no control ever reached. So there
+   *  was no way to put a small logo on a big badge — which is the other half of the listing
+   *  complaints the outline size clamp already quotes ("is there a way to scale the picture
+   *  bigger when using the Base Style").
+   *
+   *  Ignored when the base follows the outline: there the shape and the artwork are the same
+   *  thing, so shrinking one is meaningless. */
+  designScale?: number;
+  /** Pin the BODY's outer footprint to this rectangle (mm) instead of sizing it from the
+   *  artwork, and fit the artwork inside it. Absent = the body follows the design, which is
+   *  what every clicker generated before this did.
+   *
+   *  Two different people want this for two different reasons and it is one control:
+   *   • Forty names produce forty body sizes, so a seller cannot make ONE product. A run
+   *     generated without a fixed footprint can never be made into one SKU afterwards, which
+   *     is why this has to exist before batch does.
+   *   • On an `outline` base the Size slider is a no-op for any design narrower than the
+   *     switch — the build has to scale it up to clear the socket, so 20/30/40/50/60 all
+   *     produce the same part. `warnings` has said so since the fit pass; this is the way out. */
+  bodySize?: { w: number; h: number };
+  /** The "detail" knob for whichever parametric shape is selected: sides for an n-gon, points
+   *  for a star, petals for a flower, teeth for a gear. One field rather than four because the
+   *  shapes are mutually exclusive and each clamps it to its own range — four would mean four
+   *  sliders in the UI, three of which are always meaningless. */
+  shapeSides?: number;
+  /** Corner radius for square/rect, as a fraction of the short side. 0.22 is what shipped. */
+  shapeCornerPct?: number;
+  /** The second parametric knob: how deep the shape's notch cuts. A star's valley radius as a
+   *  fraction of its outer radius (0.3-0.8, 0.56 shipped), a cross's arm half-width (0.15-0.45,
+   *  0.34 shipped). One field for the same reason `shapeSides` is one field — the shapes that
+   *  have a notch are mutually exclusive, and each clamps it to its own range. Absent = each
+   *  shape's shipped default, so no model anyone has already generated moves. */
+  shapeArmPct?: number;
+  /** Silhouette for `baseShape: 'custom'` — normalised the way `parseSvg` returns rings
+   *  (longest side = 1, centred, Y-up), scaled by the build like any other preset shape.
+   *  Ignored for every other base shape. */
+  baseShapeRings?: Ring[];
+  /** A maker's mark debossed into the body's underside — the one large, flat, support-free
+   *  face the geometry has. Rings are normalised the way `parseSvg` / `parseLetter` return
+   *  them (longest side = 1, centred, Y-up); `sizeMm` is the longest side on the print.
+   *
+   *  Deboss, never emboss: `plateLayout` seats the base group on Z=0 by its own minimum, so
+   *  anything protruding below the underside BECOMES the seating plane and tips the part onto
+   *  its logo. Cut after both void loops — see the buried-void hazard in buildClicker. */
+  brandMark?: { rings: Ring[]; sizeMm: number };
   // ---- Letter-block mode ----
   /** Arrangement: a row, a column, or a grid that wraps at `blockColumns`. */
   blockOrientation?: BlockOrientation;
@@ -177,8 +241,21 @@ export interface BuildParams {
   legendScale?: number;
   /** Outward offset applied to every legend outline, mm — the "boldness" control. */
   legendBold?: number;
+  /** Text mode: outward offset applied to every glyph outline before it is carved, mm —
+   *  the "boldness" control. Absent/0 = the outline exactly as the font drew it. */
+  textBold?: number;
   /** Which side of the block set the keyring loop hangs off (blocks mode). */
   keychainEnd?: KeychainSide;
+  /** Slide the keyring loop ALONG that side, mm. 0 = where it has always sat.
+   *
+   *  A sibling of `keychainEnd`, deliberately not a replacement — buildBlocks reads the side
+   *  in two places that must keep agreeing, and 0 has to reproduce today's placement exactly
+   *  or every block set anyone has made moves.
+   *
+   *  Also deliberately NOT `keychain.offsetMm`, which is the flat clicker's tangent shift on a
+   *  continuous body outline and is persisted in project files. Sharing the field would make a
+   *  loaded clicker project teleport its loop the moment blocks mode was entered. */
+  keychainSlideMm?: number;
   /** Per-part colour overrides (partName -> rgb), for parts the user recoloured one at a
    *  time by clicking them in the viewport. The left-hand palette sets the whole group and
    *  clears these. */
@@ -222,6 +299,14 @@ export interface ClickerPart extends MeshData {
   name: string;
   /** 1-based filament slot for slicer color assignment (shared per unique color). */
   extruder?: number;
+  /** Which independently-movable object on the build plate this part belongs to. Absent
+   *  means `group` — one clicker, two objects, which is every export but a batch run. A run
+   *  sets it per row (`r03:top`, `r03:base`) so forty clickers arrive as eighty objects the
+   *  slicer can move separately, rather than two stacks of forty. See export/plateLayout.ts
+   *  for why this is a second field and not a wider `PartGroup`. */
+  objectKey?: string;
+  /** What the slicer calls this object. Absent falls back to `clicker_top` / `clicker_base`. */
+  objectLabel?: string;
 }
 
 /** A region with its resolved filament color, ready for the worker. */
@@ -252,11 +337,18 @@ export type GeometryRequest =
       regions: BuildRegion[];
       outline: Ring[];
       params: BuildParams;
+      /** Echoed back on the `parts` response. The live preview never sets it — it only ever
+       *  has one build in flight and takes whatever arrives. A batch run does: it drives N
+       *  builds through this same worker and has to tell the answers apart. Kept here, in the
+       *  tracked worker protocol, rather than giving the worker a `buildRun` message, so the
+       *  run loop itself stays entirely inside the (unshipped) paid module. */
+      requestId?: string;
     }
   | {
       type: 'buildBlocks';
       regions: BuildRegion[];
       params: BuildParams;
+      requestId?: string;
     }
   | {
       /** The printable fit test. `labels` carries one tile per setting, with the outlines of
@@ -271,10 +363,15 @@ export type GeometryResponse =
   | { type: 'ready' }
   // `switchMesh` is the real MX switch, placed in the assembly frame for the preview
   // toggle (display only — never exported).
-  | { type: 'initDone'; socketInfo: string; stemInfo: string; switchInfo: string; switchMesh: MeshData }
+  // `switchColumnMm` is the clear square an MX switch needs, measured from the socket asset
+  // rather than written down anywhere — the 2-D shape editor draws it.
+  | {
+    type: 'initDone'; socketInfo: string; stemInfo: string; switchInfo: string;
+    switchMesh: MeshData; switchColumnMm: number;
+  }
   // `switchPlacements` are the placements actually applied (after clamping to the cap
   // footprint + min-pitch spacing), so the preview switch meshes match the geometry.
   // `warnings` surfaces non-fatal build notes (e.g. switches pulled together, no room
   // for the keychain hole) for the status line.
-  | { type: 'parts'; parts: ClickerPart[]; switchPlacements: SwitchPlacement[]; warnings: string[] }
+  | { type: 'parts'; parts: ClickerPart[]; switchPlacements: SwitchPlacement[]; warnings: string[]; requestId?: string }
   | { type: 'error'; message: string };

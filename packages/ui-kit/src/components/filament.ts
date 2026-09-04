@@ -14,7 +14,7 @@
  * the values identical.
  */
 import { el } from '../dom';
-import type { ValueRow } from './controls';
+import { withAccess, type ValueRow } from './controls';
 
 /** Common PLA/PETG shelf colours. Name first, hex second, ordered light-to-dark by family. */
 export const FILAMENTS: ReadonlyArray<readonly [string, string]> = [
@@ -56,6 +56,9 @@ export interface FilamentRowOptions {
  */
 export function filamentRow(opts: FilamentRowOptions): ValueRow<string> {
   let value = norm(opts.value);
+  /** Set by `setDisabled`, and read by `paint()` — which rebuilds every swatch button, so a
+   *  one-shot disable would be undone by the next colour change. */
+  let rowDisabled = false;
 
   const swatches = el('div', { className: 'vl-swatches' });
   const custom = el('input', {
@@ -95,6 +98,11 @@ export function filamentRow(opts: FilamentRowOptions): ValueRow<string> {
     const offPalette = !known.has(value);
     custom.classList.toggle('is-on', offPalette);
     if (offPalette) swatches.append(custom);
+
+    custom.disabled = rowDisabled;
+    if (rowDisabled) {
+      for (const b of swatches.querySelectorAll('button')) (b as HTMLButtonElement).disabled = true;
+    }
   }
 
   function set(hex: string, notify = true) {
@@ -107,7 +115,58 @@ export function filamentRow(opts: FilamentRowOptions): ValueRow<string> {
   paint();
 
   row.setValue = (v, notify = false) => set(v, notify);
+  /* `ValueRow` gained `getValue` and `setDisabled` as REQUIRED members, and this row reaches
+     its type through `as unknown as ValueRow<string>` — a cast, which means the compiler could
+     not tell anyone they were missing. Calling either would have thrown "not a function" at
+     runtime, in a component ten apps use.
+
+     The swatch buttons are rebuilt by `paint()` on every change, so `setDisabled` cannot just
+     flip them once: it records the state and `paint()` re-applies it. */
+  withAccess(row, () => value, [custom]);
+  row.setDisabled = (disabled: boolean) => {
+    rowDisabled = disabled;
+    row.classList.toggle('vl-control--disabled', disabled);
+    row.setAttribute('aria-disabled', String(disabled));
+    paint();
+  };
   return row;
+}
+
+export interface ColorChipOptions {
+  /** `#rrggbb` — the colour currently shown. */
+  hex: string;
+  /** Accessible name; the chip carries no visible text, so this is the only label a screen
+   *  reader gets. */
+  label: string;
+  onClick: (e: MouseEvent) => void;
+}
+
+export interface ColorChipHandle extends HTMLButtonElement {
+  /** Repaint without waiting for the caller to rebuild the row around it. */
+  setValue(hex: string): void;
+}
+
+/**
+ * One colour swatch that opens the CALLER's own picker on click, rather than a shelf of its
+ * own the way `filamentRow()`'s `.vl-swatch` grid does.
+ *
+ * Built for the clicker's palette rows: a full `filamentRow()` per colour repeated all
+ * fourteen shelf swatches on every row, which is what made the sidebar read as "cut off" and
+ * let a wide custom-colour chip disappear off the edge. A row that shows only the ONE colour
+ * currently assigned needs a single swatch, not a shelf — and this chip is deliberately dumb
+ * about what clicking it does, so the same picker (a floating popover, a menu, whatever the
+ * app already has) can back it everywhere instead of every list re-deriving its own strip.
+ */
+export function colorChip(opts: ColorChipOptions): ColorChipHandle {
+  const btn = el('button', {
+    className: 'vl-color-chip',
+    attrs: { type: 'button', 'aria-label': opts.label, style: `--swatch: ${opts.hex}` },
+    on: { click: (e) => opts.onClick(e as MouseEvent) },
+  }) as ColorChipHandle;
+  btn.setValue = (hex: string) => {
+    btn.style.setProperty('--swatch', hex);
+  };
+  return btn;
 }
 
 /** Relative luminance, for the one question that matters: will these two read apart? */

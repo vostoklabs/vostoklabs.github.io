@@ -102,10 +102,10 @@ export function qualityCallout(opts: QualityCalloutOptions): HTMLElement | null 
   return root;
 }
 
-function actionBtn(label: string, icon: string | null, onClick: () => void): HTMLButtonElement {
+function actionBtn(label: string, icon: string | null, onClick: () => void, title?: string): HTMLButtonElement {
   const btn = el('button', {
     className: 'vl-btn vl-btn--secondary vl-action-btn',
-    attrs: { type: 'button' },
+    attrs: title ? { type: 'button', title } : { type: 'button' },
   }) as HTMLButtonElement;
   if (icon) btn.append(svgEl(icon));
   btn.append(el('span', { text: label }));
@@ -137,7 +137,7 @@ export interface ProjectActionsOptions {
 
 /**
  * The Save project / Load project / Help / Light-mode block that sits under the
- * export button. Two rows of two buttons, matching the clicker.
+ * export button. One row of short-labelled buttons, matching the clicker.
  *
  * With `hostOwnsProjects` the first row is gone and only Help (and, on the web, the theme
  * toggle) remains — the block collapses to what the host is not already providing rather
@@ -153,29 +153,30 @@ export function projectActions(opts: ProjectActionsOptions): HTMLElement {
     fileInput.value = '';
   });
 
-  const save = actionBtn('Save project', ICONS.save, () => opts.onSave());
-  const load = actionBtn('Load project', ICONS.load, () => {
+  /* ONE row. Save / Load on one line and Help / Light mode on another spent two rows of the
+     sidebar's fixed footer on four small actions, and the footer's height is taken straight
+     out of the settings above it. Short labels ("Save", not "Save project") are what let
+     three or four buttons share a 293 px line; the full name lives in the tooltip. */
+  const save = actionBtn('Save', ICONS.save, () => opts.onSave(), 'Save project');
+  const load = actionBtn('Load', ICONS.load, () => {
     if (isDesktop()) {
       opts.onLoad();
     } else {
       fileInput.click();
     }
-  });
+  }, 'Load project');
 
-  const row2: HTMLElement[] = [];
-  if (opts.onHelp) row2.push(actionBtn('Help', ICONS.help, () => opts.onHelp!()));
+  const row: (HTMLElement | Node)[] = [];
+  if (!opts.hostOwnsProjects) row.push(save, load, fileInput);
+  if (opts.onHelp) row.push(actionBtn('Help', ICONS.help, () => opts.onHelp!()));
   // No per-generator theme toggle on the desktop: the host app already has one, and two
   // switches writing the same `data-theme` attribute is a bug waiting to be reported.
   if ((opts.theme ?? true) && !isDesktop()) {
-    row2.push(themeToggleButton({
+    row.push(themeToggleButton({
       storageKey: opts.themeStorageKey,
       className: 'vl-btn vl-btn--secondary vl-action-btn',
     }));
   }
 
-  const rows: HTMLElement[] = [];
-  if (!opts.hostOwnsProjects) rows.push(el('div', { className: 'vl-action-row' }, [save, load, fileInput]));
-  if (row2.length) rows.push(el('div', { className: 'vl-action-row' }, row2));
-
-  return el('div', { className: 'vl-project-actions' }, rows);
+  return el('div', { className: 'vl-project-actions' }, row.length ? [el('div', { className: 'vl-action-row' }, row)] : []);
 }

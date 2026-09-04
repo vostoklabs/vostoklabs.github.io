@@ -64,7 +64,12 @@
   display: flex;
   flex-direction: column;
   padding: 14px 16px 16px;
-  overflow: hidden;
+  /* Scrolls. This was `hidden`, which suited the changelog (its list owns its own scroll and
+     fills the body exactly, so the body never overflows) and silently clipped every other
+     drawer: the base-shape picker's grid ran past the bottom of a 768px screen with its
+     "Draw your own shape" button cut off and no way to reach it. A child that manages its
+     own scrolling still works under `auto`, because it never exceeds the body. */
+  overflow-y: auto;
 }
 
 /* On a phone the same panel becomes a bottom sheet. Taking the full width would

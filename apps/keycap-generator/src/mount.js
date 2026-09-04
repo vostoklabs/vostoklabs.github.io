@@ -19,13 +19,18 @@
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import '@vostok/plates/plates.css';
-import { topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile } from '@vostok/ui-kit';
+import {
+  topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs,
+  promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile,
+  button, dropZone, toast, changelogButton, themeColorHex, openLicenseModal, licenseReminderToast,
+} from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadKeycap } from './keycap.js';
 import { parseSvg, logoFootprint } from './logo.js';
+import { openSvgPreview } from './svgPreview.js';
 import { FONT_OPTIONS, importFontFile, parseLetter, loadBundledFonts } from './letter.js';
 import { buildBodies } from './geometry.js';
 import { initManifold, geomToManifold, manifoldToGeom, creaseNormals } from './manifold.js';
@@ -50,6 +55,7 @@ import {
 // public build resolves this to a no-op stub and never needs those files to exist.
 import { mountProFeatures } from 'virtual:pro-pack';
 import './style.css';
+import { CHANGELOG } from './changelog';
 import { TEMPLATE } from './template.js';
 import { setAssetBase, assetUrl } from './assets.js';
 
@@ -132,7 +138,11 @@ export function mount(container, host) {
       // do different things is worse than either one alone. `Boolean(...)`, not `isDesktop()`:
       // a desktop host without the capability still needs these.
       hostOwnsProjects: Boolean(host?.registerProject),
-      formats: [{ id: '3mf', label: '3MF' }],
+      // The kit turns a bare format label into "Download 3MF" (or "Export 3MF" on the desktop).
+      // Inside the MakerLab embed nothing is downloaded — it goes to the host — and a label
+      // that already starts with "Export" is passed through untouched, which is the seam the
+      // kit provides for exactly this.
+      formats: [{ id: '3mf', label: MAKERLAB ? 'Export to MakerWorld' : '3MF' }],
       // Always travels. A paid mode may have relabelled this button "Unlock Pro — $9.99",
       // but that is a label: the click goes down the same path either way and meets the gate at
       // the far end, which is the only thing that decides whether paid work runs.
@@ -157,7 +167,11 @@ export function mount(container, host) {
       onHelp: () => {
         dialog({
           title: 'Keycap Legend Generator help',
-          content: document.createTextNode('Pick an icon or custom letter, customize size, depth, rotation, and stem clearance, then click Download 3MF to export a print-ready file for your slicer.'),
+          content: document.createTextNode(
+            MAKERLAB
+              ? 'Pick an icon or custom letter, customize size, depth, rotation and stem clearance, then send the finished keycap to MakerWorld with the button above.'
+              : 'Pick an icon or custom letter, customize size, depth, rotation and stem clearance, then click Download 3MF to export a print-ready file for your slicer.',
+          ),
           actions: [{ label: 'Got it', primary: true }],
         });
       },
@@ -174,7 +188,39 @@ export function mount(container, host) {
   }
 
   const busyEl = $('busy');
+  const busyTextEl = $('busyText');
+  const busyCancelEl = $('busyCancel');
   const statusEl = $('status');
+
+  /**
+   * The one way the busy chip is shown or hidden.
+   *
+   * `onCancel` is the half that was missing. Switching tabs during a keyboard set was refused
+   * with "let it finish or cancel it first" while nothing anywhere could cancel it, and the
+   * free A-Z batch had the same trap: twenty-six carves with no way out but closing the tab.
+   * A batch that can be stopped passes one in; the live rebuild is 200ms and passes none.
+   */
+  function setBusyState(text, onCancel) {
+    busyCancelEl.replaceChildren();
+    if (text == null) {
+      busyEl.style.display = 'none';
+      return;
+    }
+    busyTextEl.textContent = text;
+    if (onCancel) {
+      const btn = button({
+        label: 'Cancel',
+        emphasis: 'ghost',
+        onClick: () => {
+          btn.disabled = true;
+          btn.setLabel('Cancelling…');
+          onCancel();
+        },
+      });
+      busyCancelEl.append(btn);
+    }
+    busyEl.style.display = 'flex';
+  }
 
   function setStatus(msg, kind = '') {
     statusEl.textContent = msg;
@@ -214,8 +260,11 @@ export function mount(container, host) {
   buildPlate.setChoice(loadPlateChoice());
   scene.add(buildPlate.object);
 
+  // Read the token rather than a copy of it. Both hex values written here had already gone
+  // stale against tokens.css (--bg is #eef1f6 / #101620 now), so the stage painted a slightly
+  // different colour from the panels either side of it.
   function applyViewportTheme(theme) {
-    renderer.setClearColor(theme === 'light' ? 0xf3f4f6 : 0x15171c);
+    renderer.setClearColor(themeColorHex('--bg', theme === 'light' ? 0xeef1f6 : 0x101620));
     buildPlate.setTheme(theme);
   }
   applyViewportTheme(document.documentElement.getAttribute('data-theme') || 'dark');
@@ -421,6 +470,17 @@ export function mount(container, host) {
       setMax: (v) => { r.max = v; },
     };
   }
+
+  // The two block buttons in the panels. Kit `button()`s built into their mount points,
+  // keeping their ids: everything below still finds them with $('exportBlank') / $('alphabetSet').
+  const exportBlankBtn = button({ label: 'Export blank keycap', emphasis: 'secondary', block: true });
+  exportBlankBtn.id = 'exportBlank';
+  exportBlankBtn.disabled = true;
+  $('exportBlankMount').replaceWith(exportBlankBtn);
+
+  const alphabetSetBtn = button({ label: 'Get full alphabet set (A–Z)', emphasis: 'secondary', block: true });
+  alphabetSetBtn.id = 'alphabetSet';
+  $('alphabetSetMount').replaceWith(alphabetSetBtn);
 
   const C = {
     size: link('size', 'sizeNum', scheduleRegen),
@@ -639,7 +699,7 @@ export function mount(container, host) {
     if (!canRegen()) return;
     if (running) { scheduleRegen(); return; }
     running = true;
-    busyEl.style.display = 'block';
+    setBusyState('generating…');
     await new Promise((r) => setTimeout(r, 0)); // let the spinner paint
 
     try {
@@ -721,7 +781,7 @@ export function mount(container, host) {
       $('export').disabled = true;
       setStatus('Could not generate this legend (try a simpler icon/letter or smaller size).', 'err');
     } finally {
-      busyEl.style.display = 'none';
+      setBusyState(null);
       running = false;
     }
   }
@@ -745,6 +805,10 @@ export function mount(container, host) {
    */
   const singleCapSink = {
     icon: (name, getText, el) => { void selectIcon(el, getText, name); },
+    /** An uploaded or bundled SVG. On ONE cap it is the same act as picking a lucide icon —
+     *  parse the markup, carve it — and only the keyboard set needs the two kept apart, because
+     *  it stores a lucide icon by name and an upload by content. */
+    svg: (name, getText, el) => { void selectIcon(el, getText, name); },
     /** The user typed in the letter box. */
     letter: () => selectLetter(),
     /** The user picked a different font — same legend, different shapes. */
@@ -776,15 +840,27 @@ export function mount(container, host) {
     }
   }
 
-  function makeIconEl(thumbUrl, getText, name) {
-    const el = document.createElement('div');
+  /**
+   * One gallery tile.
+   *
+   * `kind` says which gallery it came from, and it is the tile's job to say so because nothing
+   * downstream can tell: a lucide icon and an uploaded file arrive here as the same pair of a
+   * name and a getText. The keyboard set stores the two differently — an icon by name, an
+   * upload by content — so a tile that could not name its own kind used to be stored as a
+   * lucide icon whatever it was, and an upload then failed to resolve.
+   */
+  function makeIconEl(thumbUrl, getText, name, kind = 'icon') {
+    // A <button>, not a <div>. Icon is the default legend mode and there are ~1750 tiles in
+    // it, none of which a keyboard could reach while they were divs with a click listener.
+    const el = document.createElement('button');
+    el.type = 'button';
     el.className = 'icon';
     el.title = name;
     const img = document.createElement('img');
     img.src = thumbUrl;
     img.alt = name;
     el.appendChild(img);
-    el.addEventListener('click', () => legendSink.icon(name, getText, el));
+    el.addEventListener('click', () => legendSink[kind](name, getText, el));
     return el;
   }
 
@@ -797,9 +873,13 @@ export function mount(container, host) {
 
   function setLegendMode(mode) {
     currentMode = mode;
-    $('iconMode').classList.toggle('active', mode === 'icon');
-    $('uploadMode').classList.toggle('active', mode === 'upload');
-    $('letterMode').classList.toggle('active', mode === 'letter');
+    // `.active` is a class, which the accessibility tree cannot see. The row calls itself a
+    // tablist, so its tabs have to carry their own selected state as well.
+    for (const [id, key] of [['iconMode', 'icon'], ['uploadMode', 'upload'], ['letterMode', 'letter']]) {
+      const tab = $(id);
+      tab.classList.toggle('active', mode === key);
+      tab.setAttribute('aria-selected', mode === key ? 'true' : 'false');
+    }
     $('iconPanel').hidden = mode !== 'icon';
     $('uploadPanel').hidden = mode !== 'upload';
     $('letterPanel').hidden = mode !== 'letter';
@@ -822,6 +902,8 @@ export function mount(container, host) {
     input.maxLength = max;
     if (input.value.length > max) {
       input.value = input.value.slice(0, max);
+      // Characters vanishing from a text box with nothing said reads as the app losing work.
+      toast(`Legend trimmed to ${max} characters for this cap`, { kind: 'warn' });
       if (currentMode === 'letter') selectLetter();
     }
   }
@@ -1048,43 +1130,66 @@ export function mount(container, host) {
   async function loadBundledSvgs() {
     const list = await fetch(assetUrl('icons-manifest.json')).then((r) => r.json()).catch(() => []);
     for (const { name, file } of list) {
-      const el = makeIconEl(assetUrl(file), () => fetch(assetUrl(file)).then((r) => r.text()), name);
+      const el = makeIconEl(assetUrl(file), () => fetch(assetUrl(file)).then((r) => r.text()), name, 'svg');
       uploadGalleryEl.appendChild(el);
     }
     refreshUploadEmptyState();
   }
 
-  $('upload').parentElement?.addEventListener('click', (e) => {
-    if (!host?.pickMedia) return;
-    e.preventDefault();
-    void chooseFile(host, { kind: 'svg', extensions: ['svg'] }, () => {}).then(async (file) => {
-      if (!file) return;
-      const text = await file.text();
-      const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
-      const iconEl = makeIconEl(url, async () => text, file.name.replace(/\.svg$/i, ''));
-      uploadGalleryEl.appendChild(iconEl);
-      refreshUploadEmptyState();
-      setLegendMode('upload');
-      iconEl.click();
-    });
-  });
-
-  $('upload').addEventListener('change', async (e) => {
+  /* Every upload goes through the import preview first: the file beside what the tracer will
+     make of it, and Fill / Outline / Off per part. What the tile stores is the file WITH those
+     choices written in (see svgPreview.js), so the paid dual legend and the keyboard set —
+     which read the tile's markup and parse it themselves — get the same result as this cap. */
+  async function addSvgFiles(files) {
     let firstEl = null;
-    for (const file of e.target.files) {
-      void rememberFile(host, 'svg', file);
-      const text = await file.text();
-      const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
-      const el = makeIconEl(url, async () => text, file.name.replace(/\.svg$/i, ''));
-      uploadGalleryEl.appendChild(el);
-      if (!firstEl) firstEl = el;
+    for (const file of files) {
+      // Per file, and reported. The whole loop used to run unguarded: a file the tracer threw
+      // on (applySvgChoices parses it a second time, and unlike describeSvg it does not catch)
+      // rejected the promise, nothing was shown, and the rest of the selection was dropped.
+      try {
+        const text = await openSvgPreview(await file.text(), file.name.replace(/\.svg$/i, ''));
+        if (text == null) continue; // the preview was cancelled — not a failure
+        void rememberFile(host, 'svg', file);
+        const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+        const el = makeIconEl(url, async () => text, file.name.replace(/\.svg$/i, ''), 'svg');
+        uploadGalleryEl.appendChild(el);
+        if (!firstEl) firstEl = el;
+      } catch (err) {
+        console.error(err);
+        setStatus(`Could not read ${file.name}.`, 'err');
+        toast(`Could not read ${file.name}`, { kind: 'error' });
+      }
     }
     refreshUploadEmptyState();
     if (firstEl) {
       setLegendMode('upload');
       firstEl.click();
     }
-    e.target.value = '';
+  }
+
+  /* The kit's drop target, replacing a file-picker label under a line of copy that said
+     "Drop any SVG here". Nothing in this app listened for a drop, so dropping a file on that
+     panel did nothing — or, once the browser handled it, navigated the tab to the raw SVG and
+     took the session with it. */
+  const uploadDropEl = dropZone({
+    title: 'Drop an SVG here',
+    text: 'or click to browse',
+    note: 'For brand and app logos, simpleicons.org is a good source',
+    accept: '.svg,image/svg+xml',
+    multiple: true,
+    onFiles: (files) => { void addSvgFiles(files); },
+  });
+  $('uploadDrop').replaceWith(uploadDropEl);
+
+  // In a desktop host the file comes from the host's own picker, so its click has to win
+  // before the drop zone opens a browser file input. Capture phase, for that reason.
+  uploadDropEl.addEventListener('click', (e) => {
+    if (!host?.pickMedia) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void chooseFile(host, { kind: 'svg', extensions: ['svg'] }, () => {}).then(async (file) => {
+      if (file) await addSvgFiles([file]);
+    });
   });
 
   // ---------------------------------------------------------------- export
@@ -1164,6 +1269,20 @@ export function mount(container, host) {
   }
 
   /**
+   * The licence nudge, per invariant #3: the full modal on the first export of a session, a
+   * quiet reminder after. Every export path in this file ends here — single cap, blank cap,
+   * A-Z batch, host or browser — because a path that forgets to call it is a silent export,
+   * which is the thing the invariant exists to prevent. Both no-op inside a desktop host,
+   * where the tier the user bought has already answered the question.
+   */
+  let exportsThisSession = 0;
+  function nudgeLicense() {
+    exportsThisSession += 1;
+    if (exportsThisSession === 1) openLicenseModal();
+    else licenseReminderToast();
+  }
+
+  /**
    * Deliver the finished keycap.
    *
    * In the MakerWorld build, when embedded, follow the SDK guide's OBJ route: hand the host
@@ -1177,6 +1296,11 @@ export function mount(container, host) {
    * @param {() => Array} makeParts  Deferred so the standalone path doesn't pay for OBJ work
    *                                 and the host path doesn't pay for 3MF zipping.
    */
+  /* The licence, on the one export path a file-level mark cannot reach. The host converts our
+     OBJ into the 3MF the buyer downloads, and a comment in an OBJ is not metadata — it does
+     not survive that conversion. The description does: MakerWorld shows it on the model page. */
+  const LICENSE_NOTE = `Free for personal use; selling prints requires a commercial license: ${BRAND.urls.mwCommercial}`;
+
   async function deliverModel(makeParts, baseName, downloadMsg, description) {
     if (MAKERLAB && mlReady() && mlCan('export')) {
       setStatus('Sending to MakerLab…');
@@ -1190,13 +1314,14 @@ export function mount(container, host) {
               buffer: objToArrayBuffer(obj),
               mtl,
               coverImage: captureCover(),
-              description,
+              description: `${description} ${LICENSE_NOTE}`,
             },
           ],
         });
         if (result.success) {
           setStatus('Exported to MakerLab ✓');
           sdkToast({ message: 'Keycap exported to MakerLab', type: 'success' });
+          nudgeLicense();
         } else {
           setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
           sdkToast({ message: 'Export failed', type: 'error' });
@@ -1220,6 +1345,8 @@ export function mount(container, host) {
           { designer: 'Keycap Legend Generator' },
         );
         setStatus(indexed ? 'Exported to your library ✓' : `Exported as ${baseName}.3mf ✓`);
+        toast(indexed ? 'Exported to your library' : `Exported as ${baseName}.3mf`, { kind: 'success' });
+        nudgeLicense();
       } catch (err) {
         console.error(err);
         setStatus(`Export failed: ${err.message || err}`, 'err');
@@ -1233,6 +1360,11 @@ export function mount(container, host) {
     a.click();
     URL.revokeObjectURL(a.href);
     setStatus(downloadMsg);
+    // The status line is 12px of muted grey in the corner of the viewport, which is the whole
+    // reason a finished export used to feel like nothing had happened. The detail stays there;
+    // the toast is the part you cannot miss.
+    toast(downloadMsg.split('  ')[0], { kind: 'success' });
+    nudgeLicense();
   }
 
   /**
@@ -1325,7 +1457,10 @@ export function mount(container, host) {
     clearTimeout(regenTimer);
     running = true;
     alphabetBtn.disabled = true;
-    busyEl.style.display = 'block';
+    // Twenty-six carves. Same trap the paid keyboard set had: without this the only way out
+    // of a slow font was closing the tab.
+    let cancelled = false;
+    setBusyState('generating…', () => { cancelled = true; });
     const files = {};
     // Host path: one OBJ per letter, handed over as a multi-plate artifact (SDK guide,
     // "Export OBJ (Multi-Plate + MTL Materials)") — the host turns the 26 plates into a
@@ -1337,9 +1472,12 @@ export function mount(container, host) {
 
     try {
       for (let i = 0; i < ALPHABET.length; i++) {
+        if (cancelled) break;
         const ch = ALPHABET[i];
         setStatus(`Generating alphabet set… ${ch} (${i + 1}/26)`);
-        busyEl.textContent = `generating ${ch} (${i + 1}/26)…`;
+        // Text only: rebuilding the chip here would throw away the Cancel button's own
+        // "Cancelling…" state twenty-six times.
+        busyTextEl.textContent = `generating ${ch} (${i + 1}/26)…`;
         await new Promise((r) => setTimeout(r, 0)); // let the spinner/status paint
 
         const legend = parseLetter(ch, fontId, 1);
@@ -1356,6 +1494,14 @@ export function mount(container, host) {
         bodies.logoGeometry?.dispose();
       }
 
+      if (cancelled) {
+        setStatus('Alphabet set cancelled. Nothing was exported.', 'warn');
+        // Toast as well as status: the `finally` hands the preview back, and the rebuild's own
+        // "Ready ·  …" lands on this line a moment later and wipes the only notice there was.
+        toast('Alphabet set cancelled', { kind: 'warn' });
+        return; // the finally below still runs: lock released, chip cleared, preview restored
+      }
+
       const fontSlug = fontName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
       const baseName = `keycap-alphabet-${fontSlug}${profileSlug() ? '-' + profileSlug() : ''}`;
 
@@ -1369,13 +1515,14 @@ export function mount(container, host) {
               buffer: plates, // ArrayBuffer[] — one print plate per letter
               mtl: plateMtl,
               coverImage: captureCover(),
-              description: 'Full A–Z keycap alphabet set (26 print plates).',
+              description: `Full A–Z keycap alphabet set (26 print plates). ${LICENSE_NOTE}`,
             },
           ],
         });
         if (result.success) {
           setStatus('Exported alphabet set to MakerLab ✓  26 keycaps (A–Z).');
           sdkToast({ message: 'Alphabet set exported', type: 'success' });
+          nudgeLicense();
         } else {
           setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
           sdkToast({ message: 'Export failed', type: 'error' });
@@ -1409,6 +1556,8 @@ export function mount(container, host) {
                 ? 'Exported the full alphabet set to your library ✓  26 keycaps (A–Z).'
                 : `Exported the full alphabet set ✓  26 keycaps (A–Z), as ${baseName}.zip.`,
             );
+            toast('Alphabet set exported', { kind: 'success' });
+            nudgeLicense();
           } catch (err) {
             console.error(err);
             setStatus(`Export failed: ${err.message || err}`, 'err');
@@ -1422,13 +1571,14 @@ export function mount(container, host) {
         a.click();
         URL.revokeObjectURL(a.href);
         setStatus('Exported full alphabet set ✓  26 keycaps (A–Z) zipped. Open each 3MF in your slicer.');
+        toast('Alphabet set exported ✓', { kind: 'success' });
+        nudgeLicense();
       }
     } catch (e) {
       console.error(e);
       setStatus('Could not generate the alphabet set (try a simpler font or smaller size).', 'err');
     } finally {
-      busyEl.textContent = 'generating…';
-      busyEl.style.display = 'none';
+      setBusyState(null);
       running = false;
       updateAlphabetAvailability();
       scheduleRegen(); // refresh the live preview to the current inputs after the batch
@@ -1543,8 +1693,15 @@ export function mount(container, host) {
 
     // sensible default size for this cap (also the value the placement reset restores)
     const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
+    const previousSize = C.size.get();
     DEFAULTS.size = Math.round(room * 0.5 * 10) / 10;
     C.size.set(DEFAULTS.size);
+    // Rotation and the offsets survive a cap swap; the size does not, because a legend sized
+    // in mm for one cap may not fit the next. That is a decision, but it used to be a silent
+    // one — the slider simply jumped.
+    if (previousSize && Math.abs(previousSize - DEFAULTS.size) > 0.05) {
+      toast(`Legend size reset to ${DEFAULTS.size} mm for this cap`);
+    }
     updateSizeMax(); // legend-aspect-aware ceiling (wide text can use the cap's length)
 
     // Nudge range follows the cap so the legend can reach the edges of wide caps/spacebars.
@@ -1567,7 +1724,7 @@ export function mount(container, host) {
   async function switchKeycap(file, label) {
     // The chip is ours only while the single cap is what's on screen. Behind a Pro mode's board
     // this load is invisible, and that mode may have progress of its own up there.
-    if (!singleCapSuspended) busyEl.style.display = 'block';
+    if (!singleCapSuspended) setBusyState('generating…');
     unitSelect.disabled = true;
     profileSelect.disabled = true;
     try {
@@ -1575,10 +1732,10 @@ export function mount(container, host) {
       setKeycap(kc);
       // Hand the chip to the rebuild only when one is actually going to run — see canRegen().
       if (canRegen()) scheduleRegen();
-      else if (!singleCapSuspended) busyEl.style.display = 'none';
+      else if (!singleCapSuspended) setBusyState(null);
     } catch (e) {
       console.error(e);
-      if (!singleCapSuspended) busyEl.style.display = 'none';
+      if (!singleCapSuspended) setBusyState(null);
       setStatus(`Could not load ${label || 'this keycap'}.`, 'err');
     } finally {
       unitSelect.disabled = false;
@@ -1635,7 +1792,7 @@ export function mount(container, host) {
       // Any rebuild still queued will now decline, so the chip it was going to clear has to be
       // put away here — before the mode starts using it for progress of its own.
       clearTimeout(regenTimer);
-      busyEl.style.display = 'none';
+      setBusyState(null);
     } else {
       resize();       // the viewport may have been resized while we weren't watching it
       scheduleRegen();
@@ -1779,6 +1936,12 @@ export function mount(container, host) {
            * implementation of "the user picked an icon" is one that will drift.
            */
           ownLegendSink: singleCapSink,
+          /**
+           * What the primary button says in single mode when nothing is locked. The modes used
+           * to restore the literal 'Download 3MF', which is the wrong verb in the embed: there
+           * the file goes to the host and nothing is downloaded at all.
+           */
+          defaultExportLabel: MAKERLAB ? 'Export to MakerWorld' : 'Download 3MF',
           /** The picker's own controls, so a sink can show the selected key's legend. */
           legendUI: {
             setType: setLegendMode,
@@ -1788,6 +1951,9 @@ export function mount(container, host) {
             get fontId() { return $('fontSelect').value; },
             set fontId(v) { $('fontSelect').value = v; },
             setLetterMaxLength: (n) => { $('letterText').maxLength = n; },
+            /** What the limit should be for the cap that is loaded. A mode handing the picker
+             *  back needs this: the number is a property of the cap, not of the mode. */
+            letterMaxLen: () => letterMaxLen(currentUnit),
             get letterMaxLength() { return $('letterText').maxLength; },
             // Readable as well as writable, so a mode that borrows the picker can put it back
             // exactly as it found it. A mode that can only WRITE the picker has to remember
@@ -1926,10 +2092,9 @@ export function mount(container, host) {
           scheduleRegen(); // back to the live preview for the current inputs
         },
         setStatus,
-        setBusy: (text) => {
-          busyEl.textContent = text ?? 'generating…';
-          busyEl.style.display = text == null ? 'none' : 'block';
-        },
+        // `onCancel` is optional and only a batch passes one: it puts a Cancel button in the
+        // chip, which is what makes "let it finish or cancel it first" a true sentence.
+        setBusy: (text, onCancel) => setBusyState(text ?? null, onCancel),
         captureCover,
       });
       cleanups.push(() => proPanel.destroy());
@@ -1937,21 +2102,31 @@ export function mount(container, host) {
   }
 
   // ------------------------------------------------------- quality callout (dismissable)
-  (function initQualityCallout() {
-    const callout = $('qualityCallout');
-    if (!callout) return;
-    // remove(), not `hidden = true`: the ui-kit `.vl-callout` rule sets `display: flex`,
-    // which outranks the [hidden] UA style — so setting `hidden` left it fully visible.
-    // The MakerLab build drops it entirely: it points users off-platform to a MakerWorld
-    // model page, which the host doesn't want surfaced inside the embed.
-    if (MAKERLAB) { callout.remove(); return; }
-    const KEY = 'keycap_quality_callout';
-    try { if (localStorage.getItem(KEY) === 'dismissed') { callout.remove(); return; } } catch {}
-    $('qualityCalloutDismiss')?.addEventListener('click', () => {
-      callout.remove();
-      try { localStorage.setItem(KEY, 'dismissed'); } catch {}
+  // The kit's own component, which already builds this markup and already remembers a dismiss
+  // against a storage key. The app hand-rolled both, with the MakerWorld listing URL written
+  // into the template — and because the mw:strip fence only ever ran over index.html, that
+  // copy shipped inside the embed's bundle and was deleted again at runtime. Behind
+  // `!MAKERLAB` the bundler drops it from that build outright.
+  if (!MAKERLAB) {
+    const callout = qualityCallout({
+      html:
+        'For the best quality printed keycap, please use the print profile and instructions available on '
+        + `<a class="vl-link" href="${BRAND.urls.keycapListing}" target="_blank" rel="noopener">MakerWorld</a>.`,
+      storageKey: 'keycap_quality_callout',
     });
-  })();
+    const slot = $('qualityCalloutMount');
+    if (callout) slot.replaceWith(callout);
+    else slot.remove();
+  } else {
+    $('qualityCalloutMount')?.remove();
+  }
+
+  // ------------------------------------------------------- updates
+  // The same Updates drawer the clicker and foldbox carry: a button the user presses when they
+  // want to know whether the thing they reported is fixed. It replaced a modal that opened
+  // itself on load — over an app that had not finished loading — and told first-time visitors
+  // what had changed "since you were last here".
+  $('updatesMount').replaceWith(changelogButton({ entries: CHANGELOG, title: 'Keycap updates' }));
 
   // ------------------------------------------------------- theme (viewport sync)
   // The shared ui-kit sidebar footer owns the light/dark toggle; it flips
@@ -2135,10 +2310,6 @@ export function mount(container, host) {
     setStatus('Project saved ✓');
   });
 
-  $('loadProj')?.addEventListener('click', () => {
-    if (host) { void openFromHost(); return; }
-    $('projFile').click();
-  });
   $('projFile')?.addEventListener('change', () => {
     const f = $('projFile').files[0];
     if (!f) return;
@@ -2178,47 +2349,6 @@ export function mount(container, host) {
     $('profileSelect').dispatchEvent(new Event('change'));
     applyModeFlags();
   }
-
-  // ------------------------------------------------------- help dialog
-  $('helpToggle')?.addEventListener('click', () => {
-    const overlay = $('whatsNew');
-    if (overlay) overlay.hidden = false;
-  });
-
-  // ------------------------------------------------------- "what's new" modal
-  // Shows on every visit until the user ticks "Don't show this again". Bump
-  // WHATS_NEW_VERSION whenever the notes change so the popup resurfaces for everyone.
-  (function initWhatsNew() {
-    const WHATS_NEW_VERSION = '2026-08-choc-v1';
-    const KEY = 'keycap_whatsnew_dismissed';
-    const overlay = $('whatsNew');
-    // Not on the desktop. Release notes belong to the app that was released, and inside a
-    // host that is the host — announcing this generator's version over someone else's
-    // window, on first open, is the wrong app talking.
-    if (MAKERLAB || isDesktop() || !overlay) return;
-
-    let dismissed = null;
-    try { dismissed = localStorage.getItem(KEY); } catch {}
-    if (dismissed === WHATS_NEW_VERSION) return; // user opted out of this version
-
-    const close = () => {
-      overlay.hidden = true;
-      document.removeEventListener('keydown', onKey);
-      if ($('whatsNewHide').checked) {
-        try { localStorage.setItem(KEY, WHATS_NEW_VERSION); } catch {}
-      }
-    };
-    function onKey(e) { if (e.key === 'Escape') close(); }
-
-    $('whatsNewClose').addEventListener('click', close);
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); }); // backdrop
-    document.addEventListener('keydown', onKey);
-    // `close()` removes this too, but only if the user ever closes the dialog. Unmounting
-    // with it still open would otherwise leave an Escape handler on the document for the
-    // rest of the session, reaching into a torn-down generator.
-    cleanups.push(() => document.removeEventListener('keydown', onKey));
-    overlay.hidden = false;
-  })();
 
   // ------------------------------------------------------- MakerLab handshake
   // MakerWorld build only: connect to the host when embedded (no-op otherwise). Runs alongside

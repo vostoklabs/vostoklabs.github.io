@@ -68,6 +68,8 @@ apps/opal-suite/planning/
 **/tests/
 !apps/clicker-generator/tests/
 !apps/clicker-generator/tests/**
+!apps/keycap-generator/tests/
+!apps/keycap-generator/tests/**
 packages/manifold-noeval/README.md
 
 # Paid feature source (anything sold rather than given away). The public

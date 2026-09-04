@@ -68,6 +68,14 @@
 .vl-sym__tile:focus-visible { outline: none; box-shadow: var(--ring); }
 
 .vl-sym__glyph { font-size: 30px; line-height: 1; }
+/* An item that brings its own drawing instead of a glyph. Sized to match the 30px glyph's
+   optical weight rather than its em box, so a grid of shapes and a grid of symbols read as
+   the same control. `currentColor` in the path means it follows the theme. */
+.vl-sym__glyph--svg {
+  display: block;
+  width: 32px;
+  height: 32px;
+}
 
 .vl-sym__name {
   font-size: 11px;

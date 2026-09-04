@@ -13,7 +13,8 @@
     "preview:mw": "vite preview --port 5174",
     "pack:mw": "tsc -p tsconfig.json && vite build --mode makerworld && node makerlab/pack.mjs",
     "serve:mw": "node makerlab/server.cjs -c config.json -p 8001",
-    "build:offline": "node ../../scripts/offline.mjs clicker-generator"
+    "build:offline": "node ../../scripts/offline.mjs clicker-generator",
+    "build:internal": "tsc -p tsconfig.json && vite build --mode internal"
   },
   "dependencies": {
     "@vostok/brand": "workspace:*",

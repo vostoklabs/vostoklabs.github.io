@@ -1,4 +1,5 @@
 import { el } from '../dom';
+import { svgPathEl } from '../icons';
 import { dialog, type DialogHandle } from './dialog';
 import { drawer } from './drawer';
 
@@ -18,10 +19,22 @@ import { drawer } from './drawer';
 export interface SymbolItem {
   id: string;
   label: string;
-  /** The character to insert. */
+  /** The character to insert. Ignored when `svgPath` is given. */
   char: string;
   /** Category ids; used for the filter chips. */
   cats?: string[];
+  /**
+   * An SVG path `d` in a 40x40 box, drawn INSTEAD of the glyph.
+   *
+   * The picker's real job is "browse a large set of small pictures, with search and
+   * categories, and pick one" — none of which is about fonts. The clicker's base-shape
+   * directory is that same job over shapes that are generated rather than typed, so rather
+   * than a second picker that would drift from this one, an item may bring its own drawing.
+   *
+   * A path rather than a data-URI image on purpose: it inherits `currentColor`, so a shape
+   * follows the theme instead of being a fixed-colour PNG that goes invisible in dark mode.
+   */
+  svgPath?: string;
 }
 
 export interface SymbolCategory {
@@ -33,8 +46,8 @@ export interface SymbolCategory {
 export interface SymbolPickerOptions {
   items: SymbolItem[];
   categories?: SymbolCategory[];
-  /** CSS font-family the glyphs render in. */
-  fontFamily: string;
+  /** CSS font-family the glyphs render in. Unused when every item carries `svgPath`. */
+  fontFamily?: string;
   /** Ranked search. Falls back to a plain label/id substring match. */
   search?: (query: string, cat?: string) => SymbolItem[];
   onPick: (item: SymbolItem) => void;
@@ -102,7 +115,15 @@ export function openSymbolPicker(opts: SymbolPickerOptions): DialogHandle {
       className: 'vl-sym__tile',
       attrs: { type: 'button', title: item.label, 'aria-label': item.label },
     }, [
-      el('span', { className: 'vl-sym__glyph', text: item.char, attrs: { style: `font-family: ${opts.fontFamily}` } }),
+      item.svgPath
+        ? el('span', { className: 'vl-sym__glyph vl-sym__glyph--svg' }, [
+            svgPathEl(item.svgPath),
+          ])
+        : el('span', {
+            className: 'vl-sym__glyph',
+            text: item.char,
+            attrs: { style: `font-family: ${opts.fontFamily ?? 'inherit'}` },
+          }),
       el('span', { className: 'vl-sym__name', text: item.label }),
     ]) as HTMLButtonElement;
     btn.addEventListener('click', () => {

@@ -47,43 +47,8 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
 }
 .utility-btn svg { flex: 0 0 auto; }
 
-/* "?" help marker + floating tooltip bubble */
-.help-tip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  margin-left: 5px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: help;
-  vertical-align: middle;
-  transition:
-    border-color var(--dur-hover) var(--ease-standard),
-    color var(--dur-hover) var(--ease-standard);
-}
-.help-tip:hover, .help-tip:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
-.help-tip-bubble {
-  position: fixed;
-  z-index: 1000;
-  max-width: 240px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.4;
-  font-weight: 400;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
-  pointer-events: none;
-}
+/* The "?" help marker is the kit's helpTip() now (see ui.ts `tip()` / `resolveHelpTips()`) —
+   the `.help-tip` / `.help-tip-bubble` pair that used to style a hand-rolled one is gone. */
 
 /* "More settings" disclosure */
 .more-settings { margin-top: 4px; }
@@ -149,13 +114,8 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
-/* Fit steppers (switch socket + switch stem tolerance): − [value] + row. */
-.tol-stepper { display: flex; align-items: center; gap: 8px; }
-.tol-stepper .btn { flex: 0 0 auto; padding: 7px 18px; font-size: 16px; }
-.tol-stepper .tol-val {
-  flex: 1; text-align: center; font-size: 15px; color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
+/* The keychain hole-size stepper this styled is a kit stepperRow() now, like the fit
+   steppers beside it — `.tol-stepper`/`.tol-val` have no more markup left to match. */
 
 /* Legacy prow kept for any remaining uses */
 .prow {
@@ -234,40 +194,8 @@ button.secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 .utility-btn svg, button.secondary svg { flex: 0 0 auto; width: 16px; height: 16px; }
 
-/* Segmented controls (tabs) */
-.tabs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 5px;
-}
-.tab {
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  padding: 9px 10px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 15px;
-  transition:
-    background var(--dur-hover) var(--ease-standard),
-    color var(--dur-hover) var(--ease-standard);
-  text-align: center;
-  width: 100%;
-}
-.tab.active {
-  background: var(--accent);
-  color: var(--accent-text);
-  font-weight: 600;
-}
-.tab:hover:not(.active) {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.03);
-}
+/* The hand-built `.tabs`/`.tab` segmented-control ladder that used to live here (the
+   active-switch chips) is gone — that control is a kit segmentedControl() now. */
 
 /* Custom shape button group: Outline + Dropdown */
 .shape-group {
@@ -298,31 +226,40 @@ button.secondary:disabled { opacity: 0.45; cursor: not-allowed; }
   font: inherit;
 }
 
-/* Filament Palette styling */
+/* Filament palette styling. Each row used to be a full kit `filamentRow()` — all fourteen
+   shelf swatches, repeated per colour — which is what read as "cut off" on the left and let
+   the off-palette custom-colour swatch wrap onto its own line or run past the 333px sidebar.
+   `renderPalette()`/`paletteRow()` now build one compact `.palette-row` per colour: a dot,
+   a label, and a single kit `colorChip()` (styled in `@vostok/ui-kit`) that opens the same
+   floating popover a 3D-view click opens. `.fil` below was already unused before this change
+   and is left as found. */
 .palette { display: flex; flex-direction: column; gap: 8px; }
-.swatch { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); flex: 0 0 auto; }
-.swatch.lg { width: 32px; height: 32px; }
-.arrow { color: var(--muted); font-size: 15px; }
-
-.fil-row { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 10px;
-  border: 1px solid transparent; cursor: pointer; background: var(--panel-2); }
-.fil-row:hover { background: rgba(255,255,255,0.02); }
-.fil-row.focused { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.slot-no { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 22px;
-  border-radius: 6px; background: var(--panel); border: 1px solid var(--line); color: var(--muted);
-  font-size: 13px; font-weight: 600; flex: 0 0 auto; }
-.fil-row.focused .slot-no { color: var(--accent); border-color: var(--accent); }
 .fil { display: inline-flex; align-items: center; gap: 6px; position: relative; }
-.fil-chip { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); }
-.fil-row .cov { color: var(--muted); font-size: 14px; margin-left: auto; min-width: 38px; text-align: right; }
-/* The body row's label is a word, not a slot number, so give it a wider pill. */
-.fil-row .slot-no.slot-body {
-  width: 40px;
-  min-width: 40px;
-  padding: 0;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.1px;
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.palette-row__label {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted);
+}
+.fil-quant-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  margin-right: 6px;
+  vertical-align: middle;
+  flex: 0 0 auto;
 }
 
 .stepper { display: inline-flex; align-items: center; gap: 3px; }
@@ -398,7 +335,13 @@ button.secondary:disabled { opacity: 0.45; cursor: not-allowed; }
   position: absolute; left: 18px; bottom: 15px; z-index: 5; max-width: 70ch;
   padding: 10px 15px; border-radius: 10px; background: color-mix(in srgb, var(--panel) 90%, transparent);
   backdrop-filter: blur(4px); font-size: 15.5px; line-height: 1.4;
-  border: 1px solid var(--line); color: var(--text); pointer-events: none;
+  border: 1px solid var(--line); color: var(--text);
+  /* Was `pointer-events: none` — meant well (let a click sail through to the model behind it)
+     but took the whole line with it: a build warning worth reading twice, or worth pasting
+     into a bug report, could not be selected at all. `auto` only changes what happens INSIDE
+     this box; the 3D viewport everywhere else is untouched. */
+  pointer-events: auto;
+  user-select: text;
 }
 .hint { color: var(--muted); font-size: 14px; line-height: 1.4; margin-top: 8px; }
 /* The shared stage hint is a bottom-CENTER pill; the clicker keeps a live
@@ -426,33 +369,63 @@ button.secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 .wz-error[hidden] { display: none; }
 
 .wz-body { display: grid; }
-.wz-modal.lg .wz-body { grid-template-columns: 1fr 400px; gap: 28px; }
-.wz-left { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.wz-info {
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
-  padding: 14px 16px; font-size: 13.5px; line-height: 1.5; color: var(--muted);
-}
-.wz-info-title {
-  display: flex; align-items: center; gap: 8px;
-  font-weight: 600; color: var(--text); margin-bottom: 10px; font-size: 14.5px;
-}
-.wz-info-title svg { color: var(--accent); flex: 0 0 auto; }
-.wz-info ul { margin: 0 0 10px; padding-left: 20px; }
-.wz-info li { margin-bottom: 5px; }
-.wz-info p { margin: 0; }
-.wz-info strong { color: var(--text); font-weight: 600; }
-.wz-info-warn {
-  margin: 0 0 10px !important; padding-top: 10px; border-top: 1px solid var(--line);
-}
-.wz-info-warn strong { color: #ff6b6b; }
-.wz-controls { display: flex; flex-direction: column; gap: 15px; }
-.wz-label { font-size: 16px; font-weight: 600; color: var(--text); }
-.wz-sub { color: var(--muted); font-size: 15px; text-align: center; line-height: 1.5; }
+/*
+  Sizing arithmetic for the 1366x768 laptop target (checked against invariant #10's "verify
+  in the browser", but written down here since the constraint is a CSS one):
+    modal max-height        92vh of 768   = 706px
+    wz-head (20px pad x2 + ~24px line)    = ~64px
+    wz-foot (18px pad x2 + ~40px button)  = ~76px
+    wz-body padding (22px top+bottom)     = ~44px
+    left column: preview-bar ~40 + gap 14 + palette ~30 + gap 14 + hint ~34 + 2 gaps 28 = ~160px
+                                             leaves ~362px for the canvas — a real hero, not
+                                             a postage stamp, and it only grows at 1920x1080.
+  None of this is hardcoded on the canvas itself: it is `flex: 1; min-height: 0` inside a
+  column that is itself a grid cell with a bounded height (`.wz-body` gets `flex:1;min-height:0`
+  from its flex-column modal parent), so the canvas simply takes whatever is left over at any
+  viewport rather than being sized in JS or pinned to a vh number the way the old `max-height:
+  56vh` was. The controls column scrolls internally instead of pushing the modal taller.
+*/
+.wz-modal.lg .wz-body { grid-template-columns: 1fr 360px; gap: 24px; overflow: hidden; flex: 1; min-height: 0; }
+.wz-left { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; }
+.wz-controls { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; padding-right: 4px; }
+/* `section()`/`collapsibleSection()` get their flex rhythm from `.vl-app .vl-section` in the
+   kit — this modal is appended to `document.body`, outside `.vl-app`, so that scoped rule
+   never matches. Restate the one part that actually changes (flex + gap) here rather than
+   let a plain `.vl-section` fall back to unstyled block spacing. */
+.wz-controls .vl-section { display: flex; flex-direction: column; gap: 14px; }
+.wz-controls .vl-section > .vl-label { margin: 0 0 2px; }
 
-.wz-canvas { display: flex; align-items: center; justify-content: center; border-radius: 12px;
-  min-height: 300px; overflow: hidden; }
+.wz-canvas {
+  flex: 1; min-height: 220px; display: flex; align-items: center; justify-content: center;
+  border-radius: 12px; overflow: hidden; cursor: grab; touch-action: none;
+}
+.wz-canvas.is-panning { cursor: grabbing; }
 .wz-canvas.big { min-height: 450px; width: 100%; }
-.wz-canvas canvas { max-width: 100%; max-height: 56vh; object-fit: contain; display: block; }
+/* The result view keeps the last trace on screen, dimmed, while a fresh one is computed —
+   a blank frame between two slider ticks reads as "it broke". */
+.wz-canvas.is-stale canvas { opacity: 0.45; transition: opacity var(--dur-hover) var(--ease-standard); }
+.wz-preview-bar { display: flex; align-items: center; gap: 14px; }
+.wz-preview-bar > :first-child { flex: 0 0 240px; }
+.wz-zoom-controls { display: flex; align-items: center; gap: 6px; }
+.wz-stats { color: var(--muted); font-size: 14px; margin-left: auto; }
+.wz-stats.is-busy { color: var(--text); }
+/* No `max-height` here on purpose — the canvas fills whatever `.wz-canvas` gives it (see the
+   sizing comment above), and the zoom/pan transform is applied to this same element in JS. */
+.wz-canvas canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+/* Read-only palette: what the trace found, not a control — filaments are picked in the
+   sidebar afterwards. */
+.wz-palette { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-height: 18px; }
+.wz-swatch { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.wz-swatch-dot { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--line); flex: 0 0 auto; }
+/* The keep-list: one kit switch row per colour found, with the swatch in front of the label. */
+.wz-colours { display: flex; flex-direction: column; gap: 6px; }
+.wz-colours-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.wz-colour-count { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.wz-colour-list { display: flex; flex-direction: column; gap: 2px; }
+.wz-colour-row { gap: 10px; }
+.wz-colour-row .vl-switch-label { flex: 1 1 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wz-colour-dot { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); flex: 0 0 auto; }
 .checker { background-image:
   linear-gradient(45deg, var(--panel-2) 25%, transparent 25%),
   linear-gradient(-45deg, var(--panel-2) 25%, transparent 25%),
@@ -560,74 +533,10 @@ body.tutorial-active.focus-center #viewport {
     outline var(--dur-in-md) var(--ease-standard),
     box-shadow var(--dur-in-md) var(--ease-standard);
   z-index: 1002 !important;
-}/* Import Grid Selector (2x2 Cards Layout + a full-width row for Blocks) */
-.import-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
 }
-
-/* Blocks is the odd fifth card: span the row so the grid stays balanced and the mode
-   reads as its own thing instead of a leftover half-row. */
-.import-card[data-mode='blocks'] {
-  grid-column: 1 / -1;
-  justify-content: center;
-}
-
-.import-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition:
-    border-color var(--dur-hover) var(--ease-standard),
-    background-color var(--dur-hover) var(--ease-standard),
-    color var(--dur-hover) var(--ease-standard),
-    transform var(--dur-press) var(--ease-standard);
-  color: var(--muted);
-  width: 100%;
-  text-align: left;
-}
-
-.import-card:hover {
-  border-color: var(--accent);
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.02);
-}
-
-:root[data-theme="light"] .import-card:hover {
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.import-card:active {
-  transform: scale(0.98);
-}
-
-.import-card.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
-}
-
-.import-card .card-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-}
-
-.import-card .card-label {
-  font-size: 14.5px;
-  font-weight: 600;
-  flex-grow: 1;
-}
+/* Import Source cards, the switch chips and both edge-style pickers now come from the kit's
+   segmentedControl() (see ui.ts) — the hand-built `.import-card` ladder that used to live here
+   is gone with them. */
 
 .mode-panel {
   display: flex;
@@ -873,8 +782,12 @@ body.tutorial-active.focus-center #viewport {
 }
 .block-gap:hover { opacity: 1; color: var(--accent); }
 
-.symbol-modal { width: min(640px, 92vw); }
-.symbol-modal .wz-body { display: block; }
+/* The symbol picker is a kit dialog() now — `.symbol-modal`'s width and its `.wz-body`
+   override are gone with the hand-rolled `.wz-overlay`/`.wz-modal` it used to sit in.
+   `color` is restated because `.vl-dialog > div` (the kit's generic content styling, meant
+   for prose) sets it to `--muted`, which is wrong for an interactive search box and a grid
+   of buttons that carry their own colour. */
+.symbol-picker-body { color: var(--text); }
 .symbol-search {
   width: 100%;
   margin-bottom: 12px;
@@ -996,26 +909,10 @@ body.tutorial-active.focus-center #viewport {
 @keyframes pulse {
   0%, 100% { opacity: 0.85; }
   50% { opacity: 1; }
-}/* Make the mapped filament chip clickable and interactive */
-button.fil-chip {
-  padding: 0;
-  cursor: pointer;
-  transition:
-    transform var(--dur-press) var(--ease-standard),
-    border-color var(--dur-press) var(--ease-standard);
-  outline: none;
 }
-/* `outline: none` above kills the ring for the mouse, which is the point; putting one back for
-   the keyboard is not optional. Without this the whole colour-picking flow — the filament chips
-   and the swatch popover below — could be tabbed into with no visible focus at all. */
-button.fil-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-button.fil-chip:hover {
-  transform: scale(1.08);
-  border-color: var(--accent);
-}
-button.fil-chip:active {
-  transform: scale(0.95);
-}
+/* The filament-chip button styled here is gone — the palette is built from `.palette-row`
+   and the kit's `colorChip()` now (see the palette comment above), which carries its own
+   focus ring and hover/press states. */
 
 /* Two-column recolor layout for wizard */
 .wz-modal.recolor {
@@ -1211,52 +1108,14 @@ button.fil-chip:active {
   line-height: 1.4;
 }
 
-/* Inline sample image thumbnails */
-.sample-heading {
-  display: block;
-  font-size: 14px;
+/* The base-shape drawer's one sentence of guidance. A muted paragraph is not a control, so
+   an app class is right here — invariant #9 is about controls, and every control in that
+   drawer is a kit component. */
+.cg-pick__hint {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--fs-small);
+  line-height: 1.4;
   color: var(--muted);
-  margin-top: 14px;
-  margin-bottom: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.sample-inline-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-  gap: 8px;
-}
-
-.sample-inline-item {
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  border-radius: 8px;
-  padding: 6px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  transition:
-    border-color var(--dur-hover) var(--ease-standard),
-    transform var(--dur-hover) var(--ease-standard);
-}
-.sample-inline-item:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
-}
-.sample-inline-item img {
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: contain;
-  border-radius: 4px;
-}
-.sample-inline-item span {
-  font-size: 11px;
-  color: var(--muted);
-  text-align: center;
-  line-height: 1.2;
 }
 
 /* Sticky footer in sidebars for action buttons */
@@ -1386,33 +1245,75 @@ button.fil-chip:active {
 }
 .extrude-height-indicator[hidden] { display: none; }
 
-/* ===== Edges Panel (floating in viewport) ===== */
-.edges-panel {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  padding: 14px 18px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--panel) 90%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--line);
-  box-shadow: 0 6px 28px rgba(0,0,0,0.22);
+/* ===== Right sidebar: docking wrapper for the Raise / Edges panels ===== */
+/*
+  `rightScrollWrap` (ui.ts) sits where `rightScroll` used to sit directly — the flex slot
+  inside `.vl-panel--right` — and now holds `rightScroll` plus, on top of it, whichever of
+  `#extrudePanel` / `#edgesPanel` is open. `position: relative` here is what makes their
+  `position: absolute; inset: 0` below cover exactly this box rather than the whole sidebar
+  (which would bury `rightFooter`) or the whole page.
+*/
+.right-scroll-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 300px;
-  max-width: 380px;
-  pointer-events: auto;
+  overflow: hidden;
+}
+
+/* ===== Raise / Edges panels (docked over the right sidebar's scroll area) ===== */
+/*
+  Used to float centred over the 3D viewport (`position: absolute; bottom: 112px; left: 50%`,
+  a blurred glass card) — covering the model it was editing, which is the opposite of what a
+  parameter panel should do. Docked instead, the same way the base-shape picker's drawer sits
+  over the sidebar rather than the stage: `inset: 0` inside `.right-scroll-wrap` above makes it
+  cover exactly the scroll area, so `rightFooter` (Export / Save / Load / Light mode, a flex
+  sibling of `.right-scroll-wrap` and NOT inside it) stays visible and clickable the whole time
+  a panel is open.
+*/
+.edges-panel {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  right: var(--space-3);
+  /* A card, not a full cover: the panel holds three controls, and covering the whole
+     column with them read as "the sidebar is gone". What is underneath is dimmed and
+     inert instead (below), so it still reads as the sidebar with a task on top of it. */
+  max-height: calc(100% - 2 * var(--space-3));
+  z-index: 5;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .edges-panel[hidden] { display: none; }
+.right-scroll-wrap:has(.edges-panel:not([hidden])) > .vl-panel__scroll {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.edges-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* Placement only (a flex-shrink override), not a restyle — the button itself is a plain
+   `iconButton()`. Without it the title text and this button would fight over space if a
+   long edge target name ever pushed the row close to wrapping. */
+.edges-panel-close { flex-shrink: 0; }
+/* A title, not a caption: the card is the one thing on top of the sidebar, so its name is
+   what says what mode you are in. */
 .edges-panel .edges-title {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
   margin: 0;
 }
 .edge-row {
@@ -1437,35 +1338,8 @@ button.fil-chip:active {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.edge-style-btns {
-  display: flex;
-  gap: 2px;
-  margin-top: 2px;
-}
-.edge-style-btn {
-  flex: 1;
-  padding: 5px 0;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background var(--dur-hover) var(--ease-standard),
-    color var(--dur-hover) var(--ease-standard),
-    border-color var(--dur-hover) var(--ease-standard);
-}
-.edge-style-btn:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-.edge-style-btn.active {
-  background: var(--accent);
-  color: var(--accent-text);
-  border-color: var(--accent);
-}
+/* The None/Fillet/Chamfer picker (global rows + per-part rows) is a kit segmentedControl()
+   now — the `.edge-style-btn(s)` ladder that used to style it by hand is gone with it. */
 
 /* Empty-state hint inside the floating Edges panel (nothing selected). */
 .edges-empty {
@@ -1476,27 +1350,6 @@ button.fil-chip:active {
   padding: 4px 2px;
 }
 
-/* ===== Global edges in the left Shape & Size panel ===== */
-.global-edges {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 18px;
-  margin-bottom: 2px;
-}
-.gedge-heading { display: block; font-size: 15px; color: var(--muted); }
-.gedge-row { display: flex; flex-direction: column; gap: 7px; }
-.gedge-name { font-size: 14.5px; color: var(--text); }
-.global-edges .edge-style-btn { font-size: 12.5px; padding: 7px 0; }
-.gedge-size { align-items: center; gap: 8px; }
-.gedge-size .edge-size-val {
-  flex: 1;
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.gedge-size .btn { flex: 0 0 auto; padding: 7px 16px; }
 
 /* Generic button used inside the floating extrude/edges panels (+/- steppers). */
 .btn {
@@ -1684,3 +1537,348 @@ button.fil-chip:active {
    rather than a JSON file the user has to keep track of themselves. The rows themselves
    are listRow() from @vostok/ui-kit; only the scrolling wrapper is app-local. */
 .ck-project-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+
+/* ---- SVG import preview -----------------------------------------------------------------
+   The file beside what the tracer made of it. When those two disagree, that difference IS the
+   "SVG import doesn't work" report, and seeing them side by side is the whole feature. */
+.cg-svgprev { display: flex; flex-direction: column; gap: 12px; }
+
+.cg-svgprev__panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.cg-svgprev__panel { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.cg-svgprev__caption {
+  color: var(--muted);
+  font-size: 13px;
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+/* A checkerboard, so a white logo on a white ground is still visible — the case where "nothing
+   imported" and "it imported and is white" look identical. */
+.cg-svgprev__art {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background-color: var(--panel);
+  background-image:
+    linear-gradient(45deg, var(--line) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--line) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--line) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--line) 75%);
+  background-size: 14px 14px;
+  background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+}
+
+.cg-svgprev__art img,
+.cg-svgprev__art svg { max-width: 100%; max-height: 100%; }
+
+.cg-svgprev__empty { color: var(--muted); font-size: 13px; text-align: center; margin: 0; }
+
+.cg-svgprev__note { margin: 0; font-size: 13px; color: var(--muted); }
+.cg-svgprev__note--warn { color: var(--warn); }
+
+.cg-svgprev__parts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* Swatch · what the file did · what we will do. The picker is the decision, so it gets the
+   fixed width; the description takes what is left and ellipsises. */
+.cg-svgprev__part { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.cg-svgprev__what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.cg-svgprev__mode { flex: 0 0 250px; }
+
+/* ---------------------------------------------------------------- the 2-D shape editor
+   `.cg-shed` is a plain flex column: the three-column working area (`.cg-shed__grid`) on top,
+   the geometry-warning banner below it. Only layout lives here. Every control in the side
+   column is a kit component and carries its own look; the canvas paints itself from tokens
+   read through `themeColor()`. */
+.cg-shed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+/*
+  The height budget that used to send this dialog off the bottom of a 1366x768 screen.
+
+  `dialog()` (`packages/ui-kit/src/components/dialog.ts`) wraps title + content + actions in one
+  flex column with `padding: 28px` and `gap: 14px`, and the OUTER box scrolls as a single unit —
+  so if the working area below grows past what is left, the footer (Cancel / Use this shape)
+  scrolls away with it rather than staying put. Nothing before this pass gave the working area
+  a ceiling: the grid had a `min-height` but no maximum, the canvas had a hard `min-height:
+  380px`, and the shape rail's own `max-height: 420px` was bigger than the whole dialog was
+  supposed to be. Three ways to overflow, and any one of them was enough.
+
+  The fix is arithmetic, not a bigger scroller. Dialog chrome outside this element:
+    28px x 2  padding                                   =  56px
+    14px x 2  flex gap (title<->content, content<->actions) =  28px
+    ~24px     title line ("Shape", 20px display font)    =  24px
+    ~40px     the actions row (a `.vl-btn--primary` is ~39px tall)
+                                                          = 148px
+  Plus what THIS element adds beneath the grid: a 10px gap to the warning banner and the
+  banner's own one-line height when it is shown (~10px padding + ~16px text ≈ 26px, rounded up
+  for a wrapped line) = ~40px. Call the total non-grid chrome 190px, with room to spare.
+
+  So the grid gets `clamp(400px, calc(90vh - 190px), 560px)`: at 1366x768, 90vh is ~691px, minus
+  190 is ~501px — comfortably inside the clamp, and the dialog sits well short of the viewport
+  instead of a hair over it. At 1920x1080 the calc would ask for ~782px; the 560px ceiling caps
+  it there instead of stretching the canvas to a size nobody asked for. The floor exists so a
+  cramped viewport (dev tools open, a short laptop panel) still gets a usable 400px rather than
+  shrinking indefinitely — past that point `.vl-dialog`'s own `overflow-y: auto` is the fallback,
+  same as it always was.
+*/
+.cg-shed__grid {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 220px;
+  gap: 16px;
+  align-items: stretch;
+  height: clamp(400px, calc(90vh - 190px), 560px);
+}
+
+.cg-shed__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  /* The shapes list scrolls INSIDE its own column — the one thing Requirement 4 insists on,
+     because a rail that grows with the catalogue is exactly how the footer went offscreen the
+     first time. */
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.cg-shed__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cg-shed__caption {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.cg-shed__tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  align-content: start;
+}
+
+.cg-shed__tile {
+  aspect-ratio: 1;
+  border-radius: var(--radius-s);
+  padding: 5px;
+  color: var(--text);
+  transition: background-color var(--dur-hover) var(--ease-standard),
+    border-color var(--dur-hover) var(--ease-standard),
+    box-shadow var(--dur-hover) var(--ease-standard);
+}
+
+.cg-shed__tile:hover { background: var(--panel-2); }
+
+/* On top of the kit's own `[aria-pressed='true']` border and tint — a halo the accent border
+   alone did not give enough of, sitting next to seventeen other tiles the same size. */
+.cg-shed__tile[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--accent); }
+
+/* Build's "Add a shape" palette: the tile reads as inert glassware next to the rail's own
+   look-alike tiles unless something on it says "click me". A `+` that only shows up under the
+   cursor/focus does that without permanently cluttering twelve small squares with a caption. */
+.cg-shed__tile--add { cursor: pointer; position: relative; }
+.cg-shed__tile--add::after {
+  content: '+';
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-hover) var(--ease-standard);
+}
+.cg-shed__tile--add:hover::after,
+.cg-shed__tile--add:focus-visible::after { opacity: 1; }
+
+.cg-shed__stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.cg-shed__canvas {
+  flex: 1;
+  width: 100%;
+  /* A floor, not a target — the canvas is sized by the grid row above and a `ResizeObserver`
+     redraws it (see `shapeEditor.ts`'s `ro`); this only stops it collapsing to nothing on an
+     extremely short viewport. */
+  min-height: 160px;
+  display: block;
+  /* Without this a drag on a touchscreen is taken by the browser as a page pan, and the
+     editor simply never receives the pointermove events. Nothing else in the repo sets it. */
+  touch-action: none;
+  outline: none;
+}
+
+.cg-shed__canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Build's "which piece is this" label — a DOM element positioned over the canvas each frame
+   (see `updateItemLabel` in shapeEditor.ts) rather than canvas-drawn text, so it renders in the
+   app's own font and tokens instead of a hand-picked canvas font string. `transform` centres it
+   horizontally on the item and sits it just above the item's box; `pointer-events: none` keeps
+   it from stealing the click meant for the shape underneath. */
+.cg-shed__item-label {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 2px 6px;
+  border-radius: var(--radius-s);
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+.cg-shed__item-label--cut { border-color: var(--red); color: var(--red); }
+
+.cg-shed__hint {
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  flex: none;
+}
+
+.cg-shed__side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  /* The side panel now carries a slider for every grip plus a full Draw toolset — more than
+     the smallest supported viewport always has room for. It scrolls on its own rather than
+     pushing the grid, and by extension the footer, taller than the budget above allows. */
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* The standing explanation for the Adjust <-> Draw freeze (Requirement 3) — updated every time
+   the state that would change its wording changes, so it never goes stale mid-session. */
+.cg-shed__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.cg-shed__tools { display: flex; gap: 6px; }
+
+/* The Adjust/Build tabs plus the "?" keyboard-shortcuts tip beside them — sharing one row
+   keeps the shortcut reference next to the control it explains rather than buried in a note
+   further down the panel. */
+.cg-shed__mode-row { display: flex; align-items: center; gap: 8px; }
+.cg-shed__mode-row > :first-child { flex: 1; min-width: 0; }
+
+/* The pieces list (Requirement 4): every item in z-order, front first, one click away from
+   being the selection — the answer to "which of these overlapping circles did I select" that
+   the canvas alone cannot give once two shapes sit on top of each other. */
+.cg-shed__piece-group { display: flex; flex-direction: column; gap: 6px; }
+.cg-shed__pieces {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+/* Each row IS a `button()` — `className` here only repositions its own label and adds the
+   Add/Cut badge, it does not restate the ladder's colour, border or padding. */
+.cg-shed__piece {
+  position: relative;
+  justify-content: flex-start;
+  text-align: left;
+  padding-right: 40px;
+}
+.cg-shed__piece::after {
+  content: attr(data-badge);
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+}
+.cg-shed__piece--cut::after { color: var(--red); }
+/* Same mechanism as `.cg-shed__tile[aria-pressed='true']` above — a halo laid over the kit's
+   own ghost-button look rather than a restyle of it. */
+.cg-shed__piece[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--accent); }
+
+/* The Adjust sliders and the Draw toolset, each in their own panel — only one showing at a
+   time, toggled from `syncModePanels` rather than by rebuilding either panel's contents. */
+.cg-shed__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cg-shed__readout {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The geometry warning, near the footer rather than only tinting the canvas (Requirement 5).
+   No `display` declared: an empty banner is hidden with the plain `hidden` attribute, and a
+   `display` here would out-rank the browser's own `[hidden]` rule and show it anyway. */
+.cg-shed__warn {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius-s);
+  background: var(--panel-2);
+  color: var(--warn);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@media (max-width: 860px) {
+  /* A narrower viewport is also usually a shorter one relative to its width, so the height
+     budget above (sized for a 3-column desktop layout) is dropped here in favour of the
+     dialog's own `overflow-y: auto` — the same fallback the desktop layout keeps in reserve. */
+  .cg-shed__grid {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .cg-shed__rail { max-height: 30vh; }
+  .cg-shed__tiles { grid-template-columns: repeat(6, 1fr); }
+  .cg-shed__stage { min-height: 45vh; }
+  .cg-shed__side { max-height: none; overflow-y: visible; }
+}

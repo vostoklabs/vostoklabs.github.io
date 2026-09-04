@@ -26,40 +26,39 @@ export function removeBackground(img: RgbaImage, tol = 2000): RgbaImage {
     return dr * dr + dg * dg + db * db;
   };
 
-  // Generic border flood: mark pixels reachable from any edge for which pred() holds.
-  // `maxDepth` limits how far (in Manhattan distance from the nearest border pixel) the
-  // flood can penetrate. This prevents the fill from leaking through thin strokes deep
-  // into the subject when the subject's interior color matches the background. A value
-  // of 0 means unlimited depth (original behavior).
-  const floodFromBorder = (pred: (p: number) => boolean, maxDepth = 0): Uint8Array => {
+  /* Generic border flood: mark pixels reachable from any edge for which pred() holds.
+
+     This used to carry a `maxDepth` parameter, documented as stopping the fill from leaking
+     through thin strokes deep into a subject whose interior matches the background. Neither
+     call site ever passed it, so the depth limit has never once executed and the protection
+     described did not exist. Removed rather than switched on: turning it on would change
+     background removal for every image, and there is no failing case on hand to pick a depth
+     against. If a leak does turn up, that is the place to put it back. */
+  const floodFromBorder = (pred: (p: number) => boolean): Uint8Array => {
     const mask = new Uint8Array(n);
-    const depth = maxDepth > 0 ? new Uint16Array(n) : null;
     const stack: number[] = [];
-    const push = (p: number, d: number) => {
+    const push = (p: number) => {
       if (!mask[p] && pred(p)) {
-        if (depth && d > maxDepth) return;
         mask[p] = 1;
-        if (depth) depth[p] = d;
         stack.push(p);
       }
     };
     for (let x = 0; x < W; x++) {
-      push(x, 1);
-      push((H - 1) * W + x, 1);
+      push(x);
+      push((H - 1) * W + x);
     }
     for (let y = 0; y < H; y++) {
-      push(y * W, 1);
-      push(y * W + W - 1, 1);
+      push(y * W);
+      push(y * W + W - 1);
     }
     while (stack.length) {
       const p = stack.pop()!;
-      const d = depth ? depth[p] + 1 : 0;
       const x = p % W;
       const y = (p / W) | 0;
-      if (x > 0) push(p - 1, d);
-      if (x < W - 1) push(p + 1, d);
-      if (y > 0) push(p - W, d);
-      if (y < H - 1) push(p + W, d);
+      if (x > 0) push(p - 1);
+      if (x < W - 1) push(p + 1);
+      if (y > 0) push(p - W);
+      if (y < H - 1) push(p + W);
     }
     return mask;
   };
@@ -86,26 +85,41 @@ export function removeBackground(img: RgbaImage, tol = 2000): RgbaImage {
     }
   }
 
-  // Detect a solid matte: the four corners of the opaque bbox (or the whole image
-  // when fully opaque) must be opaque and mutually similar.
+  /*
+    Detect a solid matte from the whole perimeter of the opaque bbox, not from its corners.
+
+    This used to sample exactly four pixels — the bbox corners — and require all four to be
+    opaque and mutually similar. Four samples is a single-pixel failure mode in both
+    directions: one JPEG-speckled corner and background removal silently does not happen,
+    while a design whose bbox corners happen to sit on the artwork gets the artwork's own
+    colour flooded away.
+
+    The perimeter is a few thousand pixels instead. A matte is declared when most of them are
+    opaque AND most of those agree with their median, which is the same judgement the corner
+    test was trying to make, with enough samples that no single pixel decides it. The genuine
+    cut-out case still falls through exactly as before: a round subject on transparency has a
+    mostly-transparent bbox perimeter, so no matte is found and only the transparent ring goes.
+  */
   let matte: RGB | null = null;
   if (maxX >= minX) {
-    const corners = [
-      [minX, minY],
-      [maxX, minY],
-      [minX, maxY],
-      [maxX, maxY],
-    ].map(([x, y]) => y * W + x);
-    if (corners.every((p) => !isTransparent(p))) {
-      const cs = corners.map(colorAt);
-      const uniform = cs.every((c) => dist2(c, cs[0]) <= tol * 3);
-      if (uniform) {
-        matte = [
-          (cs[0][0] + cs[1][0] + cs[2][0] + cs[3][0]) / 4,
-          (cs[0][1] + cs[1][1] + cs[2][1] + cs[3][1]) / 4,
-          (cs[0][2] + cs[1][2] + cs[2][2] + cs[3][2]) / 4,
-        ];
-      }
+    const perimeter: number[] = [];
+    for (let x = minX; x <= maxX; x++) {
+      perimeter.push(minY * W + x);
+      perimeter.push(maxY * W + x);
+    }
+    for (let y = minY + 1; y < maxY; y++) {
+      perimeter.push(y * W + minX);
+      perimeter.push(y * W + maxX);
+    }
+    const opaque = perimeter.filter((p) => !isTransparent(p));
+    if (opaque.length >= perimeter.length * 0.75 && opaque.length > 0) {
+      const median = (ch: number) => {
+        const v = opaque.map((p) => data[p * 4 + ch]).sort((a, b) => a - b);
+        return v[v.length >> 1];
+      };
+      const med: RGB = [median(0), median(1), median(2)];
+      const agree = opaque.filter((p) => dist2(colorAt(p), med) <= tol).length;
+      if (agree >= opaque.length * 0.75) matte = med;
     }
   }
 
@@ -119,40 +133,74 @@ export function removeBackground(img: RgbaImage, tol = 2000): RgbaImage {
   return img;
 }
 
-/** Composite semi-transparent pixels over a matte color so anti-aliased edges keep
- *  clean colors (kills the fringe/halo ring left by soft edges). Alpha is preserved —
- *  the foreground mask is derived separately, this only cleans the RGB. */
+/**
+ * Clean the RGB of soft (anti-aliased) pixels so the quantizer never sees a fringe colour.
+ *
+ * WHAT THIS USED TO DO, AND WHY IT WAS WRONG.
+ * It composited every soft pixel over a matte colour, and for any image with transparency
+ * that matte was hardcoded WHITE. Measured across the sample set, that moved 17-19% of all
+ * pixels, 100% of them toward white, by a mean of 4-5/255. On artwork whose colours are far
+ * apart it is harmless; on the bat, whose outline (#000000) and body (#222224) are 34 steps
+ * apart, a uniform nudge toward white is enough to flip labels back and forth along the
+ * seam — 91 -> 189 components and 62 -> 160 specks, which is the ragged outline ring.
+ *
+ * It is also wrong in principle. A correctly authored cut-out already stores the pure ink
+ * colour in RGB and keeps the softness in alpha, so compositing it over a background that
+ * is not there corrupts a colour that was already right. And an OPAQUE image has no soft
+ * pixels at all by this point (background removal sets alpha to exactly 0, never a partial
+ * value), so the white-matte branch was the only one that ever ran.
+ *
+ * WHAT IT DOES NOW.
+ * A soft pixel's colour is replaced by its nearest FULLY OPAQUE neighbour's — the artwork's
+ * own colour at that spot. That still does the job the function exists for (a fringe pixel
+ * contaminated by whatever used to sit behind it gets a clean colour) without pulling
+ * anything toward a white that is not in the drawing. An explicit `matte` is still honoured
+ * for callers that genuinely want a known background, and a soft pixel with no opaque
+ * neighbour within `R` falls back to it.
+ */
 export function compositeOverMatte(img: RgbaImage, matte?: RGB): RgbaImage {
   const { data, width: W, height: H } = img;
   const n = W * H;
+  const R = 4; // an anti-aliased band is 1-2px; 4 covers a soft edge on a downscaled photo
 
-  let m = matte;
-  if (!m) {
-    // Auto-pick: an opaque image has no real background left after removal, so its
-    // soft pixels came from JPEG-style edges → matte = the average border color.
-    // A cut-out (has transparency) sits on true transparent bg → matte = white.
-    let transparent = 0;
-    for (let p = 0; p < n; p++) if (data[p * 4 + 3] < 255) transparent++;
-    if (transparent < n * 0.01) {
-      let r = 0, g = 0, b = 0, c = 0;
-      const add = (p: number) => { r += data[p * 4]; g += data[p * 4 + 1]; b += data[p * 4 + 2]; c++; };
-      for (let x = 0; x < W; x++) { add(x); add((H - 1) * W + x); }
-      for (let y = 0; y < H; y++) { add(y * W); add(y * W + W - 1); }
-      m = c > 0 ? [r / c, g / c, b / c] : [255, 255, 255];
-    } else {
-      m = [255, 255, 255];
-    }
-  }
-  const [mr, mg, mb] = m;
+  const opaque = new Uint8Array(n);
+  for (let p = 0; p < n; p++) opaque[p] = data[p * 4 + 3] === 255 ? 1 : 0;
+
+  const fallback: RGB = matte ?? [255, 255, 255];
+  const out = new Uint8ClampedArray(data.length);
+  out.set(data);
+
   for (let p = 0; p < n; p++) {
     const a = data[p * 4 + 3];
-    if (a > 0 && a < 255) {
+    if (a === 0 || a === 255) continue;
+    const x = p % W;
+    const y = (p / W) | 0;
+    // Expanding square rings, so the first hit is the nearest opaque pixel.
+    let found = -1;
+    for (let r = 1; r <= R && found < 0; r++) {
+      for (let dy = -r; dy <= r && found < 0; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring only
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+          const q = ny * W + nx;
+          if (opaque[q]) { found = q; break; }
+        }
+      }
+    }
+    if (found >= 0) {
+      out[p * 4] = data[found * 4];
+      out[p * 4 + 1] = data[found * 4 + 1];
+      out[p * 4 + 2] = data[found * 4 + 2];
+    } else {
       const f = a / 255;
-      data[p * 4] = data[p * 4] * f + mr * (1 - f);
-      data[p * 4 + 1] = data[p * 4 + 1] * f + mg * (1 - f);
-      data[p * 4 + 2] = data[p * 4 + 2] * f + mb * (1 - f);
+      out[p * 4] = data[p * 4] * f + fallback[0] * (1 - f);
+      out[p * 4 + 1] = data[p * 4 + 1] * f + fallback[1] * (1 - f);
+      out[p * 4 + 2] = data[p * 4 + 2] * f + fallback[2] * (1 - f);
     }
   }
+  data.set(out);
   return img;
 }
 

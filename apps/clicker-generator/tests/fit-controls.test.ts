@@ -282,4 +282,83 @@ check(
   tinyHollow.warnings.join(' | ') || 'built solid, no warning needed',
 );
 
+
+// --- The hollow cavity must be OPEN, not a sealed box.
+//
+// This is the assertion the first version of the feature needed and did not have. A sealed
+// cavity BUILDS, is a closed manifold, saves material and passes every check above — and then
+// asks the slicer to bridge a 1.6 mm lid over open air across most of the footprint, on a part
+// that gets clicked thousands of times. Ian reported it off a print, which is the only place it
+// showed.
+//
+// So probe for the lid directly: any horizontal face strictly inside the cavity's Z band is a
+// ceiling. Grouping by constant-Z triangles rather than looking for a magic -1.6 keeps this
+// honest if the floor thickness or the travel ever moves.
+function horizontalFaceAreaInside(part, loZ, hiZ, minRadius) {
+  const v = part.vertProperties, t = part.triVerts, n = part.numProp;
+  let area = 0;
+  for (let i = 0; i < t.length; i += 3) {
+    const a = t[i] * n, b = t[i + 1] * n, c = t[i + 2] * n;
+    const za = v[a + 2], zb = v[b + 2], zc = v[c + 2];
+    if (Math.abs(za - zb) > 1e-3 || Math.abs(zb - zc) > 1e-3) continue; // not horizontal
+    if (za <= loZ + 1e-3 || za >= hiZ - 1e-3) continue;                 // floor or well floor
+    // Outside the switch pillar only. The pillar is solid ON PURPOSE — it carries the socket
+    // and the click load — and the socket pocket cut into it has its own internal steps, which
+    // are horizontal faces in this Z band and are supposed to be. Measured: 18.7 mm² at
+    // z −1.45, radius 7.4–10.1, entirely inside the pillar's ~13.2 mm radius (set by the
+    // identity-void band). Counting those would make this assertion fail on correct geometry.
+    const cx = (v[a] + v[b] + v[c]) / 3, cy = (v[a + 1] + v[b + 1] + v[c + 1]) / 3;
+    if (Math.hypot(cx, cy) < minRadius) continue;
+    area += Math.abs((v[b] - v[a]) * (v[c + 1] - v[a + 1]) - (v[c] - v[a]) * (v[b + 1] - v[a + 1])) / 2;
+  }
+  return area;
+}
+const openBody = hollowRun.parts.find((p) => p.name === 'base-body');
+// The cavity spans bodyBottomZ+FLOOR .. wellFloorZ. Derive the band from the mesh rather than
+// restating the constants: the underside is the lowest Z, the well floor the highest solid
+// plane the cavity reaches.
+const openMinZ = (() => { let m = Infinity; const v = openBody.vertProperties;
+  for (let i = 2; i < v.length; i += openBody.numProp) if (v[i] < m) m = v[i]; return m; })();
+const lidArea = horizontalFaceAreaInside(openBody, openMinZ + 1.6, 0, 14);
+check(
+  'the hollow cavity has no ceiling to bridge — it is open into the well',
+  lidArea < 1,
+  `${lidArea.toFixed(2)} mm² of ceiling over the cavity (the sealed version had ~1500)`,
+);
+// And the lid was real material: opening it has to remove measurably more than the sealed box.
+check(
+  'opening the cavity removes more material than sealing it did',
+  saved > 0.55,
+  `${(saved * 100).toFixed(1)}% of the solid body removed (the sealed version managed 48.5%)`,
+);
+
+// --- Design size. The base must NOT move; only the artwork inside it.
+const dsFull = measure({ ...base, baseShape: 'circle', capWidthMm: 45 });
+const dsHalf = measure({ ...base, baseShape: 'circle', capWidthMm: 45, designScale: 0.5 });
+check(
+  'design size leaves the base exactly where it was',
+  Math.abs(dsHalf.base.maxX - dsFull.base.maxX) < 1e-3,
+  `body maxX ${dsFull.base.maxX.toFixed(3)} -> ${dsHalf.base.maxX.toFixed(3)} mm`,
+);
+check(
+  'and shrinks the artwork inside it, so the frame takes up the slack',
+  dsHalf.top.vol > dsFull.top.vol,
+  `cap base-colour volume ${dsFull.top.vol.toFixed(0)} -> ${dsHalf.top.vol.toFixed(0)} mm³ `
+  + '(more frame = more base colour)',
+);
+check(
+  'design size 1 is byte-identical to no design size at all',
+  measure({ ...base, designScale: 1 }).base.vol === zero.base.vol,
+  'default path unchanged',
+);
+// An outline base IS the artwork, so scaling it would print the silhouette full size with a
+// shrunken copy floating in a blank band. It must be ignored there.
+const outlineFull = measure({ ...base, baseShape: 'outline' });
+const outlineScaled = measure({ ...base, baseShape: 'outline', designScale: 0.5 });
+check(
+  'design size is ignored on an outline base, where shape and artwork are the same thing',
+  Math.abs(outlineScaled.base.vol - outlineFull.base.vol) < 0.01,
+  `${outlineFull.base.vol.toFixed(1)} vs ${outlineScaled.base.vol.toFixed(1)} mm³`,
+);
+
 process.exit(failures ? 1 : 0);

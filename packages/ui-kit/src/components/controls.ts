@@ -1,4 +1,5 @@
 import { el } from '../dom';
+import { ICONS, svgEl } from '../icons';
 
 /* Small parameter controls shared by every generator sidebar: the toggle, the
    labelled slider, the segmented control, the select field, and the "?" help
@@ -20,7 +21,35 @@ export interface ToggleOptions {
 export type ValueRow<T> = HTMLElement & {
   /** Set the displayed value. Does not fire the change handler unless `notify`. */
   setValue(value: T, notify?: boolean): void;
+  /** What the control currently shows.
+   *
+   *  Added because a pair of controls that edit two halves of one value — a width and a
+   *  height that go to the store together — needs each to read the other, and reaching into
+   *  the row's `<input>` from the app is exactly the class-ladder mistake one level down:
+   *  it works until the markup changes and then fails silently. */
+  getValue(): T;
+  /** Grey the control out and stop it taking input.
+   *
+   *  A control that has been superseded by another (Size, once the base size is locked) has
+   *  to LOOK superseded. Leaving it live is how a slider goes on appearing functional while
+   *  changing nothing, which is the bug the lock exists to fix — repeating it in the UI
+   *  would be quite the joke. */
+  setDisabled(disabled: boolean): void;
 };
+
+/** Wire the two accessors above onto a row, given how to read and disable it. */
+export function withAccess<T>(
+  row: ValueRow<T>,
+  read: () => T,
+  inputs: (HTMLInputElement | HTMLButtonElement | HTMLSelectElement)[],
+): void {
+  row.getValue = read;
+  row.setDisabled = (disabled: boolean) => {
+    row.classList.toggle('vl-control--disabled', disabled);
+    row.setAttribute('aria-disabled', String(disabled));
+    for (const i of inputs) i.disabled = disabled;
+  };
+}
 
 /** A labelled iOS-style switch (green when on). Returns the whole row. */
 export function toggleSwitch(opts: ToggleOptions): ValueRow<boolean> {
@@ -39,6 +68,7 @@ export function toggleSwitch(opts: ToggleOptions): ValueRow<boolean> {
     input.checked = value;
     if (notify) opts.onChange?.(value);
   };
+  withAccess(row, () => input.checked, [input]);
   return row;
 }
 
@@ -190,13 +220,34 @@ function valueField(ariaLabel: string): {
 }
 
 /** Label + editable value box + range, kept in sync both directions. */
-export function sliderRow(opts: SliderOptions): ValueRow<number> {
+/** A slider whose range and caption can be re-pointed after construction. */
+export type SliderRowHandle = ValueRow<number> & {
+  /**
+   * Re-point the slider at a different range, and optionally rename it.
+   *
+   * For a control that serves several mutually-exclusive settings: one row whose caption and
+   * range follow the current subject, rather than four rows of which three are always
+   * meaningless, or a row rebuilt on every change that loses focus with it.
+   *
+   * **No caller today.** It was written for the clicker's shape directory, whose single
+   * "detail" knob was Sides on a polygon and Points on a star; both of those are grips on the
+   * shape itself now (`apps/clicker-generator/src/ui/shapeEditor.ts`) and the sliders are gone.
+   * Kept because the capability is real and the next generator with mutually-exclusive knobs
+   * will want it — but if nothing has claimed it by the time somebody reads this, delete it.
+   */
+  setBounds(min: number, max: number, label?: string): void;
+};
+
+export function sliderRow(opts: SliderOptions): SliderRowHandle {
   const step = opts.step ?? 1;
   const fmt = opts.format ?? ((v: number) => (opts.unit ? `${v} ${opts.unit}` : String(v)));
 
-  const clamp = (v: number) => Math.min(opts.max, Math.max(opts.min, v));
+  // Mutable, because `setBounds` re-points the slider at a different range — see the handle.
+  let lo = opts.min;
+  let hiBound = opts.max;
+  const clamp = (v: number) => Math.min(hiBound, Math.max(lo, v));
   const snap = (v: number) => {
-    const snapped = Math.round((v - opts.min) / step) * step + opts.min;
+    const snapped = Math.round((v - lo) / step) * step + lo;
     // Trim floating-point fuzz from the step maths.
     return Number(clamp(snapped).toFixed(6));
   };
@@ -224,8 +275,8 @@ export function sliderRow(opts: SliderOptions): ValueRow<number> {
      the track is simply unfilled, which is a fine default rather than a broken one — so a
      hand-built range elsewhere degrades rather than breaking. */
   const paintFill = () => {
-    const span = opts.max - opts.min;
-    const pct = span > 0 ? ((current - opts.min) / span) * 100 : 0;
+    const span = hiBound - lo;
+    const pct = span > 0 ? ((current - lo) / span) * 100 : 0;
     range.style.setProperty('--pct', `${Math.max(0, Math.min(100, pct))}%`);
   };
 
@@ -269,8 +320,21 @@ export function sliderRow(opts: SliderOptions): ValueRow<number> {
     paintFill();
     if (notify) opts.onInput?.(current);
   };
+  withAccess(row, () => current, [range, valBox]);
+  const handle = row as SliderRowHandle;
+  handle.setBounds = (min: number, max: number, label?: string) => {
+    if (min === lo && max === hiBound && (label === undefined || label === labelEl.firstChild?.textContent)) return;
+    lo = min;
+    hiBound = max;
+    range.min = String(min);
+    range.max = String(max);
+    if (label !== undefined && labelEl.firstChild) labelEl.firstChild.textContent = label;
+    // Re-clamp: the current value may sit outside the new range, and a slider showing a number
+    // its own track cannot reach is the "control that does nothing" bug in miniature.
+    commit(current, true, false);
+  };
   paintFill();
-  return row;
+  return handle;
 }
 
 /* ---------------- Stepper row ---------------- */
@@ -292,6 +356,14 @@ export interface StepperRowOptions {
   unit?: string;
   /** Turn what the user typed into the stored value. See `SliderOptions.parse`. */
   parse?: (typed: number, raw: string) => number;
+  /**
+   * Render the pair as left/right arrows instead of −/+, for a value that IS a direction
+   * rather than a count — the keychain's fine offset moves a point left or right along an
+   * edge, and a −/+ pair asks the user to translate "which way is minus" every time. Same
+   * control otherwise: same clamping, same disabled-at-the-ends behaviour, same contract.
+   * Aria-labels become "Move left" / "Move right", matching `dpad()`'s own arrow buttons.
+   */
+  arrows?: 'horizontal';
 }
 
 /**
@@ -322,14 +394,19 @@ export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
 
   const minus = el('button', {
     className: 'vl-btn vl-btn--icon',
-    text: '−',
-    attrs: { type: 'button', 'aria-label': `Decrease ${opts.label}` },
+    attrs: { type: 'button', 'aria-label': opts.arrows ? 'Move left' : `Decrease ${opts.label}` },
   }) as HTMLButtonElement;
   const plus = el('button', {
     className: 'vl-btn vl-btn--icon',
-    text: '+',
-    attrs: { type: 'button', 'aria-label': `Increase ${opts.label}` },
+    attrs: { type: 'button', 'aria-label': opts.arrows ? 'Move right' : `Increase ${opts.label}` },
   }) as HTMLButtonElement;
+  if (opts.arrows) {
+    minus.append(svgEl(ICONS.arrowLeft));
+    plus.append(svgEl(ICONS.arrowRight));
+  } else {
+    minus.textContent = '−';
+    plus.textContent = '+';
+  }
 
   const commit = (v: number, notify = true) => {
     current = snap(v);
@@ -360,15 +437,31 @@ export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
     el('div', { className: 'vl-stepper-bar' }, [minus, valFit, plus]),
   ]) as unknown as ValueRow<number>;
 
+  /* The +/- buttons already carry a bounds-driven disabled state, so an outer disable cannot
+     simply write `.disabled` as well — the next `setValue` would undo it. It sets a flag both
+     paths read instead. */
+  let rowDisabled = false;
+  const paintBounds = () => {
+    minus.disabled = rowDisabled || current <= opts.min + 1e-9;
+    plus.disabled = rowDisabled || current >= opts.max - 1e-9;
+  };
+
   row.setValue = (value, notify = false) => {
     // Same guard as `sliderRow`: a rebuild landing mid-keystroke must not replace what is
     // being typed, or the caret jumps and the half-typed number is gone.
     const typing = document.activeElement === valBox;
     current = snap(value);
     if (!typing) showValue(fmt(current));
-    minus.disabled = current <= opts.min + 1e-9;
-    plus.disabled = current >= opts.max - 1e-9;
+    paintBounds();
     if (notify) opts.onInput?.(current);
+  };
+  row.getValue = () => current;
+  row.setDisabled = (disabled: boolean) => {
+    rowDisabled = disabled;
+    row.classList.toggle('vl-control--disabled', disabled);
+    row.setAttribute('aria-disabled', String(disabled));
+    valBox.disabled = disabled;
+    paintBounds();
   };
 
   commit(current, false);
@@ -380,6 +473,9 @@ export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
 export interface SegmentedOption<T extends string = string> {
   value: T;
   label: string;
+  /** Inline SVG markup, shown before the label. Only meaningful with `variant: 'cards'` —
+   *  a plain tab row has no room for one (see `min-width: 0` + ellipsis on `.vl-tab`). */
+  icon?: string;
 }
 
 export interface SegmentedOptions<T extends string = string> {
@@ -392,6 +488,14 @@ export interface SegmentedOptions<T extends string = string> {
   label?: string;
   /** Optional "?" tooltip next to the caption (implies a label row). */
   help?: string;
+  /**
+   * `'tabs'` (default): a pill row, one option always fills the width evenly. `'cards'`: each
+   * option is a left-aligned row with room for an icon, wraps onto a grid (set `columns`) —
+   * for a picker like "Image / SVG / Icon / Text / Blocks" where a plain tab would either
+   * truncate the labels or hide the icon. When the option count is odd, the last card spans
+   * the full row rather than sitting alone under a half-empty one.
+   */
+  variant?: 'tabs' | 'cards';
 }
 
 /** What `segmentedControl` returns: a `ValueRow` plus per-option visibility. */
@@ -421,7 +525,7 @@ export function segmentedControl<T extends string = string>(
   // every column at its own min-content width — so a four-option control in a 333 px sidebar
   // could not shrink and simply ran off the panel with the last option clipped in half.
   const root = el('div', {
-    className: 'vl-tabs vl-tabs--indicator',
+    className: `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : ''}`,
     attrs: { role: 'tablist', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr))` },
   });
 
@@ -504,7 +608,6 @@ export function segmentedControl<T extends string = string>(
   for (const opt of opts.options) {
     const btn = el('button', {
       className: `vl-tab${opt.value === active ? ' active' : ''}`,
-      text: opt.label,
       attrs: { type: 'button', role: 'tab', 'aria-selected': String(opt.value === active) },
       on: {
         click: () => {
@@ -515,6 +618,11 @@ export function segmentedControl<T extends string = string>(
         },
       },
     });
+    // Two render paths rather than always building children: `text` (the default `el()` path)
+    // trims/collapses nothing extra, so a plain tab with no icon stays byte-identical to before
+    // this option existed.
+    if (opt.icon) btn.append(svgEl(opt.icon), el('span', { text: opt.label }));
+    else btn.textContent = opt.label;
     buttons.set(opt.value, btn);
     root.append(btn);
   }
@@ -540,6 +648,7 @@ export function segmentedControl<T extends string = string>(
     paint();
     if (notify) opts.onChange?.(value);
   };
+  withAccess(row, () => active, [...buttons.values()]);
 
   const hidden = new Set<T>();
   row.setOptionVisible = (value: T, visible: boolean) => {
@@ -596,6 +705,7 @@ export function selectField(opts: SelectFieldOptions): ValueRow<string> {
     select.value = value;
     if (notify) opts.onChange?.(value);
   };
+  withAccess(row, () => select.value, [select]);
   return row;
 }
 
@@ -672,4 +782,38 @@ export function helpTip(text: string): HTMLElement {
   badge.addEventListener('focus', show);
   badge.addEventListener('blur', hide);
   return badge;
+}
+
+/* ---------------- Colour swatch & checkbox ---------------- */
+
+export interface ColorSwatchOptions {
+  /** `#rrggbb`. */
+  value: string;
+  /** Accessible name — there is no visible label, so this is the only one. */
+  label: string;
+  onChange?: (hex: string) => void;
+}
+
+/**
+ * A bare colour well.
+ *
+ * `filamentRow()` has one embedded in it, but a caller that wants a single swatch in a dense
+ * list had no component and reached for `<input type="color">` — which is what the drift
+ * check's budget note means by "the colour wells the kit has no component for yet". Splitting
+ * it out means the well is defined once and every list of parts, layers or slots gets the
+ * same one.
+ */
+export function colorSwatch(opts: ColorSwatchOptions): ValueRow<string> {
+  const input = el('input', {
+    className: 'vl-swatch-well',
+    attrs: { type: 'color', value: opts.value, 'aria-label': opts.label, title: opts.label },
+  }) as HTMLInputElement;
+  input.addEventListener('input', () => opts.onChange?.(input.value));
+  const row = input as unknown as ValueRow<string>;
+  row.setValue = (v, notify = false) => {
+    input.value = v;
+    if (notify) opts.onChange?.(v);
+  };
+  withAccess(row, () => input.value, [input]);
+  return row;
 }

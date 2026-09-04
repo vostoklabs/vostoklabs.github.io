@@ -1,9 +1,13 @@
 import { zipSync, strToU8 } from 'fflate';
 import {
   projectSettings, colorGroupXml, plateItemTransform, xyBounds,
-  BBL_NS, BBL_VERSION_META, BBL_APPLICATION,
+  BBL_NS, BBL_VERSION_META, BBL_APPLICATION, provenance, PROVENANCE_FILE,
 } from '@vostok/export';
 import { weldPositions } from './meshUtils.js';
+
+// What the mark says about this generator. One object, so the 3MF and the OBJ cannot end up
+// describing different things.
+const MARK = { title: 'Keycap', generator: 'keycap-generator' };
 
 // Round to keep the XML compact without losing print precision (1e-4 mm).
 const f = (n) => Math.round(n * 1e4) / 1e4;
@@ -51,6 +55,11 @@ const rgbOf = (hex) => {
 
 export function buildThreeMF(parts) {
   const wrapperId = parts.length + 2; // parts use ids 2..N+1, wrapper is N+2
+  // Invariant #2. This writer builds its own zip (it wraps the parts in a components object
+  // the shared writer does not), and writing its own zip is how it came to write no mark at
+  // all: no Designer, no Copyright, no LicenseTerms, no vostok_labs.txt. The mark itself now
+  // comes from @vostok/export, so there is one copy of it for the whole catalogue.
+  const mark = provenance(MARK);
 
   // The filament slots the parts ask for, densely indexed by (slot - 1).
   // model_settings.config below only says WHICH slot a part wants; it does not
@@ -86,8 +95,7 @@ export function buildThreeMF(parts) {
     ` xmlns:bambu="${BBL_NS}"` +
     ` xmlns:BambuStudio="${BBL_NS}"` +
     ` xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06">` +
-    BBL_VERSION_META +
-    `<metadata name="Application">${BBL_APPLICATION}</metadata>` +
+    mark.metadata +
     `<resources>` +
     `<basematerials id="1">${baseMaterials}</basematerials>` +
     objects +
@@ -140,6 +148,7 @@ export function buildThreeMF(parts) {
       '3D/3dmodel.model': strToU8(model),
       'Metadata/model_settings.config': strToU8(modelSettings),
       'Metadata/project_settings.config': strToU8(projectSettings(palette)),
+      [PROVENANCE_FILE]: strToU8(mark.text),
     },
     { level: 6 }
   );

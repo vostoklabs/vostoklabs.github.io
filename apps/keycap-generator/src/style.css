@@ -45,13 +45,49 @@
       @media (min-width: 761px) {
         main.vl-app { grid-template-rows: minmax(0, 1fr); }
       }
-      #viewport { position: relative; min-width: 0; overflow: hidden; background: #15171c; }
+      /* Below the kit's stacking breakpoint the PAGE scrolls, so nothing above may pin
+         itself to the viewport. Above it the panels scroll individually and the height chain
+         further up is exactly right — which is why this is scoped rather than removed, the
+         same reasoning as the `min-width: 761px` grid-rows override above it.
+
+         Measured before this rule, at 390px: the four stacked rows were squeezed into one
+         screen, leaving the settings column 165px tall with the whole of Placement & size
+         inside it, the stage 165px, and `body { overflow: hidden }` swallowing the rest. */
+      @media (max-width: 760px) {
+        html, body { height: auto; }
+        body { height: auto; min-height: 100dvh; overflow: visible; }
+        .kc-root { height: auto; min-height: 0; overflow: visible; flex: 0 1 auto; }
+        /* The stage needs a real height of its own once it is a row rather than a column. */
+        #viewport { min-height: 46vh; }
+      }
+      #viewport { position: relative; min-width: 0; overflow: hidden; background: var(--bg); }
       #viewport canvas { display: block; width: 100%; height: 100%; }
+      /* The busy chip. A row rather than a block: it carries a spinner, its text, and (for a
+         batch that can be stopped) a Cancel button. It used to be a bare word that appeared and
+         disappeared with no transition, which reads as a glitch rather than as work. */
       #busy {
         position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-        background: rgba(0,0,0,.6); padding: 6px 14px; border-radius: 20px;
+        background: var(--panel); border: 1px solid var(--line);
+        padding: 5px 6px 5px 12px; border-radius: 20px; gap: 9px;
         font-size: 12px; color: var(--text); display: none;
+        align-items: center; box-shadow: var(--shadow-toast);
+        animation: busyIn var(--dur-in-sm) var(--ease-standard);
       }
+      @keyframes busyIn { from { opacity: 0; transform: translate(-50%, -4px); } to { opacity: 1; transform: translate(-50%, 0); } }
+      .busy-spinner {
+        width: 12px; height: 12px; flex: 0 0 12px; border-radius: 50%;
+        border: 2px solid var(--line); border-top-color: var(--accent);
+        animation: busySpin 700ms linear infinite;
+      }
+      @keyframes busySpin { to { transform: rotate(360deg); } }
+      /* Reduced motion takes the movement away, not the feedback: the chip still appears and
+         the ring still reads as busy, it just stops spinning. */
+      @media (prefers-reduced-motion: reduce) {
+        #busy { animation: none; }
+        .busy-spinner { animation: none; border-top-color: var(--accent); }
+      }
+      :root[data-motion='reduced'] .busy-spinner { animation: none; }
+      #busy .vl-btn { padding: 3px 10px; font-size: 11.5px; }
       .legend-section { display: flex; flex-direction: column; }
       #iconPanel:not([hidden]) { display: flex; flex-direction: column; }
       .section { border-top: 1px solid var(--line); padding: 14px 0; }
@@ -63,6 +99,17 @@
       .import-grid {
         display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
         gap: 10px; margin-bottom: 16px;
+      }
+      /* Three cards at their comfortable size need about 333px of panel, and the right panel
+         sits at the kit'''s 320px floor for every viewport below ~1322px — so on anything from a
+         small laptop down, Letter dropped onto a second row on its own, reading as a different
+         kind of control rather than the third of three. Tighter cards keep the row intact;
+         once the panel can grow again they get their padding back. */
+      @media (max-width: 1321px) {
+        .import-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+        .import-card { padding: 8px 9px; gap: 6px; }
+        .import-card .card-label { font-size: 12.5px; }
+        .import-card .card-icon svg { width: 16px; height: 16px; }
       }
       .import-card {
         display: flex; align-items: center; gap: 8px;
@@ -128,19 +175,26 @@
       .icon {
         aspect-ratio: 1; background: var(--panel-2); border: 1px solid var(--line);
         border-radius: 8px; padding: 8px; cursor: pointer; display: grid; place-items: center;
+        font: inherit; color: inherit; appearance: none;
         transition:
     border-color var(--dur-hover) var(--ease-standard),
     transform var(--dur-hover) var(--ease-standard);
       }
       .icon:hover { border-color: var(--accent); }
+      .icon:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
       .icon.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-      .icon img { width: 100%; height: 100%; object-fit: contain; filter: invert(1); opacity: .9; }
+      /* Lucide icons are built with stroke="currentColor" into a standalone SVG document, so
+         they arrive black. Inverting them unconditionally made every tile white-on-white in
+         light mode: #FCFCFD strokes on the #e4e9f2 tile, about 1.1:1. */
+      .icon img { width: 100%; height: 100%; object-fit: contain; opacity: .9; }
+      :root:not([data-theme='light']) .icon img { filter: invert(1); }
       #galleryMore {
         grid-column: 1 / -1; padding: 8px; border-radius: 8px; cursor: pointer;
         background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
         font: inherit; font-size: 12px;
       }
       #galleryMore:hover { color: var(--text); border-color: var(--accent); }
+      #galleryMore:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
       #galleryEmpty {
         grid-column: 1 / -1; padding: 16px; text-align: center;
         color: var(--muted); font-size: 12px;
@@ -289,6 +343,7 @@
       }
       .dpad-btn svg { width: 17px; height: 17px; }
       .dpad-btn:hover { border-color: var(--accent); color: var(--accent); }
+      .dpad-btn:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
       .dpad-btn:active { background: var(--panel-2); }
       .dpad-btn--up { grid-area: 1 / 2; }
       .dpad-btn--left { grid-area: 2 / 1; }
@@ -328,6 +383,7 @@
     background var(--dur-hover) var(--ease-standard);
       }
       .tol-btn:hover { border-color: var(--accent); color: var(--accent); }
+      .tol-btn:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
       .tol-btn:active { background: var(--panel-2); }
       .tol-val {
         flex: 1; text-align: center; font-size: 14px; color: var(--text);
@@ -348,6 +404,7 @@
     border-color var(--dur-hover) var(--ease-standard);
       }
       .reset-btn:hover { color: var(--accent); border-color: var(--accent); }
+      .reset-btn:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
       .reset-btn:active { transform: rotate(-30deg); }
       .reset-btn svg { width: 13px; height: 13px; }
 
@@ -362,41 +419,6 @@
       #hint.vl-stage__hint { left: auto; right: 14px; transform: none; }
       code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
 
-      /* "What's new" modal — centered overlay shown on load until dismissed */
-      .modal-overlay {
-        position: fixed; inset: 0; z-index: 100;
-        background: rgba(0, 0, 0, .6); backdrop-filter: blur(2px);
-        display: flex; align-items: center; justify-content: center; padding: 20px;
-        animation: modalFade var(--dur-in-sm) var(--ease-standard);
-      }
-      .modal-overlay[hidden] { display: none; }
-      @keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
-      .modal {
-        background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-        padding: 22px 22px 18px; width: 100%; max-width: 450px;
-        box-shadow: 0 24px 60px rgba(0, 0, 0, .55);
-      }
-      .modal h2 { margin: 0 0 3px; font-size: 18px; letter-spacing: .2px; }
-      .modal .modal-sub { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
-      .whatsnew-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 13px; }
-      .whatsnew-list li { display: flex; gap: 11px; align-items: flex-start; }
-      .whatsnew-list .wn-ico {
-        flex: 0 0 30px; width: 30px; height: 30px; border-radius: 8px;
-        background: var(--panel-2); border: 1px solid var(--line);
-        display: grid; place-items: center; color: var(--accent);
-      }
-      .whatsnew-list .wn-ico svg { width: 16px; height: 16px; }
-      .whatsnew-list .wn-body { font-size: 13px; line-height: 1.45; }
-      .whatsnew-list .wn-body strong { display: block; color: var(--text); margin-bottom: 1px; }
-      .whatsnew-list .wn-body span { color: var(--muted); }
-      .whatsnew-list .wn-body .wn-note { color: var(--accent-2); }
-      .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; }
-      .whatsnew-dismiss {
-        display: flex; align-items: center; gap: 8px;
-        font-size: 12.5px; color: var(--muted); cursor: pointer; user-select: none;
-      }
-      .whatsnew-dismiss input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
-      .modal-foot button.primary { width: auto; padding: 9px 20px; }
 
       /* Bottom-left credit block (MakerLab build only — see main.js). Sits outside the
          left panel's scroll area so it's pinned to the bottom corner, and is toned down
@@ -423,6 +445,48 @@
 
       /* Open-a-project list — desktop host only, where saved projects are real stored
          things rather than a JSON file the user has to keep track of themselves. */
+      /* ---- the SVG import preview: the file beside what the tracer made of it. When those
+         two disagree, that difference IS the "SVG import doesn't work" report. */
+      .kc-svgprev { display: flex; flex-direction: column; gap: 12px; }
+      .kc-svgprev__panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .kc-svgprev__panel { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .kc-svgprev__caption {
+        color: var(--muted);
+        font-size: 13px;
+        font-family: var(--font-display);
+        letter-spacing: 0.02em;
+      }
+      /* A checkerboard, so a white logo on a white ground is still visible — the case where
+         "nothing imported" and "it imported and is white" look identical. */
+      .kc-svgprev__art {
+        aspect-ratio: 1;
+        display: grid;
+        place-items: center;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background-color: var(--panel);
+        background-image:
+          linear-gradient(45deg, var(--line) 25%, transparent 25%),
+          linear-gradient(-45deg, var(--line) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, var(--line) 75%),
+          linear-gradient(-45deg, transparent 75%, var(--line) 75%);
+        background-size: 14px 14px;
+        background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+        color: var(--text);
+      }
+      .kc-svgprev__art img,
+      .kc-svgprev__art svg { max-width: 100%; max-height: 100%; }
+      .kc-svgprev__empty { color: var(--muted); font-size: 13px; text-align: center; margin: 0; }
+      .kc-svgprev__note { margin: 0; font-size: 13px; color: var(--muted); }
+      .kc-svgprev__note--warn { color: var(--warn); }
+      .kc-svgprev__parts { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+      /* What the file did · what we will do. The picker is the decision, so it gets the fixed
+         width; the description takes what is left and ellipsises. */
+      .kc-svgprev__part { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+      .kc-svgprev__what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+      .kc-svgprev__mode { flex: 0 0 250px; }
+
       .kc-project-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
       .kc-project-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px; }
       .kc-project-thumb {

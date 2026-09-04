@@ -1,3 +1,4 @@
+import { provenanceComment } from '@vostok/export';
 import { weldPositions } from './meshUtils.js';
 
 /*
@@ -46,8 +47,18 @@ const slug = (s) => s.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') |
  * @param {{ mtlFileName?: string, materials?: Map<number, object> }} [opts]
  */
 export function createObjWriter({ mtlFileName = 'model.mtl', materials = new Map() } = {}) {
+  /* The header carries the same provenance and licence text the .3mf writes into
+     Metadata/vostok_labs.txt, from the same function — one line of "Vostok Labs" was all this
+     used to say, and it named neither the licence nor the build.
+
+     Be clear about what this does and does not survive: the standalone .obj keeps it, and so
+     does anything the user opens the OBJ with. The MakerLab host CONVERTS this OBJ into the
+     3MF the buyer receives, and a comment is not metadata — it does not come through. What
+     carries the mark on that path is the licence line in the export `description` (mount.js),
+     which MakerWorld shows on the model page. Marking the host's own output is not something
+     this end of the pipe can do. */
   const lines = [
-    '# Keycap Legend Generator - Vostok Labs',
+    ...provenanceComment({ title: 'Keycap', generator: 'keycap-generator' }).split('\n'),
     '# Units: millimetres. One `o` object per filament slot region.',
     `mtllib ${mtlFileName}`,
   ];

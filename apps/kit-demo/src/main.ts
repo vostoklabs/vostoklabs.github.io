@@ -217,7 +217,9 @@ app.append(
   entry(
     'toggleSwitch() · segmentedControl()',
     'Toggle & segmented',
-    'The two pickers every generator reaches for: an on/off switch and a one-of-many segmented control.',
+    'The two pickers every generator reaches for: an on/off switch and a one-of-many segmented control. ' +
+      "`variant: 'cards'` swaps the centred pill for a left-aligned, icon-first row — for a source " +
+      'picker where a plain tab would either truncate the labels or have nowhere for the icon.',
     panel(
       toggleSwitch({ label: 'Add mounting holes', checked: true, onChange: (on) => toast(on ? 'Holes on' : 'Holes off') }),
       toggleSwitch({ label: 'Emboss logo', onChange: (on) => toast(on ? 'Logo on' : 'Logo off') }),
@@ -229,6 +231,17 @@ app.append(
         ],
         value: 'med',
         onChange: (v) => toast(`Quality: ${v}`),
+      }),
+      segmentedControl({
+        variant: 'cards',
+        columns: 2,
+        options: [
+          { value: 'image', label: 'Image', icon: ICONS.download },
+          { value: 'svg', label: 'SVG', icon: ICONS.link },
+          { value: 'text', label: 'Text', icon: ICONS.target },
+        ],
+        value: 'image',
+        onChange: (v) => toast(`Source: ${v}`),
       }),
     ),
   ),
@@ -249,6 +262,17 @@ app.append(
         format: (v) => `${v} layer${v === 1 ? '' : 's'} · ${(v * 0.2).toFixed(2)} mm`,
         help: 'The ends disable themselves, so a button that does nothing never looks pressable.',
         onInput: (v) => toast(`${v} layers`),
+      }),
+      stepperRow({
+        label: 'Nudge position',
+        min: -15,
+        max: 15,
+        step: 0.5,
+        value: 0,
+        unit: 'mm',
+        arrows: 'horizontal',
+        help: "arrows: 'horizontal' swaps −/+ for left/right, for a value that IS a direction rather than a count (the clicker's keychain offset).",
+        onInput: (v) => toast(`${v} mm`),
       }),
     ),
   ),

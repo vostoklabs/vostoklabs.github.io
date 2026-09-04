@@ -13,6 +13,9 @@ export interface ProcessOptions {
   customColors?: RGB[];
   /** Protect small features via adaptive smoothing + speck absorption (default on). */
   preserveDetail?: boolean;
+  /** Longest side of the FINISHED part, mm. Decides the smallest feature worth tracing —
+   *  see MIN_FEATURE_MM in trace.ts. Defaults to the app's default cap width. */
+  designMm?: number;
 }
 
 export function processImage(
@@ -27,5 +30,5 @@ export function processImage(
   compositeOverMatte(img);
   cleanMask(img);
   const q = quantize(img, colorCount, opts.customColors);
-  return traceRegions(q, opts.smoothing ?? 0.5, opts.preserveDetail ?? true);
+  return traceRegions(q, opts.smoothing ?? 0.5, opts.preserveDetail ?? true, opts.designMm ?? 35);
 }

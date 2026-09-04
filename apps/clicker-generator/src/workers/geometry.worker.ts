@@ -32,7 +32,7 @@ function post(msg: GeometryResponse, transfer: Transferable[] = []) {
   (self as unknown as Worker).postMessage(msg, transfer);
 }
 
-function assetToSolid(wasm: any, buf: ArrayBuffer): { solid: any; info: string } {
+function assetToSolid(wasm: any, buf: ArrayBuffer): { solid: any; info: string; xy: number } {
   const raw = parse3MF(buf);
   const mesh = new wasm.Mesh({
     numProp: 3,
@@ -47,7 +47,7 @@ function assetToSolid(wasm: any, buf: ArrayBuffer): { solid: any; info: string }
   const info = `${size.map((v: number) => v.toFixed(2)).join('×')} mm, Z[${bb.min[2].toFixed(
     2,
   )},${bb.max[2].toFixed(2)}], status=${status}`;
-  return { solid, info };
+  return { solid, info, xy: Math.max(size[0], size[1]) };
 }
 
 /** keycap.json (shared with the keycap generator): shell mesh at the top level, the MX
@@ -151,7 +151,20 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       const switchInfo = `${(sw.triVerts.length / 3) | 0} tris, seated +${(-seatZ).toFixed(
         2,
       )}mm, Z[${zmin.toFixed(2)},${zmax.toFixed(2)}]`;
-      post({ type: 'initDone', socketInfo: a.info, stemInfo: b.info, switchInfo, switchMesh }, [
+      /* The clear column an MX switch needs, in millimetres, measured off the socket asset
+         the way `buildClicker` measures it (`switchClear = socketDim + 3`). Reported rather
+         than recomputed in the UI: the 2-D shape editor draws this square so a user can see
+         whether their shape has room for a switch, and a second copy of the number — parsed
+         from the same file by a second code path — would agree today and drift the first time
+         the socket is re-cut. There is one asset and there should be one measurement. */
+      post({
+        type: 'initDone',
+        socketInfo: a.info,
+        stemInfo: b.info,
+        switchInfo,
+        switchMesh,
+        switchColumnMm: a.xy + 3.0,
+      }, [
         switchMesh.vertProperties.buffer,
         switchMesh.triVerts.buffer,
       ]);
@@ -170,7 +183,7 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       );
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
-      post({ type: 'parts', parts, switchPlacements, warnings }, transfer);
+      post({ type: 'parts', parts, switchPlacements, warnings, requestId: msg.requestId }, transfer);
       return;
     }
 
@@ -185,7 +198,7 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       );
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
-      post({ type: 'parts', parts, switchPlacements, warnings }, transfer);
+      post({ type: 'parts', parts, switchPlacements, warnings, requestId: msg.requestId }, transfer);
       return;
     }
 

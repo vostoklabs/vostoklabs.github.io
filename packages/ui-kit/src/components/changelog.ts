@@ -138,7 +138,11 @@ export interface ChangelogButtonOptions extends ChangelogOptions {
 export function changelogButton(opts: ChangelogButtonOptions): ButtonHandle {
   return button({
     label: opts.label ?? 'Updates',
-    emphasis: 'ghost',
+    /* Secondary, not ghost. A ghost button is transparent on a transparent panel with muted
+       text, which reads as a caption rather than a control — reported as "the Updates button
+       is not visible". Ghost is right beside something louder that draws the eye first; this
+       one stands alone at the foot of a settings column with nothing to be quiet next to. */
+    emphasis: 'secondary',
     icon: ICONS.history,
     block: opts.block ?? true,
     onClick: () => openChangelog(opts),

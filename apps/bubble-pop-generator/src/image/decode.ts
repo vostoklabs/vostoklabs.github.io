@@ -9,10 +9,29 @@ export interface RgbaImage {
   height: number;
 }
 
-// Downscale ceiling and the minimum working resolution: small logos are upscaled to
-// MIN_WORKING so the tracer has enough resolution to make smooth curves.
+/*
+  Downscale ceiling. There is deliberately no upscale floor.
+
+  Small logos used to be Lanczos-upscaled to a 900px "working resolution" so the tracer
+  would have enough samples to make smooth curves. It does not add information, and it
+  costs a great deal: Lanczos turns a one-pixel anti-aliased edge into a ~4px ramp with
+  overshoot lobes that reach PAST both of the colours either side of it. Those invented
+  pixels are then quantised. Measured on the 323px bat, same artwork, only the working
+  resolution changed:
+
+      323px (native)  ->  3 colours,   6 components,   0 specks
+      900px           ->  4 colours,  98 components,  81 specks
+     1100px           ->  4 colours, 188 components, 159 specks
+
+  It grows a fourth colour the drawing does not contain, and 159 specks along the outline
+  where the overshoot flips labels back and forth. Every file tested got worse: samurai
+  54->65 components, bird 51->88, potion 9->14. Nothing got better.
+
+  Smoothness is the tracer's job, and its smoothing is a fraction of the artwork's size
+  (see `sigmaPx` in trace.ts), so tracing at native resolution gives the same curve with
+  none of the invented pixels.
+*/
 const TARGET = 1100;
-const MIN_WORKING = 900;
 
 let picaInstance: Pica | null = null;
 function getPica(): Pica {
@@ -64,20 +83,16 @@ export async function drawToImageData(
 ): Promise<RgbaImage> {
   const maxSide = Math.max(srcW, srcH);
   // Resample policy: downscale big images (mks2013 = resize + light sharpen, better
-  // than plain Lanczos for downscale), upscale small ones (lanczos3), else keep 1:1.
+  // than plain Lanczos for downscale). Anything at or under the ceiling is kept 1:1 —
+  // see the note on TARGET for why upscaling is never the right move here.
   let w = srcW;
   let h = srcH;
-  let filter: 'mks2013' | 'lanczos3' | null = null;
+  let filter: 'mks2013' | null = null;
   if (maxSide > maxSize) {
     const s = maxSize / maxSide;
     w = Math.max(1, Math.round(srcW * s));
     h = Math.max(1, Math.round(srcH * s));
     filter = 'mks2013';
-  } else if (maxSide < MIN_WORKING) {
-    const s = MIN_WORKING / maxSide;
-    w = Math.max(1, Math.round(srcW * s));
-    h = Math.max(1, Math.round(srcH * s));
-    filter = 'lanczos3';
   }
 
   // Draw the source to a canvas at native size (pica works canvas → canvas).

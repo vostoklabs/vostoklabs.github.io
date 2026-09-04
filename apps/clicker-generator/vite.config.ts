@@ -44,17 +44,40 @@ function trademarkCleanPlugin(enabled: boolean) {
 // (`vite --mode makerworld`) it resolves to the real SDK glue (src/makerlab/glue.ts, which
 // pulls in the NDA SDK). In every other build it resolves to an inline no-op stub, so the
 // public site never depends on the SDK and builds fine without those gitignored files.
+// `virtual:pro-pack` is the same seam for the paid features (src/pro/). Both the SDK glue and
+// those sources are gitignored, so this indirection is what keeps `pnpm build` working in a
+// fresh public clone: without it, mount.ts's static `./pro/panel` import is an unresolved
+// module and the build dies before the MAKERLAB dead-code pass ever runs.
+//
+// The paid features exist ONLY in the MakerWorld build. Not locked, not hidden — absent. That
+// is stronger than a client-side gate and it sidesteps the question of whether one is real.
 function makerlabPlugin(enabled: boolean) {
   const VIRTUAL_ID = 'virtual:makerlab';
   const STUB_ID = '\0virtual:makerlab-stub';
+  const PRO_ID = 'virtual:pro-pack';
+  const PRO_STUB_ID = String.fromCharCode(0) + 'virtual:pro-pack-stub';
   const gluePath = resolve(__dirname, 'src/makerlab/glue.ts');
+  const proPath = resolve(__dirname, 'src/pro/panel.ts');
   return {
     name: 'makerlab',
     resolveId(id: string) {
       if (id === VIRTUAL_ID) return enabled ? gluePath : STUB_ID;
+      // Only reach for the real panel when it is actually present: the MakerWorld build runs
+      // from the full working tree, and a public clone has no src/pro/ at all.
+      if (id === PRO_ID) return enabled && existsSync(proPath) ? proPath : PRO_STUB_ID;
       return null;
     },
     load(id: string) {
+      if (id === PRO_STUB_ID) {
+        // Same module shape as the real panel so the call site needs no null checks. It is
+        // never called in the public build (the branch is fenced behind MAKERLAB); this
+        // exists so the module graph resolves.
+        return [
+          'export function mountProFeatures() {',
+          '  return { refresh() {}, destroy() {}, paramsPatch: () => ({}) };',
+          '}',
+        ].join('\n');
+      }
       if (id === STUB_ID) {
         return [
           'export const MAKERLAB = false;',
@@ -100,6 +123,21 @@ function makerlabPlugin(enabled: boolean) {
 export default defineConfig(({ mode }) => ({
   base: './',
   plugins: [trademarkCleanPlugin(mode === 'makerworld'), makerlabPlugin(mode === 'makerworld')],
+  /*
+    The 2-D shape editor, kept out of the public build.
+
+    A compile-time literal rather than a runtime setting, for the reason the paid pack above
+    states: absent beats hidden. `false` here folds `if (__SHAPE_EDITOR__)` to `if (false)`,
+    which takes the dynamic `import('./ui/shapeEditor')` with it, so the editor and the
+    geometry it pulls in never reach the bundle and no button can reveal it.
+
+    On in `pnpm dev` and in `vite build --mode internal`; off in the plain `pnpm build` the
+    deploy workflow runs. Flip a shipped build on by adding a mode here, never by editing
+    the app.
+  */
+  define: {
+    __SHAPE_EDITOR__: JSON.stringify(mode === 'development' || mode === 'internal'),
+  },
   worker: {
     format: 'es' as const,
   },

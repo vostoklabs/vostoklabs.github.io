@@ -21,6 +21,16 @@ export interface DialogOptions {
    * in the catalogue instead of one per call site.
    */
   wide?: boolean;
+  /**
+   * A third size, for content that is a working surface rather than a form.
+   *
+   * `wide` (760 px) fits a grid of swatches beside a preview. It does not fit a drawing canvas
+   * with a shape library down one side, which is what the clicker's shape editor is — at 760 px
+   * the canvas ends up smaller than the model it is editing. Named sizes rather than a free
+   * width, for the reason `wide` gives above: three entries in the catalogue, not one per call
+   * site. `wide: true` still means `'wide'`.
+   */
+  size?: 'default' | 'wide' | 'xl';
 }
 
 export interface DialogHandle {
@@ -39,6 +49,12 @@ export interface DialogHandle {
  *
  * A module-level set is enough because a modal is by definition global to the page.
  */
+const SIZE_CLASS: Record<'default' | 'wide' | 'xl', string> = {
+  default: '',
+  wide: ' vl-dialog--wide',
+  xl: ' vl-dialog--xl',
+};
+
 const openDialogs = new Set<DialogHandle>();
 
 /**
@@ -68,7 +84,7 @@ export function dialog(opts: DialogOptions): DialogHandle {
   body.append(typeof opts.content === 'string' ? document.createTextNode(opts.content) : opts.content);
 
   const box = el('div', {
-    className: `vl-dialog${opts.wide ? ' vl-dialog--wide' : ''}`,
+    className: `vl-dialog${SIZE_CLASS[opts.size ?? (opts.wide ? 'wide' : 'default')]}`,
     attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': opts.title },
   }, [
     el('h2', { className: 'vl-dialog__title', text: opts.title }),

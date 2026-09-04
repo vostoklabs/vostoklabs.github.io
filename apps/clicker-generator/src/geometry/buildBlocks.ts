@@ -51,6 +51,12 @@ export interface BlockAssets {
    *  each other — has joints that pair a wide face with a narrow one. Spacing those at the
    *  larger pitch leaves a hair of slop instead of making the parts interfere. */
   pitchMax: number;
+  /** The normalised MX socket, kept so the switch pocket can be resized.
+   *
+   *  Unlike the flat clicker — where the pocket IS a subtraction and scaling the cutter scales
+   *  the pocket — a block's pocket is authored into its shell, so there is nothing to scale.
+   *  Resizing it means cutting or filling against this solid afterwards. See `fitSocket`. */
+  socket: Solid;
 }
 
 export interface KeycapAsset {
@@ -224,7 +230,7 @@ export function prepareBlockAssets(wasm: Wasm, socket: Solid, raw: RawBlocks): B
     pitchMax = Math.max(pitch, noSidesSize[0] - 2 * halfWall);
   }
 
-  return { byMask, pitch, pitchMax };
+  return { byMask, pitch, pitchMax, socket };
 }
 
 /** Build the keycap shell (+ stem) once, centred on the switch axis. */
@@ -282,6 +288,36 @@ function meshPart(
     vertProperties: verts,
     triVerts: new Uint32Array(mesh.triVerts),
   };
+}
+
+/**
+ * Open or tighten a block's switch pocket by `pct` of the socket footprint.
+ *
+ * The flat clicker gets this for free: its pocket is a subtraction, so scaling the cutter
+ * scales the pocket. A block's pocket is cut into the shell by whoever authored the CAD, so
+ * there is no cutter here and the control did nothing — the switch-pocket fit was simply
+ * absent in blocks mode, and hidden in the UI, which is why nobody noticed.
+ *
+ * Both directions, and they are not symmetric:
+ *
+ *  - **Looser (+)**: subtract a socket scaled up. Whatever the shell authored, the pocket ends
+ *    up at least that size.
+ *  - **Tighter (−)**: add back the ring between the authored socket and a scaled-down copy.
+ *    That shim lines the pocket walls. Its underside sits on the pocket floor, so even if the
+ *    shell's pocket is slightly larger than this socket it rests on something rather than
+ *    floating — which is the failure this shape avoids.
+ *
+ * Z is never scaled: the pocket's depth is what seats the switch, and the whole block stack is
+ * hung off the socket's top face at Z 0.
+ */
+function fitSocket(block: Solid, socket: Solid, pct: number, track: <T extends { delete(): void }>(o: T) => T): Solid {
+  if (Math.abs(pct) < 0.01) return block;
+  const f = 1 + pct / 100;
+  const scaled = track(socket.scale([f, f, 1]));
+  if (pct > 0) return track(block.subtract(scaled));
+  // A shell between the authored socket and the smaller one: material added to the walls.
+  const shim = track(socket.subtract(scaled));
+  return track(block.add(shim));
 }
 
 export function buildBlocks(
@@ -401,6 +437,11 @@ export function buildBlocks(
     const variant = blockVariant(mask);
     let solid = variant.solid;
     cellRot.push(variant.rot);
+    /* Switch-pocket fit. Applied per cell rather than in `blockVariant`, because the variants
+       are CACHED and shared between cells — resizing one there would resize every block that
+       happens to have the same connect mask, including on a later rebuild with a different
+       setting. */
+    solid = fitSocket(solid, blocks.socket, params.socketFitPct ?? 0, track);
     // The keyring loop welds onto a free outer face of one end block, so that block stops
     // being a shared instance.
     const loop = keychainLoop(i, N, mask, solid);
@@ -611,8 +652,37 @@ export function buildBlocks(
       : free === DIR.W ? bb.min[0]
       : free === DIR.N ? bb.max[1]
       : bb.min[1];
-    const cx = dir[0] * (Math.abs(face) + loopR);
-    const cy = dir[1] * (Math.abs(face) + loopR);
+    /* Slide along the face.
+
+       Two guards, and both matter:
+
+        - Only when the user got the face they ASKED for. `order` above falls back to a
+          perpendicular free face when the wanted one is taken by a neighbour, and `dir` follows
+          the fallback — so an unguarded slide would be measured along the wrong axis and walk
+          the bridge straight off the block.
+        - Clamped to half the block pitch. Past that the bridge stops overlapping its own block
+          and the loop welds tangentially or not at all. `pitch` is the both-ends-halved depth
+          measured off the real assets at worker init, so it errs inward, which is the side to
+          err on. The clamp has to live HERE rather than in the UI because the main thread never
+          sees `pitch` — it is measured in the worker and never crosses back.
+
+       A clamp that is silent is the Size-slider bug again: the number on the control moves and
+       the geometry does not. So an over-run reports itself through `warnings`, which the status
+       line already joins and shows. */
+    const slideLimit = pitch / 2;
+    const asked = free === wanted ? (params.keychainSlideMm ?? 0) : 0;
+    const slide = Math.max(-slideLimit, Math.min(slideLimit, asked));
+    if (Math.abs(asked) > slideLimit + 0.01) {
+      warnings.push(
+        `The keyring can only slide ${slideLimit.toFixed(0)} mm along that side before it comes `
+        + 'off the block. Move it to a different side for more room.',
+      );
+    }
+    // Perpendicular to `dir`, so the bridge stays the same length and keeps its overlap —
+    // the weld is volumetric, never a tangent kiss.
+    const tan: [number, number] = [-dir[1], dir[0]];
+    const cx = dir[0] * (Math.abs(face) + loopR) + tan[0] * slide;
+    const cy = dir[1] * (Math.abs(face) + loopR) + tan[1] * slide;
 
     // See the note in buildClicker's keychain loop: the outer track() frees the translated
     // result, not the circle it came from.

@@ -22,6 +22,9 @@ export const ICONS = {
   ),
   check:
     '<svg class="vl-whatsnew-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
+  // A plain X — a docked panel's title-row close needs an `iconButton`, and `drawer()`'s own
+  // close is a bare `×` glyph rather than an icon, so nothing in the kit had one until now.
+  close: stroke('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
 
   // Directional pad + transport (arrows are heavier so they read at a glance).
   arrowUp: stroke('<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>', 22),
@@ -69,6 +72,15 @@ export const ICONS = {
   ),
   undo: stroke('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', 18),
   redo: stroke('<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>', 18),
+  trash: stroke('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6v14h12V6"/><path d="M10 11v5"/><path d="M14 11v5"/>', 18),
+  plus: stroke('<path d="M12 5v14"/><path d="M5 12h14"/>', 18),
+
+  // A preview viewport's own transport: the clicker's image wizard needed zoom in/out and a
+  // "fit to view" reset for inspecting thin lines and small text in a traced result, and no
+  // generator had asked for any of the three before.
+  zoomIn: stroke('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>', 18),
+  zoomOut: stroke('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><line x1="8" y1="11" x2="14" y2="11"/>', 18),
+  maximize: stroke('<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>', 18),
 } as const;
 
 /** Parse a raw SVG string into an element. */
@@ -76,4 +88,29 @@ export function svgEl(raw: string): SVGElement {
   const tpl = document.createElement('template');
   tpl.innerHTML = raw.trim();
   return tpl.content.firstElementChild as unknown as SVGElement;
+}
+
+/**
+ * A filled path in a `box`×`box` viewBox, inheriting the caller's colour.
+ *
+ * Built with the DOM rather than `innerHTML` so a path string — which may have come from a
+ * user-supplied SVG, or from a generator — can never carry markup into the page.
+ *
+ * Shared rather than local because two things now draw a picture that is a path rather than a
+ * named icon: the symbol picker's tiles and `thumbTile`'s shape thumbnails. A second copy is
+ * how the two would drift, and it is the smaller version of the mistake CLAUDE.md's working
+ * notes describe — a style with no function behind it.
+ */
+export function svgPathEl(d: string, box = 40): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${box} ${box}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', 'currentColor');
+  svg.appendChild(path);
+  return svg;
 }

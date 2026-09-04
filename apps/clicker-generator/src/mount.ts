@@ -33,8 +33,15 @@ import { loadFileToImage, type RgbaImage } from './image/decode';
 import { processImage } from './image/pipeline';
 import { runWizard } from './ui/wizard';
 import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
+import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
 import { buildObjMtl, objToArrayBuffer } from './export/objExport';
-import { parseSvg } from './image/logo';
+import { parseSvg, type SvgOptions } from './image/logo';
+import { openSvgPreview } from './ui/svgPreview';
+import { allShapes, findShape, loadPackShapes } from './shapes/directory';
+// The shape editor is imported dynamically inside `openShapeEditorForState`, behind the
+// `__SHAPE_EDITOR__` build flag, so it is absent from a public build rather than hidden in it.
+// Paid features. Resolves to a no-op stub outside the MakerWorld build — see vite.config.ts.
+import { mountProFeatures, type ProPanel } from 'virtual:pro-pack';
 import { SAMPLES, SVG_SAMPLES } from './image/sample';
 import { parseLetter, parseBlockChain, importFontFile } from './image/letter';
 import { LUCIDE_ICONS, buildSvg } from './image/lucideIcons';
@@ -61,7 +68,7 @@ import type {
   Ring,
   SwitchPlacement,
 } from './types';
-import { FILAMENTS } from './types';
+import { FILAMENTS, type PreprocessParams } from './types';
 
 import type { DesktopHost } from '@vostok/ui-kit';
 import { closeAllDialogs, dialog } from '@vostok/ui-kit';
@@ -150,6 +157,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     status: 'Loading switch assets…',
     building: false,
     hasParts: false,
+    // Set once the default clicker (or its dynamic fallback) actually lands — see
+    // `loadDefaultClicker` — never here, where nothing has loaded yet.
+    loadedSampleId: null,
     colorCount: 4,
     palette: [],
     baseShape: 'outline',
@@ -158,6 +168,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     imageDepth: 0.8,
     capProud: 4.0,
     hollowBase: false,
+    fixedSize: null,
+    designScale: 1,
+    shapeSides: 6,
+    shapeCornerPct: 0.22,
+    shapeArmPct: 0.34,
+    packShapeToken: null,
+    drawnShapeId: null,
+    builtBodyMm: null,
     tolerance: 0.4,
     stemFitPct: 0,
     socketFitPct: 0,
@@ -177,6 +195,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     baseColorOverride: null,
     imageOffset: { x: 0, y: 0 },
     partOverrides: {},
+    customColors: [],
     editMode: 'color',
     edgeSettings: [
       { target: 'capTop', style: 'chamfer', radius: 0.5 },
@@ -185,6 +204,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     ],
     extrudeChamfer: false,
     separateLetters: false,
+    lineSpacing: 1,
+    letterSpacing: 0,
+    textBold: 0,
+    textScale: 1,
+    textSizeMul: 1,
     // ---- Letter blocks ----
     blockSlots: [
       { kind: 'char', ch: 'N' },
@@ -196,6 +220,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     legendScale: 1,
     legendBold: 0,
     keychainEnd: 'left',
+    keychainSlideMm: 0,
     extrudeHeight: null,
     componentHeights: {},
     selectedParts: [],
@@ -206,6 +231,49 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   // ---- Heavy data kept out of the reactive store ----
   let originalImage: RgbaImage | null = null; // pristine decode (never mutated)
+  /* What the wizard was last run ON and WITH, so "Adjust image" can reopen it on the same
+     picture with the same sliders instead of starting from the already-adjusted copy (which
+     would apply the tone curve twice). */
+  let wizardBase: RgbaImage | null = null;
+  let wizardParams: PreprocessParams | null = null;
+  /** The paid panel, in the MakerWorld build only. Null everywhere else, and the `?.` at
+   *  every call site is what makes "the paid features are simply not in this build" the
+   *  default rather than a special case. */
+  let proPanel: ProPanel | null = null;
+  /** Rings of the seasonal-pack silhouette in use, if any. Out of the store deliberately: it
+   *  is thousands of coordinates, it is derived from `packShapeToken`, and every store patch
+   *  is a full object spread. */
+  let packShapeRings: Ring[] | null = null;
+  /** Outlines drawn in the 2-D editor, by the id `UiState.drawnShapeId` carries.
+   *
+   *  A MAP and not a single variable, and that distinction is the whole fix for a real bug:
+   *  the undo history is a JSON snapshot of `HISTORY_FIELDS`, so it can restore
+   *  `baseShape: 'custom'` from three edits ago — and with one variable, the points it wanted
+   *  had already been overwritten by whatever was drawn since. `buildClicker` falls back to a
+   *  circle when the rings are missing, so undo turned a drawn shape into a plain disc, and
+   *  saving after that wrote the disc to the project file. Nothing errored.
+   *
+   *  Bounded by how many shapes one session draws — a handful of rings, kept for as long as
+   *  the undo history that might still ask for them. */
+  const drawnRings = new Map<string, Ring[]>();
+  let drawnSeq = 0;
+  const rememberDrawing = (rings: Ring[]): string => {
+    const id = `draw-${++drawnSeq}`;
+    drawnRings.set(id, rings);
+    return id;
+  };
+  /** The rings behind whatever the state currently points at, or null. One place asks this
+   *  question so the two sources cannot be confused at a call site. */
+  const ringsForState = (s: UiState): Ring[] | null => {
+    if (s.baseShape !== 'custom') return null;
+    if (s.packShapeToken) return packShapeRings;
+    return s.drawnShapeId ? drawnRings.get(s.drawnShapeId) ?? null : null;
+  };
+  /** The clear square an MX switch needs, mm. Reported by the worker off the socket asset at
+   *  init, so the editor's overlay and the build's `switchClear` are the same measurement. The
+   *  seed is the shipped socket's own figure and is only ever used in the sliver of time before
+   *  `initDone` lands, which is well before the editor can be opened. */
+  let switchColumnMm = 17;
   let regionSet: RegionSet | null = null;
   let latestParts: ClickerPart[] = [];
   let assetsReady = false;
@@ -213,6 +281,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   // Vector states
   let currentSvgText = '';
+  /** How the current SVG should be traced, as chosen in the import preview: which parts to
+   *  keep, what colour each is, and whether outlines get filled. Kept beside the text rather
+   *  than in the store because it belongs to the FILE, not to the design. */
+  let currentSvgOptions: SvgOptions = {};
   let currentSvgName = '';
   let currentIconText = '';
   let currentIconName = '';
@@ -254,11 +326,37 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // Kept the moment it arrives rather than when a project is saved: save is a thing
       // the user can forget, importing is a thing they just did. No-op without a host.
       void rememberFile(host, 'image', file);
+      // The picture is the user's own now, not any sample tile's — clear the mark immediately
+      // rather than waiting for the build to settle, since an upload that fails to decode
+      // must not leave a stale sample looking selected either (audit #2).
+      store.set({ loadedSampleId: null });
       openWizard(() => loadFileToImage(file));
     },
-    onSample: (load) => openWizard(load),
+    onSample: (load, label) => {
+      // `label` is the sample/pack design's own name now, handed straight through by
+      // `onSample`'s caller in ui.ts — no more guessing it back from the loader function by
+      // reference equality, which only ever worked for the six bundled samples (a pack design
+      // is a fresh `() => loadDesignImage(pack, design)` closure every time, and no comparison
+      // could name it from here).
+      pendingSampleLoadName = label ?? null;
+      openWizard(load);
+    },
+    onCustomColor: (hex) => rememberColour(hexToRgb(hex)),
+    onAdjustImage: () => {
+      // The same wizard, on the picture it last confirmed. A sample loaded at startup never
+      // went through it, so that falls back to the pristine decode with default sliders.
+      const base = wizardBase ?? originalImage;
+      if (!base) {
+        store.set({ status: 'Load an image first.' });
+        return;
+      }
+      if (store.get().importMode !== 'image') return;
+      void openWizard(() => Promise.resolve(base));
+    },
     onColorCount: (n) => {
-      store.set({ colorCount: n });
+      // A count picked here overrides the wizard's kept-colour list: the picture is split
+      // automatically into that many again. The list is still one "Adjust image" away.
+      store.set({ colorCount: n, colorMode: 'normal', limitedColors: [] });
       debouncedReprocess();
     },
     onFilament: (i, hex) => {
@@ -293,7 +391,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       syncBaseColor();
     },
     onShape: (kind) => {
-      store.set({ baseShape: kind });
+      // Leaving a pack shape clears its token, or a later reload would restore a base the
+      // picker is no longer pointed at.
+      store.set({ baseShape: kind, packShapeToken: kind === 'custom' ? store.get().packShapeToken : null });
       debouncedRebuild();
     },
     onWidth: (mm) => {
@@ -345,6 +445,64 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ hollowBase: on });
       debouncedRebuild();
     },
+    onFixedSize: (size) => {
+      store.set({ fixedSize: size });
+      debouncedRebuild();
+    },
+    onDesignScale: (v) => {
+      store.set({ designScale: v });
+      debouncedRebuild();
+    },
+    onShapePick: (id) => {
+      const entry = findShape(id);
+      if (!entry) return;
+      // Three kinds of shape, one entry point. A built-in carries a `kind` that goes straight
+      // into `baseShape`; a library or pack shape carries rings and rides the `custom` seam
+      // that already existed for packs. The picker never has to know which is which.
+      if (entry.kind) {
+        store.set({
+          baseShape: entry.kind,
+          packShapeToken: null,
+          drawnShapeId: null,
+          // A shape brings its own defaults, so picking "Star" gives a five-point star rather
+          // than whatever the previous shape's knob happened to be sitting on.
+          ...(entry.param ? { shapeSides: entry.param.value } : {}),
+          ...(entry.corner ? { shapeCornerPct: entry.corner.value / 100 } : {}),
+          // The third knob, which this had been missing: without it a Cross picked after a
+          // Star inherited the star's 0.56 sharpness as its arm width — a legal number for
+          // the field and the wrong shape on screen, with nothing saying why. The editor's
+          // own `pickStartingShape` already did this; the picker path did not.
+          ...(entry.feature ? { shapeArmPct: entry.feature.value / 100 } : {}),
+        });
+      } else if (entry.rings?.length) {
+        packShapeRings = entry.rings;
+        store.set({ baseShape: 'custom', packShapeToken: entry.id, drawnShapeId: null });
+      } else {
+        return;
+      }
+      debouncedRebuild();
+    },
+    /* The three parametric knobs, driven from the picker.
+
+       Clamped here and not only in the UI: these are the values that go into the build, and
+       a control is not the only thing that can set one — a loaded project carries them too. */
+    onShapeSides: (n) => {
+      // 3..8, which is what `buildClicker` itself clamps to — `sides(5, 3, 8)` for a star and
+      // `sides(6, 3, 8)` for a polygon. Clamping wider here would let a loaded project store a
+      // 10 that renders as an 8: a control that moves, fires a rebuild and changes nothing,
+      // which is the complaint this whole pass is about, re-created inside its own remedy.
+      store.set({ shapeSides: Math.round(Math.max(3, Math.min(8, n))) });
+      debouncedRebuild();
+    },
+    onShapeCorner: (pct) => {
+      store.set({ shapeCornerPct: Math.max(0, Math.min(0.5, pct)) });
+      debouncedRebuild();
+    },
+    onShapeArm: (pct) => {
+      store.set({ shapeArmPct: Math.max(0.1, Math.min(0.9, pct)) });
+      debouncedRebuild();
+    },
+    onEditShape: () => { void openShapeEditorForState(); },
     onCapProud: (mm) => {
       // The builder clamps this against the available border height, so a value that cannot
       // fit simply lands at the maximum rather than breaking the bezel.
@@ -422,14 +580,21 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
       debouncedRebuild();
     },
+    onKeychainReset: () => {
+      // 90° is +Y, the top of the body — where a hanger looks deliberate.
+      store.set({ keychain: { ...store.get().keychain, angleDeg: 90, offsetMm: 0 } });
+      debouncedRebuild();
+    },
     onKeychainToggle: (on) => {
       store.set({ keychain: { ...store.get().keychain, enabled: on } });
       debouncedRebuild();
     },
 
-    onKeychainRotate: (deltaDeg) => {
+    onKeychainAngle: (deg) => {
+      // Absolute now — the slider that replaced the rotate d-pad always reports the value it
+      // shows, so there is no delta to accumulate the way the old `onKeychainRotate` did.
       const kc = store.get().keychain;
-      const angleDeg = (((kc.angleDeg + deltaDeg) % 360) + 360) % 360;
+      const angleDeg = ((deg % 360) + 360) % 360;
       store.set({ keychain: { ...kc, angleDeg } });
       debouncedRebuild();
     },
@@ -439,9 +604,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ keychain: { ...kc, holeDiameterMm } });
       debouncedRebuild();
     },
-    onKeychainOffset: (deltaMm) => {
+    onKeychainOffsetSet: (mm) => {
+      // Absolute, same reasoning as `onKeychainAngle` above.
       const kc = store.get().keychain;
-      const offsetMm = Math.round(Math.max(-15.0, Math.min(15.0, (kc.offsetMm ?? 0) + deltaMm)) * 10) / 10;
+      const offsetMm = Math.round(Math.max(-15.0, Math.min(15.0, mm)) * 10) / 10;
       store.set({ keychain: { ...kc, offsetMm } });
       debouncedRebuild();
     },
@@ -575,6 +741,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onImportMode: (mode) => {
       const s = store.get();
       pendingReframe = true;
+      // Landing on Icon with an Outline base is exactly the case `buildParamsFor` quietly
+      // swaps to Circle — flag it here, before the base itself changes, so the build this
+      // switch produces can say so (see `pendingIconBaseNote`'s declaration).
+      if (mode === 'icon' && s.baseShape === 'outline') pendingIconBaseNote = true;
       store.set({
         importMode: mode,
         baseShape: mode === 'text' ? 'outline' : s.baseShape,
@@ -598,10 +768,19 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       }
     },
     onSelectSvg: (svgText, name) => {
-      pendingReframe = true;
-      currentSvgText = svgText;
-      currentSvgName = name;
-      reprocess(); // auto-build on selection — no Generate button
+      /* Show the file, and what the tracer makes of it, before building anything.
+         "SVG import doesn't work" is the most reported problem on the listing, and it is
+         almost always the file rather than the tracer: outlines with no fills, parts with no
+         paint, or more colours than a printer has filaments. None of it was visible until the
+         model came out wrong. Cancelling leaves the current design alone. */
+      void openSvgPreview(svgText, name, store.get().removeBg).then((result) => {
+        if (!result) return;
+        pendingReframe = true;
+        currentSvgText = svgText;
+        currentSvgName = name;
+        currentSvgOptions = result.options;
+        reprocess();
+      });
     },
     onSelectIcon: (svgText, name) => {
       pendingReframe = true;
@@ -613,6 +792,24 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onTextChange: (text) => {
       currentText = text;
       debouncedReprocess(); // live rebuild as you type
+    },
+    // Spacing moves the outlines, so the word is re-traced; boldness is applied in the
+    // worker where the mm scale is known, so it only needs a rebuild.
+    onLineSpacing: (v) => {
+      store.set({ lineSpacing: v });
+      debouncedReprocess();
+    },
+    onLetterSpacing: (v) => {
+      store.set({ letterSpacing: v });
+      debouncedReprocess();
+    },
+    onTextBold: (mm) => {
+      store.set({ textBold: mm });
+      debouncedQuietRebuild();
+    },
+    onTextScale: (v) => {
+      store.set({ textScale: v });
+      debouncedRebuild();
     },
     onBlockText: (text) => {
       // The chain is the source of truth in Blocks mode: retype the LETTER chips from the
@@ -660,7 +857,23 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
     },
     onKeychainEnd: (side) => {
-      store.set({ keychainEnd: side });
+      // Moving the loop to a different face resets the slide. The slide is measured along the
+      // face, so carrying it across would put the loop somewhere the user did not point at —
+      // and on a row of blocks the two axes have wildly different ranges.
+      store.set({ keychainEnd: side, keychainSlideMm: 0 });
+      debouncedRebuild();
+    },
+    onKeychainSlideSet: (mm) => {
+      // Absolute — the slider that replaced the slide d-pad always reports the value it shows.
+      // The real limit is half the block pitch, which only the worker knows (pitch is measured
+      // off the assets at init and never crosses back). A generous UI bound stops the number
+      // running away; buildBlocks clamps for real and warns when it has to.
+      const next = Math.max(-40, Math.min(40, mm));
+      store.set({ keychainSlideMm: Math.round(next * 10) / 10 });
+      debouncedRebuild();
+    },
+    onKeychainSlideReset: () => {
+      store.set({ keychainSlideMm: 0 });
       debouncedRebuild();
     },
     onFontSelect: (fontId) => {
@@ -774,6 +987,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onUndo: () => undo(),
     onRedo: () => redo(),
     onRefresh: () => refreshDesign(),
+    onStatus: (text) => store.set({ status: text }),
   }, store.get());
 
   // ---- Undo / redo ----------------------------------------------------------
@@ -781,9 +995,20 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // shape/size). Each tracked change pushes a snapshot; re-tracing a new source
   // (reprocess) starts a fresh baseline. Restoring rebuilds the geometry.
   const HISTORY_FIELDS = [
-    'palette', 'paletteOverrides', 'partOverrides', 'bodyColorRgb', 'baseColorOverride',
+    'palette', 'paletteOverrides', 'partOverrides', 'customColors', 'bodyColorRgb', 'baseColorOverride',
     'componentHeights', 'edgeSettings', 'extrudeChamfer', 'baseShape', 'capWidthMm', 'topThickness',
-    'imageDepth', 'capProud', 'hollowBase', 'tolerance', 'stemFitPct', 'socketFitPct', 'switches', 'keychain',
+    'imageDepth', 'capProud', 'hollowBase', 'fixedSize', 'designScale', 'shapeSides', 'shapeCornerPct',
+    'shapeArmPct', 'tolerance',
+    /* Which custom outline, as well as THAT it is custom.
+       `baseShape` alone was never enough: restoring 'custom' without also restoring the token
+       (or the drawn id) left the build with no rings, and `makeCustom` answers that with a
+       circle. So undoing past a shape change quietly replaced a pumpkin with a disc, and the
+       next save wrote the disc down. Both ids are short strings; the rings they point at stay
+       out of the snapshot. */
+    'packShapeToken', 'drawnShapeId',
+    'stemFitPct',
+    'socketFitPct',
+    'switches', 'keychain',
   ] as const;
   let history: string[] = [];
   let histIndex = -1;
@@ -796,6 +1021,18 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
      handler which one arrived; it is cleared there whatever happens, so a failed strip cannot
      leave the next real rebuild exporting itself. */
   let pendingFitStrip = false;
+  /* Set right before a sample/pack image goes into the wizard, by NAME — `onSample` only ever
+     hands this file a loader function, never a label, so this is how the eventual settled
+     status ("Sample: X…") learns what got picked. Consumed by the next 'parts' message (or
+     cleared on cancel), never left standing: otherwise an unrelated slider tweak two minutes
+     later would inherit a stale sample name. */
+  let pendingSampleLoadName: string | null = null;
+  /* Set when switching TO icon mode silently swaps an Outline base for Circle
+     (`buildParamsFor`'s `effectiveBaseShape`) — icons are line art, not a filled region, so an
+     Outline base would trace to a broken ring. Surfaced once, on the build that switch
+     produces, rather than on every rebuild after (which would repeat the same sentence for
+     every unrelated edit made while still in icon mode). */
+  let pendingIconBaseNote = false;
 
   function snapshotHistory(): string {
     const s = store.get() as any;
@@ -825,6 +1062,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   function applyHistorySnapshot(snap: string) {
     restoringHistory = true;
     store.set(JSON.parse(snap));
+    /* Re-derive the pack rings from the token the snapshot just restored.
+       `packShapeRings` is a single variable outside the store, so after switching between two
+       pack shapes it holds the LATER one — and undo would have brought back the earlier one's
+       name against the later one's outline. The directory is already loaded by the time any of
+       this is reachable, so the lookup is free. */
+    const restored = store.get();
+    if (restored.packShapeToken) {
+      const entry = findShape(restored.packShapeToken);
+      if (entry?.rings?.length) packShapeRings = entry.rings;
+    }
     restoringHistory = false;
     updateHistoryButtons();
     rebuild(); // regenerate geometry + colors for the restored state
@@ -914,10 +1161,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       if (!part) return;
       const target = partColorTarget(part.name);
       if (!target) return;
-      const options: RGB[] =
+      const offered: RGB[] =
         s.colorMode === 'limited' && s.limitedColors.length > 0
           ? s.limitedColors
           : FILAMENTS.map(([, hex]) => hexToRgb(hex));
+      const sameRgb = (a: RGB, b: RGB) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+      const options: RGB[] = [
+        ...s.customColors.filter((c) => !offered.some((o) => sameRgb(o, c))),
+        ...offered,
+      ];
       ui.showColorPopoverAt(clientX, clientY, rgbToHex(part.colorRgb), options, {
         onSelect: (hex) => applyModelRecolor(target, hexToRgb(hex), index),
         onClose: () => store.set({ selectedParts: [] }),
@@ -965,6 +1217,21 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // Apply a recolor to the clicked part: update the live material + export data, and
   // persist into store state so it survives rebuilds. Geometry is identical for a
   // color change, so we deliberately skip the worker rebuild.
+  /* A colour picked from the wheel joins this design's palette.
+
+     Ian: "if I add a new colour that is not in the image palette, add it to the colouring
+     palette for that design so I can pick it for other elements as well." Without this the
+     wheel produced a one-off: the second shape that wanted the same custom red meant finding
+     it on the wheel again by eye. Shelf colours are already swatches, so only off-shelf ones
+     are recorded, once each. */
+  function rememberColour(rgb: RGB) {
+    const same = (a: RGB, b: RGB) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+    if (FILAMENTS.some(([, hex]) => same(hexToRgb(hex), rgb))) return;
+    const s = store.get();
+    if (s.customColors.some((c) => same(c, rgb))) return;
+    store.set({ customColors: [...s.customColors, rgb] });
+  }
+
   function applyModelRecolor(target: ColorTarget, rgb: RGB, partIndex: number) {
     const s = store.get();
     if (target.kind === 'region') {
@@ -1088,6 +1355,26 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   });
   cleanups.push(() => worker.terminate());
 
+  /* One-off builds, correlated by request id.
+     The live preview only ever has one build in flight and takes whatever comes back, which
+     is why the worker never needed this. A batch run does: it drives N builds through the
+     same worker and has to tell the answers apart. The map lives here rather than in the run
+     loop so the worker protocol stays the shell's business and the paid module only ever
+     awaits a promise. */
+  const pendingBuilds = new Map<string, (r: { parts: ClickerPart[]; warnings: string[] }) => void>();
+  let buildSeq = 0;
+  function buildOne(
+    regions: BuildRegion[],
+    outline: Ring[],
+    params: BuildParams,
+  ): Promise<{ parts: ClickerPart[]; warnings: string[] }> {
+    const requestId = `b${++buildSeq}`;
+    return new Promise((resolve) => {
+      pendingBuilds.set(requestId, resolve);
+      worker.postMessage({ type: 'buildClicker', regions, outline, params, requestId });
+    });
+  }
+
   worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
     const msg = e.data;
     switch (msg.type) {
@@ -1096,6 +1383,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         break;
       case 'initDone':
         assetsReady = true;
+        switchColumnMm = msg.switchColumnMm;
         console.log('[assets] socket:', msg.socketInfo, '| stem:', msg.stemInfo, '| switch:', msg.switchInfo);
         viewer.setSwitch(msg.switchMesh);
         viewer.showSwitch(store.get().showSwitch);
@@ -1118,6 +1406,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         }
         break;
       case 'parts': {
+        // A correlated build belongs to whoever asked for it, not to the viewport. Handled
+        // before anything else here so a run in progress cannot repaint the preview forty
+        // times or reset the undo baseline on every row.
+        if (msg.requestId) {
+          const resolve = pendingBuilds.get(msg.requestId);
+          pendingBuilds.delete(msg.requestId);
+          resolve?.({ parts: msg.parts, warnings: msg.warnings ?? [] });
+          break;
+        }
         if (pendingFitStrip) {
           pendingFitStrip = false;
           store.set({
@@ -1141,16 +1438,60 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // meshes too, or the raised part would float a second step above the model.
         // (Selection highlight is re-applied by the store subscription below.)
 
+        // What the build had to say, plus what the PLATE has to say. The second half is new:
+        // the layout has always known that a six-letter block chain does not fit an A1 bed and
+        // never mentioned it, so the file arrived with pieces off the plate and the slicer was
+        // the one to break the news. Same status line, because to the user it is the same
+        // question — is this going to print.
+        const notes = [...(msg.warnings ?? []), ...plateWarnings(msg.parts)].map((n) =>
+          // The base-widened note has no next step of its own — "Lock the base size" exists
+          // and fixes it, but nothing points there. Only when the lock is off: once it's on,
+          // the size IS pinned, so the suggestion would be telling someone to do what they
+          // just did.
+          n === 'Base widened so the switch fits.' && store.get().fixedSize === null
+            ? `${n} Try "Lock the base size" to set an exact size instead.`
+            : n,
+        );
+        // Icons need a solid base; an Outline one just got swapped for Circle (see
+        // `pendingIconBaseNote`'s declaration). Say so once, on this build, then forget it —
+        // an unrelated edit five minutes later must not repeat a decision that already happened.
+        if (pendingIconBaseNote) {
+          notes.unshift('Icons need a solid base, so the shape switched to Circle.');
+          pendingIconBaseNote = false;
+        }
+        // The size the build actually produced. It feeds "Lock the base size", which seeds
+        // itself from it so turning the lock on never moves the model — and it is the answer
+        // to "how big is this really", which the app has never been able to give.
+        const bodyBB = groupBBox(msg.parts, 'base', assemblyMinZ(msg.parts));
         store.set({
           building: false,
+          builtBodyMm: isFinite(bodyBB.minX)
+            ? { w: bodyBB.maxX - bodyBB.minX, h: bodyBB.maxY - bodyBB.minY }
+            : null,
           hasParts: msg.parts.length > 0,
           // Surface every non-fatal build note (switches pinched, base widened for the switch,
           // no keychain room) or clear. `warnings[0]` dropped the rest on the floor, which
           // matters now that a single build can raise two of them at once — the base was
           // widened AND the patch reached the printed face are different sentences with
-          // different fixes, and the second one is the one people photograph.
-          status: msg.warnings && msg.warnings.length ? msg.warnings.join(' ') : '',
+          // different fixes, and the second one is the one people photograph. Joined with a
+          // real separator rather than a bare space, so two sentences don't run together
+          // ("fits.Increase" read as one malformed word).
+          //
+          // A clean build (no notes) still needs to say SOMETHING when it just loaded a named
+          // sample or pack design — otherwise the status goes blank and the finished model on
+          // screen reads as the user's own work, not a demo (audit #2). `pendingSampleLoadName`
+          // is null for every ordinary edit, so this never fires outside that one moment.
+          status: notes.length
+            ? notes.join(' · ')
+            : pendingSampleLoadName
+              ? `Sample: ${pendingSampleLoadName}. Drop your own image to replace it.`
+              : '',
+          // Only when THIS build is the one a sample/pack pick produced — spread in rather
+          // than always naming the key, so an ordinary edit's `store.set` leaves whatever was
+          // marked before untouched instead of clearing it every rebuild (audit #2).
+          ...(pendingSampleLoadName ? { loadedSampleId: pendingSampleLoadName } : {}),
         });
+        pendingSampleLoadName = null;
         isInitialLoad = false;
 
         // After a re-trace, the first build becomes the new undo baseline.
@@ -1164,6 +1505,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         store.set({ building: false, status: 'Error: ' + firstLine(msg.message) });
         console.error('[geometry worker]', msg.message);
         isInitialLoad = false;
+        // A failed build answers neither pending flag — don't let either haunt the next
+        // successful one.
+        pendingSampleLoadName = null;
+        pendingIconBaseNote = false;
         break;
     }
   };
@@ -1213,13 +1558,28 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({
         building: false,
         hasParts: parts.length > 0,
-        status: '', // Clear the banner when ready
+        // The pre-built JSON skips the wizard entirely, so this is the ONLY signal that what
+        // just appeared is a demo and not a blank project someone forgot to start (audit #2) —
+        // an empty status here reads as "the app finished your work", which it did not.
+        status: `Sample: ${SAMPLES[0].name} logo. Drop your own image to replace it.`,
+        // Same reason, for the sample grid's own mark rather than the status line: the pre-built
+        // JSON never goes through the 'parts' handler above (the one place that normally sets
+        // this from `pendingSampleLoadName`), so nothing else will ever mark this tile.
+        loadedSampleId: SAMPLES[0].name,
       });
       defaultClickerLoaded = true;
       isInitialLoad = false;
+      /* The undo baseline. Every other way a model appears goes through `reprocess()`, which
+         flags a reset that the next 'parts' message performs; this fast path never sends one,
+         so `histIndex` stayed at -1 and `commitHistory` refused every snapshot. Undo, redo and
+         refresh were dead on the clicker most people start from. */
+      resetHistory();
     } catch (err) {
       console.warn('Failed to load pre-built default clicker, falling back to dynamic build:', err);
       if (originalImage) {
+        // Same sample, the slow path — carry the same honesty through to whatever this
+        // build settles on (see `pendingSampleLoadName`'s declaration).
+        pendingSampleLoadName = SAMPLES[0].name;
         reprocess();
       }
     }
@@ -1227,40 +1587,152 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   // ---- Pipeline ----
   async function openWizard(getter: () => Promise<RgbaImage>) {
+    /* Two try blocks, because two different things can fail and the user needs to be told
+       which. Decoding the file is the one the friendly "try a PNG" line is about. Everything
+       after it — opening the wizard, the store update it triggers, the sidebar repaint — is
+       app code, and when THAT throws the same line is a lie: a sample from the bundled
+       gallery is a PNG. One catch round both hid a UI error behind advice about file types. */
+    let baseImage: RgbaImage;
+    pendingReframe = true; // a new picture is a new subject, so frame it
+    // Outside the decode try on purpose: a store update repaints the sidebar, and a fault
+    // there must not be reported as a bad file.
+    store.set({ building: true, status: 'Reading image…' });
     try {
-      pendingReframe = true; // a new picture is a new subject, so frame it
-      store.set({ building: true, status: 'Reading image…' });
-      const baseImage = await getter();
+      baseImage = await getter();
+    } catch (err) {
+      // The raw error (an `EncodingError:` or similar browser-internal message) told the user
+      // nothing they could act on — the real cause console.warn keeps for us, this line
+      // states in a way that names the actual fix.
+      console.warn('[image decode]', err);
+      store.set({ building: false, status: "Couldn't read that image. Try a PNG or JPG." });
+      return;
+    }
+    try {
       store.set({ building: false, status: 'Preprocess your image…' });
+      const reopening = baseImage === wizardBase;
+      const s = store.get();
       runWizard({
         baseImage,
-        initialColorCount: store.get().colorCount,
-        onCancel: () =>
-          store.set({ status: originalImage ? 'Ready.' : 'Ready. Drop an image or try the sample.' }),
-        onComplete: ({ adjusted, preprocess, colorCount, colorMode, limitedColors, paletteOverrides }) => {
+        initialColorCount: s.colorCount,
+        initialSmoothing: s.smoothing,
+        initialRemoveBg: s.removeBg,
+        initialPreprocess: reopening && wizardParams ? wizardParams : undefined,
+        initialLimitedColors: reopening && s.colorMode === 'limited' ? s.limitedColors : undefined,
+        designMm: s.capWidthMm * (s.designScale ?? 1),
+        onCancel: () => {
+          // Cancelling never reaches the build that would have consumed this — clear it here
+          // or the NEXT unrelated build (a slider nudge, say) would wrongly claim to be the
+          // sample that was just backed out of.
+          pendingSampleLoadName = null;
+          store.set({ status: originalImage ? 'Ready.' : 'Ready. Drop an image or try the sample.' });
+        },
+        onComplete: ({ adjusted, preprocess, colorCount, smoothing, colorMode, limitedColors, paletteOverrides }) => {
           originalImage = adjusted;
-          let defaultBodyColor = store.get().bodyColorRgb;
-          if (colorMode === 'limited' && limitedColors && limitedColors.length > 0) {
-            const blackHex = '#161616';
-            const blackRgb = hexToRgb(blackHex);
-            const hasBlack = limitedColors.some(c => c[0] === blackRgb[0] && c[1] === blackRgb[1] && c[2] === blackRgb[2]);
-            defaultBodyColor = hasBlack ? blackRgb : limitedColors[0];
-          }
+          wizardBase = baseImage;
+          wizardParams = preprocess;
+          /* The body colour is NOT touched here any more. The wizard now always confirms a
+             kept-colour list (`limited`), and the old rule for that mode — body becomes the
+             list's black, else its first colour — would have repainted the base after every
+             confirm with whatever the picture's biggest colour happened to be. */
           store.set({
             removeBg: !preprocess.keepBackground,
             colorCount,
-            topThickness: Math.max(1, preprocess.thicknessMm),
+            smoothing,
+            // Image Thickness was dropped from the wizard — it's a geometry setting, not an
+            // image one, and it already lives in the sidebar. Writing it here on every
+            // confirm meant this dialog silently clobbered whatever the sidebar had just
+            // been set to.
             colorMode,
             limitedColors: limitedColors || [],
-            bodyColorRgb: defaultBodyColor,
             paletteOverrides: paletteOverrides || [],
+            /* And the per-shape recolors, which nothing else clears.
+               A part is named by position — `top-color-<region>-<component>` — so an
+               override recorded on one picture lands on whatever occupies that slot in
+               the next one. Recolor a black outline yellow, import a different image,
+               and its region 0 comes back yellow with no palette row saying so. */
+            partOverrides: {},
           });
           reprocess();
         },
       });
     } catch (err) {
-      store.set({ building: false, status: 'Could not read image: ' + String(err) });
+      console.error('[image wizard]', err);
+      store.set({ building: false, status: 'Could not open the image tools: ' + String(err) });
     }
+  }
+
+  /**
+   * Open the 2-D shape editor on whatever the app is showing, and apply what comes back.
+   *
+   * Three shapes of result, and the first two are what the app already had: a preset writes the
+   * same `baseShape` + knobs the picker used to write, so a shape nobody drew on is still built
+   * by the real WASM construction and every saved project keeps working; a library shape the
+   * editor did not change goes back as its token, exactly as picking it from the old drawer
+   * did. Only an outline whose points actually moved becomes a drawing, stored by id in
+   * `drawnRings` and identified in the state by `drawnShapeId`.
+   */
+  async function openShapeEditorForState(): Promise<void> {
+    // Loaded on demand behind the build flag, so a public build never carries the editor —
+    // see `define: __SHAPE_EDITOR__` in vite.config.ts. Nothing calls this there either
+    // (the picker omits its button), so this guard is the second lock, not the only one.
+    if (!__SHAPE_EDITOR__) return;
+    const { openShapeEditor } = await import('./ui/shapeEditor');
+    const s = store.get();
+    const current = ringsForState(s);
+    // The base's longest side, in the millimetres the editor measures everything against. The
+    // measured body is the honest number once there is one; `capWidthMm` is what the Size
+    // slider says, which is the right answer before the first build.
+    const spanMm = s.builtBodyMm
+      ? Math.max(s.builtBodyMm.w, s.builtBodyMm.h)
+      : s.capWidthMm;
+    const result = await openShapeEditor({
+      shapes: allShapes(),
+      current: {
+        baseShape: s.baseShape,
+        packShapeToken: s.packShapeToken,
+        shapeSides: s.shapeSides,
+        shapeCornerPct: s.shapeCornerPct,
+        shapeArmPct: s.shapeArmPct,
+        fixedSize: s.fixedSize,
+        rings: current,
+      },
+      spanMm,
+      switchColumnMm,
+      switches: s.switches.map((sw) => ({ x: sw.x, y: sw.y })),
+    });
+    if (!result) return;
+
+    if (result.kind === 'preset') {
+      store.set({
+        baseShape: result.baseShape,
+        packShapeToken: null,
+        drawnShapeId: null,
+        shapeSides: result.shapeSides,
+        shapeCornerPct: result.shapeCornerPct,
+        shapeArmPct: result.shapeArmPct,
+        fixedSize: result.fixedSize,
+      });
+    } else if (result.packShapeToken) {
+      // A library shape the editor did not change. Stored as its TOKEN, exactly as picking it
+      // from the old drawer did — so the button still names it, and the project file holds a
+      // few bytes rather than a few hundred points that the directory can re-derive anyway.
+      const entry = findShape(result.packShapeToken);
+      if (entry?.rings?.length) packShapeRings = entry.rings;
+      store.set({
+        baseShape: 'custom',
+        packShapeToken: result.packShapeToken,
+        drawnShapeId: null,
+        fixedSize: result.fixedSize,
+      });
+    } else {
+      store.set({
+        baseShape: 'custom',
+        packShapeToken: null,
+        drawnShapeId: rememberDrawing(result.rings),
+        fixedSize: result.fixedSize,
+      });
+    }
+    debouncedRebuild();
   }
 
   function reprocess() {
@@ -1278,6 +1750,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       regionSet = processImage(cloneImage(originalImage), s.colorCount, {
         removeBg: s.removeBg,
         smoothing: s.smoothing,
+        // The artwork's printed size, so the tracer's minimum feature is a real millimetre
+        // rather than a fraction of whatever the uploaded file's pixel dimensions happened
+        // to be. A bigger cap keeps finer detail, which is what it should do.
+        designMm: s.capWidthMm * (s.designScale ?? 1),
         customColors: s.colorMode === 'limited' ? s.limitedColors : undefined,
       });
     } else if (s.importMode === 'svg') {
@@ -1287,7 +1763,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       }
       try {
         store.set({ building: true, status: 'Parsing SVG…' });
-        regionSet = parseSvg(currentSvgText, { removeBg: s.removeBg });
+        // `removeBg` is a live control, so it wins over whatever the preview was opened with.
+        regionSet = parseSvg(currentSvgText, { ...currentSvgOptions, removeBg: s.removeBg });
       } catch (e: any) {
         store.set({ building: false, status: 'Error: ' + e.message });
         return;
@@ -1306,7 +1783,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         return;
       }
       try {
-        store.set({ building: true, status: 'Parsing Icon…' });
+        store.set({ building: true, status: 'Parsing icon…' });
         regionSet = parseSvg(currentIconText);
       } catch (e: any) {
         store.set({ building: false, status: 'Error: ' + e.message });
@@ -1322,8 +1799,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       }
     } else if (s.importMode === 'text') {
       try {
-        store.set({ building: true, status: 'Generating Text…' });
-        regionSet = parseLetter(currentText, currentFontId, 15, s.separateLetters);
+        store.set({ building: true, status: 'Generating text…' });
+        regionSet = parseLetter(currentText, currentFontId, 15, s.separateLetters, {
+          lineSpacing: s.lineSpacing,
+          letterSpacing: s.letterSpacing,
+        });
+        store.set({ textSizeMul: regionSet.sizeMul ?? 1 });
       } catch (e: any) {
         store.set({ building: false, status: 'Error: ' + e.message });
         return;
@@ -1351,10 +1832,96 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     store.set({ palette });
 
     if (palette.length === 0) {
-      store.set({ building: false, status: 'No outline found.' });
+      // A dead end on its own — anyone who skips the wizard (icon, SVG, text all can reach
+      // this) needs the next step spelled out, not just the diagnosis.
+      store.set({
+        building: false,
+        status: 'No outline found. Turn off Remove background, or use Adjust image to check the trace.',
+      });
       return;
     }
     rebuild();
+  }
+
+
+  /**
+   * Every `BuildParams` field, derived from app state and nothing else.
+   *
+   * Lifted out of `rebuild()` so a batch run can ask for "the settings the user has right
+   * now" without going near the live preview: the run loop takes these, overrides the row's
+   * text and colour, and builds N of them. Inlined, the run would have had to re-derive the
+   * two dozen fields below and they would have drifted apart the first time one changed.
+   */
+  function buildParamsFor(s: UiState): BuildParams {
+    // Icons are line-art (a single-color silhouette), not a multi-color picture.
+    // Using their thin stroke as the body outline makes a broken ring, so the body
+    // is always a solid shape (circle/square) and the icon rides on top as a design.
+    const isIcon = s.importMode === 'icon';
+    const effectiveBaseShape = isIcon && s.baseShape === 'outline' ? 'circle' : s.baseShape;
+    // The cap backing contrasts line-art designs so they stay visible (see
+    // deriveFrameColor). A frame the user pinned by clicking the model wins over it.
+    const capBaseColor: RGB = s.baseColorOverride ?? deriveFrameColor(s);
+    const isText = s.importMode === 'text' || s.importMode === 'blocks';
+    const isTextMode = s.importMode === 'text';
+    const textScale = s.textScale ?? 1;
+    const textOutline = effectiveBaseShape === 'outline';
+    return {
+      baseShape: effectiveBaseShape,
+      /* Text mode sizing. Two multipliers on the Size the user set, and both exist so the
+         LETTERS never shrink to accommodate something else:
+           · textSizeMul — spacing widened the word, so the part grows to match.
+           · textScale   — the Text size slider itself. On an outline base the letters ARE
+             the shape, so growing them grows the clicker. On a preset base there is a frame
+             to shrink into, so below 100% the letters shrink inside a base that stays put
+             (that is `designScale`), and above 100% the base grows with them. */
+      capWidthMm: isTextMode
+        ? s.capWidthMm * (s.textSizeMul ?? 1)
+          * (textOutline ? textScale : Math.max(1, textScale))
+        : s.capWidthMm,
+      topThickness: Math.max(1, s.topThickness),
+      imageDepth: s.imageDepth,
+      imageMargin: isText ? 2.5 : 1.2,
+      borderWidth: isText ? 3.5 : 2.6,
+      capProud: s.capProud,
+      hollowBase: s.hollowBase,
+      // Null, not `{w:0,h:0}` — buildClicker treats any absent/degenerate size as "follow the
+      // design", and the whole point of the control is that it is off until asked for.
+      bodySize: s.fixedSize ?? undefined,
+      designScale: isTextMode && !textOutline ? Math.min(1, textScale) : s.designScale,
+      shapeSides: s.shapeSides,
+      shapeCornerPct: s.shapeCornerPct,
+      shapeArmPct: s.shapeArmPct,
+      // Only meaningful for `baseShape: 'custom'`; buildClicker falls back to a circle if it
+      // is missing, which is what a pack file that failed to load would otherwise print as.
+      baseShapeRings: effectiveBaseShape === 'custom'
+        ? ringsForState(s) ?? undefined
+        : undefined,
+      tolerance: s.tolerance,
+      stemFitPct: s.stemFitPct,
+      socketFitPct: s.socketFitPct,
+      imageOffset: s.imageOffset,
+      colorBleed: 0.12,
+      stepHeight: 0.6,
+      travel: 4.0,
+      floorThickness: 1.6,
+      switches: s.switches,
+      keychain: s.keychain,
+      baseFilamentRgb: capBaseColor,
+      bodyColorRgb: s.bodyColorRgb ?? ([120, 124, 130] as RGB),
+      edgeSettings: s.edgeSettings,
+      extrudeChamfer: s.extrudeChamfer,
+      componentHeights: s.componentHeights,
+      blockOrientation: s.blockOrientation,
+      legendScale: s.legendScale,
+      legendBold: s.legendBold,
+      textBold: s.importMode === 'text' ? s.textBold : 0,
+      keychainEnd: s.keychainEnd,
+      keychainSlideMm: s.keychainSlideMm,
+      partOverrides: s.partOverrides,
+      // Paid geometry, merged last so a free field can never silently override it. `{}` in
+      // the public build, where the module is an inline stub.
+      ...(proPanel?.paramsPatch() ?? {}),
+    };
   }
 
   function rebuild(quiet = false) {
@@ -1416,47 +1983,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
     });
 
-    // Icons are line-art (a single-color silhouette), not a multi-color picture.
-    // Using their thin stroke as the body outline makes a broken ring, so the body
-    // is always a solid shape (circle/square) and the icon rides on top as a design.
-    const isIcon = s.importMode === 'icon';
-    const effectiveBaseShape = isIcon && s.baseShape === 'outline' ? 'circle' : s.baseShape;
-    // The cap backing contrasts line-art designs so they stay visible (see
-    // deriveFrameColor). A frame the user pinned by clicking the model wins over it.
-    const capBaseColor: RGB = s.baseColorOverride ?? deriveFrameColor(s);
-
     const isBlocks = blocksMode;
-    const isText = s.importMode === 'text' || isBlocks;
-    const params: BuildParams = {
-      baseShape: effectiveBaseShape,
-      capWidthMm: s.capWidthMm,
-      topThickness: Math.max(1, s.topThickness),
-      imageDepth: s.imageDepth,
-      imageMargin: isText ? 2.5 : 1.2,
-      borderWidth: isText ? 3.5 : 2.6,
-      capProud: s.capProud,
-      hollowBase: s.hollowBase,
-      tolerance: s.tolerance,
-      stemFitPct: s.stemFitPct,
-      socketFitPct: s.socketFitPct,
-      imageOffset: s.imageOffset,
-      colorBleed: 0.12,
-      stepHeight: 0.6,
-      travel: 4.0,
-      floorThickness: 1.6,
-      switches: s.switches,
-      keychain: s.keychain,
-      baseFilamentRgb: capBaseColor,
-      bodyColorRgb: s.bodyColorRgb ?? ([120, 124, 130] as RGB),
-      edgeSettings: s.edgeSettings,
-      extrudeChamfer: s.extrudeChamfer,
-      componentHeights: s.componentHeights,
-      blockOrientation: s.blockOrientation,
-      legendScale: s.legendScale,
-      legendBold: s.legendBold,
-      keychainEnd: s.keychainEnd,
-      partOverrides: s.partOverrides,
-    };
+    const params = buildParamsFor(s);
 
     if (quiet) {
       // Live edit preview (extrude / edges): rebuild silently — no full-screen overlay.
@@ -1573,6 +2101,20 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         imageDepth: s.imageDepth,
         capProud: s.capProud,
         hollowBase: s.hollowBase,
+        fixedSize: s.fixedSize,
+        designScale: s.designScale,
+        shapeSides: s.shapeSides,
+        shapeCornerPct: s.shapeCornerPct,
+        shapeArmPct: s.shapeArmPct,
+        packShapeToken: s.packShapeToken,
+        /* A drawn shape's POINTS, inline, and only when there is one.
+           A pack shape saves a token because the directory can re-fetch and re-trace it; a
+           shape somebody drew has no directory behind it, so the token seam would reload it as
+           a plain circle with nothing reporting a problem — "the design comes back and its
+           SHAPE quietly does not", which the load path below already calls the worst kind of
+           load bug. It follows `currentSvgText`'s precedent instead: the payload IS the file.
+           A few hundred numbers, next to a base64 image. */
+        drawnShapeRings: ringsForState(s) && !s.packShapeToken ? ringsForState(s) : null,
         tolerance: s.tolerance,
         stemFitPct: s.stemFitPct,
         socketFitPct: s.socketFitPct,
@@ -1585,6 +2127,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         currentText,
         currentFontId,
         currentSvgText,
+        currentSvgOptions,
         currentSvgName,
         currentIconText,
         currentIconName,
@@ -1594,10 +2137,21 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         paletteOverrides: s.paletteOverrides,
         baseColorOverride: s.baseColorOverride,
         partOverrides: s.partOverrides,
+        customColors: s.customColors,
         edgeSettings: s.edgeSettings,
         extrudeChamfer: s.extrudeChamfer,
         separateLetters: s.separateLetters,
+        lineSpacing: s.lineSpacing,
+        letterSpacing: s.letterSpacing,
+        textBold: s.textBold,
+        textScale: s.textScale,
         componentHeights: s.componentHeights,
+        // Blocks mode: which side the keyring hangs off and how far along it has been slid.
+        // NOTE: the other blocks fields (blockOrientation, legendScale, legendBold, blockSlots)
+        // are still not saved — a pre-existing gap, flagged rather than fixed here because it
+        // is a behaviour change of its own.
+        keychainEnd: s.keychainEnd,
+        keychainSlideMm: s.keychainSlideMm,
       },
       palette: s.palette, // filament mappings
       image: originalImage ? imageToDataUrl(originalImage) : null,
@@ -1741,6 +2295,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       currentText = set.currentText ?? 'Custom\nText';
       currentFontId = set.currentFontId ?? 'helvetiker-regular';
       currentSvgText = set.currentSvgText ?? '';
+      // Without this a project whose SVG needed "fill the outlines" reloads as hairlines.
+      currentSvgOptions = set.currentSvgOptions ?? {};
       currentSvgName = set.currentSvgName ?? '';
       currentIconText = set.currentIconText ?? '';
       currentIconName = set.currentIconName ?? '';
@@ -1759,6 +2315,24 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         imageDepth: set.imageDepth ?? store.get().imageDepth,
         capProud: set.capProud ?? 4.0,
         hollowBase: set.hollowBase ?? false,
+        // Absent in every project saved before this control existed, and absent MEANS off —
+        // so an old project keeps rendering at exactly the size it always did.
+        fixedSize: set.fixedSize ?? null,
+        // Absent means 1 — every project saved before this control existed renders unchanged.
+        designScale: set.designScale ?? 1,
+        /* Per-shape, not a flat 6.
+           `?? 6` looked harmless and silently changed geometry: `makeStar` used to be called
+           with its own default of 5 and nothing else, so every star ever saved was 5-pointed —
+           and a flat 6 is not nullish, so `sides(5, …)`'s fallback never fires and the star
+           reloads with six points. The directory already knows each shape's default. */
+        shapeSides: set.shapeSides ?? findShape(set.baseShape ?? '')?.param?.value ?? 6,
+        // Per-field `?? default` is this codebase's only real compatibility mechanism —
+        // `version` is written and never read — so a project saved before this knob existed
+        // loads with the shipped default and builds exactly what it always built.
+        shapeArmPct: set.shapeArmPct ?? 0.34,
+        shapeCornerPct: set.shapeCornerPct ?? 0.22,
+        packShapeToken: set.packShapeToken ?? null,
+        drawnShapeId: null,
         tolerance: set.tolerance ?? store.get().tolerance,
         // v3 projects stored `stemTolerance` in mm against the old scale-the-whole-post code,
         // where even the clamp extreme moved the gripping slot ~0.15 mm. There is no honest
@@ -1784,14 +2358,67 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         bodyColorRgb: set.bodyColorRgb ?? [120, 124, 130],
         paletteOverrides: set.paletteOverrides ?? [],
         partOverrides: set.partOverrides ?? {},
+        customColors: set.customColors ?? [],
         edgeSettings: set.edgeSettings ?? store.get().edgeSettings,
         extrudeChamfer: set.extrudeChamfer ?? false,
         separateLetters: set.separateLetters ?? false,
+        lineSpacing: set.lineSpacing ?? 1,
+        letterSpacing: set.letterSpacing ?? 0,
+        textBold: set.textBold ?? 0,
+        textScale: set.textScale ?? 1,
         componentHeights: set.componentHeights ?? {},
+        keychainEnd: set.keychainEnd ?? 'left',
+        keychainSlideMm: set.keychainSlideMm ?? 0,
       });
 
       if (set.importMode === 'image' && proj.image) {
         originalImage = await dataUrlToImage(proj.image);
+      }
+
+      /* Re-fetch a seasonal-pack silhouette. The rings are derived, not saved — a project
+         file holds the token — so without this a saved pumpkin reloads as `baseShape:
+         'custom'` with no rings, which buildClicker renders as a circle. The design would
+         come back and its SHAPE would quietly not, which is the worst kind of load bug:
+         nothing errors and the file looks like it worked.
+
+         Awaited before `reprocess()` so the first build already has them; a failure leaves
+         the base as a circle and says so rather than pretending. */
+      /* Restore the base silhouette.
+
+         Everything that is not a built-in `BaseShapeKind` is stored as `baseShape: 'custom'`
+         plus a token, and the RINGS are derived rather than saved — so without this the design
+         reloads and its shape quietly does not, which `makeCustom` renders as a plain circle.
+         Nothing errors and the file looks like it worked, which is the worst kind of load bug.
+
+         One lookup for every token kind, deliberately. The first cut of this went through
+         `resolveShape`, which only knows about seasonal packs: a library token (`lib:heart`)
+         made it call `findPack('lib')`, get null, and fall through in silence — so every one of
+         the 371 library shapes reloaded as a circle. `findShape` resolves all three, and
+         `loadPackShapes` is awaited first so the pack entries exist to be found. */
+      packShapeRings = null;
+      let loadedDrawnId: string | null = null;
+      /* A shape drawn in the editor: its points are in the file, so there is nothing to fetch.
+         Checked BEFORE the token branch and mutually exclusive with it by construction — a
+         drawn shape never has a token, which is the same fact that tells `buildParamsFor`
+         which of the two ring sets to use. */
+      const savedRings = (proj.settings as { drawnShapeRings?: Ring[] })?.drawnShapeRings;
+      if (Array.isArray(savedRings) && savedRings.length) {
+        const clean = savedRings.filter((r) => Array.isArray(r) && r.length >= 3);
+        if (clean.length) loadedDrawnId = rememberDrawing(clean);
+        else store.set({ status: 'The base shape this project uses could not be loaded.' });
+      }
+      store.set({ drawnShapeId: loadedDrawnId });
+      const savedToken = set.packShapeToken ?? '';
+      if (savedToken) {
+        try {
+          await loadPackShapes();
+          const savedEntry = findShape(savedToken);
+          if (savedEntry?.rings?.length) packShapeRings = savedEntry.rings;
+          else store.set({ status: 'The base shape this project uses could not be loaded.' });
+        } catch (err) {
+          console.error('[shapes] saved base shape failed to load', err);
+          store.set({ status: 'The base shape this project uses could not be loaded.' });
+        }
       }
 
       reprocess();
@@ -1817,6 +2444,47 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     '- Square-ish framing, subject fills ~80% of the canvas.',
     'Subject: <describe your subject here>.',
   ].join('\n');
+
+  /* ------------------------------------------------------- Paid features (MakerWorld only)
+
+     The panel renders into `#proMount`, an empty div the sidebar lays out, and reaches the
+     generator through the narrow `ProDeps` seam declared in makerlab.d.ts. It never touches
+     the worker, the viewer or the store directly — everything it needs is a function passed
+     in here, which is what keeps the paid module swappable and the shell free of it.
+
+     `paramsPatch()` is how paid geometry reaches a build: `rebuild()` merges it over the
+     params it just assembled. In the public build the module is an inline stub that returns
+     `{}`, and this whole branch is dead code behind `MAKERLAB` on top of that. */
+  if (MAKERLAB) {
+    const proHost = container.querySelector<HTMLElement>('#proMount');
+    if (proHost) {
+      proPanel = mountProFeatures({
+        host: proHost,
+        getState: () => {
+          const st = store.get();
+          return {
+            importMode: st.importMode,
+            fontId: currentFontId,
+            separateLetters: st.separateLetters,
+            palette: st.palette,
+            params: buildParamsFor(st),
+          };
+        },
+        setStatus: (msg) => store.set({ status: msg }),
+        buildOne,
+        showParts: (parts) => {
+          latestParts = parts;
+          viewer.setParts(parts, false);
+          viewer.setView(store.get().view);
+          viewer.setSwitchPlacements([]);
+          store.set({ building: false, hasParts: parts.length > 0 });
+        },
+        rebuild: () => debouncedRebuild(),
+      });
+      cleanups.push(() => proPanel?.destroy());
+      cleanups.push(store.subscribe(() => proPanel?.refresh()));
+    }
+  }
 
   // ------------------------------------------------------- MakerLab handshake
   // MakerWorld build only: connect to the host when embedded (no-op otherwise). Runs alongside

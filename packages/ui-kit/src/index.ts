@@ -50,9 +50,12 @@ export { captureCover, type RendererLike } from './components/cover-image';
 export {
   FILAMENTS,
   filamentRow,
+  colorChip,
   contrastRatio,
   luminance,
   type FilamentRowOptions,
+  type ColorChipOptions,
+  type ColorChipHandle,
 } from './components/filament';
 export { offlineDownloadButton, type OfflineDownloadOptions } from './components/offline-download';
 export { encodeParamsToHash, readParamsFromHash, presetShareButton } from './components/preset-share';
@@ -60,6 +63,8 @@ export {
   toggleSwitch,
   slider,
   sliderRow,
+  type SliderRowHandle,
+  colorSwatch,
   stepperRow,
   segmentedControl,
   selectField,
@@ -100,6 +105,7 @@ export {
   dropZone,
   uploadCta,
   sampleGrid,
+  thumbGrid,
   thumbTile,
   type SourceOption,
   type SourceCards,
@@ -108,7 +114,10 @@ export {
   type UploadCtaOptions,
   type SampleItem,
   type SampleGridOptions,
+  type SampleGridHandle,
+  type ThumbGridOptions,
   type ThumbTileOptions,
+  type ThumbTileHandle,
 } from './components/sources';
 export {
   modeBar,
@@ -125,9 +134,9 @@ export {
   type StageStatus,
   type StatusKind,
 } from './components/stage';
-export { ICONS, svgEl } from './icons';
+export { ICONS, svgEl, svgPathEl } from './icons';
 export { el } from './dom';
-export { themeColorHex } from './tokens';
+export { themeColorHex, themeColor } from './tokens';
 export {
   chip,
   emptyState,

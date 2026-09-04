@@ -2,7 +2,7 @@
 // pick a sample. Each one owns its markup so the styling and alignment are the
 // same in every generator instead of being re-derived per app.
 import { el } from '../dom';
-import { svgEl } from '../icons';
+import { svgEl, svgPathEl } from '../icons';
 
 // ---------------------------------------------------------------- sources --
 
@@ -166,15 +166,35 @@ export interface SampleGridOptions {
   onPick: (item: SampleItem, index: number) => void;
 }
 
+export type SampleGridHandle = HTMLDivElement & {
+  /** Mark one tile (by its `SampleItem.id`) as the loaded one, or clear the mark with null.
+   *  Only items given an `id` can be marked — a grid whose items have none simply has nothing
+   *  for this to select, the same opt-in `thumbTile()` uses for `aria-pressed`. */
+  setSelected(id: string | null): void;
+};
+
 export interface ThumbTileOptions {
-  /** Thumbnail URL — an import, a data URI, a blob URL. */
-  src: string;
+  /** Thumbnail URL — an import, a data URI, a blob URL. Omit when `svgPath` is given. */
+  src?: string;
+  /**
+   * An SVG path `d` in a 40x40 box, drawn INSTEAD of an image.
+   *
+   * A path rather than a data-URI image, for the same reason the symbol picker's tiles are:
+   * it inherits `currentColor`, so a generated silhouette follows the theme instead of being
+   * a fixed-colour bitmap that goes invisible in dark mode. The clicker's base shapes have no
+   * image files at all — they are ring generators — so `src` cannot express them.
+   */
+  svgPath?: string;
   /** The tile's whole accessible name; also its tooltip. */
   label: string;
+  /** Renders as the current choice, and reports it as `aria-pressed`. */
+  selected?: boolean;
   /** Extra class for placement or app-specific sizing. Never a restyle. */
   className?: string;
-  onClick?: (tile: HTMLButtonElement) => void;
+  onClick?: (tile: ThumbTileHandle) => void;
 }
+
+export type ThumbTileHandle = HTMLButtonElement & { setSelected(on: boolean): void };
 
 /**
  * One focusable image tile.
@@ -188,25 +208,79 @@ export interface ThumbTileOptions {
  *
  * Lazy loading here, unlike `sampleGrid`: a gallery is long and most of it is below the fold.
  */
-export function thumbTile(opts: ThumbTileOptions): HTMLButtonElement {
+export function thumbTile(opts: ThumbTileOptions): ThumbTileHandle {
   const btn = el('button', {
     className: `vl-thumb${opts.className ? ` ${opts.className}` : ''}`,
     attrs: { type: 'button', title: opts.label, 'aria-label': opts.label },
-  }) as HTMLButtonElement;
-  btn.append(el('img', { attrs: { src: opts.src, alt: '', decoding: 'async', loading: 'lazy' } }));
+  }) as ThumbTileHandle;
+  // `aria-pressed` ONLY when the caller is using selection. Setting it unconditionally would
+  // turn every tile into a toggle button as far as a screen reader is concerned — including
+  // the clicker's 1,500-icon gallery, where each tile inserts a symbol and none of them are
+  // "pressed". A tile that reports a state it does not have is worse than one that reports
+  // nothing.
+  if (opts.selected !== undefined) btn.setAttribute('aria-pressed', String(opts.selected));
+  if (opts.svgPath) btn.append(svgPathEl(opts.svgPath));
+  else if (opts.src) {
+    btn.append(el('img', { attrs: { src: opts.src, alt: '', decoding: 'async', loading: 'lazy' } }));
+  }
+  // `aria-pressed` is both the announcement and what the stylesheet keys the chosen look off,
+  // so the two cannot disagree — the same arrangement `chip()` uses.
+  btn.setSelected = (on) => btn.setAttribute('aria-pressed', String(on));
   if (opts.onClick) btn.addEventListener('click', () => opts.onClick!(btn));
   return btn;
 }
 
-/** Square sample thumbnails. Returns a fragment holder, heading included. */
-export function sampleGrid(opts: SampleGridOptions): HTMLElement {
+export interface ThumbGridOptions {
+  /** Optional heading above the grid. */
+  heading?: string;
+  tiles: HTMLElement[];
+  /** Smallest tile width before the grid drops a column, in px. Default 64. */
+  minPx?: number;
+}
+
+/**
+ * A grid of `thumbTile`s.
+ *
+ * `.vl-thumb` carries the button reset and the focus ring and nothing else, on purpose —
+ * a 1,500-item icon gallery and a six-item sample row want different sizes. That left the
+ * GRID to every caller, and by the third one (the clicker's icon gallery, its shape
+ * editor's rail, and now its base-shape picker) the three had drifted into three different
+ * column counts, paddings and hover treatments for the same picture-in-a-box.
+ *
+ * So the grid is here and the size is a number, not a class: `minPx` moves the column
+ * count without anybody writing a new rule. The tile look — square, bordered, filled on
+ * hover — comes with it, scoped to children of the grid so the bare `thumbTile` callers
+ * that predate this are untouched.
+ */
+export function thumbGrid(opts: ThumbGridOptions): HTMLElement {
   const wrap = el('div');
   if (opts.heading) wrap.append(el('span', { className: 'vl-samples__heading', text: opts.heading }));
+  const grid = el('div', { className: 'vl-thumb-grid' }, opts.tiles);
+  if (opts.minPx) grid.style.setProperty('--thumb-min', `${opts.minPx}px`);
+  wrap.append(grid);
+  return wrap;
+}
+
+/** Square sample thumbnails. Returns a fragment holder, heading included. */
+export function sampleGrid(opts: SampleGridOptions): SampleGridHandle {
+  const wrap = el('div') as SampleGridHandle;
+  if (opts.heading) wrap.append(el('span', { className: 'vl-samples__heading', text: opts.heading }));
   const grid = el('div', { className: 'vl-samples' });
+  // Keyed by id rather than index: items across several grids (one per pack, plus the
+  // bundled-sample grid) share nothing but their ids, and `setSelected` is called once with
+  // whatever is loaded — each grid has to work out on its own whether that is one of its tiles.
+  const byId = new Map<string, HTMLElement>();
   opts.items.forEach((item, i) => {
     const btn = el('button', {
       className: 'vl-sample',
-      attrs: { type: 'button', title: item.label },
+      attrs: {
+        type: 'button',
+        title: item.label,
+        // `aria-pressed` ONLY when the item carries an id — see `thumbTile`'s own version of
+        // this guard. An id-less tile has no state `setSelected` could ever put it in, so
+        // announcing "not pressed" forever would be reporting a fact that does not apply.
+        ...(item.id !== undefined ? { 'aria-pressed': 'false' } : {}),
+      },
       on: { click: () => opts.onPick(item, i) },
     });
     // Not lazy: a sample grid is a handful of small thumbnails sitting at the
@@ -214,7 +288,11 @@ export function sampleGrid(opts: SampleGridOptions): HTMLElement {
     const img = el('img', { attrs: { src: item.src, alt: item.label, decoding: 'async' } });
     btn.append(img, el('span', { text: item.label }));
     grid.append(btn);
+    if (item.id !== undefined) byId.set(item.id, btn);
   });
   wrap.append(grid);
+  wrap.setSelected = (id) => {
+    for (const [itemId, btn] of byId) btn.setAttribute('aria-pressed', String(itemId === id));
+  };
   return wrap;
 }

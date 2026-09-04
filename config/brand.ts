@@ -18,6 +18,10 @@ export const BRAND = {
     // hardcoded in the app's sidebar copy, which is exactly what invariant #4 exists to stop.
     clickerListing: 'https://makerworld.com/en/models/2980346',
     keycapApp: 'https://vostoklabs.github.io/SVG-keycap-generator/',
+    // The keycap generator's own MakerWorld listing, where the print profile and the
+    // printing instructions live. It was written into the app's markup by hand, which is
+    // exactly what this file exists to stop.
+    keycapListing: 'https://makerworld.com/en/models/2959969',
     // TODO: license/terms page on the hub once it exists
     licenseTerms: 'TODO_LICENSE_PAGE_URL',
   },

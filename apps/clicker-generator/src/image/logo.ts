@@ -7,15 +7,27 @@ import type { RegionSet, Ring, RGB } from '../types';
 // visible as an inlay on the light cap — white-on-white made icons disappear.
 const DEFAULT_INK: RGB = [22, 22, 22];
 
+/**
+ * An SVG colour string to the RGB bytes the file actually specified.
+ *
+ * `.r/.g/.b` is the obvious read and it is wrong. Since three r152 `ColorManagement` is on by
+ * default, so `new THREE.Color('#c8102e')` stores the colour converted into the LINEAR working
+ * space, and reading the components back gives (147, 1, 7) — a brand red arriving as a dark
+ * maroon. Measured across the palette: #c8102e → #930107, #00ae42 → #006c0e, #0a5cd5 → #011baa.
+ * Only pure black and pure white survive, which is why the sample SVG never showed it.
+ *
+ * Every SVG import has been doing this. The colours are what get matched to filaments, so an
+ * imported logo came out in the wrong ones — a large part of what "SVG import doesn't work"
+ * has meant on the listing.
+ *
+ * `getHex(SRGBColorSpace)` converts back, which is the documented way to ask "what did the
+ * author write".
+ */
 function parseColor(colorStr: string): RGB {
-  if (!colorStr || colorStr === 'currentColor') return DEFAULT_INK;
+  if (!colorStr || colorStr === 'currentColor' || colorStr === 'none') return DEFAULT_INK;
   try {
-    const c = new THREE.Color(colorStr);
-    return [
-      Math.round(c.r * 255),
-      Math.round(c.g * 255),
-      Math.round(c.b * 255)
-    ];
+    const hex = new THREE.Color(colorStr).getHex(THREE.SRGBColorSpace);
+    return [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
   } catch {
     return DEFAULT_INK; // fallback
   }
@@ -50,7 +62,97 @@ function strokeGeomToContours(geom: THREE.BufferGeometry): Ring[] {
   return contours;
 }
 
-export function parseSvg(svgText: string, opts: { removeBg?: boolean } = {}): RegionSet {
+/** One drawable path in the file, as the import preview shows it. */
+export interface SvgPart {
+  /** Position in `data.paths` — the handle an override is keyed on. Stable for a given file. */
+  index: number;
+  /** How the file paints it. `none` is the one that surprises people: a path with neither a
+   *  fill nor a stroke contributes nothing and the app used to say nothing about it. */
+  kind: 'fill' | 'stroke' | 'none';
+  /** Colour as authored, `#rrggbb`. */
+  hex: string;
+  /** Bounding-box area, for ordering the list biggest-first. */
+  area: number;
+  /** Stroke width in the file's own units, when `kind === 'stroke'`. */
+  strokeWidth?: number;
+}
+
+/** What the import preview decided for one path: how to draw it, and in what colour. */
+export interface SvgPartChoice {
+  /** `fill` closes the subpaths into solid shapes; `outline` traces the stroke as a ribbon
+   *  (`strokeWidth` wide, or 1 unit if the file gave none); `off` drops the path. */
+  mode: 'fill' | 'outline' | 'off';
+  /** `#rrggbb`. Defaults to the colour the file gave the path. */
+  hex?: string;
+}
+
+export interface SvgOptions {
+  removeBg?: boolean;
+  /** Per-path choice, keyed on `SvgPart.index`. A path with no entry is drawn as the file
+   *  painted it. This is what the import preview writes. */
+  overrides?: Record<number, SvgPartChoice>;
+  /** Treat stroke-only paths as filled outlines.
+   *
+   *  The single most useful switch in the preview. A stroke-only drawing — the common export
+   *  from Illustrator and from most icon sites — currently comes through as ribbon geometry:
+   *  each line becomes a long thin sliver a fraction of a millimetre wide, which at print scale
+   *  is a hairline that either vanishes into the base colour or prints as fuzz. It looks like
+   *  "SVG import is broken" and it is really "your SVG has no fills". Closing the subpaths and
+   *  filling them turns the same file into solid shapes. */
+  fillStrokes?: boolean;
+}
+
+/**
+ * What is in an SVG, before committing to a trace.
+ *
+ * The import preview needs to tell the user WHY a file will not come out as they expect, and
+ * the honest answer is almost always in here: no fills, or a stroke width that is a hairline at
+ * print scale, or forty separate colours. Reported rather than guessed at.
+ */
+export function describeSvg(svgText: string): { parts: SvgPart[]; issues: string[] } {
+  let data;
+  try {
+    data = new SVGLoader().parse(svgText);
+  } catch {
+    return { parts: [], issues: ['This file could not be read as an SVG.'] };
+  }
+  const parts: SvgPart[] = [];
+  data.paths.forEach((path: any, index: number) => {
+    const style = path.userData?.style || {};
+    const hasFill = style.fill && style.fill !== 'none';
+    const hasStroke = style.stroke && style.stroke !== 'none';
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const sub of path.subPaths) {
+      for (const p of sub.getPoints(8)) {
+        if (p.x < x0) x0 = p.x;
+        if (p.x > x1) x1 = p.x;
+        if (p.y < y0) y0 = p.y;
+        if (p.y > y1) y1 = p.y;
+      }
+    }
+    const area = isFinite(x0) ? Math.max(0, (x1 - x0) * (y1 - y0)) : 0;
+    const rgb = parseColor(hasFill ? style.fill : hasStroke ? style.stroke : '');
+    parts.push({
+      index,
+      kind: hasFill ? 'fill' : hasStroke ? 'stroke' : 'none',
+      hex: `#${rgb.map((v) => v.toString(16).padStart(2, '0')).join('')}`,
+      area,
+      ...(hasStroke && !hasFill ? { strokeWidth: Number(style.strokeWidth) || 1 } : {}),
+    });
+  });
+
+  /* Only what the per-part list cannot say for itself. An outline or an unpainted path is
+     reported by its own row (and the preview decides what to do with it), not repeated here. */
+  const issues: string[] = [];
+  if (!parts.length) issues.push('There are no drawable shapes in this file.');
+  const colours = new Set(parts.filter((p) => p.kind !== 'none').map((p) => p.hex));
+  if (colours.size > 8) {
+    issues.push(`${colours.size} different colours. A printer holds 16 filaments; give some of these the same colour.`);
+  }
+  return { parts: parts.sort((a, b) => b.area - a.area), issues };
+}
+
+export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
   const data = new SVGLoader().parse(svgText);
   const box = new THREE.Box2(
     new THREE.Vector2(Infinity, Infinity),
@@ -69,14 +171,26 @@ export function parseSvg(svgText: string, opts: { removeBg?: boolean } = {}): Re
     g.rings.push(...rings);
   }
 
-  for (const path of data.paths) {
+  data.paths.forEach((path: any, pathIndex: number) => {
     const style = path.userData?.style || {};
-    const hasFill = style.fill && style.fill !== 'none';
-    const hasStroke = style.stroke && style.stroke !== 'none';
+    const choice = opts.overrides?.[pathIndex];
+    if (choice?.mode === 'off') return;
+
+    const authoredFill = style.fill && style.fill !== 'none';
+    const authoredStroke = style.stroke && style.stroke !== 'none';
+    /* A choice from the preview wins over what the file said. Otherwise "fill the outlines"
+       promotes every stroke-only path (never an unpainted one — that is usually the invisible
+       artboard rectangle icon sites wrap their art in, and filling it is a solid square over
+       everything). `createShapes` works from the subpaths and does not care how the file
+       painted them, so a stroke or an unpainted path becomes a solid shape with no new
+       geometry code. */
+    const hasFill = choice ? choice.mode === 'fill' : authoredFill || (!!opts.fillStrokes && authoredStroke && !authoredFill);
+    const hasStroke = choice ? choice.mode === 'outline' : authoredStroke && !hasFill;
+    const authored = style.fill && style.fill !== 'none' ? style.fill : style.stroke || '';
+    const rgb = parseColor(choice?.hex ?? authored);
 
     // Filled paths
     if (hasFill) {
-      const rgb = parseColor(style.fill);
       const shapes = SVGLoader.createShapes(path);
       for (const shape of shapes) {
         const points = shape.getPoints(16);
@@ -104,12 +218,11 @@ export function parseSvg(svgText: string, opts: { removeBg?: boolean } = {}): Re
       }
     }
 
-    // Stroke-only paths
+    // Outlines
     if (hasStroke && !hasFill) {
-      const rgb = parseColor(style.stroke);
       const strokeStyle = SVGLoader.getStrokeStyle(
-        style.strokeWidth || 1,
-        style.stroke,
+        Number(style.strokeWidth) || 1,
+        style.stroke || '#000',
         style.strokeLineCap || 'butt',
         style.strokeLineJoin || 'miter',
         style.strokeMiterLimit || 4
@@ -129,7 +242,7 @@ export function parseSvg(svgText: string, opts: { removeBg?: boolean } = {}): Re
         geom.dispose();
       }
     }
-  }
+  });
 
   // Signed shoelace area of a ring (outer +, holes −); a region's area is the magnitude
   // of its rings' sum. Drives both background detection and carve-priority coverage.

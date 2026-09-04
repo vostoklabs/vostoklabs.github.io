@@ -8,7 +8,12 @@
   min-height: 100dvh;
   max-height: 100dvh;
   display: grid;
-  grid-template-columns: 22vw 1fr 24.2vw;
+  /* Floors, not bare fractions. At 1100px the plain vw columns computed to 235px and
+     259px, which is narrower than the controls the panels actually hold: a three-up tab row
+     wrapped 2+1, titles broke over three lines, and the sliders were about 50px long, while
+     the stage kept 575px it had no use for. The stage gives up the space first — it is the
+     one part of this layout that reads fine at any size. */
+  grid-template-columns: minmax(264px, 22vw) minmax(0, 1fr) minmax(320px, 24.2vw);
   grid-template-rows: auto minmax(0, 1fr);
   background: var(--bg);
   color: var(--text);
@@ -148,6 +153,15 @@
 /* Header + callout spacing at the top of a panel. */
 .vl-panel__scroll > .vl-app-header { padding-top: 4px; }
 .vl-panel__scroll > .vl-callout { margin-bottom: 8px; }
+
+/* Between the phone breakpoint and roughly a 13" laptop there is not room for both floors
+   and a usable stage, so the floors come down rather than the stage collapsing: 240 + 256 at
+   1024px still leaves 420px of stage. */
+@media (min-width: 761px) and (max-width: 1023px) {
+  .vl-app {
+    grid-template-columns: minmax(236px, 26vw) minmax(0, 1fr) minmax(288px, 28vw);
+  }
+}
 
 /* Mobile: stack the three columns. */
 @media (max-width: 760px) {

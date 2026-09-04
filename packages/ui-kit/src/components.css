@@ -117,6 +117,7 @@
 /* For grid content — a font specimen sheet, a gallery — rather than prose. Without it wide
    content overflowed the 440px box instead of widening it. */
 .vl-dialog--wide { width: min(760px, 94vw); }
+.vl-dialog--xl { width: min(1080px, 96vw); }
 .vl-dialog__title { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
 .vl-dialog > div { color: var(--muted); font-size: 15px; line-height: 1.55; }
 /* A grid child must be allowed to shrink inside the flex column, or its tracks size to the
@@ -333,6 +334,31 @@
    control that has not been laid out yet. */
 .vl-tabs__indicator.is-ready { opacity: 1; }
 
+/* `variant: 'cards'` — a left-aligned row with an icon, instead of a centred pill of text.
+   For a picker like Import Source (Image / SVG / Icon / Text / Blocks), where a plain tab
+   would either truncate five labels or have nowhere to put the icon that names each mode
+   before the label does. The sliding indicator still drives selection (it already measures
+   both axes, so a wrapping grid is not a special case); only the per-tab layout changes. */
+.vl-tabs--cards { background: transparent; border: none; padding: 0; }
+.vl-tabs--cards .vl-tab {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  text-align: left;
+  white-space: normal;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  padding: 8px 12px;
+}
+.vl-tabs--cards .vl-tab svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.vl-tabs--cards .vl-tab.active { border-color: var(--accent); }
+.vl-tabs--cards .vl-tabs__indicator { border-radius: var(--radius-btn); }
+/* An odd option count leaves one card alone under a half-empty row — span it instead. Only
+   fires on the actual last card, so an even count (nothing to balance) is untouched. */
+.vl-tabs--cards .vl-tab:last-child:nth-child(odd) { grid-column: 1 / -1; justify-content: center; }
+
 /* ---------- Toggle switch (iOS style, green when on) ---------- */
 .vl-switch-row {
   display: flex;
@@ -370,6 +396,16 @@
 
 /* ---------- Slider row (label + value badge + range) ---------- */
 .vl-slider-row { display: flex; flex-direction: column; gap: 6px; }
+
+/* A control that another control has superseded — Size once the base size is locked, say.
+   One class for every row type, set by `ValueRow.setDisabled()`, so a component is what
+   applies it rather than each app remembering the name (CLAUDE.md: a component cannot be
+   forgotten; a class name can). The inputs are disabled too, so this is appearance only —
+   `pointer-events` is belt and braces for the label and the help tip. */
+.vl-control--disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
 .vl-slider-head {
   display: flex;
   justify-content: space-between;
@@ -797,8 +833,11 @@
    two lines and the whole row grew to 57px while the same buttons sat at 38px in
    the wider generators. Below ~120px per cell the pair stacks instead, which
    keeps every action button one line tall everywhere. */
-.vl-action-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
-.vl-action-btn { font-size: 14px; padding: 9px 10px; white-space: nowrap; }
+/* One flex line, not a grid: the buttons take their own widths ("Light mode" is wider than
+   "Save") and share the slack, so Save · Load · Light mode fit a 293 px sidebar line at 13px.
+   A row that genuinely cannot fit wraps its last button rather than clipping it. */
+.vl-action-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.vl-action-btn { flex: 1 1 auto; min-width: 0; font-size: 13px; padding: 9px 8px; white-space: nowrap; }
 .vl-theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 
 /* ---------- Sidebar sticky footer (export + project actions) ---------- */
@@ -898,3 +937,43 @@
 .vl-swatch--custom::-webkit-color-swatch-wrapper { padding: 0; }
 .vl-swatch--custom::-webkit-color-swatch { border: none; border-radius: inherit; }
 .vl-swatch--custom::-moz-color-swatch { border: none; border-radius: inherit; }
+
+/* A bare colour well, split out of `filamentRow` so a dense list of parts can have one
+   without hand-rolling `<input type="color">`. */
+.vl-swatch-well {
+  inline-size: 28px;
+  block-size: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: none;
+  cursor: pointer;
+  transition: border-color var(--dur-hover) var(--ease-standard);
+}
+
+.vl-swatch-well:hover:not(:disabled) { border-color: var(--accent); }
+.vl-swatch-well::-webkit-color-swatch-wrapper { padding: 2px; }
+.vl-swatch-well::-webkit-color-swatch { border: none; border-radius: 2px; }
+
+/* One colour, one chip: the compact counterpart to `.vl-swatch`'s shelf-of-many grid, for a
+   row that only ever needs to show the ONE colour currently assigned. `--swatch` is set
+   inline per instance (see `KNOWN_UNRESOLVED_TOKENS` in check-ui-drift.mjs — the same
+   runtime-set variable `.vl-swatch` already uses). */
+.vl-color-chip {
+  width: 44px;
+  height: 30px;
+  padding: 0;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: var(--radius-chip, 6px);
+  background: var(--swatch, transparent);
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur-hover) var(--ease-standard),
+    transform var(--dur-hover) var(--ease-standard);
+}
+.vl-color-chip:hover { transform: translateY(-1px); }
+.vl-color-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
