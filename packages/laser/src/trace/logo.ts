@@ -33,12 +33,60 @@ function parseColor(colorStr: string): RGB {
   }
 }
 
+/**
+ * Does this path actually PAINT a fill / a stroke?
+ *
+ * Not just "is the property set". A laser cut file — the export from every box generator and
+ * from LightBurn — draws each panel as a coloured stroke over
+ * `fill: rgb(255,255,255); fill-opacity: 0`: a fill that is declared, is white, and is
+ * completely invisible. Read as a real fill it was a white shape, so `isWhite` flagged every
+ * path as a background, the import defaulted all of them to Off, and the file came back "No
+ * drawable paths found in this SVG" — a cut file, rejected by a cut-file tool (Ian, 2026-09-23).
+ *
+ * `opacity` multiplies both, the way the spec says, so `opacity: 0` hides a path outright.
+ */
+const paints = (color: string | undefined, own: unknown, group: unknown): boolean => {
+  if (!color || color === 'none') return false;
+  const alpha = (own === undefined ? 1 : Number(own)) * (group === undefined ? 1 : Number(group));
+  return !(Number.isFinite(alpha) && alpha <= 0);
+};
+
 const isWhite = (color: string | undefined): boolean => {
   if (!color) return false;
   const c = color.toLowerCase().replace(/\s/g, '');
   return c === '#ffffff' || c === '#fff' || c === 'white'
     || c.startsWith('rgb(255,255,255)') || c.startsWith('rgba(255,255,255,');
 };
+
+/** CSS absolute length units, in millimetres. `px` and a bare number are deliberately absent:
+ *  they are screen units and say nothing about how big the thing really is. */
+const UNIT_MM: Record<string, number> = { mm: 1, cm: 10, in: 25.4, pt: 25.4 / 72, pc: 25.4 / 6, q: 0.25 };
+
+function lengthMm(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const t = String(raw).trim().toLowerCase();
+  for (const [unit, k] of Object.entries(UNIT_MM)) {
+    if (!t.endsWith(unit)) continue;
+    const n = Number(t.slice(0, -unit.length));
+    return Number.isFinite(n) && n > 0 ? n * k : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * How big the traced artwork REALLY is, in millimetres — when the file says.
+ *
+ * A cut file has a true size, and scaling one is how a box stops fitting together: a box
+ * generator's 142 mm sheet opened at a 60 mm default came out at 42 %, finger joints and all.
+ * Clip art has no true size and gets `undefined`, so a design can keep its own default.
+ */
+function mmSpan(xml: any, viewW: number, viewH: number, maxSide: number): number | undefined {
+  if (!xml || !(maxSide > 0)) return undefined;
+  const w = lengthMm(xml.getAttribute('width'));
+  const h = lengthMm(xml.getAttribute('height'));
+  const perUnit = w && viewW > 0 ? w / viewW : h && viewH > 0 ? h / viewH : undefined;
+  return perUnit ? maxSide * perUnit : undefined;
+}
 
 /** The artboard size, from the viewBox or the width/height attributes. */
 function viewSize(xml: any): { viewW: number; viewH: number } {
@@ -182,8 +230,8 @@ export function describeSvg(svgText: string): { parts: SvgPart[]; issues: string
   const parts: SvgPart[] = [];
   data.paths.forEach((path: any, index: number) => {
     const style = path.userData?.style || {};
-    const hasFill = style.fill && style.fill !== 'none';
-    const hasStroke = style.stroke && style.stroke !== 'none';
+    const hasFill = paints(style.fill, style.fillOpacity, style.opacity);
+    const hasStroke = paints(style.stroke, style.strokeOpacity, style.opacity);
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const sub of path.subPaths) {
       for (const p of sub.getPoints(8)) {
@@ -245,8 +293,8 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
     const choice = opts.overrides?.[pathIndex];
     if (choice?.mode === 'off') return;
 
-    const authoredFill = style.fill && style.fill !== 'none';
-    const authoredStroke = style.stroke && style.stroke !== 'none';
+    const authoredFill = paints(style.fill, style.fillOpacity, style.opacity);
+    const authoredStroke = paints(style.stroke, style.strokeOpacity, style.opacity);
     /* A choice from the preview wins over what the file said. Otherwise "fill the outlines"
        promotes every stroke-only path (never an unpainted one — that is usually the invisible
        artboard rectangle icon sites wrap their art in, and filling it is a solid square over
@@ -255,7 +303,7 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
        geometry code. */
     const hasFill = choice ? choice.mode === 'fill' : authoredFill || (!!opts.fillStrokes && authoredStroke && !authoredFill);
     const hasStroke = choice ? choice.mode === 'outline' : authoredStroke && !hasFill;
-    const authored = style.fill && style.fill !== 'none' ? style.fill : style.stroke || '';
+    const authored = authoredFill ? style.fill : authoredStroke ? style.stroke : style.fill || style.stroke || '';
     const rgb = parseColor(choice?.hex ?? authored);
 
     // Filled paths
@@ -399,5 +447,8 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
 
   const outline = allRings.map(normalizeRing);
 
-  return { regions, outline, aspect };
+  // What the file says it really is, for a caller that must not rescale it (a cut file).
+  const { viewW: vw, viewH: vh } = viewSize(data.xml);
+  const mm = mmSpan(data.xml, vw, vh, maxSide);
+  return { regions, outline, aspect, ...(mm ? { mm } : {}) };
 }

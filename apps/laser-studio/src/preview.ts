@@ -21,6 +21,15 @@ const SNAP_PX = 6;
 const num = (v: number) => (Math.abs(v) < 5e-4 ? '0' : v.toFixed(3));
 
 export type ViewMode = 'preview' | 'three' | 'file';
+
+/** Is WebGL itself missing, or did the 3D view fail for some other reason? Two different
+ *  sentences, and only this can tell them apart. */
+function webglBlocked(): boolean {
+  try {
+    const c = document.createElement('canvas');
+    return !(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch { return true; }
+}
 type Pt = [number, number];
 
 const svgEl = (tag: string, attrs: Record<string, string | number> = {}): SVGElement => {
@@ -233,7 +242,21 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
       const {createMaterialPreview}=await import('@vostok/laser/material-preview');
       if(!root.isConnected)return;
       materialPreview=createMaterialPreview(threeHost);if(last)materialPreview.render(solidOf(last),thickness);
-    } catch { threeHost.replaceChildren(el('p', {className:'vl-hint',text:'3D preview requires WebGL. You can still edit in 2D and export your SVG.'})); }
+    } catch (err) {
+      // The error was swallowed by a bare `catch {}`, so the one sentence on screen was the
+      // only thing anybody — customer or us — ever got. It says nothing about WHY and nothing
+      // about what to do, and on a machine where 3D works for every other site that is a dead
+      // end. Report it, and say the thing that actually fixes it (Ian, 2026-09-23: live site,
+      // "3D preview requires WebGL", where the site itself renders fine).
+      console.error('[laser-studio] 3D preview failed to start:', err);
+      const why = webglBlocked()
+        ? 'This browser is not giving us WebGL. It is usually off in Settings → System → “Use graphics acceleration when available”; chrome://gpu says which.'
+        : `3D could not start: ${(err as Error)?.message ?? err}`;
+      threeHost.replaceChildren(
+        el('p', { className: 'vl-hint', text: why }),
+        el('p', { className: 'vl-hint', text: 'The 2D design and the export are unaffected.' }),
+      );
+    }
     finally { loading3d=false; }
   }
   const cleanup = new MutationObserver(() => { if (!root.isConnected) {materialPreview?.dispose(); cleanup.disconnect();} });

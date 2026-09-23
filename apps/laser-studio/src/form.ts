@@ -406,6 +406,16 @@ export function renderForm(opts: FormOptions): Form {
               // while the artwork underneath had already become the customer's.
               const { char } = insertAsset(values, traced.asset, { svgText: traced.svgText, svgChoices: traced.choices });
               set(char);
+              // A file that states a REAL size opens at it. A cut file does — a box generator's
+              // sheet is 142.36 mm — and squashing one to a design's default is how the finger
+              // joints stop matching the material. Clamped to the slider, which then says so.
+              const sizeKey = f.sizeKey;
+              if (sizeKey && traced.mm && sizeKey in values) {
+                const def = fields.find((x) => x.key === sizeKey);
+                const mm = def && def.kind === 'number' ? Math.min(def.max, Math.max(def.min, traced.mm)) : traced.mm;
+                values[sizeKey] = Math.round(mm * 10) / 10;
+                controls.get(sizeKey)?.set(values[sizeKey]);
+              }
               change(f.key, char);
               // The faces are traced off the new value, so the picker opens on the next frame.
               setTimeout(() => areaPickers.get(f.key)?.(), 0);

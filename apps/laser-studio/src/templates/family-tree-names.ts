@@ -167,26 +167,27 @@ export const familyTreeNames: TemplateDef = {
     // ------------------------------------------------------------------ LEFT: Font --
     { kind: 'font', key: 'font', label: 'Font', section: 'Font', value: 'anton', recommended: BOLD_SANS },
 
-    // A branch under each name, joining it to the next (Ian, 2026-09-22: "each line of text
-    // shoul havea line underneath so its easier to connect it all"). It is the sure way this
-    // design holds together: the weld between two rows depends on where their letters happen
-    // to fall, and a bar does not depend on anything — every row meets the one below it across
-    // its whole width. On by default, because the piece it makes is stronger AND reads as a
-    // tree rather than a stack of words.
-    { kind: 'toggle', key: 'rowLines', label: 'Line under each name', section: 'Tree', value: true },
+    // How far apart the rows sit — and the whole shape of this design.
+    //
+    // It used to be "Row overlap", 1.5 mm, and 1.5 mm of BOX overlap means the cap line of one
+    // name sits inside the baseline of the one above: no air anywhere, and the tree reads as a
+    // slab with the letters cut out of it (Ian, 2026-09-23: "letters are all close together").
+    // Positive now, and a gap: the branch under each name is what holds the piece together, so
+    // the names no longer have to touch to survive the cut. Negative still bites, for anyone
+    // who wants the old welded stack.
     {
-      kind: 'number', key: 'rowLine', label: 'Line thickness', section: 'Tree',
+      kind: 'number', key: 'rowGap', label: 'Row spacing', section: 'Tree',
+      value: 3, min: -2, max: 12, step: 0.5, unit: 'mm',
+      format: (n) => (n > 0 ? `${n} mm apart` : n < 0 ? `${-n} mm overlap` : 'touching'),
+      help: 'Air between the names. The branch joins them.',
+    },
+    {
+      kind: 'number', key: 'rowLine', label: 'Branch thickness', section: 'Tree',
       value: 2.5, min: 1, max: 6, step: 0.5, unit: 'mm',
-      visibleWhen: (v) => bool(v, 'rowLines'),
       help: 'Thin lines snap; keep it near the material thickness.',
     },
 
     // ----------------------------------------------------- long tail → More options --
-    {
-      kind: 'number', key: 'overlap', label: 'Row overlap', value: 1.5, min: 0.5, max: 4, step: 0.1, unit: 'mm',
-      advanced: true,
-      help: 'How far each name bites into the one below it.',
-    },
     // The same control, the same units, as every other design that sets type: a share of the
     // letter height, so it survives a size change.
     {
@@ -195,7 +196,9 @@ export const familyTreeNames: TemplateDef = {
       format: (n) => `${n > 0 ? '+' : ''}${Math.round(n * 100)}%`,
       help: 'Air between the letters, as a share of their height.',
     },
-    { ...letterScoreField('More options', 'score'), advanced: true },
+    // Not advanced: it is the difference between a name you can read and a silhouette you
+    // cannot, which is not a long-tail decision.
+    { ...letterScoreField('Tree', 'score'), label: 'Outline the letters' },
     {
       kind: 'number', key: 'yearSize', label: 'Year size', value: 65, min: 30, max: 90, step: 1, unit: '%',
       advanced: true,
@@ -217,7 +220,12 @@ export const familyTreeNames: TemplateDef = {
     const symbols = readSymbols(v);
     const font = str(v, 'font');
     const width = Math.max(20, num(v, 'width'));
-    const pen = clamp(num(v, 'overlap'), 0.2, 8);
+    // The stack's step, as the geometry has always wanted it: how far the next row's TOP sits
+    // below this row's BOTTOM. A gap is simply a negative bite, so nothing downstream changes.
+    const gap = clamp(num(v, 'rowGap'), -4, 12);
+    const pen = -gap;
+    /** Rows that do not touch are held by the branches, so the branches are not optional. */
+    const branches = gap > 0.01;
     const thickness = Math.max(0.5, num(v, 'thickness'));
     const bridge = Math.max(2, thickness);
     const scoreSeams = str(v, 'letterLines') === 'score';
@@ -236,7 +244,13 @@ export const familyTreeNames: TemplateDef = {
     // — one stem over a gap between two letters — and the engine has to invent a joining bar.
     // Measured on the default names before this line existed: 3 bars, and a warning.
     const draw = async (text: string, size: number, id: string, label: string): Promise<DesignLayer | null> => {
-      const [layer] = await textLayer({ symbols, text: text.toUpperCase(), font, size, letterSpacing: num(v, 'letterSpacing'), connect: connectSpec(font, size) }, 'off', id, label);
+      // NOT welded. The letters used to be overlapped into each other so the row cut as one
+      // piece, and at these sizes that weld is millimetres deep: "NOAH" came out with the O
+      // buried in the N and the seams scored across both (Ian, 2026-09-23: "letters are all
+      // close together, scoring of letters doesn't work properly"). The branch under each name
+      // is what holds its letters together now, so they can simply stand at their own spacing.
+      const connect = branches ? { thicken: connectSpec(font, size).thicken, overlap: 0 } : connectSpec(font, size);
+      const [layer] = await textLayer({ symbols, text: text.toUpperCase(), font, size, letterSpacing: num(v, 'letterSpacing'), connect }, 'off', id, label);
       return layer ?? null;
     };
     /** A drawn line with the extents that MATTER: the ink plus the thicken the engine will add. */
@@ -341,7 +355,7 @@ export const familyTreeNames: TemplateDef = {
     // that the star is wearing the name rather than standing on it.
     const builtBox = bboxOf(built.shapes);
     const placedAt = (s: number) => (top ? top.top : 0) - builtBox.minY - s;
-    let sink = Math.max(pen, 0.08 * topperW);
+    let sink = Math.max(0.5, 0.08 * topperW);
     if (top) {
       const ceiling = 0.34 * (builtBox.maxY - builtBox.minY);
       for (; sink < ceiling; sink += 0.75) {
@@ -355,9 +369,14 @@ export const familyTreeNames: TemplateDef = {
 
     // ---- what is not welded gets bridged, and is said ------------------------------
     const loose: string[] = [];
-    for (let i = 1; i < stack.length; i++) {
-      const a = stack[i - 1]!, b = stack[i]!;
-      if (!welded(a.layer.shapes, a.layer.grow ?? 0, a.bottom, b.layer.shapes, b.layer.grow ?? 0, b.top)) loose.push(b.name);
+    // Only when the rows are meant to touch. Spaced rows are joined by their branches by
+    // construction, so checking whether the LETTERS reach each other reports every row as
+    // loose and says nothing true.
+    if (!branches) {
+      for (let i = 1; i < stack.length; i++) {
+        const a = stack[i - 1]!, b = stack[i]!;
+        if (!welded(a.layer.shapes, a.layer.grow ?? 0, a.bottom, b.layer.shapes, b.layer.grow ?? 0, b.top)) loose.push(b.name);
+      }
     }
     if (top && !welded(topper.shapes, 0, bboxOf(topper.shapes).minY, top.layer.shapes, top.layer.grow ?? 0, top.top)) loose.push('the topper');
     if (loose.length) {
@@ -384,20 +403,21 @@ export const familyTreeNames: TemplateDef = {
      * Not under the LAST row: there is nothing below it to reach, and a bar hanging off the
      * bottom of the piece is a tab, not a branch. */
     const bars: DesignLayer[] = [];
-    if (bool(v, 'rowLines') && stack.length > 1) {
+    if (stack.length > 1) {
       const t = Math.max(0.6, num(v, 'rowLine'));
+      /** How far a branch buries itself in the row at each end. Enough that the join survives
+       *  the kerf; it is the only thing holding a spaced tree together. */
+      const bite = Math.max(1, t / 2);
       for (let i = 0; i < stack.length - 1; i++) {
         const r = stack[i]!;
-        // The row's OWN width. Widening it to the row below — so the bar shows as a branch
-        // sticking out past the shorter name — was tried and is worse: at this row overlap the
-        // band between two names is already nearly closed, and a full-width bar across it turns
-        // the tree into a slab with the letters reduced to counters. The bar's job here is the
-        // weld, and it does that invisibly, which is the right trade at this overlap. Making it
-        // SHOW would mean separating the rows and letting the bar be the only thing joining
-        // them — a different design, and Ian's call to make.
+        const below = stack[i + 1]!;
+        // The row's own width, so the branch reads as a branch of THAT name.
         const w = r.width / 2;
-        const topY = r.bottom + pen / 2;
-        const botY = r.bottom - t;
+        // Spaced rows: the branch runs from inside this name to inside the next, which is what
+        // now carries the piece. Overlapping rows: the old thin bar in the closed band, where
+        // it only ever had to help the weld along.
+        const topY = branches ? r.bottom + bite : r.bottom + pen / 2;
+        const botY = branches ? below.top - bite : r.bottom - t;
         bars.push({
           id: `bar-${i}`, label: 'Branch', op: 'off', hugOnly: true,
           shapes: [[[[-w, botY], [w, botY], [w, topY], [-w, topY]]]],
@@ -409,9 +429,27 @@ export const familyTreeNames: TemplateDef = {
     // The seams are a second copy of the SAME islands, scored: the engine burns the run of each
     // letter's edge that the next letter covers, and nothing else (G33). One layer per row, so
     // each keeps its own row's thicken — a shared layer could only carry one.
-    const seams: DesignLayer[] = scoreSeams
-      ? stack.map((r) => ({ ...r.layer, id: `${r.layer.id}-seam`, label: 'Letter seams', op: 'score' as const, seams: true }))
-      : [];
+    /* What gets scored, and why it is two different things.
+     *
+     * WELDED rows (spacing 0 or less) bury one letter in the next, so what needs a line is the
+     * junction — `seams: true`, the run of each letter's edge that a later letter covers.
+     *
+     * SPACED rows do not bury anything in each other, but every letter stands ON its branch,
+     * and where it meets that bar its foot simply stops existing: the N, the R and the I lose
+     * their bottoms into the band and the name stops reading (Ian, 2026-09-23: "the letter
+     * itself is blended with the rest of the thing, but it still has to have scoring to be
+     * easily read, like we have in name keychain"). The line that fixes that is the letter's
+     * WHOLE outline, not a junction — so the letters read as letters wherever they touch. The
+     * runs that fall on the piece's own cut edge are dropped by the engine's clip, so the only
+     * ink left is the part crossing material. */
+    const seams: DesignLayer[] = !scoreSeams
+      ? []
+      : branches
+        // `kind: 'fill'` is the engine's own word for "this is MEANT to reach the edge": a
+        // letter outline lies ON the piece's cut line by definition, and without it the build
+        // reports every row as a name that ran off the part.
+        ? stack.map((r) => ({ ...r.layer, id: `${r.layer.id}-outline`, label: 'Letter outlines', op: 'score' as const, kind: 'fill' as const }))
+        : stack.map((r) => ({ ...r.layer, id: `${r.layer.id}-seam`, label: 'Letter seams', op: 'score' as const, seams: true }));
 
     const keyring: KeyringSpec = v.hangHole === false
       ? NO_KEYRING

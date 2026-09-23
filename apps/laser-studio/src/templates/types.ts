@@ -56,7 +56,13 @@ export type Field =
    *  same private-use character a `symbol` field holds and everything downstream (`areas`,
    *  `symbolLayer`, Save/Load) is unchanged. Use it where the design IS the customer's file —
    *  a grid of paw prints is not a step on the way there (Ian, 2026-09-22). */
-  | (FieldBase & { kind: 'svg'; value: string })
+  | (FieldBase & {
+    kind: 'svg'; value: string;
+    /** The key of the design's size field. A dropped file that states a REAL size — a cut file
+     *  does, at `width="142.36mm"` — opens at that size instead of the design's default, because
+     *  scaling a cut file is how a box stops fitting together. */
+    sizeKey?: string;
+  })
   | (FieldBase & { kind: 'blank'; value: string; categories?: BlankCategory[]; /** Number fields that take the picked shape's own defaults. */ linked?: { width?: string; height?: string; corner?: string } })
   /** Two numbers moved with a nudge pad: `key` is X, `keyY` is Y. */
   | (FieldBase & { kind: 'position'; value: number; keyY: string; valueY: number; max: number; step: number; unit?: string })

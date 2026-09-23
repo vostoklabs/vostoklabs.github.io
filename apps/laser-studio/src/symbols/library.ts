@@ -9,8 +9,13 @@ const cache = new Map<string, SymbolAsset>();
 const storageKey = 'laser-studio-my-icons';
 function saved(): SymbolAsset[] { try { return JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch { return []; } }
 function trace(text: string, overrides?: NonNullable<Parameters<typeof parseSvg>[1]>['overrides']): Shapes {
+  return traced(text, overrides).shapes;
+}
+/** …and the same trace with what the file says its real size is (a cut file has one). */
+function traced(text: string, overrides?: NonNullable<Parameters<typeof parseSvg>[1]>['overrides']): { shapes: Shapes; mm?: number } {
   const regions = parseSvg(text.replace(/currentColor/gi, '#000000'), { removeBg: false, ...(overrides ? { overrides } : {}) });
-  return normalize(regions.regions.flatMap(r=>r.components.map(c=>c.rings)) as Shapes);
+  const shapes = normalize(regions.regions.flatMap(r=>r.components.map(c=>c.rings)) as Shapes);
+  return { shapes, ...(regions.mm ? { mm: regions.mm } : {}) };
 }
 async function assetFor(id: string): Promise<SymbolAsset> {
   const existing = cache.get(id) ?? saved().find(a=>a.id===id); if(existing)return existing;
@@ -41,6 +46,9 @@ export interface SvgTrace {
   choices: Record<number, SvgImportChoice>;
   parts: SvgImportPart[];
   issues: string[];
+  /** The longest side the FILE says it is, mm. A cut file states one and must not be rescaled;
+   *  clip art states none and keeps the design's own default. */
+  mm?: number;
 }
 
 /**
@@ -54,9 +62,9 @@ export async function traceSvgFile(file: File): Promise<SvgTrace> {
   const svgText = (await file.text()).replace(/currentColor/gi, '#000000');
   const { parts, issues } = describeSvg(svgText);
   const choices = svgImportDefaults(parts);
-  const shapes = trace(svgText, choices);
+  const { shapes, mm } = traced(svgText, choices);
   if (!shapes.length) throw Error('There is nothing to cut in this file.');
-  return { asset: assetOf(file.name, shapes), svgText, choices, parts, issues };
+  return { asset: assetOf(file.name, shapes), svgText, choices, parts, issues, ...(mm ? { mm } : {}) };
 }
 
 /** The same file traced again on new choices — the picker's own re-trace. Empty when the

@@ -14,6 +14,10 @@ export interface RegionSet {
   aspect: number;
   /** Text only: longest side relative to the same text laid out with default typography. */
   sizeMul?: number;
+  /** The traced artwork's longest side in MILLIMETRES, when the file declared a real size
+   *  (`width="142.36mm"` and a viewBox). Absent for clip art, which has no true size — and for
+   *  anything measured in px. A caller that must not rescale the drawing reads this. */
+  mm?: number;
 }
 
 export type CropRatio = 'free' | '1:1' | '4:3' | '3:2' | '16:9';

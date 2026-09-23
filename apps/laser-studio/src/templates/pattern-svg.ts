@@ -37,7 +37,7 @@ export const patternSvg: TemplateDef = {
       : 'Run the engrave and score before the outline.',
   fields: [
     {
-      kind: 'svg', key: 'artwork', label: 'Your SVG', panel: 'right', section: 'Artwork', value: DEFAULT_SYMBOL,
+      kind: 'svg', key: 'artwork', sizeKey: 'size', label: 'Your SVG', panel: 'right', section: 'Artwork', value: DEFAULT_SYMBOL,
       help: 'Crop to the shape first, photos are ignored.',
     },
     {
@@ -45,8 +45,10 @@ export const patternSvg: TemplateDef = {
       help: 'Click a surface of your SVG to pattern it or leave it plain.',
     },
     {
-      kind: 'number', key: 'size', label: 'Size', section: 'Shape & size', value: 60, min: 20, max: 200, step: 1, unit: 'mm',
-      help: 'Longest side of the finished piece.',
+      // Up to 400 mm: a dropped cut file sets this to its own size, and a box generator's sheet
+      // is already 142 mm. A bed is rarely wider than 400.
+      kind: 'number', key: 'size', label: 'Size', section: 'Shape & size', value: 60, min: 20, max: 400, step: 1, unit: 'mm',
+      help: 'Longest side of the finished piece. A file that states its own size opens at it.',
     },
     ...patternFields({ section: 'Pattern', value: DEFAULT_PATTERN, op: 'score', margin: 0 }),
     // Off by default (Ian, 2026-09-22). The customer's own SVG may already HAVE the hole it

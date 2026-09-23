@@ -32,8 +32,10 @@ import { MIN_COUNTER, applyCase, textLayer } from '../engine/text';
 import { sizeForCapHeight } from '../engine/metrics';
 import type { BuildInput, DesignLayer, PartInput } from '../engine/types';
 import { NO_KEYRING } from './keyring';
-import { connectSpec, countersTooTight, letterScoreField, letteringFields, stem } from './shared';
-import { num, str, type TemplateDef, type Values } from './types';
+import { fillShape } from '@vostok/patterns';
+import { askedOp, fillOptions, patternDefFor, patternFields, resolveOp } from './pattern-shared';
+import { bridgeField, bridgeModeOf, connectSpec, countersTooTight, letteringFields, stem } from './shared';
+import { bool, num, str, type TemplateDef, type Values } from './types';
 
 const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo);
 
@@ -53,6 +55,27 @@ const CAP_FLOOR = 6;
 /** The bar that joins a letter the weld could not reach (a space, an inline symbol's pip), mm.
  *  The sheet's own thickness: a thinner bar is the first thing to snap off the piece. */
 const NAME_BRIDGE = 3;
+/** The card's own corner, seat depth and seat width, mm. They were sliders and they are not
+ *  decisions: every value that was not the default either broke the web rule or looked like a
+ *  different product, and the panel is the poorer for asking (Ian, 2026-09-23: "too much
+ *  settings in both, simplify it"). */
+const CORNER = 10;
+/* The side seat, measured off Ian's reference sheet rather than guessed: 4.4 % of the width
+   deep and 16.4 % of the height tall. The shipped 8 x 6 was the other way round — twice as
+   deep and half as tall — which is why it read as a bite taken out of the edge instead of a
+   seat an elastic drops into (Ian, 2026-09-23: "slots ... still not right, compare to the
+   reference"). Kept as millimetres on the default card so the numbers are legible. */
+const NOTCH_D = 4;
+const NOTCH_W = 10;
+
+/** How far ABOVE the card's middle the slot sits, as a share of the height.
+ *
+ *  Centred, the slot split the card in two and the name got whichever half was left. The
+ *  reference (Ian's Cricut sheet, 2026-09-23) puts it high — the ties hang from the bar just
+ *  under the hanging hole, and everything below it is clear for the name, which is the whole
+ *  lower half of the card rather than a strip. */
+const SLOT_RISE = 0.12;
+
 /** The slot's corner radius, mm. The reference draws a plain rectangle; a small radius is the
  *  same drawing with the pierce divot off the corner (§2.1). */
 const SLOT_CORNER = 1.5;
@@ -60,11 +83,17 @@ const SLOT_CORNER = 1.5;
 /** How far the scored inner line stops short of a seat it would otherwise run into, mm. */
 const INNER_GAP = 0.8;
 
-/** A notch: a stadium centred ON the edge, so its inner half bites `depth` into the material and
- *  its outer half hangs in fresh air. Full-radius ends, which is what lets a stretched elastic
- *  slide into the seat instead of catching, and what keeps the notch from being a stress riser. */
+/** A notch: a rounded rectangle centred ON the edge, so its inner half bites `depth` into the
+ *  material and its outer half hangs in fresh air.
+ *
+ *  SQUARE, with a small fillet — not the stadium it was. At 4 mm deep and 10 mm tall a
+ *  full-radius end makes the whole notch one curve, and a curve is a round bite out of the edge
+ *  rather than the square seat the reference draws (Ian, 2026-09-23, holding the two side by
+ *  side). The fillet is what keeps it off being a stress riser; the flat is what makes it a
+ *  seat an elastic sits IN instead of sliding across. */
+const NOTCH_FILLET = 1.5;
 const notchRing = (x: number, y: number, depth: number, along: number): CutRing =>
-  placeShapes([[roundedRectRing(2 * depth, along, Math.min(depth, along / 2))]], x, y, 0)[0]![0]!;
+  placeShapes([[roundedRectRing(2 * depth, along, Math.min(NOTCH_FILLET, depth / 2, along / 2))]], x, y, 0)[0]![0]!;
 
 /** Is `p` inside a rounded rectangle of half-sizes `hw × hh` and radius `r` about `c`, grown by
  *  `g`? Exact: the corner test only runs in the corner quadrant, so a stadium answers as a
@@ -136,7 +165,11 @@ export const hairTieHolder: TemplateDef = {
   fields: [
     // ------------------------------------------------------- RIGHT: what you type --
     {
-      kind: 'text', key: 'text', label: 'Name', panel: 'right', section: 'Name', value: 'Sophia',
+      // Not a name with an I in it. A welded word guarantees every letter keeps 1.5 mm of its
+      // own ink (engine/text.ts, MIN_BODY) and no more — which is a readable stroke on a wide
+      // capital and a sliver on a narrow one, so "MILA" comes off the bed reading MLA. The
+      // default should show the design working, not its narrowest case (2026-09-23).
+      kind: 'text', key: 'text', label: 'Name', panel: 'right', section: 'Name', value: 'Hazel',
       placeholder: 'A name', maxLength: 14, symbols: true,
       help: 'Cut as its own piece and glued on the card.',
     },
@@ -150,24 +183,32 @@ export const hairTieHolder: TemplateDef = {
     // 45, not 40: under 45 the band left under the slot is thinner than the 6 mm floor a cut
     // letter has, so the slider's own minimum shipped a warning (G25).
     { kind: 'number', key: 'height', label: 'Height', section: 'Card', value: 62, min: 45, max: 120, step: 1, unit: 'mm' },
+    // Both slot sizes on the first screen: it is the part of this object that does the work,
+    // and the shipped 50 x 12 letterbox was too small for a handful of ties (Ian, 2026-09-23).
     {
-      kind: 'number', key: 'slotW', label: 'Slot width', section: 'Card', value: 50, min: 20, max: 140, step: 1, unit: 'mm',
+      kind: 'number', key: 'slotW', label: 'Slot width', section: 'Card', value: 56, min: 20, max: 140, step: 1, unit: 'mm',
       help: 'The ties are pushed through and hang on the bar.',
     },
+    // 12, which is the reference's 19 % of a 62 mm card. It was 18 for one round, after "the
+    // slot is too small" — and 18 is half again as tall as the drawing, which is what made the
+    // card read as a frame rather than a holder. The slider is on the first screen either way.
+    { kind: 'number', key: 'slotH', label: 'Slot height', section: 'Card', value: 12, min: 6, max: 40, step: 0.5, unit: 'mm' },
 
-    // ---------------------------------------------------- LEFT: "More options" --
-    { kind: 'number', key: 'slotH', label: 'Slot height', section: 'Card', value: 12, min: 6, max: 30, step: 0.5, unit: 'mm', advanced: true },
-    {
-      kind: 'number', key: 'notchD', label: 'Seat depth', section: 'Card', value: 8, min: 3, max: 16, step: 0.5, unit: 'mm', advanced: true,
-      help: 'How far into the edge a stretched tie drops.',
-    },
-    { kind: 'number', key: 'notchW', label: 'Seat width', section: 'Card', value: 6, min: 3, max: 16, step: 0.5, unit: 'mm', advanced: true },
-    { kind: 'toggle', key: 'innerLine', label: 'Inner line', section: 'Card', value: true, advanced: true, help: 'Scores an outline 3 mm inside the edge.' },
-    { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Card', value: 8, min: 0, max: 20, step: 0.5, unit: 'mm', advanced: true },
-    { kind: 'number', key: 'nameSize', label: 'Name size', section: 'Name', value: 14, min: 8, max: 28, step: 0.5, unit: 'mm', advanced: true },
-    // Under More with the rest: a left category holding one control is a rail icon that answers
-    // a question nobody asked. The first screen is the name, the card and the font.
-    { ...letterScoreField('Name', 'score'), advanced: true },
+    { kind: 'number', key: 'nameSize', label: 'Name size', section: 'Name', value: 14, min: 8, max: 28, step: 0.5, unit: 'mm' },
+    // The bars that join letters the weld could not reach. They were forced on and unmentioned,
+    // which is how a name comes off the bed wearing them with nothing to switch (Ian,
+    // 2026-09-23: "letters still have this shitty bridges with no way for me to turn them off").
+    bridgeField('Name', 'Join loose letters'),
+
+    // The whole card, patterned — the same engine and the same knobs the pattern holder uses,
+    // behind one switch so a plain card stays a plain card (Ian, 2026-09-23: "add option to
+    // slap pattern on the full board").
+    { kind: 'toggle', key: 'usePattern', label: 'Pattern the card', section: 'Pattern', value: false },
+    ...patternFields({ section: 'Pattern', op: 'engrave', margin: 0 })
+      // No margin and no web: "full board" is the whole point, and the border those two held
+      // back is the thing being asked for.
+      .filter((f) => !['margin', 'web'].includes(f.key))
+      .map((f) => ({ ...f, visibleWhen: (vv: Values) => bool(vv, 'usePattern') && (f.visibleWhen ? f.visibleWhen(vv) : true) })),
     ...letteringFields('Name', { textCase: 'upper' }),
   ],
 
@@ -175,7 +216,7 @@ export const hairTieHolder: TemplateDef = {
     const warnings: string[] = [];
     const w = clamp(num(v, 'width'), 60, 160);
     const h = clamp(num(v, 'height'), 45, 120);
-    const corner = clamp(num(v, 'corner'), 0, 0.3 * Math.min(w, h));
+    const corner = clamp(CORNER, 0, 0.3 * Math.min(w, h));
 
     // ------------------------------------------------------------- the card --
     // The hanging hole is a hole in the OUTLINE, not a layer: it is part of the shape the way
@@ -183,13 +224,20 @@ export const hairTieHolder: TemplateDef = {
     const holeCy = h / 2 - HOLE_EDGE;
     const card: Shapes = [[roundedRectRing(w, h, corner), circleRing(0, holeCy, HOLE_DIA / 2, 48)]];
 
+    // Where the slot sits, and now the seats too: a tie stretched across the card runs from one
+    // seat, through the slot and out the other, so all three being on ONE line is the whole
+    // geometry of it (Ian, 2026-09-23: "the slots need to be on the same level as the cutout").
+    const slotCy = SLOT_RISE * h;
+
     // ------------------------------------------------- the seats in the edges --
     // Held off the top and bottom edges as well as off the slot: a seat is a cut like any other.
-    const notchD = clamp(num(v, 'notchD'), 3, Math.max(3, Math.min(16, w / 2 - 2 * MIN_WEB)));
-    const notchW = clamp(num(v, 'notchW'), 3, Math.max(3, Math.min(16, h - 2 * MIN_WEB)));
+    // As a SHARE of the card, so a 160 mm holder gets a seat an elastic can still find. The
+    // fractions are the reference's; the constants above are what they come to on the default.
+    const notchD = clamp(0.044 * w, 3, Math.max(3, Math.min(16, w / 2 - 2 * MIN_WEB)));
+    const notchW = clamp(0.164 * h, 3, Math.max(3, Math.min(20, h - 2 * MIN_WEB)));
     const notches: Shapes = [
-      [notchRing(-w / 2, 0, notchD, notchW)],
-      [notchRing(w / 2, 0, notchD, notchW)],
+      [notchRing(-w / 2, slotCy, notchD, notchW)],
+      [notchRing(w / 2, slotCy, notchD, notchW)],
     ];
 
     // ------------------------------------------------------------- the slot --
@@ -198,33 +246,59 @@ export const hairTieHolder: TemplateDef = {
     const maxSlotW = w - 2 * notchD - 2 * MIN_WEB;
     const slotW = clamp(num(v, 'slotW'), 10, Math.max(10, maxSlotW));
     if (num(v, 'slotW') > maxSlotW + 0.01) warnings.push(`The slot was cut back to ${slotW.toFixed(0)} mm to keep ${MIN_WEB} mm of material between it and the seats.`);
-    const maxSlotH = Math.min(2 * (holeCy - HOLE_DIA / 2 - MIN_WEB), h - 2 * MIN_WEB);
+    // Room above (the hanging hole) and below (the card's own edge), measured from where the
+    // slot actually sits rather than from the middle it no longer occupies.
+    const maxSlotH = 2 * Math.min(holeCy - HOLE_DIA / 2 - MIN_WEB - slotCy, slotCy + h / 2 - MIN_WEB);
     const slotH = clamp(num(v, 'slotH'), 4, Math.max(4, maxSlotH));
     if (num(v, 'slotH') > maxSlotH + 0.01) warnings.push(`The slot was cut back to ${slotH.toFixed(0)} mm tall to keep clear of the hanging hole.`);
 
+    const slotRing = roundedRectRing(slotW, slotH, Math.min(SLOT_CORNER, slotH / 2, slotW / 2))
+      .map(([x, y]): [number, number] => [x, y + slotCy]);
+
     const layers: DesignLayer[] = [
-      {
-        id: 'slot', label: 'Slot', op: 'cut', stencil: false,
-        shapes: [[roundedRectRing(slotW, slotH, Math.min(SLOT_CORNER, slotH / 2, slotW / 2))]],
-      },
+      { id: 'slot', label: 'Slot', op: 'cut', stencil: false, shapes: [[slotRing]] },
       {
         // Trimmed to the material before it is punched: the outer half of each seat hangs in
         // fresh air and must not reach the size on the status line (G15).
         id: 'notches', label: 'Seats', op: 'cut', shapes: notches, keep: card, stencil: false,
       },
     ];
-    if (v.innerLine !== false && w > 2 * INNER_INSET + 4 && h > 2 * INNER_INSET + 4) {
+    if (w > 2 * INNER_INSET + 4 && h > 2 * INNER_INSET + 4) {
       const seat = { hw: notchD, hh: notchW / 2, r: Math.min(notchD, notchW / 2) };
       const runs = innerRuns(w, h, corner, INNER_INSET, [
-        { c: [-w / 2, 0], ...seat },
-        { c: [w / 2, 0], ...seat },
+        { c: [-w / 2, slotCy], ...seat },
+        { c: [w / 2, slotCy], ...seat },
       ]);
       if (runs.length) layers.push({ id: 'inner', label: 'Inner line', op: 'score', shapes: [], paths: runs });
     }
 
+    // ------------------------------------------------- the pattern, if asked for --
+    // The region is the card less its own voids — the hanging hole and the slot — and nothing
+    // else held back. The seats are NOT reserved: they are cut away afterwards, so a burn that
+    // lands there leaves with them.
+    if (bool(v, 'usePattern')) {
+      const def = await patternDefFor(str(v, 'pattern'));
+      const resolved = resolveOp(def, askedOp(v));
+      const op = resolved.op;
+      warnings.push(...resolved.warnings);
+      const region: Shapes = [[roundedRectRing(w, h, corner), circleRing(0, holeCy, HOLE_DIA / 2 + 1, 48), slotRing]];
+      const fill = fillShape(region, def, fillOptions({ ...v, margin: 0, web: MIN_WEB }, op));
+      warnings.push(...fill.warnings);
+      // `kind: 'fill'` — a pattern that covers the card is MEANT to reach the edge, and without
+      // it every build reports the burn as having run off the part.
+      if (op === 'cut') {
+        layers.unshift({ id: 'pattern', label: def.name, shapes: fill.shapes, op: 'cut', stencil: false, kind: 'fill' });
+      } else if (op === 'engrave') {
+        if (fill.shapes.length) layers.unshift({ id: 'pattern', label: def.name, shapes: fill.shapes, op: 'engrave', kind: 'fill' });
+        if (fill.paths.length) layers.unshift({ id: 'pattern-lines', label: `${def.name} lines`, shapes: [], op: 'score', paths: fill.paths, kind: 'fill' });
+      } else {
+        layers.unshift({ id: 'pattern', label: def.name, shapes: fill.shapes, op: 'score', paths: fill.paths, kind: 'fill' });
+      }
+    }
+
     // -------------------------------------------------- the name, its own piece --
     // The band under the slot is where it glues: the hole and the slot own everything above it.
-    const bandTop = -slotH / 2;
+    const bandTop = slotCy - slotH / 2;
     const bandH = bandTop + h / 2;
     const name = await namePiece(
       v,
@@ -241,7 +315,7 @@ export const hairTieHolder: TemplateDef = {
         label: 'Name',
         // The piece IS the letters: margin 0 and no smoothing, so it is cut on the glyph
         // outlines and not in a jacket (G31). Bridges join what the weld could not reach.
-        blank: { kind: 'hug', margin: 0, smoothing: 0, bridge: NAME_BRIDGE, counters: 'open', minHole: MIN_COUNTER, bridges: 'all' },
+        blank: { kind: 'hug', margin: 0, smoothing: 0, bridge: NAME_BRIDGE, counters: 'open', minHole: MIN_COUNTER, bridges: bridgeModeOf(v) },
         layers: [
           ...name.layers.map((l) => ({ ...l, op: 'off' as const, hugOnly: true })),
           ...name.seams,
@@ -309,9 +383,19 @@ async function namePiece(v: Values, wantedCap: number, maxW: number, maxH: numbe
   const dx = -(out.box.minX + out.box.maxX) / 2;
   const dy = -(out.box.minY + out.box.maxY) / 2;
   const centred = out.layers.map((l) => ({ ...l, shapes: placeShapes(l.shapes, dx, dy, 0) }));
-  // Seams are what a WELD leaves behind: a face that already joins was drawn that way by its type
-  // designer, and a line burnt at every join crosses a script meant to read as one stroke.
-  const seams = str(v, 'letterLines') === 'score' && (out.connect.overlap ?? 0) > 0
+  // Welded letters blend into each other, so the word needs a line at every junction to still
+  // read as letters — SOPHIA came off the bed with its I buried between the H and the A.
+  //
+  // `seams: true`, NOT the whole-outline trick the family tree uses. The two designs bury
+  // different things: a tree's letter stands on a BAR, so what is hidden is an area and the
+  // clip finds it; here one letter is buried 0.6 mm into the next, so what is hidden is a
+  // short arc lying on the piece's own cut line — the clip drops all of it and the build says
+  // "Letter outlines lies outside the part" (measured, 2026-09-23). `seams` computes the
+  // junction directly instead of asking the clip to discover it.
+  //
+  // Always on, with no control: a welded word that cannot be read is not a product, and the
+  // field that used to switch it went with the rest of the long tail.
+  const seams = (out.connect.overlap ?? 0) > 0
     ? centred.map((l) => ({ ...l, id: `${l.id}-seam`, label: 'Letter seams', op: 'score' as const, seams: true }))
     : [];
   return { layers: centred, seams, cap, tight: bw > maxW + 0.05 || bh > maxH + 0.05 };
