@@ -1,6 +1,7 @@
 import { symbolTextField } from './symbols/text-field';
-import { openIconLibrary } from './symbols/library';
-import { readSymbols, insertAsset, symbolSvg } from './symbols/model';
+import { importSvgFile, openIconLibrary, retraceSvg, svgParts, traceSvgFile } from './symbols/library';
+import { readSymbols, insertAsset, symbolSvg, updateSymbol } from './symbols/model';
+import { areaStage, areasValue, artworkFaces, openAreaPicker, pickedAreas } from './areas';
 // The form: a template's fields → kit controls, in two homes. The RIGHT panel holds what the
 // customer TYPES (text lines, a list, a symbol, a link) and nothing else; the LEFT panel holds
 // every setting, in named categories on a rail — the font among them, as its own category —
@@ -14,6 +15,7 @@ import {
   blankSilhouette,
   type BlankCategory,
   type BlankDef,
+  type Shapes,
 } from '@vostok/laser';
 import {
   FONTS,
@@ -50,6 +52,7 @@ import {
   toast,
   toggleSwitch,
   uploadCta,
+  dropZone,
 } from '@vostok/ui-kit';
 import { BATCH_SHEETS } from './engine/batch';
 import { fontSampleOf, railIconKeys, surpriseValues, useSegmented } from './form-rules';
@@ -127,11 +130,20 @@ export function renderForm(opts: FormOptions): Form {
   const showUnit = (pad: { setUnit(unit: string, scale?: number, decimals?: number): void }) =>
     (getUnit() === 'in' ? pad.setUnit('in', 1 / 25.4, 3) : pad.setUnit('mm', 1, 1));
 
+  /** Controls that draw ANOTHER field's value — the areas card draws its symbol's artwork —
+   *  and so cannot wait for their own `set` to be called. Repainted on every change. */
+  const repaints: (() => void)[] = [];
+  /** An `areas` control's own "open the picker", registered under the field it picks FOR — so
+   *  a drop on the `svg` control can go straight into it. The window IS the wizard now, and a
+   *  wizard you have to go and find afterwards is not one. */
+  const areaPickers = new Map<string, () => void>();
+
   const change = (key: string, v: string | number | boolean) => {
     values[key] = v;
     // Any control can move a sample now, not just a text field: a `previewText` may follow a
     // select (the calendar's month), so the pickers are re-lettered on every change.
     for (const h of fontHandles) h.setSample(fontSample(h.key));
+    for (const repaint of repaints) repaint();
     applyVisibility();
     opts.onChange(key);
   };
@@ -372,6 +384,106 @@ export function renderForm(opts: FormOptions): Form {
           el('div', { className: 'ls-pattern-row' }, [art, nameEl, buttonRow(choose, surprise)]),
         ]);
         return { node, set: (v) => show(String(v)) };
+      }
+      case 'svg': {
+        // The whole control is the drop target: this design's artwork is the customer's file,
+        // so there is no library to open first. The artwork itself is not repeated here — the
+        // Pattern areas card underneath draws it, large, with its surfaces lit.
+        const name = el('p', { className: 'vl-hint' });
+        const drop = dropZone({
+          title: 'Drop your SVG', text: 'or click to browse',
+          note: 'Filled shapes; outline any text first.',
+          accept: '.svg,image/svg+xml',
+          onFiles: async ([file]) => {
+            if (!file) return;
+            try {
+              // No window in front of this: the file is traced on the choices the import wizard
+              // would have opened with, and the questions it used to ask are asked in the area
+              // picker instead, beside the artwork they change (Ian, 2026-09-22).
+              const traced = await traceSvgFile(file);
+              // `set` first, then `change`: a control's own setter is not called by `change`
+              // (that is for Load and Reset), so the name line kept saying "Example shape"
+              // while the artwork underneath had already become the customer's.
+              const { char } = insertAsset(values, traced.asset, { svgText: traced.svgText, svgChoices: traced.choices });
+              set(char);
+              change(f.key, char);
+              // The faces are traced off the new value, so the picker opens on the next frame.
+              setTimeout(() => areaPickers.get(f.key)?.(), 0);
+            } catch (err) { toast(`Could not read that SVG: ${(err as Error).message}`, { kind: 'error' }); }
+          },
+        });
+        // A template opens on an EXAMPLE shape, so the gallery card has something to show and
+        // the editor is never an empty stage. Saying so is the difference between "here is a
+        // flower" and "here is your file" (the name is the customer's own once they drop one).
+        const set = (v: string | number | boolean) => {
+          const item = readSymbols(values)[String(v)];
+          name.textContent = item ? item.label : 'Example shape — drop your own SVG to replace it';
+        };
+        set(String(values[f.key]));
+        const node = el('div', { className: 'ls-svg-drop' }, [labelOf(f), drop, name]);
+        return { node, set };
+      }
+      case 'areas': {
+        // The artwork with its areas lit, over the button that changes them. A card, not a
+        // count: you pick an area by looking at the drawing, which is the whole reason this is
+        // a click and not a list of numbers.
+        const art = el('div', { className: 'ls-areas-preview' });
+        const nameEl = el('span', { className: 'ls-areas-row__name' });
+        let faces: Shapes = [];
+        const open = () => {
+          if (!faces.length) { toast('Drop your SVG first, then you can click its areas.', { kind: 'warn' }); return; }
+          const char = String(values[f.from] ?? '');
+          const item = readSymbols(values)[char];
+          const svgText = item?.svgText;
+          openAreaPicker({
+            faces,
+            picked: pickedAreas(String(values[f.key] ?? ''), char),
+            // A library icon has no file behind it, so the window simply does not grow the rows.
+            ...(svgText ? {
+              file: {
+                name: item?.label ?? 'Your file',
+                svgText,
+                ...svgParts(svgText),
+                choices: (item?.svgChoices ?? {}) as Parameters<typeof retraceSvg>[1],
+                retrace: (c) => retraceSvg(svgText, c),
+              },
+            } : {}),
+            onDone: ({ picked, shapes, choices }) => {
+              // A changed trace is a changed ARTWORK: it is written back under the same
+              // character, so the symbol field, the card and the build all follow it.
+              if (shapes) updateSymbol(values, char, { shapes, ...(choices ? { svgChoices: choices } : {}) });
+              change(f.key, areasValue(char, picked));
+            },
+          });
+        };
+        areaPickers.set(f.from, open);
+        const choose = button({ label: 'Choose areas…', emphasis: 'secondary', onClick: open });
+        // Async: tracing the artwork is the symbol layer's own work. The guard is the artwork
+        // it started on — a second import while the first is still tracing must not repaint
+        // the card with the drawing that has just been replaced.
+        const show = () => {
+          const char = String(values[f.from] ?? '');
+          void artworkFaces(values, f.from).then((next) => {
+            if (String(values[f.from] ?? '') !== char) return;
+            faces = next;
+            const picked = pickedAreas(String(values[f.key] ?? ''), char);
+            art.replaceChildren(...(faces.length ? [areaStage(faces, picked).svg] : []));
+            nameEl.textContent = !faces.length
+              ? 'Import an SVG to start'
+              : !picked || picked.size === faces.length
+                ? faces.length === 1 ? 'The whole shape' : `Every area — all ${faces.length}`
+                : picked.size === 0
+                  ? 'No areas — nothing to pattern'
+                  : `${picked.size} of ${faces.length} areas`;
+          });
+        };
+        show();
+        repaints.push(show);
+        const node = el('div', {}, [
+          labelOf(f),
+          el('div', { className: 'ls-areas-row' }, [art, nameEl, choose]),
+        ]);
+        return { node, set: () => show() };
       }
     }
   }

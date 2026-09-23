@@ -51,6 +51,12 @@ export type Field =
   | (FieldBase & { kind: 'select'; value: string; options: { value: string; label: string }[] })
   | (FieldBase & { kind: 'toggle'; value: boolean })
   | (FieldBase & { kind: 'symbol'; value: string })
+  /** The customer's OWN SVG as the artwork: a drop target, and nothing in front of it. The file
+   *  is traced and stored exactly as the symbol picker stores an import, so the value is the
+   *  same private-use character a `symbol` field holds and everything downstream (`areas`,
+   *  `symbolLayer`, Save/Load) is unchanged. Use it where the design IS the customer's file —
+   *  a grid of paw prints is not a step on the way there (Ian, 2026-09-22). */
+  | (FieldBase & { kind: 'svg'; value: string })
   | (FieldBase & { kind: 'blank'; value: string; categories?: BlankCategory[]; /** Number fields that take the picked shape's own defaults. */ linked?: { width?: string; height?: string; corner?: string } })
   /** Two numbers moved with a nudge pad: `key` is X, `keyY` is Y. */
   | (FieldBase & { kind: 'position'; value: number; keyY: string; valueY: number; max: number; step: number; unit?: string })
@@ -64,7 +70,12 @@ export type Field =
   /** A repeating pattern, picked from the gallery. The value is a pattern id: `pm-<slug>` for a
    *  tile of the Pattern Monster library, or a procedural id (`honeycomb`, `asanoha`). The
    *  control is a preview card of the current pattern over "Choose pattern…" and "Surprise me". */
-  | (FieldBase & { kind: 'pattern'; value: string });
+  | (FieldBase & { kind: 'pattern'; value: string })
+  /** Which surfaces of an uploaded SVG a pattern fills, picked by clicking them. `from` names
+   *  the `symbol` field whose artwork is shown. The value is `"<char>|<i>,<j>"` — the artwork
+   *  the pick was made on, then the faces; empty means every area, which is what a one-piece
+   *  silhouette wants without a click. See `src/areas.ts`. */
+  | (FieldBase & { kind: 'areas'; value: string; from: string });
 
 export interface TemplateDef {
   id: string;

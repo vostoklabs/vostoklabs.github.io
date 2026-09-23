@@ -117,6 +117,8 @@ export { drawer, closeAllDrawers, type DrawerOptions, type DrawerHandle } from '
 export { splitDialog, type SplitDialogOptions } from './components/split-dialog';
 export {
   openSvgImport,
+  svgImportDefaults,
+  svgPartLabel,
   type SvgImportMode,
   type SvgImportPart,
   type SvgImportChoice,

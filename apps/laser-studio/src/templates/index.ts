@@ -35,6 +35,7 @@ import { braceletSet } from './bracelet-set';
 import { braceletSetSymbol } from './bracelet-set-symbol';
 import { dateKeychain } from './date-keychain';
 import { patternFill } from './pattern-fill';
+import { patternSvg } from './pattern-svg';
 import { coupleKeychains } from './couple-keychains';
 import { phoneStand } from './phone-stand';
 import { keychainPhoneStand } from './keychain-phone-stand';
@@ -44,7 +45,7 @@ import type { TemplateDef } from './types';
 export const TEMPLATES: TemplateDef[] = [
   qrDisplayStand, nameKeychain, nameTag, symbolCharm, connectedText,
   petIdTag, petFeedingSign, luggageTag, bagCharm, christmasOrnament,
-  familyCrossword, tileKeychain, qrStand, qrSlotStand, qrTableTent, qrTag, cakeTopper, layeredKeychain, familyTreeNames, namePuzzle, splitMonogram, arcCoaster, svgKeychain, placeCards, hairTieHolder, hairTieCard, framedNameOrnament, houseOrnament, themedFaceOrnament, basketballTag, baseballTag, footballTag, soccerTag, businessCard, ticTacToe, braceletSet, braceletSetSymbol, dateKeychain, coupleKeychains, phoneStand, keychainPhoneStand, tableSign, patternFill,
+  familyCrossword, tileKeychain, qrStand, qrSlotStand, qrTableTent, qrTag, cakeTopper, layeredKeychain, familyTreeNames, namePuzzle, splitMonogram, arcCoaster, svgKeychain, placeCards, hairTieHolder, hairTieCard, framedNameOrnament, houseOrnament, themedFaceOrnament, basketballTag, baseballTag, footballTag, soccerTag, businessCard, ticTacToe, braceletSet, braceletSetSymbol, dateKeychain, coupleKeychains, phoneStand, keychainPhoneStand, tableSign, patternFill, patternSvg,
 ];
 
 export const templateById = (id: string): TemplateDef | undefined => TEMPLATES.find((t) => t.id === id);

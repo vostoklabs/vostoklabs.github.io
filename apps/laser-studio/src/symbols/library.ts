@@ -1,5 +1,5 @@
 import { ICONS, POPULAR, SYMBOL_GROUPS, searchGroup } from '@vostok/fonts';
-import { button, dialog, el, openSvgImport, textField, toast, uploadCta } from '@vostok/ui-kit';
+import { button, dialog, el, openSvgImport, svgImportDefaults, textField, toast, uploadCta, type SvgImportChoice, type SvgImportPart } from '@vostok/ui-kit';
 import { describeSvg, parseSvg } from '@vostok/laser/trace';
 import type { Shapes } from '@vostok/laser';
 import catalog from './catalog.json';
@@ -18,6 +18,86 @@ async function assetFor(id: string): Promise<SymbolAsset> {
   const asset=item ? { id, label:item.label, source:item.source, shapes:trace(item.svg) } : await legacyAsset(ICONS.find(i=>i.id===id)!.char);
   cache.set(id,asset);return asset;
 }
+/**
+ * One uploaded SVG → a traced asset, through the import window.
+ *
+ * The window is not optional politeness: an SVG with a white backdrop traces as a solid block
+ * over the whole drawing, and without it the only symptom is artwork that comes out wrong with
+ * nothing on screen to explain it. Answers null when the customer backs out of it; throws with
+ * a plain sentence on a file we cannot use, which the caller toasts.
+ *
+ * `before` runs once the file has parsed and just before the window opens — the icon library
+ * passes its own `close`, so the wall of icons is gone behind the window rather than under it.
+ *
+ * Lifted out of the library's own upload button when the `svg` field wanted the same flow
+ * WITHOUT the library in front of it: a design whose artwork is the customer's own file has no
+ * use for a grid of paw prints first (Ian, 2026-09-22).
+ */
+export interface SvgTrace {
+  asset: SymbolAsset;
+  /** The file itself, kept so a later window can trace it AGAIN with different choices. */
+  svgText: string;
+  /** The choice per part, as `svgImportDefaults` made it — what a picker starts its rows on. */
+  choices: Record<number, SvgImportChoice>;
+  parts: SvgImportPart[];
+  issues: string[];
+}
+
+/**
+ * An uploaded SVG traced with NO window in front of it, on the choices the import window would
+ * have opened with. Everything the caller needs to re-ask the question later comes back with
+ * it, so "no window" is not "no way to fix it" — it is "fix it where you can see what it did"
+ * (Ian, 2026-09-22: "drop the svg wizard on upload").
+ */
+export async function traceSvgFile(file: File): Promise<SvgTrace> {
+  if (file.size > 2_000_000) throw Error('Choose an SVG smaller than 2 MB.');
+  const svgText = (await file.text()).replace(/currentColor/gi, '#000000');
+  const { parts, issues } = describeSvg(svgText);
+  const choices = svgImportDefaults(parts);
+  const shapes = trace(svgText, choices);
+  if (!shapes.length) throw Error('There is nothing to cut in this file.');
+  return { asset: assetOf(file.name, shapes), svgText, choices, parts, issues };
+}
+
+/** The same file traced again on new choices — the picker's own re-trace. Empty when the
+ *  choices leave nothing drawable, which the caller shows rather than throwing over. */
+export function retraceSvg(svgText: string, choices: Record<number, SvgImportChoice>): Shapes {
+  return trace(svgText, choices);
+}
+
+/** What is in a file we already hold, for a picker that lists its parts. The colour is dropped:
+ *  a cut file is one colour, so a swatch per part would be a control over nothing. */
+export function svgParts(svgText: string): { parts: SvgImportPart[]; issues: string[] } {
+  const { parts, issues } = describeSvg(svgText);
+  return { parts: parts.map(({ hex, ...p }) => p), issues };
+}
+
+/** Named after the file, remembered under "My icons". */
+function assetOf(fileName: string, shapes: Shapes): SymbolAsset {
+  const asset: SymbolAsset = { id: crypto.randomUUID(), label: fileName.replace(/\.svg$/i, ''), source: 'My icons', shapes };
+  try { localStorage.setItem(storageKey, JSON.stringify([asset, ...saved()].slice(0, 40))); }
+  catch { toast('Icon added. Browser storage is full; save the project to keep it.', { kind: 'warn' }); }
+  return asset;
+}
+
+export async function importSvgFile(file: File, before?: () => void): Promise<SymbolAsset | null> {
+  if (file.size > 2_000_000) throw Error('Choose an SVG smaller than 2 MB.');
+  const text = (await file.text()).replace(/currentColor/gi, '#000000');
+  const { parts, issues } = describeSvg(text);
+  before?.();
+  const choices = await openSvgImport({
+    svgText: text, name: file.name, parts: parts.map(({ hex, ...p }) => p), issues, thinAt: 'symbol size',
+    trace: (c) => {
+      const shapes = trace(text, c);
+      return shapes.length ? { viewBox: '-0.6 -0.6 1.2 1.2', paths: [{ d: shapePath(shapes), fill: 'currentColor' }], summary: 'Single-colour icon. Adjust the parts before adding it.' } : null;
+    },
+  });
+  if (!choices) return null;
+  const shapes = trace(text, choices);
+  if (!shapes.length) throw Error('No visible shapes selected.');
+  return assetOf(file.name, shapes);
+}
+
 export function openIconLibrary(onPick: (asset: SymbolAsset)=>void, anchor?: HTMLElement) {
   let category='popular', query='', generation=0;
   const grid=el('div',{className:'ls-icon-grid',attrs:{'aria-label':'Symbols',role:'group'}});
@@ -30,19 +110,8 @@ export function openIconLibrary(onPick: (asset: SymbolAsset)=>void, anchor?: HTM
   });
   const upload=uploadCta({label:'Import your own SVG',accept:'.svg,image/svg+xml',onFiles:async ([file])=>{
     if(!file)return;
-    if(file.size>2_000_000){toast('Choose an SVG smaller than 2 MB.',{kind:'warn'});return;}
-    try{
-      const text=(await file.text()).replace(/currentColor/gi, '#000000');const {parts,issues}=describeSvg(text);
-      handle.close();
-      const choices=await openSvgImport({svgText:text,name:file.name,parts:parts.map(({hex,...p})=>p),issues,thinAt:'symbol size',trace:c=>{
-        const shapes=trace(text,c);return shapes.length?{viewBox:'-0.6 -0.6 1.2 1.2',paths:[{d:shapePath(shapes),fill:'currentColor'}],summary:'Single-colour icon. Adjust the parts before adding it.'}:null;
-      }});
-      if(!choices)return;
-      const shapes=trace(text,choices);if(!shapes.length)throw Error('No visible shapes selected.');
-      const asset={id:crypto.randomUUID(),label:file.name.replace(/\.svg$/i,''),source:'My icons',shapes};
-      try{localStorage.setItem(storageKey,JSON.stringify([asset,...saved()].slice(0,40)));}catch{toast('Icon added. Browser storage is full; save the project to keep it.',{kind:'warn'});}
-      onPick(asset);
-    }catch(err){toast(`Could not import SVG: ${(err as Error).message}`,{kind:'error'});}
+    try{const asset=await importSvgFile(file,()=>handle.close());if(asset)onPick(asset);}
+    catch(err){toast(`Could not import SVG: ${(err as Error).message}`,{kind:'error'});}
   }});
   const content=el('div',{className:'ls-icon-library'},[
     el('div',{className:'ls-icon-library__search'},[search,upload]),

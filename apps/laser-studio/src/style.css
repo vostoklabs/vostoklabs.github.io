@@ -151,6 +151,103 @@
 .ls-pattern-preview > svg { display: block; width: 100%; height: 100%; }
 .ls-pattern-row__name { font-weight: 600; color: var(--text); }
 
+/* The SVG drop target, where a design's artwork IS the customer's file. The kit's drop zone
+   is the control; this only stacks it under its label with the loaded file's name beneath. */
+.ls-svg-drop { display: grid; gap: var(--space-2); }
+
+/* Pattern areas: the artwork's faces, the picked ones lit. The same two elements serve the
+   card in the panel and the big stage in the picker, so what you click is what you saw. */
+.ls-areas-row { display: grid; gap: var(--space-2); }
+
+.ls-areas-preview {
+  aspect-ratio: 3 / 2;
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel-2);
+}
+
+.ls-areas-row__name { font-weight: 600; color: var(--text); }
+
+.ls-area-picker { display: grid; gap: var(--space-3); height: 100%; }
+
+.ls-area-picker__stage {
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel-2);
+  height: 100%;
+  min-height: 0;
+}
+
+.ls-area-picker__count { margin: 0; color: var(--text); font-weight: 600; }
+.ls-area-picker__problem { margin: 0; color: var(--warn, var(--muted)); }
+
+/* The window's right column: what is patterned, then what the file was made of. */
+.ls-area-controls { display: grid; gap: var(--space-2); align-content: start; }
+.ls-area-controls > .vl-label { margin-top: var(--space-2); }
+.ls-area-controls > .vl-label:first-child { margin-top: 0; }
+
+.ls-area-file {
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  /* A LIGHT checkerboard in both themes, and deliberately not a token. What is shown here is a
+     cut file, and a cut file is drawn near-black — on the dark panel the artwork disappeared
+     into its own background. The app already makes this call once: the Export Preview's sheet
+     is a flat `#ffffff` (`preview.ts`, PAPER) "so red, blue and black read as what they are".
+     The checkerboard on top of it says which parts of the file are transparent. */
+  background:
+    linear-gradient(45deg, #dfdfdf 25%, transparent 25%, transparent 75%, #dfdfdf 75%) 0 0 / 14px 14px,
+    linear-gradient(45deg, #dfdfdf 25%, transparent 25%, transparent 75%, #dfdfdf 75%) 7px 7px / 14px 14px,
+    #f6f6f6;
+}
+
+.ls-area-file img { display: block; max-height: 120px; max-width: 100%; }
+
+
+.ls-area-stage { display: block; width: 100%; max-height: 52vh; }
+.ls-areas-preview .ls-area-stage { max-height: 100%; }
+
+/* A face off is material with nothing on it; a face on is the pattern's ground. Both are
+   drawn, never hidden — the shape has to stay readable while you choose (Ian's rule: hide,
+   never grey, is about CONTROLS; a face you cannot see is a face you cannot click). */
+.ls-area {
+  fill: var(--panel);
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  transition: fill var(--dur-hover) var(--ease-standard);
+}
+
+.ls-area[data-on='true'] { fill: var(--accent); }
+
+/* A shape taken out of the artwork: a ghost, never gone. Drawn as an empty dashed outline so
+   you can still see WHAT you dropped and right-click it back — a removal you cannot see is a
+   removal you cannot undo without starting over. */
+.ls-area[data-removed='true'] {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  opacity: 0.55;
+}
+
+.ls-area[role='checkbox'] { cursor: pointer; }
+.ls-area[role='checkbox']:hover { stroke: var(--accent); stroke-width: 2; }
+
+/* Focus follows the SHAPE, not its bounding box. An `outline` on an SVG path is drawn as a
+   rectangle round the whole petal — and on a face with a hole in it the box says nothing about
+   what is focused. A thick stroke in the text colour reads on both a lit face and a plain one. */
+.ls-area[role='checkbox']:focus { outline: none; }
+.ls-area[role='checkbox']:focus-visible { outline: none; stroke: var(--text); stroke-width: 3; }
+
 /* The preview fills the stage. */
 .ls-stage {
   position: absolute;

@@ -140,6 +140,28 @@ function initialMode(part: SvgImportPart, anyFilled: boolean): SvgImportMode {
   return 'off';
 }
 
+/**
+ * The choices this window would have STARTED on, without opening it.
+ *
+ * For a caller that has somewhere better to fix a trace than a modal in front of the upload —
+ * Laser Studio's area picker asks the same question beside the artwork it affects — the window
+ * on import is a question asked before the user has seen anything. This is the half of it worth
+ * keeping: the same defaults, applied silently, so "no window" and "the window, accepted
+ * unchanged" are the same file. Exported from here rather than re-derived so the two cannot
+ * drift (Ian, 2026-09-22: "drop the svg wizard on upload").
+ */
+export function svgImportDefaults(parts: SvgImportPart[]): Record<number, SvgImportChoice> {
+  const anyFilled = parts.some((p) => p.kind === 'fill' && !p.why);
+  const out: Record<number, SvgImportChoice> = {};
+  for (const part of parts) out[part.index] = { mode: initialMode(part, anyFilled), ...(part.hex ? { hex: part.hex } : {}) };
+  return out;
+}
+
+/** What a part IS, in the window's own words — for a caller that lists the parts itself. */
+export function svgPartLabel(part: SvgImportPart): string {
+  return whatItIs(part);
+}
+
 function whatItIs(part: SvgImportPart): string {
   if (part.why === 'artboard') return 'Artboard rectangle';
   if (part.why === 'white') return part.kind === 'stroke' ? 'White outline in the file' : 'White in the file';
@@ -181,8 +203,7 @@ export function openSvgImport(
   return new Promise((resolve) => {
     let settled = false;
     const { parts, issues } = opts;
-    const anyFilled = parts.some((p) => p.kind === 'fill' && !p.why);
-    const choices: Record<number, SvgImportChoice> = {};
+    const choices: Record<number, SvgImportChoice> = svgImportDefaults(parts);
 
     // The two panes are the split dialog's own now — the grid that used to hold them is
     // `.vl-split`. Everything INSIDE them is untouched, which is the point: three apps ship
@@ -225,11 +246,7 @@ export function openSvgImport(
     // One pass: seed the part's choice and build the row that owns it. The rows hold the
     // state; only the preview and the note repaint.
     for (const part of parts) {
-      const choice: SvgImportChoice = {
-        mode: initialMode(part, anyFilled),
-        ...(part.hex ? { hex: part.hex } : {}),
-      };
-      choices[part.index] = choice;
+      const choice = choices[part.index]!;
       const row = el('div', { className: 'vl-svgprev__part' });
       if (part.hex) {
         row.append(colorSwatch({

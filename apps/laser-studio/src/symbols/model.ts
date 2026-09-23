@@ -5,7 +5,15 @@ import type { Values } from '../templates/types';
 export interface SymbolAsset { id: string; label: string; shapes: Shapes; source: string }
 /** `flip` mirrors the symbol in X — an arrow, a paw or a leaf that has to point the other way.
  *  Optional so every project file saved before it existed still loads. */
-export interface InlineSymbol extends SymbolAsset { char: string; pair?: string; scale: number; dx: number; dy: number; rotation: number; flip?: boolean }
+export interface InlineSymbol extends SymbolAsset {
+  char: string; pair?: string; scale: number; dx: number; dy: number; rotation: number; flip?: boolean;
+  /** The FILE this was traced from, and the choice that was made per part of it. Kept so a
+   *  picker can trace it again on different choices — which is what replaced the import window
+   *  in front of the upload. Absent on a library icon and on anything saved before 2026-09-22;
+   *  a picker with no file to re-read simply does not offer the rows. */
+  svgText?: string;
+  svgChoices?: Record<number, { mode: string }>;
+}
 export type SymbolMap = Record<string, InlineSymbol>;
 export const SYMBOL_KEY = '__symbols';
 let cachedRaw = '';
@@ -21,6 +29,9 @@ export function readSymbols(values: Values): SymbolMap {
         const item = candidate as InlineSymbol;
         if (Array.from(char).length !== 1 || (char.codePointAt(0) ?? 0) < 0xf0000 || !item) continue;
         if (typeof item.label !== 'string' || typeof item.id !== 'string' || !Array.isArray(item.shapes)) continue;
+        // The source file rides along when there is one; anything else claiming to be one is
+        // dropped rather than trusted, the same way the rings are checked below.
+        if (item.svgText !== undefined && typeof item.svgText !== 'string') continue;
         if (![item.scale,item.dx,item.dy,item.rotation].every(Number.isFinite)) continue;
         const valid = item.shapes.every(island => Array.isArray(island) && island.every(ring =>
           Array.isArray(ring) && ring.length >= 3 && ring.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))));
@@ -34,13 +45,24 @@ export function readSymbols(values: Values): SymbolMap {
 export function writeSymbols(values: Values, symbols: SymbolMap) {
   cachedRaw = JSON.stringify(symbols); cachedSymbols = symbols; values[SYMBOL_KEY] = cachedRaw;
 }
-export function insertAsset(values: Values, asset: SymbolAsset): InlineSymbol {
+export function insertAsset(values: Values, asset: SymbolAsset, extra: Partial<InlineSymbol> = {}): InlineSymbol {
   const symbols = readSymbols(values);
   let code = 0xf0000;
   while (symbols[String.fromCodePoint(code)]) code++;
   const char = String.fromCodePoint(code);
-  const item = { ...asset, char, scale: 1, dx: 0, dy: 0, rotation: 0 };
+  const item = { ...asset, ...extra, char, scale: 1, dx: 0, dy: 0, rotation: 0 };
   symbols[char] = item; writeSymbols(values, symbols); return item;
+}
+
+/** Change a symbol the project already holds — the area picker re-tracing the file it was made
+ *  from. In place, under the SAME character, so every field pointing at it follows along
+ *  instead of being left on an orphan. */
+export function updateSymbol(values: Values, char: string, patch: Partial<InlineSymbol>): void {
+  const symbols = readSymbols(values);
+  const item = symbols[char];
+  if (!item) return;
+  symbols[char] = { ...item, ...patch, char };
+  writeSymbols(values, symbols);
 }
 export async function legacyAsset(char: string): Promise<SymbolAsset> {
   const icon = iconByChar(char);
