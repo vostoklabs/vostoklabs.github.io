@@ -1,0 +1,10 @@
+services:
+  keycap-generator:
+    build:
+      context: ../..
+      dockerfile: apps/keycap-generator/Dockerfile
+    image: keycap-generator:latest
+    container_name: keycap-generator
+    ports:
+      - "8000:80"
+    restart: unless-stopped
