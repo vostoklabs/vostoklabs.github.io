@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Same call as the magnet generator: the image pipeline and the geometry
+    // code index flat typed arrays and ring lists constantly, and threading
+    // `!` through every one of those hot loops costs more than it catches.
+    "noUncheckedIndexedAccess": false,
+    "types": ["vite/client"]
+  },
+  "include": ["src"]
+}

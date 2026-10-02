@@ -1,0 +1,25 @@
+{
+  "name": "@vostok/fonts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fonts.css": "./src/fonts.css",
+    "./textLayout": "./src/textLayout.ts",
+    "./icons": "./src/icons.ts"
+  },
+  "scripts": {
+    "fetch-fonts": "node scripts/fetch-fonts.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "fetch-icons": "node scripts/fetch-icons.mjs",
+    "test": "esbuild tests/symbols.mts --bundle --platform=node --format=esm --external:opentype.js --outfile=node_modules/.cache/symbols.mjs --log-level=error && node node_modules/.cache/symbols.mjs"
+  },
+  "dependencies": {
+    "opentype.js": "^1.3.4"
+  },
+  "devDependencies": {
+    "subset-font": "^2.7.0",
+    "typescript": "^5.7.2"
+  }
+}

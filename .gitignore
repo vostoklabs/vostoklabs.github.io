@@ -1,0 +1,90 @@
+# Dependencies, build output, OS files
+node_modules/
+dist/
+dist-offline/
+dist-mw/
+offline/
+*.log
+.DS_Store
+Thumbs.db
+.pnpm-store/
+
+# Local tooling. The shared Claude Code settings and the public-repo rule are tracked.
+.claude/*
+!.claude/settings.json
+!.claude/rules/
+.claude/rules/*
+!.claude/rules/public-repo.md
+CLAUDE.md
+
+# Apps are private by default. A published app is re-included here.
+apps/*/
+!apps/bubble-pop-generator/
+!apps/clicker-generator/
+!apps/foldbox/
+!apps/generator-template/
+!apps/house-number/
+!apps/hub/
+!apps/keycap-generator/
+!apps/keychain-carabiner/
+!apps/kit-demo/
+!apps/laser-studio/
+!apps/magnet-generator/
+!apps/name-keychain/
+!apps/pen-topper/
+
+# Packages are private by default too.
+packages/*/
+!packages/export/
+!packages/fonts/
+!packages/laser/
+!packages/manifold/
+!packages/manifold-noeval/
+!packages/patterns/
+!packages/plates/
+!packages/ui-kit/
+!packages/viewer/
+
+# docs/ is local, except listing copy. `docs/**` rather than `docs/`, so the negation can match.
+docs/**
+!docs/*-listing.md
+
+# Local reference material and working output
+vendor/pmm-docs/
+**/renders/
+
+# Local only, not published
+DEV_PLAN.md
+**/makerlab/
+**/source 3d models/
+apps/*/src/pro/
+packages/laser/src/photo/
+packages/manifold-noeval/README.md
+apps/foldbox/src/export/cutFiles.ts
+apps/foldbox/src/export/cutPack.ts
+apps/foldbox/src/export/lac.ts
+apps/foldbox/demo/
+apps/foldbox/srcfit/
+apps/foldbox/testfit/
+apps/foldbox/scripts/
+apps/foldbox/offline.README.txt
+apps/foldbox/README.internal.md
+
+# Tests are local, except these apps
+**/tests/
+!apps/clicker-generator/tests/
+!apps/clicker-generator/tests/**
+!apps/keycap-generator/tests/
+!apps/keycap-generator/tests/**
+
+# 3MF files: only app public assets are tracked
+**/blocks/**/*.3mf
+**/blocks.3mf
+*.3mf
+!apps/*/public/**/*.3mf
+
+# Generated files
+result.json
+.render/
+.render-carabiner/
+packages/fonts/scripts/.icons-metadata.json

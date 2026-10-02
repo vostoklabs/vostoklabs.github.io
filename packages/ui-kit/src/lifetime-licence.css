@@ -1,0 +1,185 @@
+/*
+  Lifetime commercial licence — the sales offer (.vl-licence*) and the owner's certificate
+  (.vl-licence-cert*). See components/lifetime-licence.ts.
+
+  Ported from the clicker's licence dialog, renamed onto the shared prefix because a second app
+  needed the identical dialog. Same token names throughout, so it matches existing chrome in
+  both light and dark with zero new tokens.
+*/
+
+.vl-licence {
+  display: flex;
+  flex-direction: column;
+  /* 9, not the dialog's 14. Every pixel here is multiplied by several stacked blocks, and the
+     window has to fit a short embedded viewport without scrolling. */
+  gap: 9px;
+}
+
+.vl-licence__lede {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* The price block. The fact the dialog exists to deliver, so it leads. */
+.vl-licence__price {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 11px 12px;
+  border-radius: var(--radius-btn-primary);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.vl-licence__price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.vl-licence__amount {
+  font-family: var(--font-display);
+  font-size: 1.9em;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--accent);
+}
+
+.vl-licence__once {
+  font-size: 0.86em;
+  color: var(--muted);
+}
+
+/* The rights, as one uniform list of cards. Single column: two columns wraps the longer terms
+   to a second line inside their own card, which is the height problem this list exists to
+   avoid. */
+.vl-licence__terms {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vl-licence__terms li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+/* A dot, not a tick. A tick claims something has been done; these are things being granted.
+   Drawn rather than typed so it is a true circle at any density, with no font to depend on. */
+.vl-licence__dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* The bonus: what else the licence unlocks. Its own block, so it cannot read as two more rights
+   tacked onto the list above, and loud enough to be seen: an accent heading, a dashed accent
+   frame (dashed, not solid, so it does not compete with the price block for "the offer"), and a
+   plus on every bullet. The plus is typed rather than drawn like the dots: every font has one. */
+.vl-licence__bonus {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 12px;
+  border-radius: var(--radius-btn);
+  border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.vl-licence__bonus-head {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.3;
+}
+
+.vl-licence__bonus-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vl-licence__bonus-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.vl-licence__bonus-list li::before {
+  content: '+';
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.vl-licence__bonus-list strong {
+  font-family: var(--font-display);
+  color: var(--text);
+}
+
+.vl-licence__foot {
+  margin: 0;
+  font-size: 0.86em;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------- the licence, after buying
+
+   A document, not a pitch. Quieter than the offer dialog on purpose: nothing here is trying to
+   persuade anyone of anything, so there is no accent fill and no card treatment. */
+.vl-licence-cert {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vl-licence-cert__lede {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* The grant itself. Monospace because it is a document meant to be copied out and kept, and its
+   own scroller because a licence is the one piece of content here that legitimately runs long —
+   bounded so the DIALOG never scrolls. */
+.vl-licence-cert__text {
+  margin: 0;
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: var(--radius-btn);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  /* Focusable so the Select all button can put the caret here for Ctrl+C. */
+  outline: none;
+  /* A long unbroken token (a URL, say) must not widen the dialog. */
+  overflow-wrap: anywhere;
+  user-select: text;
+}

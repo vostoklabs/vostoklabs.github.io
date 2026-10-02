@@ -1,0 +1,15 @@
+Laser Studio — offline copy
+===========================
+
+Unzip anywhere and double-click laser-studio-offline.html. That is the whole thing:
+one file, no install, no server, no internet.
+
+Chrome, Edge, Firefox and Safari all run it. The page is large because it carries
+every font in the library; give it a few seconds to open the first time.
+
+WHAT IT MAKES
+  Cut files (.svg)   Red lines cut, blue lines score, black areas engrave. Set the
+                     colours to those operations in your laser software.
+
+Downloads land in your normal downloads folder. Save / Load keep a design as a
+small .json file you can open again later.

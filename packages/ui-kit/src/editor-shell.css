@@ -1,0 +1,407 @@
+/* Editor shell — the second house layout, for tools that are an EDITOR rather than a
+   configurator: a canvas you compose on, not a model you parametrise.
+
+     suite bar      one row: title · the suite tabs · the design's name · actions
+     body           the Design view (context bar over rail | panel | canvas | objects)
+                    or a studio (the generator's settings | stage | output)
+     status bar     zoom · cursor · sheet · selection
+
+   The panels reuse .vl-panel, so every control inside them is a generator's control. */
+
+.vl-editor {
+  min-height: 100dvh;
+  max-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--bg);
+  color: var(--text);
+}
+.vl-editor__body { display: grid; min-height: 0; }
+.vl-editor__body > * { min-height: 0; }
+
+/* ----------------------------------------------------------------- suite bar -- */
+
+.vl-suitebar {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 6px var(--space-4);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  min-height: 56px;
+  box-sizing: border-box;
+}
+.vl-suite-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-subtitle);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+/* The tabs are the product's sections, so they are the loudest thing on the row: display
+   face, a full-height pill, and the active one in the accent. */
+.vl-suite-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+.vl-suite-tab {
+  padding: 9px 20px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: var(--fs-medium);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
+}
+.vl-suite-tab:hover { color: var(--text); }
+.vl-suite-tab:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-suite-tab.is-active { background: var(--accent); color: var(--accent-text); }
+.vl-suite-centre { display: flex; align-items: baseline; justify-content: center; gap: 10px; min-width: 0; }
+.vl-suite-name {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--fs-strong);
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-btn);
+  cursor: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+.vl-suite-name:hover { background: var(--panel-2); }
+.vl-suite-name:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-suite-note { color: var(--muted); font-size: var(--fs-small); white-space: nowrap; }
+.vl-suite-actions { display: flex; align-items: center; gap: 6px; }
+
+/* A compact fact-button in the suite bar — the Sheet dropdown's trigger. */
+.vl-suite-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  background: var(--panel-2);
+  color: var(--text);
+  font: 500 var(--fs-small) var(--font-mono);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.vl-suite-fact:hover { border-color: var(--muted); }
+.vl-suite-fact:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-suite-fact__swatch { width: 12px; height: 12px; border-radius: 2px; border: 1px solid rgba(0, 0, 0, 0.25); }
+
+/* ------------------------------------------------------------------- toolbar -- */
+
+.vl-toolbar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px var(--space-3);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  min-height: 44px;
+}
+.vl-toolbar__group { display: flex; align-items: center; gap: 4px; }
+.vl-toolbar__sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; flex: 0 0 auto; }
+.vl-toolbar__spacer { flex: 1 1 auto; }
+.vl-toolbar__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-strong);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin: 0 var(--space-2) 0 2px;
+  white-space: nowrap;
+}
+.vl-toolbar__hint { color: var(--muted); font-size: var(--fs-small); }
+
+/* The context bar: what the selection is. Quieter than the suite bar — a lighter ground,
+   smaller controls, and it keeps its height when empty so the canvas never jumps. AFTER
+   .vl-toolbar on purpose: same specificity, so the later rule is the one that wins. */
+.vl-toolbar--context {
+  min-height: 40px;
+  padding-block: 3px;
+  background: color-mix(in srgb, var(--panel) 55%, var(--bg));
+  gap: var(--space-3);
+}
+.vl-toolbar--context .vl-field { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.vl-toolbar--context .vl-field > label { font-size: var(--fs-micro); color: var(--muted); }
+.vl-toolbar--context .vl-field input { width: 64px; padding: 4px 7px; font-family: var(--font-mono); font-size: var(--fs-small); }
+.vl-toolbar--context .vl-tabs { padding: 2px; gap: 2px; }
+.vl-toolbar--context .vl-tab { padding: 5px 10px; font-size: var(--fs-small); }
+.vl-toolbar--context .vl-btn { padding: 5px 10px; font-size: var(--fs-small); }
+.vl-toolbar--context .vl-btn--icon { width: 28px; height: 28px; }
+/* The operation's colour, beside its pill. */
+.vl-op-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.3); flex: 0 0 auto; }
+
+/* ---------------------------------------------------------------- design body -- */
+
+.vl-design {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto minmax(280px, 20vw);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+.vl-design > .vl-toolbar--context { grid-column: 1 / -1; }
+.vl-design__panel {
+  width: 340px;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Closed = still in the grid at zero width. `display: none` would drop it out of the flow and
+   slide the canvas into its column and Objects into the canvas's. */
+.vl-design__panel--closed { width: 0; min-width: 0; border-right: 0; border-left: 0; visibility: hidden; }
+/* The right slot: the selection's inspector, beside Objects, over its own column. */
+.vl-design__panel--right { width: 300px; border-right: 0; border-left: 1px solid var(--line); }
+.vl-design__panel--right.vl-design__panel--closed { width: 0; border-left: 0; }
+.vl-panel--objects { border-left: 1px solid var(--line); }
+.vl-panel--objects .vl-panel__scroll { padding: var(--space-3); gap: 2px; }
+
+/* ---------------------------------------------------------------- studio view -- */
+
+.vl-studio {
+  display: grid;
+  grid-template-columns: minmax(264px, 22vw) minmax(0, 1fr) minmax(320px, 24.2vw);
+  min-height: 0;
+}
+.vl-studio > .vl-panel--left { border-right: 1px solid var(--line); }
+.vl-studio > .vl-panel--right { border-left: 1px solid var(--line); }
+.vl-studio > .vl-stage { min-height: 0; }
+/* The stage's centred flat preview, drawn on the material's colour. */
+.vl-stage__sheet {
+  position: absolute;
+  inset: 64px 48px 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-box);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 45%, transparent);
+  background-image: linear-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+  background-size: 40px 40px;
+  overflow: hidden;
+}
+.vl-stage__sheet > svg, .vl-stage__sheet > canvas { max-width: 92%; max-height: 92%; display: block; }
+.vl-stage__sheet > canvas { image-rendering: pixelated; }
+
+/* ----------------------------------------------------------------- tool rail -- */
+
+.vl-tool-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) 6px;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.vl-tool-rail__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 64px;
+  min-height: 56px;
+  padding: 8px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    border-color var(--dur-hover) var(--ease-standard);
+}
+.vl-tool-rail__btn svg { width: 20px; height: 20px; }
+.vl-tool-rail__btn:hover { background: var(--panel-2); color: var(--text); }
+.vl-tool-rail__btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-tool-rail__btn.is-active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+.vl-tool-rail__label { display: block; text-align: center; }
+.vl-tool-rail__gap { flex: 1 1 auto; }
+.vl-tool-rail__rule { display: block; height: 1px; margin: 6px 8px; background: var(--line); }
+
+/* -------------------------------------------------------------------- canvas -- */
+
+.vl-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  background-image: radial-gradient(color-mix(in srgb, var(--line) 70%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.vl-canvas > svg { display: block; width: 100%; height: 100%; touch-action: none; }
+
+.vl-canvas__zoom {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-btn);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+.vl-canvas__zoom-readout {
+  min-width: 52px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text);
+}
+
+/* The selected object's own controls, at the canvas edge. Scrolls inside itself. */
+.vl-fpanel {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 12;
+  width: 264px;
+  max-height: calc(100% - 2 * var(--space-3) - 44px);
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  box-shadow: var(--shadow-modal);
+  backdrop-filter: blur(8px);
+}
+.vl-fpanel__head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; border-bottom: 1px solid var(--line); }
+.vl-fpanel__title { font-family: var(--font-display); font-size: var(--fs-medium); font-weight: 700; }
+.vl-fpanel__sub { color: var(--muted); font-size: var(--fs-micro); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vl-fpanel__close {
+  width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--radius-btn);
+  background: transparent; color: var(--muted); font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
+}
+.vl-fpanel__close:hover { color: var(--text); background: var(--panel-2); }
+.vl-fpanel__close:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-fpanel__body { padding: 8px 12px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; }
+.vl-fpanel__body .vl-section { padding: 8px 0; gap: 8px; }
+.vl-fpanel__body .vl-section:first-child { padding-top: 0; }
+
+/* A row of labelled picture tiles — Bambu's Filter and Tools rows. */
+.vl-tile-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.vl-tile-row .vl-thumb { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: var(--fs-micro); color: var(--muted); }
+.vl-tile-row .vl-thumb > canvas, .vl-tile-row .vl-thumb > svg, .vl-tile-row .vl-thumb > img { display: block; width: 100%; aspect-ratio: 1; border-radius: 4px; border: 1px solid var(--line); background: #fff; }
+.vl-tile-row .vl-thumb[aria-pressed='true'] > canvas, .vl-tile-row .vl-thumb[aria-pressed='true'] > svg { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* ------------------------------------------------------------------- popover -- */
+
+.vl-popover {
+  position: fixed;
+  z-index: 70;
+  min-width: 260px;
+  max-width: min(480px, 92vw);
+  padding: var(--space-3) var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  box-shadow: var(--shadow-modal);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--dur-in-sm) var(--ease-enter), transform var(--dur-in-sm) var(--ease-enter);
+}
+.vl-popover[data-open] { opacity: 1; transform: none; }
+.vl-popover .vl-section { padding: 6px 0; gap: 8px; }
+.vl-popover__row { display: flex; align-items: center; gap: 8px; }
+.vl-popover__row > .vl-field { flex: 1; }
+
+/* ------------------------------------------------------------------ objects -- */
+
+.vl-objects-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--line);
+}
+.vl-objects-actions .vl-btn {
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 4px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+.vl-objects-actions .vl-btn:last-child { border-right: 0; }
+.vl-objects-actions .vl-btn:not(:disabled):hover { color: var(--text); background: var(--panel-2); }
+.vl-objects-actions .vl-btn svg { width: 18px; height: 18px; }
+.vl-objects-empty { padding: var(--space-4) var(--space-3); color: var(--muted); font-size: var(--fs-small); text-align: center; line-height: 1.5; }
+/* Rows in the list get an operation tag and a nesting indent. */
+.vl-list-row--child { padding-left: 30px; }
+.vl-op-tag { padding: 2px 7px; border-radius: 6px; font-size: var(--fs-micro); font-weight: 600; letter-spacing: 0.2px; white-space: nowrap; }
+.vl-op-tag--cut { background: rgba(255, 0, 0, 0.14); color: #ff6b6b; }
+.vl-op-tag--score { background: rgba(0, 0, 255, 0.18); color: #8ab4ff; }
+.vl-op-tag--engrave { background: rgba(127, 127, 127, 0.18); color: var(--text); }
+.vl-op-tag--photo { background: rgba(54, 192, 138, 0.16); color: var(--accent-2); }
+
+/* ----------------------------------------------------------------- statusbar -- */
+
+.vl-statusbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 4px var(--space-3);
+  min-height: 26px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.vl-statusbar__item { display: inline-flex; align-items: center; gap: 6px; }
+.vl-statusbar__item b { color: var(--text); font-weight: 600; }
+.vl-statusbar__spacer { flex: 1 1 auto; }
+
+/* Phones: everything stacks. Not the target device for an editor, but it must not break. */
+@media (max-width: 900px) {
+  .vl-editor { max-height: none; }
+  .vl-suitebar { grid-template-columns: 1fr; gap: var(--space-2); }
+  .vl-suite-centre { justify-content: flex-start; }
+  .vl-design { grid-template-columns: 1fr; grid-template-rows: auto auto auto minmax(300px, 50vh) auto; }
+  .vl-design__panel { width: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .vl-tool-rail { flex-direction: row; border-right: none; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .vl-tool-rail__rule { width: 1px; height: auto; margin: 8px 6px; }
+  .vl-studio { grid-template-columns: 1fr; grid-template-rows: auto minmax(300px, 46vh) auto; }
+  .vl-panel { height: auto; max-height: 50vh; }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@vostok/laser",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The shared laser engine: operations, ring maths, 2D CSG on manifold, parametric blanks, keyring placement, text outlines, and the clicker's image tracer.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./trace": "./src/trace/index.ts",
+    "./photo": "./src/photo/index.ts",
+    "./material-preview": "./src/material-preview.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/fonts": "workspace:*",
+    "d3-contour": "^4.0.2",
+    "manifold-3d": "^3.0.1",
+    "onnxruntime-web": "^1.29.0",
+    "pica": "^10.0.2",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/d3-contour": "^3.0.6",
+    "@types/three": "^0.171.0",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,144 @@
+/* Vostok Labs design tokens. Dark is the default; light via <html data-theme="light">.
+
+   The neutrals were retuned on 2026-08-25. They are a touch cooler and bluer than the
+   originals extracted from the clicker — `--bg` #15171c -> #101620 and so on. The accent,
+   accent-text and the whole radius ladder needed no change.
+
+   `--accent-2` was deliberately NOT changed: it is the green that every generator uses for
+   its "Download started" badge and every toggle's on-state, and that is a brand decision. */
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #eef1f6;
+  --panel: #ffffff;
+  --panel-2: #e4e9f2;
+  --line: #cfd7e4;
+  --text: #16202f;
+  --muted: #5d6b80;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --accent-2: #10b981;
+  --accent-rgb: 37 99 235;
+  --accent-hover: #1d4ed8;
+}
+
+:root[data-theme='dark'],
+:root:not([data-theme='light']) {
+  color-scheme: dark;
+  --bg: #101620;
+  --panel: #171e2a;
+  --panel-2: #1e2735;
+  --line: #2b3648;
+  --text: #e6ebf2;
+  --muted: #909bad;
+  --accent: #5b9dff;
+  --accent-text: #08122a;
+  --accent-2: #36c08a;
+  --accent-rgb: 91 157 255;
+  --accent-hover: #74acff;
+}
+
+:root {
+  /* Brand action colors (theme-independent, same as the clicker topbar/license UI) */
+  --red: #ef4444;
+  --red-hover: #dc2626;
+  --green: #16a34a;
+  --green-hover: #15803d;
+  --warn: #fbbf24;
+  --error-text: #ff6b6b;
+
+  /* Type. Body = system stack at the clicker's 17.5px base.
+     Display face: Chakra Petch (OFL), confirmed by Ian, bundled locally in ./fonts
+     (see fonts.css; never a CDN). System fallback kept for the font-display swap window.
+     Mono is the utility face for tokens, specs, and numeric readouts. */
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Chakra Petch', var(--font-body);
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
+  --fs-base: 17.5px;
+  --fs-body: var(--fs-base);
+
+  /* The type scale. `--fs-base`/`--fs-body` above stay the generators' 17.5px; these are the
+     fixed rungs that density and the individual components point at. */
+  --fs-micro: 11px;      /* tags, metadata floor */
+  --fs-small: 12px;      /* dense chrome */
+  --fs-compact: 13px;    /* compact density body size */
+  --fs-medium: 15px;     /* today's de-facto control size, finally named */
+  --fs-strong: 16px;     /* heading inside a panel */
+  --fs-subtitle: 18px;
+  --fs-title: 24px;
+
+  /* Icon sizes, so an icon inside a control cannot drift from the control. */
+  --icon-inline: 14px;
+  --icon-control: 16px;
+  --icon-heading: 20px;
+
+  /* Spacing scale (4px base) used for layout rhythm across apps. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 20px;
+  --space-5: 32px;
+  --space-6: 48px;
+
+  /* Radii ladder — tightened to a technical/engineered feel (2026-07-18): sharper
+     corners read as precise/CAD rather than soft-SaaS, on-brand for parametric tools.
+     Buttons 6, fields 5, chips 4, license box/cards 8, modals 12; pills stay round.
+     s/m/l are convenience aliases for layout chrome. */
+  --radius-chip: 4px;
+  --radius-field: 5px;
+  --radius-btn: 6px;
+  --radius-btn-primary: 6px;
+  --radius-box: 8px;
+  --radius-modal: 12px;
+  --radius-pill: 999px;
+  --radius-s: 4px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+
+  /* Shadows (from the app's modals/toasts) */
+  --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --shadow-toast: 0 16px 40px rgba(0, 0, 0, 0.45);
+
+  /* Focus ring (single source so every control matches). */
+  --ring: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ==========================================================================
+   DENSITY
+
+   The third member of the `data-*` family, alongside `data-theme` and `data-motion`:
+
+     (no attribute)            comfortable — a generator's sidebar, touch-friendly
+     data-density="compact"    dense desktop chrome, ~13px base
+
+   This is the knob that lets a dense host shell and a roomy generator panel share one
+   component set instead of maintaining two.
+
+   The comfortable values below are today's shipped numbers, promoted from literals to
+   tokens and nothing more, so adopting them is a no-op until something sets the attribute.
+   The `pnpm check:ui` snapshot is what proves that: swapping a literal for a token here
+   must produce a byte-identical computed style.
+   ========================================================================== */
+
+:root {
+  --control-fs: var(--fs-medium);   /* 15px — .vl-btn, .vl-tab, fields */
+  --control-pad-y: 10px;
+  --control-pad-x: 15px;
+  --field-pad-y: 10px;
+  --field-pad-x: 11px;
+  --field-fs: var(--fs-base);       /* 17.5px — what `font: inherit` already gave */
+  --label-fs: var(--fs-medium);     /* 15px — field labels, control captions */
+  --icon-btn-size: 38px;
+}
+
+:root[data-density='compact'] {
+  --fs-body: var(--fs-compact);     /* 13px — reaches `body` via root.css */
+  --control-fs: var(--fs-compact);
+  --control-pad-y: 7px;
+  --control-pad-x: 13px;
+  --field-pad-y: 7px;
+  --field-pad-x: 10px;
+  --field-fs: var(--fs-compact);
+  --label-fs: var(--fs-small);      /* 12px */
+  --icon-btn-size: 28px;
+}

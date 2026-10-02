@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <title>Keycap Legend Generator</title>
+    <!-- Chakra Petch is bundled locally by @vostok/ui-kit (fonts.css), so no CDN is needed. -->
+    <script>
+      (function() {
+        var saved = localStorage.getItem('keycap_theme');
+        var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = saved || (systemDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+    <!-- The generator's own CSS and markup now live in src/style.css and src/template.js,
+         because a desktop host mounts this generator into an element rather than loading
+         this page. See src/mount.js. -->
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

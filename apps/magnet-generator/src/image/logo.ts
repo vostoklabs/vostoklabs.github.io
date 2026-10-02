@@ -1,0 +1,221 @@
+import * as THREE from 'three';
+import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
+import type { RegionSet, Ring, RGB } from '../types';
+
+// Default ink for paths whose color we can't resolve (e.g. Lucide icons use
+// `stroke="currentColor"`, which isn't a real color). Dark so the design is
+// visible as an inlay on the light cap — white-on-white made icons disappear.
+const DEFAULT_INK: RGB = [22, 22, 22];
+
+function parseColor(colorStr: string): RGB {
+  if (!colorStr || colorStr === 'currentColor') return DEFAULT_INK;
+  try {
+    const c = new THREE.Color(colorStr);
+    return [
+      Math.round(c.r * 255),
+      Math.round(c.g * 255),
+      Math.round(c.b * 255)
+    ];
+  } catch {
+    return DEFAULT_INK; // fallback
+  }
+}
+
+function strokeGeomToContours(geom: THREE.BufferGeometry): Ring[] {
+  const pos = geom.getAttribute('position');
+  if (!pos) return [];
+  const idx = geom.getIndex();
+  const contours: Ring[] = [];
+
+  const getTri = idx
+    ? (t: number) => [idx.array[t * 3], idx.array[t * 3 + 1], idx.array[t * 3 + 2]]
+    : (t: number) => [t * 3, t * 3 + 1, t * 3 + 2];
+
+  const nTris = (idx ? idx.array.length : pos.count) / 3;
+  for (let t = 0; t < nTris; t++) {
+    const [ia, ib, ic] = getTri(t);
+    const ax = pos.getX(ia), ay = pos.getY(ia);
+    const bx = pos.getX(ib), by = pos.getY(ib);
+    const cx = pos.getX(ic), cy = pos.getY(ic);
+
+    const area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+    if (Math.abs(area) < 1e-12) continue;
+
+    if (area > 0) {
+      contours.push([[ax, ay], [bx, by], [cx, cy]]);
+    } else {
+      contours.push([[ax, ay], [cx, cy], [bx, by]]);
+    }
+  }
+  return contours;
+}
+
+export function parseSvg(svgText: string, opts: { removeBg?: boolean } = {}): RegionSet {
+  const data = new SVGLoader().parse(svgText);
+  const box = new THREE.Box2(
+    new THREE.Vector2(Infinity, Infinity),
+    new THREE.Vector2(-Infinity, -Infinity)
+  );
+
+  const groups = new Map<string, { rgb: RGB; rings: Ring[] }>();
+
+  function addRings(rgb: RGB, rings: Ring[]) {
+    const hex = rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+    let g = groups.get(hex);
+    if (!g) {
+      g = { rgb, rings: [] };
+      groups.set(hex, g);
+    }
+    g.rings.push(...rings);
+  }
+
+  for (const path of data.paths) {
+    const style = path.userData?.style || {};
+    const hasFill = style.fill && style.fill !== 'none';
+    const hasStroke = style.stroke && style.stroke !== 'none';
+
+    // Filled paths
+    if (hasFill) {
+      const rgb = parseColor(style.fill);
+      const shapes = SVGLoader.createShapes(path);
+      for (const shape of shapes) {
+        const points = shape.getPoints(16);
+        if (points.length >= 3) {
+          if (THREE.ShapeUtils.isClockWise(points)) points.reverse();
+          const ring: Ring = [];
+          for (const p of points) {
+            box.expandByPoint(p);
+            ring.push([p.x, p.y]);
+          }
+          addRings(rgb, [ring]);
+        }
+        for (const hole of shape.holes) {
+          const hp = hole.getPoints(16);
+          if (hp.length >= 3) {
+            if (!THREE.ShapeUtils.isClockWise(hp)) hp.reverse();
+            const ring: Ring = [];
+            for (const p of hp) {
+              box.expandByPoint(p);
+              ring.push([p.x, p.y]);
+            }
+            addRings(rgb, [ring]);
+          }
+        }
+      }
+    }
+
+    // Stroke-only paths
+    if (hasStroke && !hasFill) {
+      const rgb = parseColor(style.stroke);
+      const strokeStyle = SVGLoader.getStrokeStyle(
+        style.strokeWidth || 1,
+        style.stroke,
+        style.strokeLineCap || 'butt',
+        style.strokeLineJoin || 'miter',
+        style.strokeMiterLimit || 4
+      );
+      for (const sub of path.subPaths) {
+        const pts = sub.getPoints(32);
+        if (pts.length < 2) continue;
+        const geom = SVGLoader.pointsToStroke(pts, strokeStyle);
+        if (!geom) continue;
+        const pos = geom.getAttribute('position');
+        if (!pos || pos.count === 0) continue;
+        for (let i = 0; i < pos.count; i++) {
+          box.expandByPoint(new THREE.Vector2(pos.getX(i), pos.getY(i)));
+        }
+        const strokeRings = strokeGeomToContours(geom);
+        addRings(rgb, strokeRings);
+        geom.dispose();
+      }
+    }
+  }
+
+  // Signed shoelace area of a ring (outer +, holes −); a region's area is the magnitude
+  // of its rings' sum. Drives both background detection and carve-priority coverage.
+  const ringArea = (r: Ring): number => {
+    let a = 0;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      a += r[j][0] * r[i][1] - r[i][0] * r[j][1];
+    }
+    return a / 2;
+  };
+  const regionArea = (rings: Ring[]): number =>
+    Math.abs(rings.reduce((sum, r) => sum + ringArea(r), 0));
+
+  // "Remove background" for SVG — the vector parallel to the raster edge-flood-fill: a
+  // filled colour that spans the whole artboard AND fills its own bbox (a rectangle
+  // painted behind the art) is the background. Drop it so only the logo remains.
+  // Guards: keep at least one colour, and require a rectangle-like fill so a big round
+  // logo that merely spans the canvas is not mistaken for a backdrop.
+  if (opts.removeBg && groups.size > 1) {
+    const fw = (box.max.x - box.min.x) || 1;
+    const fh = (box.max.y - box.min.y) || 1;
+    const SPAN = 0.92; // must cover ≥92% of the artboard on each axis
+    const RECT = 0.85; // must fill ≥85% of its own bbox (i.e. is rectangle-like)
+    let bgHex: string | null = null;
+    let bgArea = -1;
+    for (const [hex, g] of groups) {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const r of g.rings) for (const [x, y] of r) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      const gw = x1 - x0, gh = y1 - y0;
+      const area = regionArea(g.rings);
+      const spans = gw >= SPAN * fw && gh >= SPAN * fh;
+      const rectLike = area >= RECT * (gw * gh || Infinity);
+      if (spans && rectLike && area > bgArea) { bgArea = area; bgHex = hex; }
+    }
+    if (bgHex) groups.delete(bgHex);
+  }
+
+  const allRings: Ring[] = [];
+  groups.forEach(g => allRings.push(...g.rings));
+
+  if (allRings.length === 0) {
+    throw new Error('No drawable paths found in this SVG.');
+  }
+
+  // Bbox over the (possibly background-stripped) rings, so the remaining art is
+  // recentered and normalized to fill the cap and drives the outline silhouette.
+  let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+  for (const r of allRings) for (const [x, y] of r) {
+    if (x < bMinX) bMinX = x; if (x > bMaxX) bMaxX = x;
+    if (y < bMinY) bMinY = y; if (y > bMaxY) bMaxY = y;
+  }
+  const cx = (bMinX + bMaxX) / 2;
+  const cy = (bMinY + bMaxY) / 2;
+  const dx = bMaxX - bMinX;
+  const dy = bMaxY - bMinY;
+  const maxSide = Math.max(dx, dy) || 1;
+  const aspect = dy !== 0 ? dx / dy : 1;
+
+  const normalizeRing = (r: Ring): Ring =>
+    r.map(([x, y]) => [
+      (x - cx) / maxSide,
+      -(y - cy) / maxSide // flip Y to match image tracer (Y-up)
+    ]);
+
+  // Coverage drives carve priority in buildClicker (smallest-AREA colour is placed
+  // first so fine detail wins over big fills). It MUST be an area fraction to match
+  // the image pipeline (types.ts: "fraction of foreground pixels"); measuring it by
+  // point count instead let a low-poly background rectangle rank as the "smallest"
+  // colour, claim the whole cap, and subtract every real colour to nothing.
+  const totalArea =
+    Array.from(groups.values()).reduce((sum, g) => sum + regionArea(g.rings), 0) || 1;
+
+  const regions = Array.from(groups.values()).map(g => {
+    const normRings = g.rings.map(normalizeRing);
+    const cov = regionArea(g.rings) / totalArea;
+    return {
+      quantRgb: g.rgb,
+      components: [{ rings: normRings, coverage: cov }],
+      coverage: cov
+    };
+  });
+
+  const outline = allRings.map(normalizeRing);
+
+  return { regions, outline, aspect };
+}

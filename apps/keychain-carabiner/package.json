@@ -1,0 +1,28 @@
+{
+  "name": "keychain-carabiner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/fonts": "workspace:*",
+    "@vostok/plates": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
+    "@vostok/viewer": "workspace:*",
+    "manifold-3d": "^3.0.1",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.171.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "description": "Snap-hook clip, chain links and a charm in any shape, with a filled icon on the clip. Prints flat in one job."
+}

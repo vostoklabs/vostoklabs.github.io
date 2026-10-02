@@ -1,0 +1,34 @@
+{
+  "name": "laser-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "build:mw": "tsc -p tsconfig.json && vite build --mode makerworld",
+    "preview:mw": "vite preview --mode makerworld --port 5187 --strictPort",
+    "pack:mw": "pnpm run build:mw && node makerlab/pack.mjs",
+    "serve:mw": "node makerlab/server.cjs -c config.json -p 8031",
+    "preview": "vite preview",
+    "build:offline": "node ../../scripts/offline.mjs laser-studio",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:browser": "node tests/browser.test.mjs",
+    "test:node": "node tests/node/engine.test.mjs && node tests/node/run-all.mjs"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/fonts": "workspace:*",
+    "@vostok/laser": "workspace:*",
+    "@vostok/patterns": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
+    "manifold-3d": "^3.0.1",
+    "qrcode-generator": "^1.4.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "description": "Pick a template, type your text, download the cut file."
+}

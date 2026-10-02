@@ -1,0 +1,76 @@
+/* The page frame — the one file in the kit that styles the document itself.
+
+   This used to be every app's job: a `:root` + `body` block copied by hand into each
+   app's `style.css`. It is the single most-repeated bug in this repo. `.vl-btn` and
+   every control row use `font: inherit`, so an app that forgot the block rendered its
+   whole panel — buttons, labels, inputs, the status line — in the browser's default
+   serif, while the few elements naming `--font-display` kept Chakra Petch. That mix is
+   what makes a new generator read as a different product. Two generators shipped exactly
+   that bug; their style.css files carried the post-mortem.
+
+   Dialogs, toasts, tooltips and the license modal are appended to `document.body`, not
+   into `.vl-app`, so putting the font on `.vl-app` alone would still leave those in the
+   fallback face. It has to be `body`.
+
+   Everything here is a default, not a lock: apps import their own `style.css` AFTER
+   `@vostok/ui-kit/styles.css`, so the hub still replaces the background and the
+   generators still add `overflow: hidden`. */
+
+:root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* `node.hidden = true` has to actually hide the node.
+
+   The UA stylesheet's rule is a bare `[hidden] { display: none }` — specificity (0,1,0) —
+   so ANY class that sets `display` outranks it and `hidden` silently does nothing. Every
+   component in this kit sets `display` (`.vl-btn` is `inline-flex`, `.vl-callout` is
+   `flex`), which makes this the second most-repeated bug in the repo after the page frame
+   above: `.vl-stage-panel`, `.vl-plate-picker__menu`, `.kc-set__block` and `.import-card`
+   each carry a one-line `[hidden]` patch of their own, and the keycap generator gave up on
+   `hidden` for `.vl-callout` and calls `remove()` instead. Those are the ones somebody
+   noticed. The ones nobody noticed shipped a control that was supposed to be gone: the
+   keycap set editor showed a Print orientation dropdown on the profiles that ignore the
+   setting, so changing it did nothing to the export.
+
+   `!important` because the app's own `style.css` is imported AFTER the kit, so a plain
+   rule here would lose to any app-side class the same way. Nothing may show while
+   `hidden` is set; `until-found` is exempt because the browser removes the attribute
+   itself when find-in-page reaches the node, and `display: none` would stop it looking. */
+[hidden]:not([hidden='until-found']) {
+  display: none !important;
+}
+
+/* The native `<select>` popup.
+
+   The list Chromium opens is a window of its own, drawn outside the page, and it takes its
+   row colours from the `<option>` elements — NOT from the `<select>` they hang off. An option
+   with no background of its own paints straight onto the platform's canvas, which on Windows
+   is white, so a dark-theme app got a white menu hanging off a dark control. (macOS and Linux
+   happen to follow `color-scheme`, which is why this only ever showed up on Windows — and why
+   it survived every review done on a Mac.)
+
+   `.vl-select` has carried the two-line fix for a while; the generators that style a bare
+   `<select>` through a `.field select` rule of their own — the keycap generator's Profile,
+   Size and Font pickers — never picked it up. That is the same per-app drift the page frame
+   above exists to stop, so the rule belongs here, on the element, where nothing has to opt in.
+   `color-scheme` on `:root` (tokens.css) already handles the popup's scrollbar and frame;
+   these are the rows.
+
+   Element specificity (0,0,2), so an app or component that genuinely wants a different menu
+   still outranks it. */
+select option,
+select optgroup {
+  background-color: var(--panel);
+  color: var(--text);
+}

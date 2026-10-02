@@ -1,0 +1,27 @@
+{
+  "name": "@vostok/patterns",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The repeating-pattern engine: procedural tiles and fields (Japanese, Islamic, lattices, living hinges, radial, engrave fills) plus SVG tile import, filled into any shape and emitted as laser cut-outs, score lines or engraved regions. Pure TypeScript, no dependencies, millimetres, Y up.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./library": "./src/library/index.ts",
+    "./lattice": "./src/lattice.ts",
+    "./library-index": "./data/pattern-monster-index.json",
+    "./ui": "./src/ui/index.ts"
+  },
+  "dependencies": {
+    "@vostok/ui-kit": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node tests/run.mjs && node tests/library-import.test.mjs",
+    "sheet": "node tests/sheet.mjs",
+    "fetch-monster": "node scripts/fetch-pattern-monster.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

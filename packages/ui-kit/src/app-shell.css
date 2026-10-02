@@ -1,0 +1,215 @@
+/* Generator app shell — the standard 3-column layout every Vostok generator
+   uses: a full-width topbar, a left settings panel, a center stage (3D preview),
+   and a right panel. Thin scrollbars match the look shared across generators.
+   A new generator gets this whole frame from `appShell()` and only fills in the
+   panel contents + wires the stage. */
+
+.vl-app {
+  min-height: 100dvh;
+  max-height: 100dvh;
+  display: grid;
+  /* Floors, not bare fractions. At 1100px the plain vw columns computed to 235px and
+     259px, which is narrower than the controls the panels actually hold: a three-up tab row
+     wrapped 2+1, titles broke over three lines, and the sliders were about 50px long, while
+     the stage kept 575px it had no use for. The stage gives up the space first — it is the
+     one part of this layout that reads fine at any size. */
+  grid-template-columns: minmax(264px, 22vw) minmax(0, 1fr) minmax(320px, 24.2vw);
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--bg);
+  color: var(--text);
+}
+.vl-app > .vl-topbar { grid-column: 1 / -1; }
+
+/* No topbar — an embedded build, where the host draws its own chrome.
+   The rows above exist for a bar that is not there, so without this the panels are placed in
+   the `auto` row and sized to their CONTENT: a 532 px band of app at the top of a 920 px window,
+   the rest dead, and the band changing height whenever a panel's content does. It was never
+   about any one host — the same build standalone did it too. One row, and it is the one that
+   fills. */
+.vl-app--no-topbar { grid-template-rows: minmax(0, 1fr); }
+
+/* Two columns: the stage and one panel. A form-driven editor has nothing for a third column,
+   and a dead first column is what "cluttered" looked like. The panel is clamped, not a bare vw:
+   on an ultrawide the extra width would only pad rows that do not get any wider. */
+.vl-app.vl-app--2col {
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 27vw, 460px);
+}
+@media (max-width: 900px) {
+  .vl-app.vl-app--2col {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(280px, 46vh) auto;
+    max-height: none;
+  }
+  /* Same off-by-one row stacked as unstacked: with no bar there are two rows, not three. */
+  .vl-app.vl-app--2col.vl-app--no-topbar { grid-template-rows: minmax(280px, 46vh) auto; }
+  .vl-app--2col > .vl-panel { height: auto; border-left: none; border-top: 1px solid var(--line); }
+}
+
+/* Left / right side panels. */
+.vl-panel {
+  overflow: hidden;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.vl-panel--left { border-right: 1px solid var(--line); }
+.vl-panel--right { border-left: 1px solid var(--line); }
+
+/* Pinned header at the top of a panel — the mirror of the footer below. For the handful of
+   controls that act on the panel as a whole (undo, redo, reset) and so must not scroll out
+   from under the settings they undo. */
+.vl-panel__header {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The scrolling content area of a panel — thin scrollbar (the shared look). */
+.vl-panel__scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.vl-panel__scroll::-webkit-scrollbar { width: 10px; }
+.vl-panel__scroll::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 6px;
+  border: 3px solid var(--panel);
+}
+.vl-panel__scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.vl-panel__scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Pinned footer at the bottom of a panel (export + project actions). */
+.vl-panel__footer {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* `sidebarFooter()` already brings its own padding and top border. Handing it to
+   appShell's `footer:` slot nested it inside this one and the two stacked: 40px
+   of horizontal padding vanished from the content box, which is what squeezed
+   Save/Load/Help/Light out of their 2x2 grid into a stacked column while the
+   clicker — which mounts the same component unwrapped — kept the grid. Let the
+   inner component own the chrome when it is there. */
+.vl-panel__footer:has(> .vl-sidebar-footer) {
+  padding: 0;
+  gap: 0;
+  border-top: none;
+}
+
+/* Center stage — the 3D preview canvas mounts here. */
+.vl-stage {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+.vl-stage > canvas { display: block; width: 100%; height: 100%; }
+
+/* Standard stage overlays (top-left badge & bottom-center interaction hint) */
+.vl-stage__label {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  pointer-events: none;
+  user-select: none;
+  z-index: 5;
+}
+
+/* Anchored bottom-RIGHT, not centred. The status line owns the bottom-left and
+   grows with its message; a centred pill sat directly in its path, and no
+   max-width on the status can avoid that at every stage width — the two are
+   independently positioned, so the only reliable fix is opposite corners. */
+.vl-stage__hint {
+  position: absolute;
+  bottom: 14px;
+  right: var(--space-4);
+  margin: 0;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--line);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+  user-select: none;
+  /* Below the status line's z-index: 5 — if a stage ever gets narrow enough to
+     force the two together, the message wins over the affordance reminder. */
+  z-index: 4;
+  white-space: nowrap;
+}
+
+/* Too narrow for two bottom corners, and a device this size is very likely touch
+   anyway — where "hold left click to rotate" means nothing at all. */
+@media (max-width: 900px) {
+  .vl-stage__hint { display: none; }
+  .vl-stage-status { max-width: calc(100% - 2 * var(--space-4)); }
+}
+
+/* Section rhythm inside panels: flex + gap so controls never crowd. These are the
+   numbers the SHIPPED generators actually run at — the kit briefly carried a
+   tighter 15px/12px, which is why the clicker and magnet each grew a "parity"
+   override pinning them back to 22px/14px. New generators built from the template
+   inherited the tighter values and read visibly cramped next to the real ones, so
+   the default is the shipped rhythm and the overrides are now redundant. */
+.vl-app .vl-section {
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* A plain section already pads itself; its body's bottom padding is for the collapsible
+   kind, whose <details> has none. Stacked, the two made a 60 px gap before the next heading. */
+.vl-app .vl-section:not(details) > .vl-section__body { padding-bottom: 0; }
+.vl-app .vl-section:first-of-type { padding-top: 2px; }
+.vl-app .vl-section > .vl-label { margin: 0 0 2px; }
+/* Hidden controls must not leave a phantom gap. */
+.vl-app .vl-section > .hidden { display: none !important; }
+
+/* Header + callout spacing at the top of a panel. */
+.vl-panel__scroll > .vl-app-header { padding-top: 4px; }
+.vl-panel__scroll > .vl-callout { margin-bottom: 8px; }
+
+/* Between the phone breakpoint and roughly a 13" laptop there is not room for both floors
+   and a usable stage, so the floors come down rather than the stage collapsing: 240 + 256 at
+   1024px still leaves 420px of stage. */
+@media (min-width: 761px) and (max-width: 1023px) {
+  .vl-app {
+    grid-template-columns: minmax(236px, 26vw) minmax(0, 1fr) minmax(288px, 28vw);
+  }
+}
+
+/* Mobile: stack the three columns. */
+@media (max-width: 760px) {
+  .vl-app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(280px, 46vh) auto;
+    max-height: none;
+  }
+  .vl-panel { height: auto; }
+}

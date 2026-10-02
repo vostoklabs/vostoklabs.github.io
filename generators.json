@@ -1,0 +1,153 @@
+{
+  "$comment": "Registry of every tool. The hub renders its cards from this and CI builds from this. route: 'mw' (scad listing on MakerWorld) | 'app' (own-site app) | 'both'. external: true = lives outside this monorepo.",
+  "generators": [
+    {
+      "id": "clicker",
+      "name": "Image to Clicker",
+      "route": "both",
+      "status": "live",
+      "appUrl": "/Clicker-Generator/",
+      "mwUrl": "https://makerworld.com/en/models/2980346",
+      "blurb": "Turn any image, logo, or custom text into a clicker fidget."
+    },
+    {
+      "id": "magnet",
+      "name": "Fridge Magnet & Fidget Slider",
+      "route": "both",
+      "status": "live",
+      "appUrl": "/magnet/",
+      "mwUrl": "https://makerworld.com/en/models/3137555",
+      "blurb": "Turn any image into a printable fridge magnet — or a two-piece magnetic fidget slider that clicks as it slides."
+    },
+    {
+      "id": "keycap",
+      "name": "Custom Keycap Generator",
+      "route": "both",
+      "status": "live",
+      "appUrl": "/SVG-keycap-generator/",
+      "mwUrl": "https://makerworld.com/en/models/2959969",
+      "blurb": "Custom keycaps with icons, logos, or letters."
+    },
+    {
+      "id": "name-keychain",
+      "name": "Name Keychain Generator",
+      "route": "both",
+      "status": "live",
+      "blurb": "Personalized plate-style name keychains with live font preview, pixel & script styles, multi-language, 1 to 3 colour layers, and AMS & no-AMS printing."
+    },
+    {
+      "id": "house-number",
+      "name": "House & Office Number Generator",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/house-number/",
+      "blurb": "Type a number, pick a plate, print a house or office sign that fits your door. Custom fonts, independent line sizes, and keyhole slots so no fixings show."
+    },
+    {
+      "id": "pen-topper",
+      "name": "Pen Topper Generator",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/pen-topper/",
+      "blurb": "Personalised pen and pencil toppers: any name, 152 fonts, 1392 solid symbols, and a socket sized to the pen you actually own."
+    },
+    {
+      "id": "foldbox",
+      "name": "Fold-Up Box Generator",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/foldbox/",
+      "blurb": "Set the size, pick a structure, print it flat as one thin grooved sheet — then fold it into a box. Four glue-free mailers and trays, with a live fold animation before you commit."
+    },
+    {
+      "id": "keychain-carabiner",
+      "name": "Keychain Carabiner Set",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/keychain-carabiner/",
+      "blurb": "A snap-hook clip and a chain to hang your keys or a fidget on. Every part in any shape, a symbol you drag onto the clip, an optional charm — printed flat in one job, or a chain that prints already linked."
+    },
+    {
+      "id": "laser-studio",
+      "name": "Laser Studio",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/laser-studio/",
+      "blurb": "Pick a design, type your name, download the cut file. 43 laser templates — keychains, pet tags, ornaments, QR stands, coasters and signs — with 241 fonts, a symbol library and pattern fills, in millimetres for LightBurn, xTool or Bambu Suite."
+    },
+    {
+      "id": "large-box",
+      "name": "Large Customizable Box",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/2300059",
+      "blurb": "Large customizable print-in-place box. No hardware/screws required."
+    },
+    {
+      "id": "rugged-box",
+      "name": "Customizable Rugged Box",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/1642041",
+      "blurb": "Super customizable rugged box. Print in place, no extra hardware."
+    },
+    {
+      "id": "washer-spacer",
+      "name": "Washer & Spacer Generator",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/1669724",
+      "blurb": "Customizable washer and spacer generator. Set ID, OD, and thickness."
+    },
+    {
+      "id": "headphone-hook",
+      "name": "Desk Headphone Hook",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/2483947",
+      "blurb": "Adjustable desk headphone hook. Parametric to fit any desk thickness."
+    },
+    {
+      "id": "edge-mount-dock",
+      "name": "Edge Mount Device Dock",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/1684531",
+      "blurb": "Customizable edge mount dock for devices. Customize to fit your phone, Kindle, or tablet."
+    },
+    {
+      "id": "powerstrip-holder",
+      "name": "Screw-On Power Strip Holder",
+      "route": "mw",
+      "status": "live",
+      "mwUrl": "https://makerworld.com/en/models/1732918",
+      "blurb": "Customizable screw-on power strip holder. Mount strip securely under desks."
+    }
+  ],
+  "sellerTools": [
+    {
+      "id": "profit-calc",
+      "name": "Profit Calculator",
+      "status": "coming-soon",
+      "blurb": "3D print pricing: material, time, margin, all in one."
+    },
+    {
+      "id": "photo-render",
+      "name": "Product Photo Tool",
+      "status": "coming-soon",
+      "blurb": "Upload your model, get store-ready product shots."
+    },
+    {
+      "id": "listing-copy",
+      "name": "Listing Copy Helper",
+      "status": "coming-soon",
+      "blurb": "Generate Etsy & MakerWorld titles, tags, and descriptions."
+    },
+    {
+      "id": "review-qr",
+      "name": "Review QR Cards",
+      "status": "coming-soon",
+      "blurb": "\"Scan to leave a review\" cards to include with shipments."
+    }
+  ]
+}

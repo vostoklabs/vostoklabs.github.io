@@ -1,0 +1,20 @@
+[
+  {
+    "id": "pumpkin",
+    "name": "Pumpkin",
+    "file": "pumpkin.svg",
+    "group": "seasonal"
+  },
+  {
+    "id": "coffin",
+    "name": "Coffin",
+    "file": "coffin.svg",
+    "group": "seasonal"
+  },
+  {
+    "id": "potion",
+    "name": "Potion",
+    "file": "potion.svg",
+    "group": "seasonal"
+  }
+]

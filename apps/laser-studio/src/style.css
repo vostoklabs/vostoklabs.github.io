@@ -1,0 +1,546 @@
+/* App-specific styles only. Everything structural comes from @vostok/ui-kit/styles.css; the
+   page frame (fonts, colours, margin) is the kit's root.css. If a rule here would suit a
+   second generator, it belongs in the kit. */
+
+/* ------------------------------------------------------------------- gallery -- */
+
+/* The gallery is a page, not an app frame: it scrolls. */
+.ls-gallery {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Two columns the whole way down — the rail and the grid — and the header row sits on the same
+   two, so the title heads the rail and the search box starts where the cards start. The page
+   takes the window's width (a 1240 px column left a third of a wide screen empty), capped where
+   a row of cards would stop reading as one row. */
+.ls-gallery__page {
+  --ls-rail: 200px;
+  --ls-gutter: var(--space-5);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  display: grid;
+  grid-template-columns: var(--ls-rail) minmax(0, 1fr);
+  column-gap: var(--ls-gutter);
+  row-gap: var(--space-4);
+  align-items: start;
+}
+
+.ls-gallery__header {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: var(--ls-rail) minmax(0, 1fr);
+  column-gap: var(--ls-gutter);
+  align-items: center;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+/* The kit header (title, line, byline) with a slot at the end of its row for the theme switch,
+   which is used only on a phone — on a wider screen the switch is at the foot of the rail. */
+.ls-gallery__heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.ls-gallery__heading > .vl-app-header { margin: 0; gap: 2px; }
+.ls-gallery__heading .vl-app-subtitle { font-size: var(--fs-small); }
+.ls-gallery__heading .vl-app-credit { font-size: var(--fs-small); }
+.ls-gallery__heading .vl-credit-logo { width: 12px; height: 12px; flex: 0 0 12px; }
+.ls-gallery__head-slot:empty { display: none; }
+
+.ls-gallery__tools { display: flex; min-width: 0; }
+.ls-gallery__search { flex: 1 1 auto; }
+
+/* The rail stays in reach down a long page, and scrolls itself on a short window. */
+.ls-gallery__rail {
+  position: sticky;
+  top: var(--space-4);
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+/* Its foot: the theme switch under a hairline, as the editor's sidebar ends in its action row. */
+.ls-gallery__rail-foot {
+  display: flex;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.ls-gallery__rail-foot:empty { display: none; }
+
+.ls-gallery__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* The templates in groups, each under a small heading ruled off to the right edge, so where one
+   group ends and the next begins is a line, not a guess from the gaps. */
+.ls-gallery__group { display: grid; gap: var(--space-3); }
+.ls-gallery__group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-medium);
+  line-height: 1.2;
+}
+.ls-gallery__group-title::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  margin-left: var(--space-2);
+  background: var(--line);
+}
+.ls-gallery__count {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.ls-gallery__count::before { content: '·'; margin-right: var(--space-2); }
+
+.ls-gallery__empty {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-m);
+}
+
+/* A phone: one column. The rail is a row of chips pinned under the top of the window, and the
+   header stacks — title and byline (the theme switch at the end of that row), then the search
+   box the full width. */
+@media (max-width: 760px) {
+  .ls-gallery__page {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-3) var(--space-4) var(--space-5);
+    row-gap: var(--space-3);
+  }
+  .ls-gallery__header {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-3);
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .ls-gallery__rail {
+    top: 0;
+    z-index: 2;
+    max-height: none;
+    overflow: visible;
+    margin: 0 calc(-1 * var(--space-4));
+    padding: var(--space-2) 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  /* The chips scroll edge to edge, starting in line with the page. */
+  .ls-gallery__rail > .vl-side-nav { margin: -3px 0; padding: 3px var(--space-4); }
+  .ls-gallery__main { gap: var(--space-4); }
+}
+
+/* -------------------------------------------------------------------- editor -- */
+
+.ls-editor { overflow: hidden; }
+
+.ls-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* The Font category: the kit's font picker inline — search, category chips and the whole
+   library as a list that scrolls INSIDE the tab, taking whatever height the tab has left once
+   the import and the lettering knobs are placed (never less than six rows). The kit's own
+   320 px cap on the list is lifted: the tab's height is the cap. */
+/* The rows list is sized `height: 0` + a 280 px floor + `flex: 1 1 0`: it contributes only its
+   floor to every ancestor's intrinsic height (a scrolling box's CONTENT would otherwise be what
+   its parents refuse to shrink below), then grows to whatever the tab has left. So no ancestor
+   needs `min-height: 0` — the ones that had it shrank past the floor and the import painted
+   over the rows — and a tab shorter than the floor scrolls the panel, never the rows. */
+.ls-font-block { display: flex; flex-direction: column; gap: var(--space-3); }
+.ls-font-list { display: flex; flex-direction: column; flex: 1 1 auto; }
+.ls-font-list > .vl-font-picker { flex: 1 1 auto; }
+.ls-font-list .vl-font-picker__list { flex: 1 1 0; height: 0; min-height: 280px; max-height: none; }
+
+/* Placement around the UI kit's tool rail and standard controls. */
+.ls-editor .vl-panel--left > .vl-panel__header { padding: var(--space-3) var(--space-4) var(--space-4); gap: var(--space-3); }
+.ls-editor .vl-panel--left > .vl-panel__header > .vl-btn { align-self: flex-start; }
+.ls-editor .vl-panel--left .vl-app-header { padding: 0; margin: 0; }
+.ls-editor .vl-panel--left > .vl-panel__scroll { padding: 0; }
+.ls-editor .vl-panel--left > .vl-panel__footer { padding: var(--space-2) var(--space-4); align-items: flex-start; }
+.ls-editor .vl-panel--left > .vl-panel-credit { order: 1; }
+.ls-form--left { display: grid; grid-template-columns: 77px minmax(0, 1fr); gap: 0; flex: 1; min-height: 0; }
+.ls-settings-rail { align-self: stretch; }
+/* The category panel scrolls on its own, so the rail stays put while a long category (the
+   font cards) scrolls past it. */
+.ls-settings-panels { min-width: 0; min-height: 0; overflow-y: auto; padding: var(--space-4); scrollbar-width: thin; }
+.ls-settings-panels > .vl-section { border-top: 0; padding-top: 0; }
+.ls-field-row > button { flex: 0 0 auto; }
+
+@media (min-width: 901px) {
+  .ls-editor { grid-template-columns: minmax(340px, 25vw) minmax(0, 1fr) minmax(320px, 25vw); }
+  .ls-editor .vl-panel--left > .vl-panel__scroll { overflow: hidden; }
+  /* The Font tab is a column as tall as the panel; the font block takes the slack. */
+  /* `height`, not `min-height`: the tab must be BOUNDED by the panel for the list to take the
+     slack and scroll; with a minimum only, the list grew to its content and the panel scrolled. */
+  .ls-font-panel { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
+  .ls-font-panel > .vl-section__body { flex: 1 1 auto; display: flex; flex-direction: column; }
+  .ls-font-panel .ls-font-block { flex: 1 1 auto; }
+  .ls-font-panel .ls-font-block ~ * { flex: 0 0 auto; }
+  .ls-editor .vl-panel--right > .vl-panel__scroll { overflow: hidden; }
+  .ls-form--right { flex: 1; min-height: 0; overflow-y: auto; }
+  .ls-form--right > .vl-section { flex-shrink: 0; }
+}
+
+.ls-position { display: grid; gap: var(--space-2); }
+
+/* The chosen shape: a silhouette beside its name and the button that changes it. */
+.ls-shape-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.ls-shape-row__body { display: grid; gap: var(--space-2); }
+
+.ls-shape-current {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.ls-shape-current svg { width: 100%; height: 100%; }
+.ls-shape-current__name { font-weight: 600; }
+
+.ls-shape-picker { display: grid; gap: var(--space-4); }
+.ls-shape-picker .vl-tabs { width: max-content; }
+.ls-shape-grid { min-height: 240px; }
+
+/* The chosen pattern in the settings panel: the same card, at the width the panel allows. */
+.ls-pattern-row { display: grid; gap: var(--space-2); }
+
+.ls-pattern-preview {
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.ls-pattern-preview > svg { display: block; width: 100%; height: 100%; }
+.ls-pattern-row__name { font-weight: 600; color: var(--text); }
+
+/* The SVG drop target, where a design's artwork IS the customer's file. The kit's drop zone
+   is the control; this only stacks it under its label with the loaded file's name beneath. */
+.ls-svg-drop { display: grid; gap: var(--space-2); }
+
+/* Pattern areas: the artwork's faces, the picked ones lit. The same two elements serve the
+   card in the panel and the big stage in the picker, so what you click is what you saw. */
+.ls-areas-row { display: grid; gap: var(--space-2); }
+
+.ls-areas-preview {
+  aspect-ratio: 3 / 2;
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel-2);
+}
+
+.ls-areas-row__name { font-weight: 600; color: var(--text); }
+
+.ls-area-picker { display: grid; gap: var(--space-3); height: 100%; }
+
+.ls-area-picker__stage {
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel-2);
+  height: 100%;
+  min-height: 0;
+}
+
+.ls-area-picker__count { margin: 0; color: var(--text); font-weight: 600; }
+.ls-area-picker__problem { margin: 0; color: var(--warn, var(--muted)); }
+
+/* The window's right column: what is patterned, then what the file was made of. */
+.ls-area-controls { display: grid; gap: var(--space-2); align-content: start; }
+.ls-area-controls > .vl-label { margin-top: var(--space-2); }
+.ls-area-controls > .vl-label:first-child { margin-top: 0; }
+
+.ls-area-file {
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  /* A LIGHT checkerboard in both themes, and deliberately not a token. What is shown here is a
+     cut file, and a cut file is drawn near-black — on the dark panel the artwork disappeared
+     into its own background. The app already makes this call once: the Export Preview's sheet
+     is a flat `#ffffff` (`preview.ts`, PAPER) "so red, blue and black read as what they are".
+     The checkerboard on top of it says which parts of the file are transparent. */
+  background:
+    linear-gradient(45deg, #dfdfdf 25%, transparent 25%, transparent 75%, #dfdfdf 75%) 0 0 / 14px 14px,
+    linear-gradient(45deg, #dfdfdf 25%, transparent 25%, transparent 75%, #dfdfdf 75%) 7px 7px / 14px 14px,
+    #f6f6f6;
+}
+
+.ls-area-file img { display: block; max-height: 120px; max-width: 100%; }
+
+
+.ls-area-stage { display: block; width: 100%; max-height: 52vh; }
+.ls-areas-preview .ls-area-stage { max-height: 100%; }
+
+/* A face off is material with nothing on it; a face on is the pattern's ground. Both are
+   drawn, never hidden — the shape has to stay readable while you choose (the rule "hide,
+   never grey" is about CONTROLS; a face you cannot see is a face you cannot click). */
+.ls-area {
+  fill: var(--panel);
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  transition: fill var(--dur-hover) var(--ease-standard);
+}
+
+.ls-area[data-on='true'] { fill: var(--accent); }
+
+/* A shape taken out of the artwork: a ghost, never gone. Drawn as an empty dashed outline so
+   you can still see WHAT you dropped and right-click it back — a removal you cannot see is a
+   removal you cannot undo without starting over. */
+.ls-area[data-removed='true'] {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  opacity: 0.55;
+}
+
+/* A hole left open is the empty space it will be, so it is drawn as nothing — but painted
+   `transparent`, not `none`, because a hole has to stay clickable: on a box panel the square in
+   the middle is a hole and the one place the pattern goes. Its edge is the face's own edge, so
+   it needs no stroke of its own until the pointer is on it. Before the hover rule, which wins. */
+.ls-area[data-hole='true'][data-on='false'] { fill: transparent; stroke: none; }
+
+.ls-area[role='checkbox'] { cursor: pointer; }
+.ls-area[role='checkbox']:hover { stroke: var(--accent); stroke-width: 2; }
+
+/* Focus follows the SHAPE, not its bounding box. An `outline` on an SVG path is drawn as a
+   rectangle round the whole petal — and on a face with a hole in it the box says nothing about
+   what is focused. A thick stroke in the text colour reads on both a lit face and a plain one. */
+.ls-area[role='checkbox']:focus { outline: none; }
+.ls-area[role='checkbox']:focus-visible { outline: none; stroke: var(--text); stroke-width: 3; }
+
+/* The preview fills the stage. */
+.ls-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.ls-preview {
+  position: absolute;
+  inset: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/* The view switch on the left, the unit switch on the right, above the drawing. */
+.ls-preview__bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ls-preview__bar .vl-tabs { width: max-content; margin: 0; }
+
+.ls-preview__svg {
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  display: block;
+  touch-action: none;
+}
+
+.ls-preview .vl-stage-status {
+  bottom: 14px;
+  left: 14px;
+}
+
+/* The hole is the one live thing on the preview. */
+.ls-preview[data-cursor="grab"] .ls-preview__svg { cursor: grab; }
+.ls-preview[data-dragging] .ls-preview__svg { cursor: grabbing; }
+.ls-hole { cursor: grab; outline: none; }
+.ls-hole:focus-visible { stroke-width: 2.5; }
+.ls-preview[data-dragging] .ls-hole { cursor: grabbing; }
+/* The design's centre line while the dragged ring is snapped to it: thin, dashed, the accent. */
+.ls-snap-guide {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* A text field with a trailing action: the symbol button. */
+.ls-field-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.ls-field-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The chosen symbol, large, beside its name and the button that changes it. */
+.ls-symbol-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.ls-symbol-row__body {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ls-symbol-current {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72px;
+  font-size: 40px;
+  line-height: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.hidden {
+  display: none !important;
+}
+
+@media (max-width: 760px) {
+  .ls-stage { position: relative; height: 46vh; }
+}
+
+@media (max-width: 900px) {
+  .ls-form--left { display: flex; flex-direction: column; }
+  .ls-settings-rail { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+}
+/* A compact text field; the symbol action sits inside its trailing edge. */
+.ls-text-entry { display: flex; align-items: flex-end; gap: 6px; }
+.ls-text-entry > :first-child { flex: 1; min-width: 0; }
+.ls-text-entry > button { flex: 0 0 38px; margin-bottom: 3px; }
+.ls-rich-text { min-height: 44px; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-field); background: var(--panel-2); font: inherit; color: var(--text); line-height: 26px; overflow-wrap: anywhere; cursor: text; }
+.ls-rich-text:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+.ls-inline-symbol { display: inline-flex; width: 27px; height: 27px; vertical-align: middle; align-items: center; justify-content: center; position: relative; border-radius: 4px; cursor: grab; margin: 0 2px; }
+.ls-inline-symbol svg { width: 24px; height: 24px; pointer-events: none; }
+.ls-inline-symbol__marker { font-size: 0; width: 0; overflow: hidden; }
+.ls-inline-symbol:hover, .ls-inline-symbol.is-selected { background: color-mix(in srgb,var(--accent) 15%,transparent); outline: 1px solid var(--accent); }
+.ls-inline-symbol:active { cursor: grabbing; }
+.ls-rich-text.is-dragging { border-style: dashed; border-color: var(--accent); }
+.ls-symbol-inspector { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-m); display: grid; gap: 10px; }
+.ls-symbol-inspector__heading { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-display); }
+.ls-symbol-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.ls-icon-library { display: flex; flex-direction: column; gap: 16px; }
+.ls-icon-library__search { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 12px; }
+.ls-icon-library__body { display: grid; grid-template-columns: 155px minmax(0,1fr); height: min(470px,55vh); }
+.ls-icon-categories { display: flex; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--line); padding-right: 10px; gap: 2px; }
+.ls-icon-categories button { justify-content: flex-start; text-align: left; }
+.ls-icon-categories button[aria-pressed="true"] { color: var(--accent); background: var(--panel-2); }
+.ls-icon-results { padding-left: 18px; min-width: 0; overflow-y: auto; }
+.ls-icon-results > p { margin: 0 0 12px; }
+.ls-icon-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(56px,1fr)); gap: 8px; }
+.ls-icon-tile { aspect-ratio: 1; padding: 8px; min-width: 0; }
+.ls-icon-tile svg { width: 100%; height: 100%; max-width: 44px; max-height: 44px; }
+.ls-symbol-current svg { width: 48px; height: 48px; }
+.ls-preview__three { flex: 1; min-height: 0; overflow: hidden; }
+.ls-preview__three canvas { display: block; width: 100%; height: 100%; }
+.ls-material-bar { border-top: 1px solid var(--line); padding: 12px 16px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 16px; }
+.ls-material-bar > p { grid-column: 1 / -1; margin: 0; }
+.ls-material-bar > .vl-slider-row { min-width: 0; }
+.ls-export-legend { display: flex; gap: 24px; padding: 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.ls-export-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 7px; border-radius: 3px; background: black; }
+.ls-export-legend [data-op="cut"]::before { background: #ff0000; }
+.ls-export-legend [data-op="score"]::before { background: #0000ff; }
+.ls-preview[data-mode="three"] .vl-stage-status { display: none; }
+/* The cut file on a white sheet, whatever the theme: red, blue and black mean something there. */
+.ls-preview[data-mode="file"] .ls-preview__svg { background: #fff; }
+.ls-export-legend > p { flex: 1 1 100%; font-size: 12px; }
+.ls-preview__bar { padding: 10px 12px; }
+.ls-preview__mode .vl-tab { font-size: 12px; padding-inline: 10px; }
+.ls-settings-panels .vl-section__body { gap: 18px; }
+@media(max-width: 760px) {
+  .ls-icon-library__search { grid-template-columns: 1fr; }
+  .ls-icon-library__body { grid-template-columns: 110px minmax(0,1fr); }
+  .ls-icon-results { padding-left: 10px; }
+  .ls-icon-grid { grid-template-columns: repeat(auto-fill,minmax(44px,1fr)); gap: 4px; }
+  .ls-preview__bar { flex-wrap: wrap; }
+}
+/* The selected icon temporarily takes the font browser's place. Keep the text in sight. */
+.ls-symbol-inspector .vl-slider-row { margin: 0; }
+.ls-icon-tile { color: var(--text); }
+@media (max-width: 900px) {
+  .ls-form--left { flex: none; min-height: auto; }
+  .ls-settings-rail, .ls-settings-panels { flex: none; }
+}
+@media (max-width: 760px) {
+  .ls-editor .vl-panel--left > .vl-panel__scroll { flex: none; overflow: visible; }
+  .ls-preview__mode .vl-tab { font-size: 11px; padding-inline: 6px; }
+}
+@media (max-width: 760px) {
+  .ls-editor > .vl-panel { max-height: none; }
+}
+/* Symbol controls expand below the text; browsing opens beside Add symbol. */
+.ls-text-entry > .ls-add-symbol { flex: 0 0 auto; margin-bottom: 0; }
+.ls-symbol-inspector { display: block; padding: 0; }
+.ls-symbol-inspector > summary { padding: 12px; cursor: pointer; font-family: var(--font-display); font-weight: 600; }
+.ls-symbol-inspector__body { display: grid; gap: 14px; padding: 0 12px 12px; }
+.ls-symbol-transform { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.ls-icon-dropdown.vl-overlay { background: transparent; backdrop-filter: none; pointer-events: none; }
+.ls-icon-dropdown > .vl-dialog { position: fixed; box-sizing: border-box; pointer-events: auto; padding: 18px; max-height: calc(100dvh - 24px); }
+.ls-icon-dropdown .ls-icon-library__body { height: min(340px,40vh); grid-template-columns: 130px minmax(0,1fr); }
+.ls-icon-dropdown .ls-icon-grid { grid-template-columns: repeat(auto-fill,minmax(44px,1fr)); gap: 6px; }
+.ls-preview[data-mode="file"] .vl-stage-status { position: static; align-self: flex-start; margin: 0 16px 12px; max-width: calc(100% - 32px); }
+.ls-export-legend { flex: 0 0 auto; flex-wrap: wrap; }
+.ls-export-legend span { display: inline-flex; align-items: center; white-space: nowrap; }
+.ls-export-legend span::before { flex: 0 0 10px; }
+
+.ls-symbol-reorder { display: inline-flex; gap: 4px; }
+
+/* The three field kinds the template programme added: a list, a count, a row of tiles. */
+.ls-lines textarea { min-height: 120px; font: inherit; }
+.ls-thumbs { display: grid; gap: var(--space-2); }
+.ls-part-labels, .ls-sheet-guides { pointer-events: none; user-select: none; }

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120">
+  <!-- Example asset: the outline is the silhouette; the three markers say where the gate,
+       the hanging eye and the charm's top go. Markers only need to be NEAR the edge. -->
+  <path id="outline" d="M 50 4 C 70 12 84 14 96 14 L 96 60 C 96 90 74 108 50 118 C 26 108 4 90 4 60 L 4 14 C 16 14 30 12 50 4 Z"/>
+  <line id="gate" x1="4" y1="40" x2="4" y2="52"/>
+  <circle id="eye" cx="50" cy="118" r="2"/>
+  <circle id="top" cx="50" cy="4" r="2"/>
+</svg>

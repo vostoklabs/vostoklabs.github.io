@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clicker Generator</title>
+    <!-- No webfont link here on purpose. @vostok/ui-kit bundles Chakra Petch at these exact
+         three weights as local woff2 (packages/ui-kit/src/fonts.css), so a CDN request would
+         be a second copy of a font we already ship — and invariant #5 is "zero external
+         network calls; an app must work offline and from file://". This was the only app in
+         the repo still linking Google Fonts, and the swap was visible on every first paint. -->
+    <!-- Favicon: black logo (dark ink) reads on light backgrounds; white logo on dark. -->
+    <link rel="icon" type="image/png" href="./assets/favicon/Vostokfaviconblack.png" />
+    <link rel="icon" type="image/png" href="./assets/favicon/vostokfaviconwhite.png" media="(prefers-color-scheme: dark)" />
+    <link rel="apple-touch-icon" href="./assets/favicon/Vostokfaviconblack.png" />
+    <script>
+      (function() {
+        const saved = localStorage.getItem('clicker_theme');
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = saved || (systemDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+    <!-- The generator's shell now lives in src/template.ts, because a desktop host mounts
+         this generator into an element rather than loading this page. See src/mount.ts. -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

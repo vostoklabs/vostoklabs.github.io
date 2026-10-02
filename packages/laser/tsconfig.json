@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "esModuleInterop": true,
+    // `trace/` is the clicker's tracer verbatim, written under the clicker's tsconfig, which
+    // does not switch this on. Off here so the copy stays a copy; the rest of the package
+    // passes with it on and loses nothing.
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src"]
+}

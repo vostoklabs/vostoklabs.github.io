@@ -1,0 +1,1199 @@
+/* Component styles, ported from the clicker's shipped CSS (topbar, license modal,
+   what's-new card, toggles, tabs, sliders, help tips). */
+
+/* ---------- Topbar link buttons ---------- */
+.vl-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.vl-topbar-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vl-donate-label { color: var(--muted); font-size: 14px; margin-right: 2px; }
+
+.vl-topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    background var(--dur-hover) var(--ease-standard);
+}
+.vl-topbar-btn svg { flex: 0 0 auto; }
+.vl-topbar-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Commercial license + Ko-fi: red, emphasized. */
+.vl-topbar-btn--license,
+.vl-topbar-btn--kofi {
+  background: var(--red);
+  border-color: var(--red);
+  color: #ffffff;
+  font-weight: 700;
+}
+.vl-topbar-btn--license:hover,
+.vl-topbar-btn--kofi:hover {
+  background: var(--red-hover);
+  border-color: var(--red-hover);
+  color: #ffffff;
+}
+
+/* MakerWorld boost: green. */
+.vl-topbar-btn--mw {
+  background: var(--green);
+  border-color: var(--green);
+  color: #ffffff;
+  font-weight: 600;
+}
+.vl-topbar-btn--mw:hover {
+  background: var(--green-hover);
+  border-color: var(--green-hover);
+  color: #ffffff;
+}
+
+/* ---------- Modal overlay + card (welcome/license family) ---------- */
+.vl-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: vl-fade-in var(--dur-in-lg) var(--ease-enter);
+  padding: 16px;
+}
+@keyframes vl-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.vl-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-modal);
+  width: min(540px, 94vw);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 32px;
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.vl-card h2 { margin: 0; font-family: var(--font-display); font-size: 23px; font-weight: 700; letter-spacing: 0.2px; }
+.vl-card > p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+.vl-card a { color: var(--accent); font-weight: 600; }
+
+.vl-card-actions { display: flex; justify-content: flex-end; gap: 12px; }
+
+/* ---------- Generic dialog (confirm / info) ---------- */
+/* Shares the overlay with the license/what's-new family; this is the plain,
+   reusable modal surface. Without these rules the dialog box renders with no
+   background. */
+.vl-dialog {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-modal);
+  width: min(440px, 94vw);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 28px;
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* For grid content — a font specimen sheet, a gallery — rather than prose. Without it wide
+   content overflowed the 440px box instead of widening it. */
+.vl-dialog--wide { width: min(760px, 94vw); }
+.vl-dialog--xl { width: min(1080px, 96vw); }
+.vl-dialog__title { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+.vl-dialog > div { color: var(--muted); font-size: 15px; line-height: 1.55; }
+/* A grid child must be allowed to shrink inside the flex column, or its tracks size to the
+   widest card and push the whole dialog sideways. */
+.vl-dialog > div { min-width: 0; }
+.vl-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
+
+/* Pill badge (green "✓ Download started" / blue "WHAT'S NEW"). */
+.vl-badge {
+  align-self: flex-start;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-2);
+  color: #fff;
+}
+.vl-badge--accent {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+}
+
+/* ---------- License modal: the red commercial focal block ---------- */
+.vl-commercial {
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  border: 2px solid var(--red);
+  border-radius: var(--radius-box);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vl-commercial-title { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--text); }
+.vl-commercial-title .vl-sell { color: var(--red); text-decoration: underline; }
+.vl-commercial p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
+.vl-commercial p strong { color: var(--text); }
+.vl-price { color: var(--red); font-weight: 700; }
+.vl-commercial-cta {
+  align-self: flex-start;
+  background: var(--red);
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 11px 20px;
+  border-radius: var(--radius-btn);
+  text-decoration: none;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
+}
+.vl-commercial-cta:hover { background: var(--red-hover); }
+.vl-commercial-cta:active { transform: scale(0.98); }
+.vl-commercial-alt { font-size: 13.5px !important; }
+
+/* ---------- License reminder: corner toast (subsequent downloads) ---------- */
+.vl-license-toast {
+  position: fixed;
+  top: 70px;
+  right: 24px;
+  z-index: 300;
+  width: min(320px, 88vw);
+  background: var(--panel);
+  border: 2px solid var(--red);
+  border-radius: var(--radius-box);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transform: translateX(calc(100% + 32px));
+  opacity: 0;
+  transition:
+    transform var(--dur-in-lg) var(--ease-enter),
+    opacity var(--dur-in-lg) var(--ease-enter);
+}
+.vl-license-toast.show { transform: translateX(0); opacity: 1; }
+.vl-license-toast-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--accent-2); }
+.vl-license-toast p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--muted); }
+.vl-license-toast .vl-commercial-cta { font-size: 13.5px; padding: 8px 14px; border-radius: var(--radius-btn); margin-top: 2px; }
+.vl-license-toast-x {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.vl-license-toast-x:hover { color: var(--text); }
+
+/* ---------- What's new ---------- */
+.vl-whatsnew-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vl-whatsnew-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.vl-whatsnew-list li strong { color: var(--text); font-weight: 600; }
+.vl-whatsnew-check { flex: 0 0 auto; margin-top: 1px; color: var(--accent); }
+.vl-whatsnew-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+.vl-whatsnew-foot .vl-btn--primary { flex: 1; }
+.vl-dismiss {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.vl-dismiss input { margin: 0; width: 16px; height: 16px; cursor: pointer; }
+
+/* ---------- Segmented control (tabs) ---------- */
+.vl-tabs {
+  display: grid;
+  gap: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  padding: 5px;
+}
+/* Horizontal padding here is only ever min-content sizing: the button is a full-width grid
+   cell with centred text, so trimming it changes nothing about how a two-option control looks
+   and is the difference between four options fitting a sidebar and overflowing it. `min-width`
+   and the ellipsis are the backstop for a translation nobody sized for. */
+.vl-tab {
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  padding: 9px 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
+  text-align: center;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vl-tab.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.vl-tab:hover:not(.active) { color: var(--text); background: rgba(255, 255, 255, 0.03); }
+:root[data-theme='light'] .vl-tab:hover:not(.active) { background: rgba(0, 0, 0, 0.03); }
+
+/* The sliding selection pill.
+
+   `segmentedControl()` adds `.vl-tabs--indicator` and one `.vl-tabs__indicator` child, then
+   measures the active tab and drives width/transform from JS — the grid's columns depend on
+   the panel width, so there is nothing to derive in CSS. The active tab hands its background
+   to the pill and keeps only its text colour, so the *look* is unchanged and only the
+   transition is new. Hover on an inactive tab still paints its own wash: that is a different
+   object under the cursor, not the selection moving. */
+.vl-tabs--indicator { position: relative; }
+.vl-tabs--indicator .vl-tab { position: relative; z-index: 1; }
+
+/* The active tab hands its background to the pill ONLY once the pill has actually been
+   measured and placed — note `.is-ready ~`, not a plain descendant selector.
+
+   This is load-bearing, and it was a real bug before it was a rule. Placement depends on a
+   ResizeObserver callback, and ResizeObserver (like requestAnimationFrame) is part of the
+   "update the rendering" steps, so it does not fire while the document is not being
+   rendered — a background tab, a hidden window. With an unconditional `background:
+   transparent` the pill stayed at opacity 0 and the tab painted nothing, so a generator
+   restored into a background tab showed a segmented control with NO selection at all.
+
+   The resting state must be correct without JavaScript. Worst case here is today's instant
+   swap; it can never be an invisible selection. (The indicator is the first child and the
+   tabs follow it, so `~` reaches all of them.) */
+.vl-tabs__indicator.is-ready ~ .vl-tab.active { background: transparent; }
+
+.vl-tabs__indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  opacity: 0;
+  border-radius: var(--radius-chip);
+  background: var(--accent);
+  pointer-events: none;
+  transition:
+    transform var(--dur-in-md) var(--ease-standard),
+    width var(--dur-in-md) var(--ease-standard),
+    opacity var(--dur-in-sm) var(--ease-enter);
+}
+/* Held invisible until it has been measured once, so it never flashes at the far left of a
+   control that has not been laid out yet. */
+.vl-tabs__indicator.is-ready { opacity: 1; }
+
+/* `variant: 'cards'` — a left-aligned row with an icon, instead of a centred pill of text.
+   For a picker like Import Source (Image / SVG / Icon / Text / Blocks), where a plain tab
+   would either truncate five labels or have nowhere to put the icon that names each mode
+   before the label does. The sliding indicator still drives selection (it already measures
+   both axes, so a wrapping grid is not a special case); only the per-tab layout changes. */
+.vl-tabs--cards { background: transparent; border: none; padding: 0; }
+.vl-tabs--cards .vl-tab {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  text-align: left;
+  white-space: normal;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  padding: 8px 12px;
+}
+.vl-tabs--cards .vl-tab svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.vl-tabs--cards .vl-tab.active { border-color: var(--accent); }
+.vl-tabs--cards .vl-tabs__indicator { border-radius: var(--radius-btn); }
+/* An odd option count leaves one card alone under a half-empty row — span it instead. The
+   sliding indicator is the FIRST child, so the last card of an odd count sits at an even
+   child index: `:nth-child(odd)` here stretched the fourth of four and left the fifth of five
+   alone. */
+.vl-tabs--cards .vl-tab:last-child:nth-child(even) { grid-column: 1 / -1; justify-content: center; }
+/* A card the caller asked to span the row (`SegmentedOption.wide`): a label too long for half. */
+.vl-tabs--cards .vl-tab--wide { grid-column: 1 / -1; justify-content: center; }
+
+/* `variant: 'pictures'` — a choice between results: a picture of what each option gets you,
+   its name, one line. The card keeps its own face when chosen and the sliding indicator
+   becomes a ring drawn OVER it, because the accent fill every other variant uses would sit
+   behind the picture and drown it. The picture box is `--bg`, so a render with a transparent
+   background (the clicker's) follows the theme instead of carrying the one it was made in. */
+.vl-tabs--pictures { background: transparent; border: none; padding: 0; }
+.vl-tabs--pictures .vl-tab {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px;
+  text-align: left;
+  white-space: normal;
+  color: var(--text);
+  font-weight: 400;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+}
+.vl-tabs--pictures .vl-tab.active,
+.vl-tabs--pictures .vl-tabs__indicator.is-ready ~ .vl-tab.active {
+  color: var(--text);
+  font-weight: 400;
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel-2));
+  border-color: var(--accent);
+}
+.vl-tabs--pictures .vl-tab:hover:not(.active) {
+  background: var(--panel-2);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.vl-tabs--pictures .vl-tabs__indicator {
+  z-index: 2;
+  background: transparent;
+  border-radius: var(--radius-btn);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.vl-tabs--pictures .vl-tab__picture {
+  display: block;
+  width: 76px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--bg);
+  border-radius: var(--radius-chip);
+}
+.vl-tabs--pictures .vl-tab__picture img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.vl-tabs--pictures .vl-tab__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-tabs--pictures .vl-tab__label {
+  font-family: var(--font-display);
+  font-size: var(--fs-strong);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.vl-tabs--pictures .vl-tab__desc { font-size: var(--fs-compact); line-height: 1.3; color: var(--muted); }
+
+/* ---------- Toggle switch (iOS style, green when on) ---------- */
+.vl-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+.vl-switch-row .vl-switch-label { font-size: 15.5px; color: var(--text); }
+.vl-toggle { position: relative; display: inline-block; width: 50px; height: 29px; flex: 0 0 50px; cursor: pointer; }
+.vl-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.vl-toggle .vl-knob {
+  position: absolute;
+  inset: 0;
+  background: var(--line);
+  border-radius: var(--radius-pill);
+  transition:
+    background var(--dur-in-sm) var(--ease-standard);
+}
+.vl-toggle .vl-knob::before {
+  content: '';
+  position: absolute;
+  height: 23px;
+  width: 23px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition:
+    transform var(--dur-in-sm) var(--ease-standard);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.vl-toggle input:checked + .vl-knob { background: var(--accent-2); }
+.vl-toggle input:checked + .vl-knob::before { transform: translateX(21px); }
+.vl-toggle input:focus-visible + .vl-knob { box-shadow: 0 0 0 2px var(--accent); }
+
+/* ---------- Slider row (label + value badge + range) ---------- */
+.vl-slider-row { display: flex; flex-direction: column; gap: 6px; }
+
+/* A control that another control has superseded — Size once the base size is locked, say.
+   One class for every row type, set by `ValueRow.setDisabled()`, so a component is what
+   applies it rather than each app remembering the name (CLAUDE.md: a component cannot be
+   forgotten; a class name can). The inputs are disabled too, so this is appearance only —
+   `pointer-events` is belt and braces for the label and the help tip. */
+.vl-control--disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.vl-slider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  /* A readout that has grown to fit itself may end up right beside its label, and a grey
+     caption touching a bordered field reads as a bug. */
+  gap: var(--space-2);
+  /* The last resort for a readout no line can hold — a fold mode that says "no groove"
+     rather than a number. The box drops under the label and stays right-aligned, rather
+     than crushing the label or scrolling its own text out of view. */
+  flex-wrap: wrap;
+}
+.vl-slider-head > label { color: var(--muted); font-size: var(--label-fs); }
+.vl-slider-head > .vl-val-fit { margin-left: auto; }
+
+/* The "back to the recommended 3.2 mm" pill — see `defaultMark()` in components/controls.ts.
+
+   Deliberately quieter than every other control in the row: it is a footnote to the caption,
+   not a second thing to press. It shows only while the value differs, so its arrival is what
+   carries the meaning — a pill sitting there permanently would just be more furniture. */
+.vl-default-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-hover) var(--ease-standard),
+    border-color var(--dur-hover) var(--ease-standard);
+}
+.vl-default-mark > svg { width: 11px; height: 11px; flex: none; }
+.vl-default-mark:hover { color: var(--accent); border-color: var(--accent); }
+.vl-default-mark:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/*
+  The value box, sized to what it is actually showing.
+
+  It was a flat 82px, which fits "2.4 mm" and stops at about eleven characters. Fine, until
+  a `format` had something to say: foldbox's sheet row prints `2 layers · 0.40 mm` and lost
+  the unit off the end, and its groove row prints `1.3 mm (floor)` and lost the bracket.
+  Nothing ever reported it, because an <input> that overflows SCROLLS rather than wrapping —
+  the text is still in the field, just not on screen, so it does not look truncated. It
+  looks like the app rounded.
+
+  The width comes from a pseudo-element carrying the same string in the same font, stacked
+  in the same grid cell as the input: the cell is as wide as the wider of the two, and the
+  input stretches to fill it. Nothing is measured in JS, which is what makes it correct at
+  the times measurement is not — on the first paint (a detached element has no computed
+  font to measure from), in a background tab (no rAF), and after a density or font change
+  (nothing to re-run). `size="1"` on the input is load-bearing: an <input>'s intrinsic
+  width comes from `size`, and at the default 20 it would set the grid track instead of the
+  copy.
+*/
+.vl-val-fit {
+  display: inline-grid;
+  min-width: 96px;
+  max-width: 100%;
+}
+.vl-val-fit > .vl-val {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.vl-val-fit::after {
+  grid-area: 1 / 1;
+  content: attr(data-value);
+  visibility: hidden;
+  white-space: pre;
+  /* The copy has to measure exactly as the input does, plus a pixel so a caret at the end
+     of the text is not flush against the border. */
+  box-sizing: border-box;
+  padding: 5px 7px 5px 6px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.vl-val {
+  width: 82px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: var(--radius-chip);
+  padding: 5px 6px;
+  text-align: right;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.vl-val:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* The -/+ bar under a `stepperRow` caption. The readout stretches between the two
+   buttons and centres its text, because a number with a control on each side reads as
+   belonging to both — right-aligned it looks like it belongs to the plus. */
+.vl-stepper-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.vl-stepper-bar > .vl-val-fit { flex: 1; }
+.vl-stepper-bar .vl-val { text-align: center; }
+.vl-stepper-bar .vl-btn { flex: none; font-size: 18px; }
+.vl-stepper-bar .vl-btn:disabled { opacity: 0.4; }
+
+/* ---------- Field (label + input/select) ---------- */
+.vl-field { display: grid; gap: 8px; }
+.vl-field > label { color: var(--muted); font-size: var(--label-fs); }
+.vl-field input,
+.vl-field textarea,
+.vl-field select {
+  width: 100%;
+  /* Padding and border inside the 100%, or the field overruns its column by 2 × padding and
+     hands the whole sidebar a horizontal scrollbar — which is what it once did. */
+  box-sizing: border-box;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: var(--radius-field);
+  padding: var(--field-pad-y) var(--field-pad-x);
+  font: inherit;
+  /* Comfortable resolves to --fs-base, i.e. exactly the value `font: inherit` already
+     produced. Named only so compact density has something to change. */
+  font-size: var(--field-fs);
+  /* These had no transition and no hover state at all: a dropdown is the one control in the
+     sidebar that gave no sign it was interactive until it was already open. */
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    background-color var(--dur-hover) var(--ease-standard);
+}
+.vl-field select { cursor: pointer; }
+.vl-field input:hover:not(:disabled),
+.vl-field textarea:hover:not(:disabled),
+.vl-field select:hover:not(:disabled) { border-color: var(--accent); }
+.vl-field input:focus-visible,
+.vl-field textarea:focus-visible,
+.vl-field select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.vl-field select:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* The two things a textarea needs that an input does not: a floor on its height, and
+   a handle to raise it — a list is a thing people keep adding to. Everything else it
+   inherits from the rule above, so a caller never has to remember a class. */
+.vl-field textarea {
+  box-sizing: border-box;
+  min-height: 140px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* `textareaField({ compact: true })` is the other kind: a word or a name, not a list. The
+   140 px floor above is right for something people keep adding to and wrong for a two-line
+   legend. It needs `.vl-field .vl-textarea--compact` rather than a bare class, because the
+   rule it overrides is (0,1,1) and would otherwise win. `resize: none` because these sit in
+   a fixed-width sidebar column, where a dragged-wider textarea overlaps its neighbours. */
+.vl-field .vl-textarea--compact {
+  min-height: 38px;
+  line-height: 1.4;
+  resize: none;
+}
+
+/* ---------- Captioned control (segmented control with a label + tooltip) ---------- */
+.vl-control { display: grid; gap: 8px; }
+.vl-control-label { color: var(--muted); font-size: var(--label-fs); }
+
+/* ---------- "?" help tip + bubble ---------- */
+/*
+  `padding: 0` and `flex: none` are the load-bearing lines here, not decoration.
+
+  This is a <button>, and it was the ONE kit control that never declared its own padding.
+  The clicker's stylesheet carries a bare `button { padding: 10px 15px }` element rule,
+  which therefore won by default — and under border-box a 16px width loses to 30px of
+  padding, so the round `?` rendered as a 31 x 21 OVAL in that app and a circle everywhere
+  else. Nothing catches that: the class is present, the token resolves, and only looking at
+  it finds it.
+
+  So the badge now states every property that defines its box. A component has to be able to
+  survive the stylesheet of the app it is dropped into; an element selector in app CSS is
+  not a thing the kit gets to assume away.
+*/
+.vl-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-left: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
+}
+.vl-help:hover, .vl-help:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.vl-help-bubble {
+  position: fixed;
+  z-index: 1000;
+  max-width: 240px;
+  padding: 8px 10px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 400;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  /* Fade only, no movement. A bubble that slides is a bubble you read late - and this
+     one is fixed-positioned at the cursor, so travel reads as the tip chasing the
+     pointer. Out is quicker than in: leaving should not linger. */
+  opacity: 0;
+  transition: opacity var(--dur-out-sm) var(--ease-standard);
+}
+.vl-help-bubble[data-open] {
+  opacity: 1;
+  transition-duration: var(--dur-in-sm);
+}
+
+/* ---------- Transient status toast ---------- */
+.vl-toasts {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 1100;
+  pointer-events: none;
+}
+.vl-toast {
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  padding: 10px 15px;
+  font-size: 15px;
+  color: var(--text);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  animation: vl-fade-in var(--dur-in-md) var(--ease-enter);
+}
+.vl-toast--ok { border-color: var(--accent-2); }
+.vl-toast--warn { border-color: var(--warn); }
+.vl-toast--error { border-color: var(--red); }
+
+/* ---------- Support links (Ko-fi / MakerWorld / GitHub) ---------- */
+.vl-support {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.vl-support a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
+}
+.vl-support a svg { flex: 0 0 auto; width: 15px; height: 15px; color: var(--muted); }
+.vl-support a:hover { border-color: var(--accent); color: var(--accent); }
+.vl-support a:hover svg { color: var(--accent); }
+
+/* ---------- Directional pad (nudge + rotate a placed element) ---------- */
+.vl-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(3, 44px);
+  grid-template-areas:
+    'rotl up   rotr'
+    'left ctr  right'
+    '.    down  .';
+  gap: 8px;
+  justify-content: center;
+  margin: 0 auto;
+}
+.vl-dpad-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    background var(--dur-hover) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
+}
+.vl-dpad-btn:hover { border-color: var(--accent); color: var(--accent); }
+.vl-dpad-btn:active { transform: scale(0.92); }
+.vl-dpad-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-dpad-btn svg { width: 22px; height: 22px; }
+/* Rotate corners read as secondary to the directional arrows. */
+.vl-dpad-btn--rot { color: var(--muted); }
+.vl-dpad-btn--rot svg { width: 18px; height: 18px; }
+/* Center reset: dashed circle, quiet until hovered. */
+.vl-dpad-wrap { flex: 0 0 auto; }
+.vl-dpad-btn--center { color: var(--muted); border-radius: 50%; border-style: dashed; }
+.vl-dpad-btn--center svg { width: 18px; height: 18px; }
+.vl-dpad-up { grid-area: up; }
+.vl-dpad-down { grid-area: down; }
+.vl-dpad-left { grid-area: left; }
+.vl-dpad-right { grid-area: right; }
+.vl-dpad-rotl { grid-area: rotl; }
+.vl-dpad-rotr { grid-area: rotr; }
+.vl-dpad-center { grid-area: ctr; }
+.vl-dpad-readout {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+/* ---------- Export panel ---------- */
+.vl-export { display: flex; flex-direction: column; gap: 10px; }
+.vl-export__buttons { display: flex; gap: 10px; }
+.vl-export__buttons .vl-btn { flex: 1; }
+
+/* Working, not refused. `exportPanel` disables its buttons for as long as the export promise
+   is pending; on an export that runs for minutes (a keycap set carves sixty-one caps) a button
+   that is only greyed reads as broken, and the next thing anyone does is click it again.
+   A ::before rather than an inserted node, so the app relabelling the button per mode with
+   `.textContent` cannot wipe the spinner. */
+.vl-btn--busy::before {
+  content: '';
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.9;
+  animation: vl-spin var(--dur-spin) var(--ease-linear) infinite;
+}
+@keyframes vl-spin { to { transform: rotate(360deg); } }
+
+/* Reduced motion still needs "working", just not spinning: hold the ring still and pulse it. */
+@media (prefers-reduced-motion: reduce) {
+  .vl-btn--busy::before {
+    animation: vl-pulse 1.4s ease-in-out infinite;
+    border-top-color: currentColor;
+    border-style: dotted;
+  }
+  @keyframes vl-pulse { 50% { opacity: 0.3; } }
+}
+
+/* ---------- Generator chrome: header + credit ---------- */
+.vl-app-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.vl-app-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  margin: 0 0 2px;
+  color: var(--text);
+}
+.vl-app-subtitle {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.35;
+  margin: 2px 0 0;
+}
+.vl-app-credit { color: var(--muted); font-size: 14px; margin: 2px 0 0; }
+.vl-credit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.vl-credit-link:hover { text-decoration: underline; }
+/* `hostOwnsLinks`: the same mark and name, as text — no accent, no underline, nothing to press. */
+.vl-credit-link--text { color: inherit; }
+.vl-credit-link--text:hover { text-decoration: none; }
+.vl-credit-logo { width: 15px; height: 15px; flex: 0 0 15px; }
+
+/* ---------- Generator chrome: quality callout ---------- */
+.vl-callout {
+  position: relative;
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  /* No coloured left rail: the icon already carries the semantic colour, and a
+     uniform hairline keeps this in the flat sidebar language (base.css). */
+  padding: 10px 30px 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.vl-callout > svg { flex: 0 0 16px; width: 16px; height: 16px; color: var(--accent-2); margin-top: 1px; }
+.vl-callout__body a { color: var(--accent); text-decoration: none; }
+.vl-callout__body a:hover { text-decoration: underline; }
+.vl-callout__dismiss {
+  position: absolute; top: 5px; right: 6px;
+  width: 20px; height: 20px; padding: 0; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 5px;
+  color: var(--muted); font-size: 17px; cursor: pointer;
+}
+.vl-callout__dismiss:hover { color: var(--text); background: var(--panel); }
+
+/* ---------- Generator chrome: Save / Load / Help / Light-mode ---------- */
+.vl-project-actions { display: flex; flex-direction: column; gap: 8px; }
+/* auto-fit, not a hard 1fr 1fr: on a narrower sidebar "Save project" wrapped to
+   two lines and the whole row grew to 57px while the same buttons sat at 38px in
+   the wider generators. Below ~120px per cell the pair stacks instead, which
+   keeps every action button one line tall everywhere. */
+/* One flex line, not a grid: the buttons take their own widths ("Light mode" is wider than
+   "Save") and share the slack, so Save · Load · Light mode fit a 293 px sidebar line at 13px.
+   A row that genuinely cannot fit wraps its last button rather than clipping it. */
+.vl-action-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.vl-action-btn { flex: 1 1 auto; min-width: 0; font-size: 13px; padding: 9px 8px; white-space: nowrap; }
+.vl-theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+
+/* ---------- Sidebar sticky footer (export + project actions) ---------- */
+.vl-sidebar-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  padding: 16px 20px 20px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 5;
+}
+
+/* ---------- Select (a picker, not a number box) ---------- */
+
+/*
+ * `.vl-val` is a right-aligned, 82px, tabular-numeric field with the native appearance
+ * stripped — correct for a slider's value box, wrong for a `<select>`. Reusing it gave the
+ * generators a full-width dropdown with its text jammed against the right edge and no
+ * chevron at all, because `appearance: none` removes the arrow and nothing replaced it.
+ *
+ * `.vl-select` is the picker treatment: text reads from the left, and the chevron is an
+ * inline SVG in `background-image` (a data URI, so it costs no request and cannot 404).
+ * `currentColor` is not available inside a background image, so the stroke is the muted
+ * token's value written out; keep the two in step if the palette moves.
+ */
+.vl-select {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  padding: 7px 30px 7px 10px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%239aa3b2' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  text-overflow: ellipsis;
+}
+:root[data-theme="light"] .vl-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%236b7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.vl-select:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+/* The popup list itself is drawn by the OS; only its colours are ours to set. */
+.vl-select option { background: var(--panel); color: var(--text); }
+
+/* ---------- Filament swatches ---------- */
+
+.vl-swatch-row { padding: 6px 0; }
+
+.vl-swatches__label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+
+.vl-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(26px, 1fr));
+  gap: 6px;
+}
+
+/*
+ * A swatch is the colour, so the selected state cannot be a colour — a border in any hue is
+ * invisible against the swatches that share it, and white-on-white loses either way. It is a
+ * ring drawn OUTSIDE the chip via box-shadow, in the panel colour then the accent, so it
+ * reads at equal strength on every swatch including black and white.
+ */
+.vl-swatch {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: var(--radius-chip, 6px);
+  background: var(--swatch, transparent);
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur-out-sm) var(--ease-standard),
+    transform var(--dur-out-sm) var(--ease-standard);
+}
+.vl-swatch:hover { transform: translateY(-1px); }
+.vl-swatch.is-on {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+.vl-swatch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+
+/* The custom-colour chip. Same footprint as a swatch so the grid stays even; the native
+   colour input's own well is stretched to fill it. */
+/* The label line: the name of the thing being coloured, and the custom picker at the far end
+   of it. The picker sits here rather than in the grid below because a fifteenth chip in a row
+   of seven lands alone on a third line. */
+.vl-swatches__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* The picker chip: a colour wheel, not a swatch. It has to say "something else" at a glance
+   rather than repeat whichever chip is already selected, so it paints the wheel until it is
+   actually holding an off-palette value — then that value covers the wheel (via `--swatch`,
+   set by `filamentRow`) and it takes the selection ring like any other chip.
+
+   A `<label>` with the real input stretched over it at zero opacity: Chromium paints the
+   input's value into its own shadow part, over any background it is given, so an
+   `<input type="color">` can never show anything but its own colour. */
+.vl-swatch--custom {
+  position: relative;
+  inline-size: 22px;
+  block-size: 22px;
+  flex: 0 0 auto;
+  aspect-ratio: auto;
+  overflow: hidden;
+  background:
+    linear-gradient(var(--swatch, transparent), var(--swatch, transparent)),
+    conic-gradient(#f2545b, #f2c14e, #4caf50, #2196f3, #7e57c2, #f2545b);
+}
+.vl-swatch--custom input[type='color'] {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  opacity: 0;
+  cursor: pointer;
+}
+.vl-swatch--custom:focus-within {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* A bare colour well, split out of `filamentRow` so a dense list of parts can have one
+   without hand-rolling `<input type="color">`. */
+.vl-swatch-well {
+  inline-size: 28px;
+  block-size: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: none;
+  cursor: pointer;
+  transition: border-color var(--dur-hover) var(--ease-standard);
+}
+
+.vl-swatch-well:hover:not(:disabled) { border-color: var(--accent); }
+.vl-swatch-well::-webkit-color-swatch-wrapper { padding: 2px; }
+.vl-swatch-well::-webkit-color-swatch { border: none; border-radius: 2px; }
+
+/* One colour, one chip: the compact counterpart to `.vl-swatch`'s shelf-of-many grid, for a
+   row that only ever needs to show the ONE colour currently assigned. `--swatch` is set
+   inline per instance (see `KNOWN_UNRESOLVED_TOKENS` in check-ui-drift.mjs — the same
+   runtime-set variable `.vl-swatch` already uses). */
+.vl-color-chip {
+  width: 44px;
+  height: 30px;
+  padding: 0;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: var(--radius-chip, 6px);
+  background: var(--swatch, transparent);
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur-hover) var(--ease-standard),
+    transform var(--dur-hover) var(--ease-standard);
+}
+.vl-color-chip:hover { transform: translateY(-1px); }
+.vl-color-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+
+/* ---------- One colour, one line: the compact palette row ---------- */
+/* A name and the chip holding its colour, which opens the shared picker. See `paletteRow()`
+   for why a sidebar gets this instead of the fourteen-swatch shelf. */
+.vl-palette-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vl-palette-row__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--control-fs);
+  color: var(--text);
+}
+.vl-control--disabled .vl-palette-row__label { color: var(--muted); }
+
+/* ---------- The colour picker popover ---------- */
+/* Round chips, because a colour here is a spool rather than a UI surface — and round reads as
+   a sample where a rounded square reads as another button. Fixed four across: the list is a
+   shelf of about fourteen, and a width that follows its contents would jump every time an app
+   offered a different number. */
+.vl-color-popover {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  width: 178px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-modal);
+  box-shadow: var(--shadow-toast);
+  animation: vl-pop-in var(--dur-in-sm) var(--ease-standard);
+}
+@keyframes vl-pop-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .vl-color-popover { animation: none; } }
+:root[data-motion='reduced'] .vl-color-popover { animation: none; }
+
+.vl-color-popover__chip,
+.vl-color-popover__custom {
+  inline-size: 32px;
+  block-size: 32px;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    transform var(--dur-press) var(--ease-standard),
+    box-shadow var(--dur-press) var(--ease-standard);
+}
+.vl-color-popover__chip {
+  border: 1.5px solid color-mix(in srgb, var(--text) 22%, transparent);
+  background: var(--swatch, transparent);
+}
+.vl-color-popover__chip:hover,
+.vl-color-popover__custom:hover { transform: scale(1.12); }
+.vl-color-popover__chip:focus-visible,
+.vl-color-popover__custom:focus-within {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+/* The selected one is ringed rather than merely bordered: on a shelf where two greys sit next
+   to each other, a border-colour change alone is not a difference you can find. */
+.vl-color-popover__chip.is-on {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+/* The custom cell wears the wheel with the native input laid over it at zero opacity —
+   Chromium paints a colour input's value over any background it is given. */
+.vl-color-popover__custom {
+  position: relative;
+  display: inline-flex;
+  overflow: hidden;
+  border: 1.5px solid color-mix(in srgb, var(--text) 22%, transparent);
+  background: conic-gradient(#f2545b, #f2c14e, #4caf50, #2196f3, #7e57c2, #f2545b);
+}
+.vl-color-popover__custom input[type='color'] {
+  position: absolute;
+  inset: -4px;
+  inline-size: calc(100% + 8px);
+  block-size: calc(100% + 8px);
+  padding: 0;
+  border: none;
+  background: none;
+  opacity: 0;
+  cursor: pointer;
+}

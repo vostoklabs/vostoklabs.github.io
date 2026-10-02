@@ -1,0 +1,196 @@
+// Image → model preprocessing, ported from the clicker's import wizard so both
+// generators treat an imported picture the same way. One modal step: crop ratio
+// plus the tone/colour sliders, over a live preview.
+//
+// Background removal stays a sidebar toggle, so this only tones/crops. On confirm
+// it hands back the adjusted image (background intact) + params; the caller runs
+// the trace/build pipeline, where removal is re-derived from keepBackground.
+import { button, segmentedControl, sliderRow } from '@vostok/ui-kit';
+import type { RgbaImage } from '../image/decode';
+import { preprocessImage } from '../image/adjust';
+import { removeBackground } from '../image/matte';
+import { DEFAULT_PREPROCESS, type CropRatio, type PreprocessParams } from '../types';
+
+export interface ImportWizardResult {
+  /** Cropped + tone-adjusted, background still present. */
+  adjusted: RgbaImage;
+  preprocess: PreprocessParams;
+}
+
+interface WizardOpts {
+  baseImage: RgbaImage;
+  /** Reuse the params from the last import so re-opening keeps the user's tuning. */
+  initial?: PreprocessParams;
+  onComplete(result: ImportWizardResult): void;
+  onCancel?(): void;
+}
+
+const SLIDERS: [keyof PreprocessParams, string][] = [
+  ['exposure', 'Exposure'],
+  ['contrast', 'Contrast'],
+  ['saturation', 'Saturation'],
+  ['brightness', 'Brightness'],
+  ['whiteBalance', 'White Balance'],
+  ['highlights', 'Highlights'],
+  ['shadows', 'Shadows'],
+];
+
+const RATIOS: [CropRatio, string][] = [
+  ['free', 'Free'],
+  ['1:1', '1:1'],
+  ['4:3', '4:3'],
+  ['3:2', '3:2'],
+  ['16:9', '16:9'],
+];
+
+const ALPHA_THRESHOLD = 128;
+
+/** True if the image would still have foreground after background removal, i.e.
+ *  the build pipeline would find an outline to trace. Keeping the background
+ *  means every pixel is foreground, so an outline always exists. */
+function hasOutline(img: RgbaImage, keepBackground: boolean): boolean {
+  if (keepBackground) return true;
+  const clone: RgbaImage = {
+    data: new Uint8ClampedArray(img.data),
+    width: img.width,
+    height: img.height,
+  };
+  removeBackground(clone); // mutates the clone, never the live preview image
+  let fg = 0;
+  for (let p = 3; p < clone.data.length; p += 4) if (clone.data[p] >= ALPHA_THRESHOLD) fg++;
+  return fg > 8; // a few stray pixels won't trace into a usable region
+}
+
+function imageToCanvas(img: RgbaImage): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const ctx = c.getContext('2d')!;
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height), 0, 0);
+  return c;
+}
+
+export function runImportWizard(opts: WizardOpts) {
+  const params: PreprocessParams = { ...DEFAULT_PREPROCESS, ...opts.initial };
+
+  const overlay = document.createElement('div');
+  overlay.className = 'wz-overlay';
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  const cancel = () => {
+    close();
+    opts.onCancel?.();
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') cancel();
+  };
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('mousedown', (e) => {
+    if (e.target === overlay) cancel();
+  });
+
+  // Adjusted image (background intact) for the current params.
+  const adjusted = () => preprocessImage(opts.baseImage, params);
+
+  // ---------- Preprocessing ----------
+  function stepPreprocess() {
+    overlay.innerHTML = `
+      <div class="wz-modal lg">
+        <div class="wz-head">Image Preprocessing</div>
+        <div class="wz-body">
+          <div class="wz-left">
+            <div class="wz-canvas checker" id="wzPrev"></div>
+            <div class="wz-info">
+              <div class="wz-info-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+                What kind of image works best
+              </div>
+              <ul>
+                <li><strong>Simple, flat colors</strong> with bold, clearly separated shapes.</li>
+                <li><strong>2D illustrations</strong>, logos, icons or clipart convert best.</li>
+              </ul>
+              <p class="wz-info-warn"><strong>Don't work well:</strong> photos of real objects with shadows, gradients or texture usually won't convert.</p>
+              <p>Missing details after processing? Turn up <strong>Contrast</strong> and <strong>Exposure</strong> to make the image bolder and bring them back.</p>
+            </div>
+          </div>
+          <div class="wz-controls">
+            <div class="wz-label">Crop Ratio</div>
+            <div id="wzRatioMount"></div>
+
+            <div class="wz-label">Image Adjustment</div>
+            <div id="wzAdjMount"></div>
+          </div>
+        </div>
+        <div class="wz-foot">
+          <span class="wz-error" id="wzErr" hidden>No outline found. Adjust the image and try again.</span>
+        </div>
+      </div>`;
+
+    const prev = overlay.querySelector<HTMLElement>('#wzPrev')!;
+    const err = overlay.querySelector<HTMLElement>('#wzErr')!;
+    const foot = overlay.querySelector<HTMLElement>('.wz-foot')!;
+    const ratioMount = overlay.querySelector<HTMLElement>('#wzRatioMount')!;
+    const adjMount = overlay.querySelector<HTMLElement>('#wzAdjMount')!;
+
+    const cancelBtn = button({ label: 'Cancel', onClick: cancel });
+    const doneBtn = button({
+      label: 'Confirm',
+      emphasis: 'primary',
+      onClick: () => {
+        if (doneBtn.disabled) return;
+        close();
+        opts.onComplete({ adjusted: adjusted(), preprocess: { ...params } });
+      },
+    });
+    foot.append(cancelBtn, doneBtn);
+
+    // Mirror the build pipeline's foreground check so the user can't confirm an
+    // image (e.g. one darkened until it's all background) that would silently
+    // trace into nothing.
+    const redraw = () => {
+      const a = adjusted();
+      prev.innerHTML = '';
+      prev.appendChild(imageToCanvas(a));
+      const ok = hasOutline(a, params.keepBackground);
+      doneBtn.disabled = !ok;
+      err.hidden = ok;
+    };
+    redraw();
+
+    const ratioRow = segmentedControl<CropRatio>({
+      options: RATIOS.map(([value, label]) => ({ value, label })),
+      value: params.cropRatio,
+      onChange: (v) => {
+        params.cropRatio = v;
+        redraw();
+      },
+    });
+    ratioMount.replaceWith(ratioRow);
+
+    let raf = 0;
+    const scheduleRedraw = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(redraw);
+    };
+    const sliderRows = SLIDERS.map(([k, l]) =>
+      sliderRow({
+        label: l,
+        min: 0,
+        max: 2,
+        step: 0.05,
+        value: params[k] as number,
+        onInput: (v) => {
+          (params[k] as number) = v;
+          scheduleRedraw();
+        },
+      }),
+    );
+    adjMount.replaceWith(...sliderRows);
+  }
+
+  stepPreprocess();
+}

@@ -1,0 +1,642 @@
+THIRD-PARTY NOTICES
+============================================================
+
+Pick a template, type your text, download the cut file.
+Copyright (c) 2026 Vostok Labs
+
+This file lists the third-party material bundled into this application, and the
+licences it is used under. It ships with every distribution of the app.
+
+Nothing here restricts what you may do with a file you EXPORT from this
+generator — see the application's own licence for that.
+
+
+
+1. TYPEFACES  (241 families)
+------------------------------------------------------------
+
+  All bundled typefaces come from Google Fonts and are licensed under either the
+  SIL Open Font License 1.1 or the Apache License 2.0. Both permit embedding and
+  bundling in commercial software, and the OFL states explicitly that documents
+  created with the font are not restricted by it — so anything you export from
+  this generator is yours, with no attribution owed for the lettering.
+
+  SIL Open Font License 1.1   https://openfontlicense.org
+  Apache License 2.0          https://www.apache.org/licenses/LICENSE-2.0
+
+  Each typeface remains the copyright of its respective authors. None is sold or
+  redistributed on its own; they ship only as part of this generator.
+
+Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allura, Amatic SC, Anton, Architects Daughter, Archivo, Archivo Black, Arvo, Audiowide, Bad Script, Bakbak One, Baloo 2, Bangers, Barlow Condensed, Bebas Neue, Berkshire Swash, Bevan, Bitter, Black Han Sans, Black Ops One, Boogaloo, Bowlby One, Bowlby One SC, Bree Serif, Bungee, Bungee Inline, Bungee Shade, Butcherman, Cabin, Caveat, Cedarville Cursive, Chakra Petch, Changa One, Chewy, Chicle, Chonburi, Cinzel, Cinzel Decorative, Comfortaa, Comic Neue, Coming Soon, Concert One, Cookie, Courgette, Coustard, Creepster, Crete Round, Cutive Mono, Damion, Dancing Script, Days One, Dela Gothic One, Delius Swash Caps, DM Mono, Do Hyeon, Domine, DotGothic16, Eater, EB Garamond, Electrolize, Ewert, Exo 2, Faster One, Faustina, Figtree, Fira Mono, Fjalla One, Flavors, Fredoka, Frijole, Fugaz One, Gaegu, Gelasio, Gloria Hallelujah, Gochi Hand, Grand Hotel, Grandstander, Gravitas One, Great Vibes, Griffy, Gruppo, Handjet, Handlee, Henny Penny, Homemade Apple, IBM Plex Mono, Iceland, Inconsolata, Indie Flower, Inter, Italianno, Itim, Jersey 15, Jersey 25, JetBrains Mono, Jolly Lodger, Josefin Sans, Josefin Slab, Jua, Jura, Just Another Hand, Kalam, Kanit, Kaushan Script, Khand, Kreon, Lacquer, Lexend, Libre Baskerville, Lilita One, Literata, Lobster, Lobster Two, Lora, Luckiest Guy, Major Mono Display, Mali, Manrope, Marcellus, Marck Script, Martian Mono, Merriweather, Metal Mania, Michroma, Micro 5, Modak, Monoton, Montserrat, Neucha, New Rocker, Niconne, Norican, Nosifer, Nothing You Could Do, Nova Mono, Nova Square, Nunito, Orbitron, Oswald, Outfit, Oxanium, Pacifico, Pangolin, Parisienne, Passion One, Patrick Hand, Patua One, Paytone One, Permanent Marker, Petit Formal Script, Petrona, Pinyon Script, Pirata One, Pixelify Sans, Playfair Display, Podkova, Poppins, Press Start 2P, PT Serif, Quantico, Quicksand, Racing Sans One, Rajdhani, Raleway, Rammetto One, Ranchers, Reenie Beanie, Righteous, Roboto Mono, Roboto Slab, Rochester, Rock Salt, Rokkitt, Rowdies, Rubik, Rubik Beastly, Rubik Burned, Rubik Distressed, Rubik Glitch, Rubik Mono One, Rubik Moonrocks, Rubik Puddles, Rubik Spray Paint, Rubik Storm, Rubik Vinyl, Rufina, Russo One, Rye, Sacramento, Saira Condensed, Sanchez, Sancreek, Sansita, Sansita Swashed, Satisfy, Schoolbell, Secular One, Shadows Into Light, Share Tech Mono, Short Stack, Shrikhand, Sigmar One, Silkscreen, Sixtyfour, Sniglet, Sora, Source Code Pro, Space Mono, Special Elite, Spectral, Squada One, Sriracha, Staatliches, Sue Ellen Francisco, Syncopate, Syne Mono, Tangerine, Teko, Tiny5, Titan One, Titillium Web, Tomorrow, Turret Road, Ultra, Unica One, Urbanist, Vollkorn, VT323, Wallpoet, Work Sans, Workbench, Xanh Mono, Yellowtail, Yeseva One, Zen Dots, Zilla Slab.
+
+
+2. SYMBOL / ICON FONT
+------------------------------------------------------------
+
+  Material Symbols (Rounded), instanced at FILL=1 and subset to the glyphs the
+  symbol picker offers.
+  Copyright (c) Google LLC
+  Licensed under the Apache License, Version 2.0
+  https://www.apache.org/licenses/LICENSE-2.0
+  https://fonts.google.com/icons
+
+  A symbol you place is traced into the file you export. Apache-2.0 puts no
+  attribution requirement on a work made WITH the icons, so the file you download
+  is yours to use and to sell under this generator's own licence.
+
+
+
+3. PATTERN TILES
+------------------------------------------------------------
+
+  Pattern tiles from Pattern Monster (https://pattern.monster), bundled as the
+  tile library of the pattern picker and loaded only when it is opened.
+  Copyright (c) 2020 - 2023 pattern.monster
+  Licensed under the MIT License
+  https://github.com/catchspider2002/svelte-svg-patterns
+
+  A pattern you fill a design with is traced into the file you export. The MIT
+  licence attaches to the software, not to a work made with it, so the file you
+  download is yours to use and to sell under this generator's own licence.
+
+  MIT License
+
+  Copyright (c) 2020 - 2023 pattern.monster
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+4. RUNTIME LIBRARIES
+------------------------------------------------------------
+
+  Every third-party library this application is built from, whether it is depended
+  on directly or reached through one of the shared Vostok Labs packages. Listed in
+  full rather than per build: which of them a given page actually loads depends on
+  which features it uses, and an omitted notice is a licence not honoured while a
+  spare one costs nobody anything.
+
+  d3-contour 4.0.2 — ISC
+  fflate 0.8.3 — MIT
+  manifold-3d 3.5.1 — Apache-2.0
+  onnxruntime-web 1.29.0 — MIT
+  opentype.js 1.3.4 — MIT
+  pica 10.0.2 — MIT
+  qrcode-generator 1.5.2 — MIT
+  three 0.171.0 — MIT
+
+
+
+
+============================================================
+APPENDIX A — COPYRIGHT NOTICES FOR EACH BUNDLED FACE
+============================================================
+
+  abril-fatface: Copyright (c) 2011, Copyright (c) 2011, TypeTogether (www.type-together.com), with Reserved Font Names "Abril" and "Abril Fatface"
+  aldrich: Copyright (c) Matthew Desmond, 2011. All rights reserved.
+  alegreya-sans-sc: Copyright 2013 The Alegreya Sans Project Authors (https://github.com/huertatipografica/Alegreya-Sans)
+  aleo: Copyright 2013 The Aleo Project Authors (https://github.com/AlessioLaiso/aleo)
+  alex-brush: Copyright 2011 The Alex Brush Project Authors (https://github.com/googlefonts/alex-brush)
+  alfa-slab-one: Copyright 2016 The Alfa Slab One Project Authors (http://www.jmsole.cl | info@jmsole.cl), with Reserved Font Name "Alfa Slab".
+  allura: Copyright 2010 The Allura Project Authors (https://github.com/googlefonts/allura)
+  amatic-sc: Copyright 2015 The Amatic SC Project Authors (https://github.com/googlefonts/AmaticSC)
+  anton: Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)
+  architects-daughter: Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)
+  archivo-black: Copyright 2017 The Archivo Black Project Authors (https://github.com/Omnibus-Type/ArchivoBlack)
+  archivo: Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
+  arvo: Copyright (c) 2010 Anton Koovit.
+  audiowide: Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Name "Audiowide"
+  bad-script: Copyright 2011 The Bad Script Project Authors (https://github.com/alexeiva/badscript)
+  bakbak-one: Copyright 2021 The Bakbak One Project Authors (https://github.com/googlefonts/bakbak)
+  baloo-2: Copyright 2019 The Baloo 2 Project Authors (https://github.com/EkType/Baloo2)
+  bangers: Copyright 2010 The Bangers Project Authors (https://github.com/googlefonts/bangers)
+  barlow-condensed: Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
+  bebas-neue: Copyright 2019 The Bebas Neue Project Authors (https://github.com/dharmatype/Bebas-Neue)
+  berkshire-swash: Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Name "Berkshire Swash"
+  bevan: Copyright 2016 The Bevan Project Authors (https://github.com/googlefonts/BevanFont)
+  bitter: Copyright 2011 The Bitter Project Authors (https://github.com/solmatas/BitterPro)
+  black-han-sans: Copyright 2015 The Black Han Sans Project Authors (https://github.com/zesstype/Black-Han-Sans)
+  black-ops-one: Copyright 2022 The PinyonScript Project Authors (https://github.com/SorkinType/Black-Ops)
+  boogaloo: Copyright (c) 2011, John Vargas Beltran (www.johnvargasbeltran.com|john.vargasbeltran@gmail.com), with Reserved Font Name "Boogaloo".
+  bowlby-one-sc: Copyright (c) 2011, vernon adams (vern@newtypography.co.uk), with Reserved Font Names "Bowlby"
+  bowlby-one: Copyright (c) 2011 by vernon adams (vern@newtypography.co.uk), with Reserved Font Names "Bowlby" "Bowlby One" and "Bowlby One SC". This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL
+  bree-serif: Copyright (c) 2011, TypeTogether (www.type-together.com), with Reserved Font Names "Bree" and "Bree Serif"
+  bungee-inline: Copyright 2023 The Bungee Project Authors (https://github.com/djrrb/Bungee)
+  bungee-shade: Copyright 2023 The Bungee Project Authors (https://github.com/djrrb/Bungee)
+  bungee: Copyright 2023 The Bungee Project Authors (https://github.com/djrrb/Bungee)
+  butcherman: Copyright (c) 2011, Typomondo, with Reserved Font Name "Butcherman".
+  cabin: Copyright 2018 The Cabin Project Authors (https://github.com/impallari/Cabin)
+  caveat: Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)
+  cedarville-cursive: Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)
+  chakra-petch: Copyright 2018 The Chakra Petch Project Authors (https://github.com/m4rc1e/Chakra-Petch.git)
+  changa-one: Copyright (c) 2011, Eduardo Tunni (http://www.tipo.net.ar), with Reserved Font Name "Changa"
+  chewy: Copyright (c) 2010 by Font Diner, Inc DBA Sideshow. All rights reserved.
+  chicle: Copyright (c) 2007 Angel Koziupa (sudtipos@sudtipos.com), Copyright (c) 2007 Alejandro Paul (sudtipos@sudtipos.com), with Reserved Font Name "Chicle"
+  chonburi: Copyright (c) 2015, Cadson Demak (info@cadsondemak.com)
+  cinzel-decorative: Copyright © 2012 Natanael Gama (info@ndiscovered.com), with Reserved Font Name 'Cinzel'
+  cinzel: Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)
+  comfortaa: Copyright 2011 The Comfortaa Project Authors (https://github.com/alexeiva/comfortaa), with Reserved Font Name "Comfortaa".
+  comic-neue: Copyright 2014 The Comic Neue Project Authors (https://github.com/crozynski/comicneue)
+  coming-soon: Copyright (c) 2010 by Open Window. All rights reserved.
+  concert-one: Copyright (c) 2011, 2011 Johan Kallas (johankallas@gmail.com), Copyright (c) 2011, 2011 Mihkel Virkus (mihkelvirkus@gmail.com), with Reserved Font Name Concert.
+  cookie: Copyright (c) 2011 by Ania Kruk (hello@aniakruk.com), with Reserved Font Name Cookie.
+  courgette: Copyright (c) 2012, Sorkin Type Co (www.sorkintype.com) with Reserved Font Name "Courgette".
+  coustard: Copyright 2011 The Coustard Project Authors (https://github.com/googlefonts/bangers)
+  creepster: Copyright (c) 2011, Font Diner, Inc (diner@fontdiner.com), with Reserved Font Names "Creepster"
+  crete-round: Copyright (c) 2011, TypeTogether (www.type-together.com), with Reserved Font Names "Crete" and "Crete Round"
+  cutive-mono: Copyright 2012 The Cutive Project Authors (https://github.com/googlefonts/cutivemono)
+  damion: Copyright 2014 The Damion Project Authors (https://github.com/googlefonts/damionFont)
+  dancing-script: Copyright 2016 The Dancing Script Project Authors (https://github.com/googlefonts/DancingScript), with Reserved Font Name "Dancing Script".
+  days-one: Copyright (c) 2009 by Alexander Kalachev, Alexey Maslov, Jovanny Lemonad. All rights reserved.
+  dela-gothic-one: Copyright 2020 The Dela Gothic Project Authors (https://github.com/syakuzen/DelaGothic)
+  delius-swash-caps: Copyright (c) 2010, 2011, Natalia Raices <nraices@gmail.com>, with Reserved Font Name "Delius" "Delius Unicase" "Delius Swash Caps".
+  dm-mono: Copyright 2020 The DM Mono Project Authors (https://www.github.com/googlefonts/dm-mono)
+  do-hyeon: Copyright 2018 The Do Hyeon Project Authors
+  domine: Copyright 2020 The Domine Project Authors (https://github.com/googlefonts/domine)
+  dotgothic16: Copyright 2020 The DotGothic16 Project Authors (https://github.com/fontworks-fonts/DotGothic16/)
+  eater: Copyright (c) 2011, Typomondo, with Reserved Font Name "Eater"
+  eb-garamond: Copyright 2017 The EB Garamond Project Authors (https://github.com/octaviopardo/EBGaramond12)
+  electrolize: Copyright (c) 2011, Cyreal (www.cyreal.org) with Reserved Font Name "Electrolize" This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL
+  ewert: Copyright (c) 2011, Johan Kallas (johankallas@gmail.com), Copyright (c) 2011 Mihkel Virkus (mihkelvirkus@gmail.com) with Reserved Font Name Ewert.
+  exo-2: Copyright 2013 The Exo 2 Project Authors (https://github.com/googlefonts/Exo-2.0)
+  faster-one: Copyright 2012 The Faster Project Authors (https://github.com/etunni/faster), with Reserved Font Name 'Faster'
+  faustina: Copyright 2019 The Faustina Project Authors (https://github.com/Omnibus-Type/Faustina)
+  figtree: Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree)
+  fira-mono: Digitized data copyright © 2012-2015, The Mozilla Foundation and Telefonica S.A.
+  fjalla-one: Copyright 2012 The Fjalla Project Authors (https://github.com/SorkinType/FjallaOne)
+  flavors: Copyright (c) 2011 by Font Diner, Inc DBA Sideshow (diner@fontdiner.com) with Reseved Font Name "Flavors"
+  fredoka: Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One)
+  frijole: Copyright (c) 2011 by Font Diner, Inc DBA Sideshow (diner@fontdiner.com) with Reseved Font Name "Frijole"
+  fugaz-one: Copyright (c) 2011 by LatinoType Limitada (info@latinotype.com), with Reserved Font Names "Fugaz" and "Fugaz One"
+  gaegu: Copyright 2018 The Gaegu Project Authors
+  gelasio: Copyright 2022 The Gelasio Project Authors (https://github.com/SorkinType/Gelasio)
+  gloria-hallelujah: Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)
+  gochi-hand: Copyright (c) 2011, Huerta Tipografica (www.huertatipografica.com.ar), with Reserved Font Names "Gochi" and "Gochi Hand"
+  grand-hotel: Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Name "Grand Hotel"
+  grandstander: Copyright 2020 The Grandstander Project Authors (https://github.com/Etcetera-Type-Co/Grandstander)
+  gravitas-one: Copyright (c) 2011, Sorkin Type Co (www.sorkintype.com) with Reserved Font Name "Gravitas". This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL
+  great-vibes: Copyright 2010 The Great Vibes Pro Project Authors (https://github.com/googlefonts/great-vibes)
+  griffy: Copyright (c) 2012 by Font Diner, Inc DBA Neapolitan (diner@fontdiner.com) with Reseved Font Name "Griffy"
+  gruppo: Copyright 2010 The Gruppo Project Authors (https://github.com/googlefonts/GruppoFont)
+  handjet: Copyright 2018 The Handjet Project Authors (https://github.com/rosettatype/Handjet/)
+  handlee: Copyright (c) 2011, Admix Designs (http://www.admixdesigns.com/) with Reserved Font Name Handlee.
+  henny-penny: Copyright (c) 2012, Brownfox (gayaneh.b@gmail.com), with Reserved Font Name "Henny Penny"
+  homemade-apple: Copyright (c) 2010 by Font Diner, Inc. All rights reserved.
+  ibm-plex-mono: Copyright 2017 IBM Corp. All rights reserved.
+  iceland: Copyright (c) 2011, Cyreal (www.cyreal.org) with Reserved Font Name "Iceland". This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL
+  icon-fallback: Copyright 2026 Google LLC. All Rights Reserved.
+  inconsolata: Copyright 2006 The Inconsolata Project Authors (https://github.com/cyrealtype/Inconsolata)
+  indie-flower: Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)
+  inter: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
+  italianno: Copyright 2009 The Italianno Project Authors (https://github.com/googlefonts/italianno)
+  itim: Copyright (c) 2015, Cadson Demak (info@cadsondemak.com), Copyright (c) 2014, Pablo Impallari (www.impallari.com|impallari@gmail.com)
+  jersey-15: Copyright 2023 The Soft Type Project Authors (https://github.com/scfried/soft-type-jersey)
+  jersey-25: Copyright 2023 The Soft Type Project Authors (https://github.com/scfried/soft-type-jersey)
+  jetbrains-mono: Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+  jolly-lodger: Copyright (c) 2012 by Font Diner, Inc (diner@fontdiner.com) with Reseved Font Name "Jolly Lodger"
+  josefin-sans: Copyright 2010 The Josefin Sans Project Authors (https://github.com/ThomasJockin/JosefinSansFont-master), with Reserved Font Name "Josefin Sans".
+  josefin-slab: Copyright 2020 The Josefin Slab Project Authors (https://github.com/googlefonts/josefinslab/), with Reserved Font Name Josefin.
+  jua: Copyright 2018 The BM JUA Project Authors
+  jura: Copyright 2019 The Jura Project Authors (https://github.com/ossobuffo/jura)
+  just-another-hand: Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence. http://www.apache.org/licenses/LICENSE-2.0.html
+  kalam: Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)
+  kanit: Copyright 2020 The Kanit Project Authors (https://github.com/cadsondemak/kanit)
+  kaushan-script: Copyright (c) 2011, Pablo Impallari (www.impallari.com|impallari@gmail.com), Copyright (c) 2011, Igino Marini. (www.ikern.com|mail@iginomarini.com), with Reserved Font Name Kaushan Script.
+  khand: Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)
+  kreon: Copyright 2018 The Kreon Project Authors (https://github.com/googlefonts/kreon), with Reserved Font Name "Kreon"
+  lacquer: Copyright 2019 The Lacquer Project Authors (https://github.com/Lacquer-Font/Lacquer)
+  lexend: Copyright 2019 The Lexend Project Authors (https://github.com/googlefonts/lexend)
+  libre-baskerville: Copyright 2012 The Libre Baskerville Project Authors (https://github.com/impallari/Libre-Baskerville)
+  lilita-one: Copyright (c) 2011 Juan Montoreano (juan@remolacha.biz), with Reserved Font Names "Lilita One"
+  literata: Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)
+  lobster-two: Copyright (c) 2011 by Pablo Impallari. www.impallari.com. All rights reserved.
+  lobster: Copyright 2010 The Lobster Project Authors (https://github.com/impallari/The-Lobster-Font), with Reserved Font Name "Lobster".
+  lora: Copyright 2011 The Lora Project Authors (https://github.com/cyrealtype/Lora-Cyrillic), with Reserved Font Name "Lora".
+  luckiest-guy: Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence. http://www.apache.org/licenses/LICENSE-2.0.html
+  major-mono-display: Copyright 2018 The Major Mono Project Authors (https://github.com/googlefonts/majormono)
+  mali: Copyright 2018 The Mali Project Authors (https://github.com/cadsondemak/Mali)
+  manrope: Copyright 2019 The Manrope Project Authors (https://github.com/sharanda/manrope)
+  marcellus: Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Name "Marcellus"
+  marck-script: Copyright (c) 2011, Denis Masharov <denis.masharov@gmail.com>, Marck Fogel, with Reserved Font Names "Marck Script".
+  martian-mono: Copyright 2020 The Martian Mono Project Authors (https://github.com/evilmartians/mono)
+  merriweather: Copyright 2024 The Merriweather Project Authors (https://github.com/EbenSorkin/Merriweather4) with Reserved Font Name "Merriweather".
+  metal-mania: Copyright (c) 2012 by Open Window (dathanboardman@gmail.com) with Reseved Font Name "Metal Mania"
+  michroma: Copyright 2011 The Michroma Project Authors (https://github.com/googlefonts/Michroma-font)
+  micro-5: Copyright 2023 The Soft Type Project Authors (https://github.com/scfried/soft-type-micro)
+  modak: Copyright (c) 2014, Ek Type. All rights reserved.
+  monoton: Copyright (c) 2011 by vernon adams. All rights reserved.
+  montserrat: Copyright 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)
+  neucha: Copyright (c) 2005-2010 by Jovanny Lemonad. All rights reserved.
+  new-rocker: Copyright (c) 2012, Pablo Impallari (www.impallari.com|impallari@gmail.com), Copyright (c) 2012, Brenda Gallo (gbrenda1987@gmail.com), Copyright (c) 2012, Rodrigo Fuenzalida (www.rfuenzalida.com|hello@rfuenzalida.com), with Reserved Font Name 'New Rocker'
+  niconne: Copyright (c) 2011 by vernon adams (vern@newtypography.co.uk), with Reserved Font Name Niconne.
+  norican: Copyright 2011 The Norican Project Authors (https://github.com/googlefonts/NoricanFont)
+  nosifer: Copyright (c) 2011, Typomondo, with Reserved Font Name "Nosifer"
+  nothing-you-could-do: Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com). This Font Software is licensed under the SIL Open Font License, Version 1.1. This license available with a FAQ at: http://scripts.sil.org/OFL
+  nova-mono: wmk69 SIL - Open Font License v.1.1
+  nova-square: Copyright (c) 2011, wmk69 (wmk69@o2.pl) with Reserved Font Names 'NovaSquare' and 'Nova Square'. This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL
+  nunito: Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
+  orbitron: Copyright 2018 The Orbitron Project Authors (https://github.com/theleagueof/orbitron), with Reserved Font Name: "Orbitron".
+  oswald: Copyright 2016 The Oswald Project Authors (https://github.com/googlefonts/OswaldFont)
+  outfit: Copyright 2021 The Outfit Project Authors (https://github.com/Outfitio/Outfit-Fonts)
+  oxanium: Copyright 2019 The Oxanium Project Authors (https://github.com/sevmeyer/oxanium)
+  pacifico: Copyright 2018 The Pacifico Project Authors (https://github.com/googlefonts/Pacifico)
+  pangolin: Copyright 2016 The Pangolin Project Authors (https://github.com/googlefonts/pangolin)
+  parisienne: Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Name "Parisienne"
+  passion-one: Copyright (c) 2011 Fontstage (info@fontstage.com), with Reserved Font Name "Passion"
+  patrick-hand: Copyright (c) 2012 Patrick Wagesreiter (mail@patrickwagesreiter.at)
+  patua-one: Copyright (c) 2011 by LatinoType Limitada (info@latinotype.com), with Reserved Font Names "Patua" and "Patua One"
+  paytone-one: Copyright 2011 The Paytone Project Authors (https://github.com/googlefonts/paytoneFont)
+  permanent-marker: Copyright (c) 2010 by Font Diner, Inc. All rights reserved.
+  petit-formal-script: Copyright (c) 2011, Pablo Impallari (www.impallari.com|impallari@gmail.com), Copyright (c) 2011, Brenda Gallo. (gbrenda1987@gmail.com), Copyright (c) 2011, Rodrigo Fuenzalida (www.rfuenzalida.com|hello@rfuenzalida.com), with Reserved Font Name Petit Formal Script.
+  petrona: Copyright 2019 The Petrona Project Authors (https://github.com/RingoSeeber/Petrona)
+  pinyon-script: Copyright 2022 The PinyonScript Project Authors (https://github.com/SorkinType/Pinyon)
+  pirata-one: Copyright (c) 2012, Rodrigo Fuenzalida, Nicolas Massi (www.taip.com.ar / abc.taip.com.ar), with Reserved Font Name 'Pirata'
+  pixelify-sans: Copyright 2021 The Pixelify Sans Project Authors (https://github.com/eifetx/Pixelify-Sans)
+  playfair-display: Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name "Playfair Display".
+  podkova: Copyright 2011 The Podkova Project Authors (https://github.com/cyrealtype/Podkova)
+  poppins: Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)
+  press-start-2p: Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P"
+  pt-serif: Copyright © 2010 ParaType Ltd. All rights reserved.
+  quantico: Copyright (c) 2011 Matthew Desmond (http://www.madtype.com | mattdesmond@gmail.com), with Reserved Font Name "Quantico"
+  quicksand: Copyright 2019 The Quicksand Project Authors (https://github.com/andrew-paglinawan/QuicksandFamily.git), with Reserved Font Name "Quicksand"
+  racing-sans-one: Copyright (c) 2012, Pablo Impallari (www.impallari.com|impallari@gmail.com) and Rodrigo Fuenzalida (www.rfuenzalida.com), with Reserved Font Name Racing Sans.
+  rajdhani: Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com)
+  raleway: Copyright 2010 The Raleway Project Authors (impallari@gmail.com), with Reserved Font Name "Raleway".
+  rammetto-one: Copyright 2011 The Rammetto Project Authors (https://github.com/googlefonts/RammettoFont), with Reserved Font Name Rammetto.
+  ranchers: Copyright (c) 2012, Pablo Impallari (www.impallari.com|impallari@gmail.com), Brenda Gallo. (gbrenda1987@gmail.com), with Reserved Font Name Ranchers.
+  reenie-beanie: Copyright (c) 2010 Typeco. All rights reserved.
+  righteous: Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Name "Righteous"
+  roboto-mono: Copyright 2015 The Roboto Mono Project Authors (https://github.com/googlefonts/robotomono)
+  roboto-slab: Copyright 2018 The Roboto Slab Project Authors (https://github.com/googlefonts/robotoslab)
+  rochester: Copyright (c) 2010 by Font Diner, Inc DBA Sideshow. All rights reserved. Available under the Apache 2.0 licence. http://www.apache.org/licenses/LICENSE-2.0.html
+  rock-salt: Copyright (c) 2010 by Font Diner, Inc DBA Sideshow. All rights reserved.
+  rokkitt: Copyright 2016 The Rokkit Project Authors (https://github.com/googlefonts/RokkittFont)
+  rowdies: Copyright 2018 The Rowdies Project Authors (https://github.com/magictype/rowdies)
+  rubik-beastly: Copyright 2020 The Rubik Filtered Project Authors (https://github.com/NaN-xyz/Rubik-Filtered)
+  rubik-burned: Copyright 2020 The Rubik Filtered Project Authors (https://github.com/NaN-xyz/Rubik-Filtered)
+  rubik-distressed: Copyright 2020 The Rubik Filtered Project Authors (https://github.com/NaN-xyz/Rubik-Filtered)
+  rubik-glitch: Copyright 2020 The Rubik Filtered Project Authors (https://github.com/NaN-xyz/Rubik-Filtered)
+  rubik-mono-one: Copyright (c) 2013, 2014, Hubert and Fischer, Philipp Hubert (philipp@hubertfischer.com), Sebastian Fischer (sebastian@hubertfischer.com)
+  rubik-moonrocks: Copyright 2020 The Rubik Filtered Project Authors (https://github.com/NaN-xyz/Rubik-Filtered)
+  rubik-puddles: Copyright 2020 The Rubik Filtered Project Authors (https://github.com/NaN-xyz/Rubik-Filtered)
+  rubik-spray-paint: Copyright 2020 The Rubik Filtered Project Authors (https://github.com/NaN-xyz/Rubik-Filtered)
+  rubik-storm: Copyright 2020 The Rubik Filtered Project Authors (https://github.com/NaN-xyz/Rubik-Filtered)
+  rubik-vinyl: Copyright 2020 The Rubik Filtered Project Authors (https://github.com/NaN-xyz/Rubik-Filtered)
+  rubik: Copyright 2015 The Rubik Project Authors (https://github.com/googlefonts/rubik)
+  rufina: Copyright (c) 2011-2012, Martin Sommaruga (martin@estudiotrama.com), with Reserved Font Name 'Rufina'
+  russo-one: Copyright (c) 2011-2012, Jovanny Lemonad (jovanny.ru), with Reserved Font Name "Russo"
+  rye: Copyright (c) 2010 by Sorkin Type Co with Reserved Font Name Rye. This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is copied below, and is also available with a FAQ at: http://scripts.sil.org/OFL
+  sacramento: Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Name "Sacramento"
+  saira-condensed: Copyright 2016 The Saira Project Authors (omnibus.type@gmail.com), with reserved font name "Saira".
+  sanchez: Copyright (c) 2012, LatinoType (www.latinotype.com), with Reserved Font Name 'Sanchez'
+  sancreek: Copyright (c) 2011 by vernon adams (vern@newtypography.co.uk), with Reserved Font Names "Sancreek"
+  sansita-swashed: Copyright 2020 The Sansita Swashed Project Authors (https://github.com/Omnibus-Type/Sansita-Swashed)
+  sansita: Copyright 2016 The Sansita Project Authors (omnibus.type@gmail.com)
+  satisfy: Copyright (c) 2011 by Font Diner, Inc. All rights reserved.
+  schoolbell: Copyright (c) 2010 by Font Diner, Inc. All rights reserved.
+  secular-one: Copyright 2016 The Secular One Project Authors (https://github.com/googlefonts/secular)
+  shadows-into-light: Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)
+  share-tech-mono: Copyright (c) 2012, Carrois Type Design, Ralph du Carrois (post@carrois.com www.carrois.com), with Reserved Font Name 'Share'
+  short-stack: Copyright (c) 2011, Sorkin Type Co (www.sorkintype.com) with Reserved Font Names "Short Stack" and "Short Stack One".
+  shrikhand: Copyright (c) 2015 Jonny Pinhorn (jonpinhorn.typedesign@gmail.com)
+  sigmar-one: Copyright 2011 The Sigmar One Project Authors (contact@sansoxygen.com)
+  silkscreen: Copyright 2001 The Silkscreen Project Authors (https://github.com/googlefonts/silkscreen)
+  sixtyfour: Copyright 2021 The Sixtyfour Project Authors (https://github.com/jenskutilek/homecomputer-fonts)
+  sniglet: Copyright (c) 2008, Haley Fiege (haley@kingdomofawesome.com), Copyright (c) 2012, Brenda Gallo (gbrenda1987@gmail.com) Copyright (c) 2013, Pablo Impallari (www.impallari.com|impallari@gmail.com), with no Reserved Font Name.
+  sora: Copyright 2019 The Sora Project Authors (https://github.com/sora-xor/sora-font)
+  source-code-pro: © 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’
+  space-mono: Copyright 2016 The Space Mono Project Authors (https://github.com/googlefonts/spacemono)
+  special-elite: Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence. http://www.apache.org/licenses/LICENSE-2.0.html
+  spectral: Copyright 2017 The Spectral Project Authors (https://github.com/productiontype/Spectral)
+  squada-one: Copyright (c) 2011, Admix Designs (http://www.admixdesigns.com/) with Reserved Font Name Squada.
+  sriracha: Copyright (c) 2015, Cadson Demak (info@cadsondemak.com), Copyright (c) 2014, Pablo Impallari (www.impallari.com|impallari@gmail.com)
+  staatliches: Copyright 2018 The Staatliches Project Authors (https://github.com/googlefonts/staatliches)
+  sue-ellen-francisco: Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com)
+  syncopate: Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence. http://www.apache.org/licenses/LICENSE-2.0.html
+  syne-mono: Copyright 2019 The Syne Project Authors (https://gitlab.com/bonjour-monde/fonderie/syne-typeface)
+  tangerine: Copyright (c) 2010 by Toshi Omagari. All rights reserved.
+  teko: Copyright 2023 The Teko Project Authors (https://www.github.com/googlefonts/teko)
+  tiny5: Copyright 2024 The tiny5 Project Authors (https://github.com/Gissio/font_tiny5)
+  titan-one: Copyright (c) 2011 Rodrigo Fuenzalida (hello@rfuenzalida.com), with Reserved Font Name "Titan One"
+  titillium-web: Copyright (c) 2009-2011 by Accademia di Belle Arti di Urbino and students of MA course of Visual design. Some rights reserved.
+  tomorrow: Copyright 2019 The Tomorrow Project Authors (https://github.com/MonicaRizzolli/Tomorrow)
+  turret-road: Copyright 2018 The Turret Road Project Authors (https://github.com/noponies/turret-road)
+  ultra: Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence. http://www.apache.org/licenses/LICENSE-2.0.html
+  unica-one: Copyright 2012 The Unica One Project Authors (https://github.com/etunni/unica)
+  urbanist: Copyright 2021 The Urbanist Project Authors (https://github.com/coreyhu/Urbanist)
+  vollkorn: Copyright 2018 The Vollkorn Project Authors (https://github.com/FAlthausen/Vollkorn-Typeface)
+  vt323: Copyright 2011, The VT323 Project Authors (peter.hull@oikoi.com)
+  wallpoet: Copyright (c) 2011 by Lars Berggren. All rights reserved.
+  work-sans: Copyright 2019 The Work Sans Project Authors (https://github.com/weiweihuanghuang/Work-Sans)
+  workbench: Copyright 2021 The Workbench Project Authors (https://github.com/jenskutilek/homecomputer-fonts)
+  xanh-mono: Copyright 2020 The XanhMono Project Authors (https://github.com/yellow-type-foundry/xanhmono)
+  yellowtail: Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence. http://www.apache.org/licenses/LICENSE-2.0.html
+  yeseva-one: Copyright 2012 The Yeseva One Project Authors (lemonad@jovanny.ru), with Reserved Font Name "Yeseva".
+  zen-dots: Copyright 2021 The Dots Project Authors (https://github.com/googlefonts/zen-dots)
+  zilla-slab: Copyright 2017, The Mozilla Foundation
+
+
+============================================================
+APPENDIX B — SIL OPEN FONT LICENSE 1.1 (full text)
+============================================================
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded, 
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+
+
+============================================================
+APPENDIX C — APACHE LICENSE 2.0 (full text)
+============================================================
+
+Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+
+============================================================
+Questions about any of the above: see the project's licence, or get in touch.

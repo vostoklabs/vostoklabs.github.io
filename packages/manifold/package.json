@@ -1,0 +1,16 @@
+{
+  "name": "@vostok/manifold",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "manifold-3d's JS glue less its leaks: a CrossSection built from rings, read back to rings, and extruded, through the same embind classes, freeing what the glue forgets.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

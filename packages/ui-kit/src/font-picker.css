@@ -1,0 +1,91 @@
+/* Font picker — see components/font-picker.ts */
+
+.vl-font-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.vl-font-picker__cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vl-font-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  background: var(--panel-2);
+}
+
+.vl-font-picker__heading {
+  padding: 8px 8px 2px;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vl-font-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-standard);
+}
+@media (hover: hover) {
+  .vl-font-row:hover { background: var(--panel); }
+}
+.vl-font-row:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-font-row[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.vl-font-row__sample {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.vl-font-row__name {
+  flex: 0 0 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
+.vl-font-picker__empty {
+  margin: 12px 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.vl-font-picker__sentinel {
+  height: 1px;
+}

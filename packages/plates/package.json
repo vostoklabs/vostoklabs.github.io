@@ -1,0 +1,24 @@
+{
+  "name": "@vostok/plates",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Bambu Lab build-plate meshes plus the three.js renderer and picker every generator's preview shares.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./three": "./src/buildPlate.ts",
+    "./plates.css": "./src/plates.css"
+  },
+  "scripts": {
+    "build-meshes": "node scripts/build-plates.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/three": "^0.171.0",
+    "three": "^0.171.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  }
+}

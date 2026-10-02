@@ -1,0 +1,4 @@
+# Offline single-file builds and their check copies
+_offline-check.html
+*.offline.html
+dist-offline/

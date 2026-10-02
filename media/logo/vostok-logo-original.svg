@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 568.55431 524.21602"
+   width="568.55432"
+   height="524.216"
+   version="1.1"
+   id="svg10"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <desc
+     id="desc1">v logo.dxf - scale = 1.000000, origin = (0.000000, 0.000000), method = manual</desc>
+  <defs
+     id="defs4" />
+  <g
+     id="g10"
+     transform="translate(-154.85598,-434.41616)">
+    <g
+       id="g11"
+       style="stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-opacity:1"
+       transform="matrix(27.585522,0,0,27.585522,-4116.9283,-25485.74)">
+      <path
+         d="m 168.82968,939.92899 h 6.20045 l -7.06437,18.4033 h -6.01727 l 3.00864,-8.31496 z"
+         style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-opacity:1"
+         id="path6" />
+      <path
+         d="m 164.11059,947.81203 -3.00864,8.31496 -0.84654,-2.20531 3.00864,-8.31496 z"
+         style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-opacity:1"
+         id="path7" />
+      <path
+         d="m 162.41751,943.40141 -3.00864,8.31496 -0.84653,-2.20531 3.00863,-8.31496 z"
+         style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-opacity:1"
+         id="path8" />
+      <path
+         d="m 160.38496,939.92899 -2.66916,7.37676 -0.84654,-2.20531 1.87121,-5.17145 z"
+         style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-opacity:1"
+         id="path9" />
+      <path
+         d="m 157.09597,939.92899 -1.07325,2.96615 -0.84654,-2.20531 0.2753,-0.76084 z"
+         style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-opacity:1"
+         id="path10" />
+    </g>
+  </g>
+</svg>

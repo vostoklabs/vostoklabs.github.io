@@ -1,0 +1,10 @@
+Fluent Emoji High Contrast artwork
+Source: https://github.com/microsoft/fluentui-emoji
+Copyright Microsoft Corporation. MIT; see licenses/Fluent-Emoji.txt.
+
+Tabler Filled Icons
+Source: https://github.com/tabler/tabler-icons
+Copyright 2020-2026 Paweł Kuna. MIT; see licenses/Tabler-Icons.txt.
+
+These curated monochrome icons are bundled locally. Font and Material Symbols credits are in licenses/FONT-CREDITS.md, with their
+OFL and Apache license texts alongside them.

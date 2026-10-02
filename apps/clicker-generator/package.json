@@ -1,0 +1,39 @@
+{
+  "name": "clicker-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based image-to-clicker 3D model generator (3MF export, GitHub Pages).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "build:mw": "tsc -p tsconfig.json && vite build --mode makerworld",
+    "preview:mw": "vite preview --port 5174",
+    "pack:mw": "tsc -p tsconfig.json && vite build --mode makerworld && node makerlab/pack.mjs",
+    "serve:mw": "node makerlab/server.cjs -c config.json -p 8001",
+    "build:offline": "node ../../scripts/offline.mjs clicker-generator",
+    "build:internal": "tsc -p tsconfig.json && vite build --mode internal"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/manifold": "workspace:*",
+    "@vostok/plates": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
+    "d3-contour": "^4.0.2",
+    "fflate": "^0.8.3",
+    "lucide": "^1.21.0",
+    "manifold-3d": "^3.0.1",
+    "pica": "^10.0.2",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/d3-contour": "^3.0.6",
+    "@types/three": "^0.171.0",
+    "@xmldom/xmldom": "^0.9.10",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

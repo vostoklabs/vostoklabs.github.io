@@ -1,0 +1,296 @@
+/* Base primitives, ported from the clicker's shipped CSS. All classes vl- prefixed.
+   Sidebar sections are FLAT with hairline separators, never boxed cards. */
+
+/* Section = the real sidebar pattern: border-top hairline, vertical padding, no box. */
+.vl-section { border-top: 1px solid var(--line); padding: 22px 0; }
+.vl-section:first-of-type { border-top: none; padding-top: 4px; }
+
+/* Uppercase section label (clicker .label). */
+.vl-label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.vl-hint { color: var(--muted); font-size: 14px; line-height: 1.4; margin: 0; }
+.vl-hint a, .vl-link {
+  color: var(--accent);
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.vl-hint a:hover, .vl-link:hover { text-decoration: underline; }
+
+/* Buttons, clicker's exact treatments. */
+.vl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  font-size: var(--control-fs);
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard),
+    background var(--dur-hover) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
+}
+/* Every hover here carries a `:not(:disabled)` guard. Without it a dead Export button
+   still lit up accent blue under the cursor, which invites a click and does nothing —
+   the one piece of feedback in the kit that was actively lying. */
+.vl-btn:hover:not(:disabled) { border-color: var(--accent); }
+.vl-btn:disabled { opacity: var(--opacity-disabled, 0.45); cursor: not-allowed; }
+.vl-btn:disabled:hover { border-color: var(--line); color: var(--text); filter: none; }
+
+/* Pointer-down acknowledgement. Uniform scale and no rebound: a click carries no momentum,
+   so bouncing it invents energy the user did not supply — which is the single most common
+   way a professional tool starts looking like a toy. --press-scale goes to 1 under
+   prefers-reduced-motion, so this rule needs no media query of its own. */
+.vl-btn:active:not(:disabled) { transform: scale(var(--press-scale)); }
+
+.vl-btn svg { flex: 0 0 auto; }
+
+/* A label with a quiet second line under it (a price on a buy button).
+
+   Only present when `sublabel` was passed, so this styles nothing that existed before. The
+   stack is what keeps a two-line label from stranding the icon: without it the label is a bare
+   text node, and a centred flex row wrapping that node pushes the icon to the far edge while
+   the text centres itself in what is left. Wrapping the lines makes them one flex item, so the
+   icon sits beside the pair instead of beside the first line. */
+.vl-btn__text {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.vl-btn__sub {
+  font-size: 0.82em;
+  font-weight: 600;
+  /* Inherits the button's colour rather than naming one: on a `cta` the ground is `--accent`
+     and on a plain button it is `--panel-2`, so any fixed colour would fail one of them. */
+  opacity: 0.88;
+}
+
+/* The paid marker: a sparkle and a word, at the button's trailing edge.
+
+   `margin-left: auto` pushes it to the edge without the button needing `space-between`, which
+   would also fling a lone icon away from its label. On a button with no badge nothing changes.
+   Sized in `em` so it tracks whatever control it is sitting in — a 13px compact-density button
+   and a 17.5px comfortable one both get a pill in proportion. */
+.vl-btn__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 3px 6px;
+  border-radius: var(--radius-s, 4px);
+  font-family: var(--font-display);
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--accent);
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+/* With a pill on the row the label takes the space that is left and starts at the leading edge,
+   rather than centring itself in a column the pill has already narrowed. Scoped to badged
+   buttons so an ordinary one keeps its centred label. */
+/* A badged button that is not paid for yet reads quieter than one that is. The pill keeps its
+   full strength: it is the label for the state, so dimming it would dim the explanation. */
+.vl-btn--locked { opacity: 0.72; }
+.vl-btn--locked .vl-btn__badge { opacity: 1; }
+
+.vl-btn--badged { justify-content: flex-start; }
+.vl-btn--badged .vl-btn__text { flex: 1 1 auto; align-items: flex-start; text-align: left; }
+
+.vl-btn__badge-icon { display: inline-flex; align-items: center; }
+.vl-btn__badge-icon svg { width: 1em; height: 1em; }
+
+/* On an accent-filled button the ground IS the accent, so an accent-on-panel pill would
+   disappear into it. Invert to sit on top instead. */
+.vl-btn--primary .vl-btn__badge {
+  color: var(--accent-text);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--accent-text) 45%, transparent);
+}
+
+.vl-btn--primary {
+  border: none;
+  border-radius: var(--radius-btn-primary);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  padding: 11px 16px;
+}
+.vl-btn--primary:hover:not(:disabled) { filter: brightness(1.07); border: none; }
+.vl-btn--primary:disabled { filter: none; }
+
+/* CTA: the rung above primary, for the one button that asks for money.
+
+   It is a primary plus three things, and each is doing a job that "make it bigger" would not:
+   the ring separates it from the accent fill so it reads as raised rather than merely blue,
+   the weight and padding give it more mass than the primary it sits beside, and the hover
+   lift is the only movement in the ladder — a button that moves is a button that is asking.
+
+   `--accent-rgb` rather than a colour-mix on `--accent`, because this needs an ALPHA ramp and
+   `color-mix` toward transparent loses the hue at low percentages in Safari. Never a hex: the
+   accent differs per theme and a copied one would strand the dark palette. */
+.vl-btn--cta {
+  padding: 13px 20px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow:
+    0 0 0 1px rgb(var(--accent-rgb) / 0.55),
+    0 6px 18px rgb(var(--accent-rgb) / 0.32);
+  transition:
+    box-shadow var(--dur-hover) var(--ease-standard),
+    transform var(--dur-hover) var(--ease-standard),
+    filter var(--dur-hover) var(--ease-standard);
+}
+
+.vl-btn--cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgb(var(--accent-rgb) / 0.7),
+    0 10px 24px rgb(var(--accent-rgb) / 0.42);
+}
+
+/* Straight back down, no overshoot: a click is a confirmation, not a bounce. */
+.vl-btn--cta:active:not(:disabled) {
+  transform: translateY(0);
+  transition-duration: var(--dur-press);
+}
+
+.vl-btn--cta:disabled { box-shadow: none; }
+
+/* The sheen: a slow band of light crossing the button, then a long pause.
+
+   A subtle animation, added once the price came off the label. The restraint is
+   the design: it sweeps for roughly a third of the cycle and rests for the other two thirds, so
+   it reads as an occasional glint rather than a barber's pole. `transform` only, so it composites
+   on the GPU and never lays out.
+
+   The button clips it, which is why `overflow: hidden` is here rather than on a wrapper. That
+   also clips the busy spinner's ::before, which is fine: a button cannot be mid-purchase and
+   idle-shimmering at the same time, and the disabled rule below stops the sheen anyway. */
+.vl-btn--cta { position: relative; overflow: hidden; isolation: isolate; }
+
+.vl-btn--cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Wide and faint. A narrow bright band reads as a "shine" gimmick; a broad soft one reads as
+     light moving across a surface, which is the difference between subtle and salesy. */
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    rgb(255 255 255 / 0.14) 50%,
+    transparent 75%
+  );
+  transform: translateX(-100%);
+  animation: vl-cta-sheen var(--dur-attention) var(--ease-standard) infinite;
+}
+
+/* Nothing to draw attention to on a button that cannot be pressed. */
+.vl-btn--cta:disabled::after { animation: none; content: none; }
+
+@keyframes vl-cta-sheen {
+  0% { transform: translateX(-100%); }
+  /* Across in the first fifth, then held off-screen for the remaining four: the pause IS the
+     effect, and at a 6s cycle that is ~1.2s of movement every six seconds. */
+  20%, 100% { transform: translateX(100%); }
+}
+
+/* Reduced motion removes movement, not feedback — and an idle glint is pure movement, so it
+   goes entirely. Hover and press still respond. */
+@media (prefers-reduced-motion: reduce) {
+  .vl-btn--cta::after { animation: none; content: none; }
+}
+:root[data-motion="reduced"] .vl-btn--cta::after { animation: none; content: none; }
+
+/* Reduced motion removes the MOVEMENT, not the feedback — the ring still brightens. */
+@media (prefers-reduced-motion: reduce) {
+  .vl-btn--cta:hover:not(:disabled) { transform: none; }
+}
+:root[data-motion="reduced"] .vl-btn--cta:hover:not(:disabled) { transform: none; }
+
+.vl-btn--secondary {
+  background: transparent;
+  border-radius: var(--radius-btn-primary);
+  font-weight: 600;
+}
+.vl-btn--secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+/* Ghost: quiet, no fill, for low-emphasis actions (theme toggle, etc.). */
+.vl-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.vl-btn--ghost:hover:not(:disabled) { background: var(--panel-2); border-color: var(--line); color: var(--text); }
+
+/* Icon-only square button (history bars, steppers, compact toolbars). */
+.vl-btn--icon { padding: 0; width: var(--icon-btn-size); height: var(--icon-btn-size); }
+.vl-btn--icon svg { width: 18px; height: 18px; }
+
+/* Full-width action (the app's big Export button). */
+.vl-btn--block { width: 100%; padding: 14px; font-size: var(--fs-base); }
+
+/* Horizontal action cluster: wraps, even gaps, buttons keep their intrinsic
+   width. This is the container that keeps sibling buttons the same height. */
+.vl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+.vl-btn-row { display: flex; gap: 10px; }
+/* `min-width: 0` is what makes `flex: 1` mean what it says. A flex item's default
+   `min-width: auto` refuses to shrink below its own content, so three labelled buttons whose
+   text does not fit push straight past the panel and the last one is clipped by the sidebar's
+   edge — reported as "the right side of the left menu is cut off", and it was. With this they
+   share the width and ellipsise instead. */
+.vl-btn-row .vl-btn { flex: 1; min-width: 0; overflow: hidden; }
+
+/* Keyboard focus ring. */
+.vl-btn:focus-visible,
+.vl-link:focus-visible,
+.vl-tab:focus-visible,
+.vl-topbar-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* Comfortable touch targets on phones. */
+
+/* Buttons as a set of choices rather than a row of actions — see `buttonGrid()`. The column
+   count is a custom property so the count lives at the call site, not in a new rule per app. */
+.vl-btn-grid {
+  --btn-cols: 2;
+  display: grid;
+  grid-template-columns: repeat(var(--btn-cols), minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.vl-btn-grid > .vl-btn { width: 100%; }

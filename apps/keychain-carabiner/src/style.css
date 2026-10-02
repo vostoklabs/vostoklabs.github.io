@@ -1,0 +1,122 @@
+/* App-specific styles only.
+
+   Everything structural already comes from @vostok/ui-kit/styles.css. If you find yourself
+   restyling one of those, fix it in the ui-kit instead — that is what keeps every generator
+   looking like the same product. */
+
+/* The page frame — background, text colour, fonts, margin — comes from the kit's root.css.
+   A generator only adds this: it fills the viewport, so the page itself never scrolls. */
+body {
+  overflow: hidden;
+}
+
+/* The viewer mounts its canvas here; it fills the stage behind the overlays. */
+.kc-stage-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.kc-stage-canvas canvas {
+  display: block;
+}
+
+/* --- Icon chooser ---------------------------------------------------------------------- */
+
+/* The dozen symbols people actually want, as one-click buttons. Six across, because the
+   glyphs are square and six 44 px targets fit the panel with the gaps the kit uses. */
+.kc-quick {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.kc-quick__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 44px is the coarse-pointer minimum and these are the smallest targets in the panel. */
+  min-height: 44px;
+  padding: 0;
+  font-family: 'VL-icon-fallback', 'Chakra Petch', system-ui, sans-serif;
+  font-size: 20px;
+}
+
+.kc-quick__btn[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The current pick, spelled out beside its glyph, with the way to change it. */
+.kc-icon-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kc-icon-current__glyph {
+  font-family: 'VL-icon-fallback', system-ui, sans-serif;
+  font-size: 22px;
+  line-height: 1;
+  min-width: 28px;
+  text-align: center;
+}
+
+.kc-icon-current__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The shape field's button carries the current silhouette as its icon, at icon size. */
+.kc-shape-field .vl-btn svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+
+/* The shape drawer: one thumb grid per group, with air between the groups. */
+.kc-shape-drawer {
+  display: grid;
+  gap: 16px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* A shape tile inside the quick row sits at the same size as the glyph buttons beside it. */
+.kc-quick__tile {
+  min-height: 44px;
+  aspect-ratio: auto;
+}
+
+/* What you are about to print, as a short list. */
+.kc-summary {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+}
+
+/* "None" sits in the quick grid as a plain word among glyphs. */
+.kc-quick__none {
+  font-family: inherit;
+  font-size: var(--control-fs, 14px);
+}
+
+/* A group of rows that shows or hides as one (a charm's body, a chain style's controls) —
+   spaced like the section body it sits in, so rows never touch across the group's edge. */
+.kc-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The chosen symbol's name sits above its grid with room, like a label. */
+.kc-icon-current {
+  margin-bottom: 4px;
+}

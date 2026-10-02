@@ -1,0 +1,136 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Hub
+        run: pnpm build:hub
+
+      - name: Build Name Keychain
+        run: pnpm build:keychain
+
+      - name: Copy Name Keychain to Hub Dist
+        run: cp -r apps/name-keychain/dist apps/hub/dist/name-keychain
+
+      - name: Build Clicker Generator
+        run: pnpm build:clicker
+
+      - name: Copy Clicker Generator to Hub Dist
+        run: |
+          cp -r apps/clicker-generator/dist apps/hub/dist/Clicker-Generator
+          cp -r apps/clicker-generator/dist apps/hub/dist/clicker
+
+      - name: Build Keycap Generator
+        run: pnpm build:keycap
+
+      - name: Copy Keycap Generator to Hub Dist
+        run: |
+          cp -r apps/keycap-generator/dist apps/hub/dist/SVG-keycap-generator
+          cp -r apps/keycap-generator/dist apps/hub/dist/keycap
+
+      - name: Build Magnet Generator
+        run: pnpm build:magnet
+
+      - name: Copy Magnet Generator to Hub Dist
+        run: cp -r apps/magnet-generator/dist apps/hub/dist/magnet
+
+      - name: Build House Number Generator
+        run: pnpm build:housenumber
+
+      - name: Copy House Number Generator to Hub Dist
+        run: cp -r apps/house-number/dist apps/hub/dist/house-number
+
+      - name: Build Pen Topper Generator
+        run: pnpm build:penTopper
+
+      - name: Copy Pen Topper Generator to Hub Dist
+        run: cp -r apps/pen-topper/dist apps/hub/dist/pen-topper
+
+      # Default build: the one the hub serves.
+      - name: Build Fold-Up Box Generator (print-only)
+        run: pnpm build:foldbox
+
+      - name: Copy Fold-Up Box Generator to Hub Dist
+        run: cp -r apps/foldbox/dist apps/hub/dist/foldbox
+
+      - name: Build Keychain Carabiner Set
+        run: pnpm build:keychainCarabiner
+
+      - name: Copy Keychain Carabiner Set to Hub Dist
+        run: cp -r apps/keychain-carabiner/dist apps/hub/dist/keychain-carabiner
+
+      # Default build: MakerWorld-only modules are stubbed in this build. The MakerWorld build
+      # is `build:mw`, and it writes to dist-mw/, never here.
+      - name: Build Laser Studio
+        run: pnpm build:laserStudio
+
+      - name: Copy Laser Studio to Hub Dist
+        run: cp -r apps/laser-studio/dist apps/hub/dist/laser-studio
+
+      # Every generator the hub links to has to exist under the path generators.json gives it,
+      # or the card is a 404 — which is exactly what shipped: the app was written, the registry
+      # entry was added, and nothing here ever built it. Cheap to assert, and it fails the
+      # deploy instead of the visitor.
+      - name: Check every app route the hub links to exists
+        run: |
+          node -e '
+            const fs = require("fs");
+            const reg = JSON.parse(fs.readFileSync("generators.json", "utf8"));
+            const missing = reg.generators
+              .filter((g) => g.status === "live" && g.appUrl && !g.external)
+              .map((g) => g.appUrl.replace(/^\/|\/$/g, ""))
+              .filter((p) => !fs.existsSync(`apps/hub/dist/${p}/index.html`));
+            if (missing.length) {
+              console.error("No build at: " + missing.join(", "));
+              process.exit(1);
+            }
+            console.log("All app routes present.");
+          '
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/hub/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

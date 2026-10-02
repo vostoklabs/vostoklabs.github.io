@@ -1,0 +1,2897 @@
+/**
+ * The keycap generator, wrapped so a host can mount and unmount it.
+ *
+ * On the web this file's body ran on import: a browser tab loads the script once and never
+ * unloads it, so there was nothing to call a `mount()` from. A desktop host is the opposite
+ * — it mounts this into an element it owns, and unmounts it when the user opens a different
+ * generator. Everything that used to be top-level is now inside `mount()`, and everything
+ * that outlives a function call — the renderer, the observers, the document-level listener,
+ * the tooltip parked on <body> — is handed back in the teardown.
+ *
+ * Skipping that teardown is not a tidiness problem. A leaked WebGL context per visit hits
+ * the browser's limit at around sixteen, and it starts dropping the OLDEST context: the bug
+ * shows up somewhere else entirely, long after the cause.
+ *
+ * The markup moved to template.js and the styles to style.css for the same reason — there
+ * is no index.html in a hosted build. `main.js` is now the three-line web entry.
+ */
+
+import { BRAND } from '@vostok/brand';
+import '@vostok/ui-kit/styles.css';
+import '@vostok/plates/plates.css';
+import {
+  topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs,
+  promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile,
+  button, dropZone, toast, themeColorHex, openLicenseModal, licenseReminderToast,
+  nudgePad, busyChip, panelCredit, paletteRow, segmentedControl,
+} from '@vostok/ui-kit';
+import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
+import { createBuildPlate } from '@vostok/plates/three';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { loadKeycap } from './keycap.js';
+import { parseSvg, logoFootprint } from './logo.js';
+import { openSvgPreview } from './svgPreview.js';
+import { FONT_OPTIONS, importFontFile, parseLetter, loadBundledFonts } from './letter.js';
+import { buildBodies } from './geometry.js';
+import { initManifold, geomToManifold, manifoldToGeom, creaseNormals, getManifoldApi } from './manifold.js';
+import { printMatrix } from './meshUtils.js';
+import { applyStemClearance } from './stemClearance.js';
+import {
+  FIT_TEST_STEP_MM, FIT_TEST_STEP_OPTIONS, FIT_TEST_FONT_ID, computeFitTestLadder, buildFitTestRow,
+} from './fitTest.js';
+import { buildThreeMF } from './export3mf.js';
+import { buildObjMtl, objToArrayBuffer } from './exportObj.js';
+import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
+import { zipSync } from 'fflate';
+// MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
+// host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
+import {
+  MAKERLAB,
+  initMakerlab,
+  isReady as mlReady,
+  can as mlCan,
+  sdkExport,
+  sdkToast,
+} from 'virtual:makerlab';
+// Paid features (MakerWorld-only). Imported statically so the MAKERLAB=false constant lets
+// the bundler drop the whole feature — tabs, layouts and set builder — from the public build.
+// Through the same kind of virtual seam as the host glue above, because src/pro/ is gitignored: the
+// public build resolves this to a no-op stub and never needs those files to exist.
+import { mountProFeatures, PRO_CHANGELOG } from 'virtual:pro-pack';
+import './style.css';
+import { ICONS } from '@vostok/ui-kit';
+import { CHANGELOG } from './changelog';
+import { TEMPLATE } from './template.js';
+import { setAssetBase, assetUrl } from './assets.js';
+
+/**
+ * @param {HTMLElement} container where the generator's DOM goes
+ * @param {import('@vostok/ui-kit').DesktopHost} [host] absent on the web
+ * @returns {() => void} teardown
+ */
+export function mount(container, host) {
+  setAssetBase(host?.assetBase?.() ?? '');
+
+  // Outbound links go to the user's real browser rather than to this window, which has no
+  // address bar and so no way back. One delegated listener, and a no-op on the web.
+  bindExternalLinks(host);
+  container.innerHTML = TEMPLATE;
+  // Whoever owns the container, WE own its layout: it has to be a bounded flex column or
+  // .vl-app sizes to its content and everything past the fold is clipped away (see .kc-root
+  // in style.css). Applied here rather than as an `#app` rule so the desktop host — which
+  // mounts us into an element of its own, with no id we could select — is covered too.
+  container.classList.add('kc-root');
+
+  /** Scoped to the container: two generators can be mid-teardown and mid-mount at once,
+   *  and a bare getElementById would happily find the other one's node. */
+  const $ = (id) => container.querySelector(`#${id}`);
+
+  /** Everything the teardown has to undo, in the order it was set up. */
+  const cleanups = [];
+  cleanups.push(() => container.classList.remove('kc-root'));
+
+
+
+  // Mount the unified Vostok topbar — except in the MakerWorld build, where the host provides
+  // its own chrome, and on the desktop, where the app around this one already owns the
+  // window. In both, a bar of links out is a way out of the product.
+  const oldTopbar = $('topbar');
+  if (oldTopbar) {
+    if (MAKERLAB || isDesktop()) {
+      oldTopbar.remove();
+    } else {
+      oldTopbar.replaceWith(topbarLinks({
+        githubUrl: BRAND.urls.github,
+        boostUrl: BRAND.urls.makerworld,
+      }));
+    }
+  }
+
+  // Mount header and footer components
+  const oldHeader = $('keycapAppHeader');
+  if (oldHeader) {
+    if (MAKERLAB) {
+      // The host page already shows the app's name, so in this build the header simply
+      // goes — the credit strip pinned at the foot of the panel (panelCredit, below) carries
+      // the byline in both builds now.
+      oldHeader.remove();
+    } else {
+      oldHeader.replaceWith(generatorHeader({
+        title: 'Keycap Legend Generator',
+        description: 'Pick an icon or letter, size it, export a two-color 3MF.',
+        // The byline lives in the credit strip at the foot of this panel. Saying "Made by
+        // Vostok Labs" at both ends of one column is one time too many.
+        hideCredit: true,
+      }));
+    }
+  }
+
+  /** The footer's primary export button, once the footer exists. Relabelled per mode.
+   *  Declared before the footer is built — the block below assigns it. */
+  let exportBtn = null;
+  /** The footer's export block, so a paid mode can hang its price note under the button. */
+  let exportPanelEl = null;
+
+  const keycapFooter = $('keycapFooter');
+  if (keycapFooter) {
+    const footer = sidebarFooter({
+      // The host draws Save and Open itself when it owns projects; two Save buttons that
+      // do different things is worse than either one alone. `Boolean(...)`, not `isDesktop()`:
+      // a desktop host without the capability still needs these.
+      //
+      // Also true in the MakerLab embed, where nobody owns them: the embedded build has no
+      // download path, so it has no Save or Load. The kit then draws only Help and the theme
+      // toggle — which is what the live listing has always shown. This used to be done by
+      // removing "the first action row" after the fact, and when the kit folded its two rows
+      // into one that took Help and Light mode with it.
+      hostOwnsProjects: MAKERLAB || Boolean(host?.registerProject),
+      // The label names the user's FILE, and the verb names what happens to it.
+      //
+      // Two wrong answers were tried first. "Export to MakerWorld" named the wrong platform
+      // outright — the host here is MakerLab. "Export to MakerLab" named the right one, but
+      // naming our host describes our side of the transaction; the user came for a 3MF.
+      // Plain "Download 3MF" is the other miss: the embedded build has no download path, the
+      // file goes to the host, and a button that says otherwise is the one thing this label
+      // has to stop doing.
+      //
+      // "Export 3MF" is the file plus an honest verb. The kit passes a label already starting
+      // with "Export" through untouched and turns a bare one into "Download 3MF", so the web
+      // build keeps the word that is true there. Where it went is the status line's job, and
+      // it says so.
+      formats: [{ id: '3mf', label: MAKERLAB ? 'Export 3MF' : '3MF' }],
+      // Always travels. A paid mode may have relabelled this button ("Unlock Pro"),
+      // but that is a label: the click goes down the same path either way and meets the gate at
+      // the far end, which is the only thing that decides whether paid work runs.
+      //
+      // RETURNED, not fired and forgotten. The kit greys this button for as long as the promise
+      // is pending, which is the whole feedback story for a keyboard set — see runPrimaryExport.
+      onExport: () => runPrimaryExport(),
+      onSave: () => $('saveProj')?.click(),
+      onLoad: (file) => {
+        // On the desktop the kit's Load button hands us nothing and expects the host's own
+        // picker to be opened instead — there is no file input in that story.
+        if (host) { void openFromHost(); return; }
+        if (!file) return;
+        const projFile = $('projFile');
+        if (projFile) {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          projFile.files = dt.files;
+          projFile.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      },
+      onHelp: () => {
+        dialog({
+          title: 'Keycap Legend Generator help',
+          content: document.createTextNode(
+            MAKERLAB
+              ? 'Pick an icon or custom letter, customize size, depth, rotation and stem clearance, then send the finished keycap to MakerLab with the button above.'
+              : 'Pick an icon or custom letter, customize size, depth, rotation and stem clearance, then click Download 3MF to export a print-ready file for your slicer.',
+          ),
+          actions: [{ label: 'Got it', primary: true }],
+        });
+      },
+      themeStorageKey: 'keycap_theme',
+    });
+    keycapFooter.replaceWith(footer);
+    // The one primary action, whatever the mode. Set mode relabels it rather than adding a
+    // second export button somewhere else — there is one place to press to get a file.
+    exportBtn = footer.querySelector('.vl-export .vl-btn--primary');
+    exportPanelEl = footer.querySelector('.vl-export');
+  }
+
+  const busyEl = busyChip();
+  const statusEl = $('status');
+  $('viewport').append(busyEl);
+
+  /**
+   * The one way the busy chip is shown or hidden.
+   *
+   * `onCancel` is the half that was missing. Switching tabs during a keyboard set was refused
+   * with "let it finish or cancel it first" while nothing anywhere could cancel it, and the
+   * free A-Z batch had the same trap: twenty-six carves with no way out but closing the tab.
+   * A batch that can be stopped passes one in; the live rebuild is 200ms and passes none.
+   */
+  function setBusyState(text, onCancel) {
+    if (text == null) busyEl.hide();
+    else busyEl.show(text, onCancel);
+  }
+
+  function setStatus(msg, kind = '') {
+    statusEl.textContent = msg;
+    statusEl.className = kind;
+  }
+
+  // ---------------------------------------------------------------- three setup
+  const viewport = $('viewport');
+  // preserveDrawingBuffer (MakerWorld build only) lets us read the canvas with toDataURL() for
+  // the host export cover image; the public build keeps the default for a touch less overhead.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: MAKERLAB });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  viewport.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x404654, 1.05));
+  const key = new THREE.DirectionalLight(0xffffff, 1.4);
+  key.position.set(12, 30, 18);
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0x9fb6ff, 0.5);
+  fill.position.set(-18, 10, -14);
+  scene.add(fill);
+
+  // Ground: a real Bambu build plate (or the plain grid) under the cap, shared
+  // with every other generator. This scene is Y-up, so the plate is told which way
+  // is up rather than being rotated here.
+  const buildPlate = createBuildPlate(THREE, {
+    theme: document.documentElement.getAttribute('data-theme') || 'dark',
+    up: 'y',
+    gridSize: 400,
+    topZ: -0.06,
+  });
+  buildPlate.setChoice(loadPlateChoice());
+  scene.add(buildPlate.object);
+
+  // Read the token rather than a copy of it. Both hex values written here had already gone
+  // stale against tokens.css (--bg is #eef1f6 / #101620 now), so the stage painted a slightly
+  // different colour from the panels either side of it.
+  function applyViewportTheme(theme) {
+    renderer.setClearColor(themeColorHex('--bg', theme === 'light' ? 0xeef1f6 : 0x101620));
+    buildPlate.setTheme(theme);
+  }
+  applyViewportTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+
+  mountPlatePicker(viewport, {
+    setPlate: (choice) => buildPlate.setChoice(choice),
+  });
+
+  // Native keycap space is Z-up; rotate the display group so it looks right in Y-up.
+  const group = new THREE.Group();
+  group.rotation.x = -Math.PI / 2;
+  scene.add(group);
+
+  const capMat = new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.55, metalness: 0.0 });
+  const logoMat = new THREE.MeshStandardMaterial({ color: 0xf7f7f5, roughness: 0.5, metalness: 0.0 });
+  const capMesh = new THREE.Mesh(undefined, capMat);
+  const logoMesh = new THREE.Mesh(undefined, logoMat);
+  /**
+   * Meshes for legends BEYOND the first — see `extraLegends` under state.
+   *
+   * One mesh and one material each, not a shared material: a layer's colour is its own, and
+   * pointing two legends at `logoMat` is what makes the second one silently follow the first
+   * everywhere the user changes a colour.
+   *
+   * @type {Array<{mesh: THREE.Mesh, mat: THREE.MeshStandardMaterial}>}
+   */
+  const extraLegendMeshes = [];
+  // The stem is a constant body; only its material swaps (cap colour normally, legend
+  // colour in shine-through). It shares the cap/logo materials so colour edits follow.
+  const stemMesh = new THREE.Mesh(undefined, capMat);
+  // Print orientation lives on its own group INSIDE the Z-up group. Some profiles can't be
+  // printed the way they're modelled — a Choc cap has to stand on its bottom rib, because its
+  // two stub stems won't survive being printed flat. Rotating here (and applying the same
+  // transform on export) keeps the geometry itself canonical Z-up, so the legend carving, the
+  // dish metadata and the size ceiling never have to know about it.
+  const printGroup = new THREE.Group();
+  printGroup.add(capMesh, logoMesh, stemMesh);
+  group.add(printGroup);
+
+  /** Grow or shrink the extra-legend mesh pool to `n`, freeing whatever it drops. */
+  function ensureExtraMeshes(n) {
+    while (extraLegendMeshes.length < n) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5, metalness: 0.0 });
+      const mesh = new THREE.Mesh(undefined, mat);
+      printGroup.add(mesh);
+      extraLegendMeshes.push({ mesh, mat });
+    }
+    while (extraLegendMeshes.length > n) {
+      const { mesh, mat } = extraLegendMeshes.pop();
+      mesh.geometry?.dispose();
+      printGroup.remove(mesh);
+      mat.dispose();
+    }
+  }
+
+  // Point the stem at the right shared material for the current shine-through state.
+  // (Single-colour mode prints everything in the cap filament, so the stem stays capMat.)
+  function updateStemMaterial() {
+    stemMesh.material = $('through').checked ? logoMat : capMat;
+  }
+
+  // Rebuild the working stem from the authored one at the current fit tolerance, refreshing
+  // the preview. `stemGeometry` (used by both exports) is the scaled body; at 0 tolerance it
+  // IS the base solid (no copy). Safe to call before C exists (falls back to 0 tolerance).
+  function applyStemTolerance() {
+    const prev = stemGeometry;
+    if (!baseStemGeometry) {
+      stemGeometry = null;
+    } else {
+      const tol = stemTolValue;
+      if (Math.abs(tol) > 1e-4) {
+        const result = applyStemClearance(getManifoldApi(), baseStemGeometry, tol);
+        if (!result.watertight) console.warn('Stem clearance was not watertight at tol', tol, '— keeping the previous stem.');
+        stemGeometry = result.watertight ? result.geometry : (stemGeometry ?? baseStemGeometry);
+      } else {
+        stemGeometry = baseStemGeometry;
+      }
+    }
+    if (prev && prev !== baseStemGeometry && prev !== stemGeometry) prev.dispose();
+    stemMesh.geometry?.dispose();
+    stemMesh.geometry = stemGeometry ? creaseNormals(stemGeometry) : undefined;
+    updateStemMaterial();
+  }
+
+  function resize() {
+    const w = viewport.clientWidth;
+    const h = viewport.clientHeight;
+    // A hidden or zero-sized viewport makes `0 / 0` — NaN — and a NaN aspect poisons the
+    // projection matrix permanently, blanking the preview with nothing logged anywhere.
+    // framedDistance() already guards this; resize() is where it actually gets in.
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+
+  /** Share of the narrower half-view the cap's bounding sphere should fill when framed. */
+  const FRAME_FILL = 0.55;
+
+  /**
+   * Camera distance that makes a bounding sphere of `radius` fill `FRAME_FILL` of the view.
+   * Uses whichever FOV is narrower — the vertical one is fixed, the horizontal one follows
+   * the aspect — because that's the axis the cap will overflow first.
+   */
+  function framedDistance(radius) {
+    const vFov = (camera.fov * Math.PI) / 180;
+    const aspect = camera.aspect > 0 && Number.isFinite(camera.aspect) ? camera.aspect : 1;
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+    return radius / (FRAME_FILL * Math.tan(Math.min(vFov, hFov) / 2));
+  }
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(viewport);
+  cleanups.push(() => resizeObserver.disconnect());
+
+  // Height of the plate's top surface. This scene is Y-up, so "below the plate" is
+  // a Y test, not the Z one the other generators use.
+  const PLATE_TOP_Y = -0.06;
+
+  // The frame loop has to be stoppable. Left running after unmount it keeps rendering into
+  // a detached canvas forever — invisible, but still holding the context and still burning
+  // a frame's worth of GPU work every 16ms, once per generator the user has ever opened.
+  let frame = 0;
+  function animate() {
+    frame = requestAnimationFrame(animate);
+    controls.update();
+    // Looking up from underneath, an opaque plate hides the cap completely. Fade it
+    // to a ghost rather than dropping it, so it never pops as you orbit past level.
+    buildPlate.setGhosted(camera.position.y <= PLATE_TOP_Y);
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  /**
+   * Stop rendering entirely, for when something full-screen is covering this viewport.
+   * Two render loops running at once is double the GPU cost for a scene nobody can see —
+   * and it is the extra pressure that makes the browser drop a context.
+   */
+  function setPaused(paused) {
+    if (paused) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+    } else if (!frame) {
+      animate();
+    }
+  }
+
+  cleanups.push(() => {
+    cancelAnimationFrame(frame);
+    clearTimeout(regenTimer); // a queued rebuild would otherwise fire into a torn-down scene
+    ensureExtraMeshes(0);     // pooled meshes carry a material each, which renderer.dispose() misses
+    controls.dispose();
+    buildPlate.dispose?.();
+    // forceContextLoss() is what actually hands the WebGL context back; dispose() alone
+    // frees three's own objects and leaves the context alive.
+    renderer.dispose();
+    renderer.forceContextLoss();
+  });
+
+  // ---------------------------------------------------------------- state
+  let meta = null;            // keycap metadata from convert step
+  let shellGeometry = null;   // cap shell geometry, stem removed (native mm)
+  let baseStemGeometry = null;// switch stem as authored (clean solid); source for the tolerance scale
+  let stemGeometry = null;    // stem after fit-tolerance scaling — the body used for preview + export
+  let homingBumpGeometry = null; // homing bump geometry
+  let currentLegend = null;   // { contours, box, name }
+  /**
+   * Legends carved into this cap BEYOND the first one, in carve order.
+   *
+   * Empty by default and empty for good in the free build — the list is something a mode hands
+   * us through `shell.setExtraLegends`, and the free single-cap path never hands us one. What
+   * the shell knows is only that a cap may carry more than one legend, each with its own
+   * placement and its own colour; which legends those are, and how you choose them, belongs to
+   * whoever supplies the list.
+   *
+   * @type {Array<{legend: object, placement: object, color: string}>}
+   */
+  let extraLegends = [];
+  let lastBodies = null;      // { keycapGeometry, logoGeometry, extraGeometries } for export
+  let lastIconSelection = null;
+  let currentMode = 'icon';
+  let currentUnit = 1;        // size of the active keycap (drives the letter limit)
+
+  // debug handles (harmless; used for automated verification)
+  window.__app = {
+    THREE, scene, camera, renderer, capMesh, logoMesh, stemMesh, buildThreeMF, buildObjMtl,
+    get exportParts() {
+      return lastBodies
+        ? buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked)
+        : null;
+    },
+    get meta() { return meta; },
+    get lastBodies() { return lastBodies; },
+    get shellGeometry() { return shellGeometry; },
+    get stemGeometry() { flushStemApply(); return stemGeometry; },
+  };
+
+  // paired range + number input -> single value with onChange
+  function link(rangeId, numId, onChange) {
+    const r = $(rangeId);
+    const n = $(numId);
+    n.value = r.value;
+    r.addEventListener('input', () => { n.value = r.value; onChange(); });
+    n.addEventListener('input', () => { r.value = n.value; onChange(); });
+    return {
+      get: () => parseFloat(r.value),
+      set: (v) => { r.value = v; n.value = v; },
+      setMax: (v) => { r.max = v; },
+    };
+  }
+
+  // The two block buttons in the panels. Kit `button()`s built into their mount points,
+  // keeping their ids: everything below still finds them with $('exportBlank') / $('alphabetSet').
+  /** Millimetres per arrow press. Declared up here because the pad below reads it. */
+  const NUDGE_STEP = 0.5;
+
+  /* The nudge pad, before the C block below: it BUILDS #offxNum / #offyNum, and `link()`
+     binds them by id. */
+  const nudge = nudgePad({
+    step: NUDGE_STEP,
+    x: { id: 'offxNum', label: 'X' },
+    y: { id: 'offyNum', label: 'Y' },
+    // The app writes, not the pad: `nudgeBy` clamps against the hidden per-cap ranges, which
+    // the pad cannot see (a legend reaches the edge of a 6.25u spacebar, not of a 1u cap).
+    onNudge: (dx, dy) => nudgeBy(dx, dy),
+    onReset: () => {
+      C.offx.set(0);
+      C.offy.set(0);
+      announce(['offx', 'offy']);
+      scheduleRegen();
+    },
+  });
+  $('nudgePadMount').replaceWith(nudge);
+
+  const exportBlankBtn = button({
+    label: 'Export blank keycap',
+    emphasis: 'secondary',
+    block: true,
+    icon: ICONS.download,
+    title: 'The bare cap and stem, no legend, in one colour',
+  });
+  exportBlankBtn.id = 'exportBlank';
+  exportBlankBtn.disabled = true;
+  $('exportBlankMount').replaceWith(exportBlankBtn);
+
+  const alphabetSetBtn = button({ label: 'Get full alphabet set (A–Z)', emphasis: 'secondary', block: true });
+  alphabetSetBtn.id = 'alphabetSet';
+  $('alphabetSetMount').replaceWith(alphabetSetBtn);
+
+  const C = {
+    size: link('size', 'sizeNum', scheduleRegen),
+    depth: link('depth', 'depthNum', scheduleRegen),
+    rot: link('rot', 'rotNum', scheduleRegen),
+    offx: link('offx', 'offxNum', scheduleRegen),
+    offy: link('offy', 'offyNum', scheduleRegen),
+  };
+
+  // Stem fit stepper (− / +): a signed mm offset that rescales only the stem body (no cap CSG
+  // rebuild), so it lives outside `C` and drives applyStemTolerance directly.
+  let stemTolValue = 0;
+  const STEM_TOL_MIN = -0.4, STEM_TOL_MAX = 0.4, STEM_TOL_STEP = 0.02;
+  function renderStemTol() {
+    const v = stemTolValue;
+    $('stemTolVal').textContent = `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)} mm`;
+  }
+  function setStemTol(v) {
+    stemTolValue = Math.round(Math.min(STEM_TOL_MAX, Math.max(STEM_TOL_MIN, v)) * 100) / 100;
+    renderStemTol();
+  }
+  // Applying the stepper's value runs real CSG once the tolerance is non-zero
+  // (applyStemClearance), which measures 170-280ms on a Choc cap's two stub stems — running
+  // that synchronously per click would stack up behind a rapid burst of presses. Coalescing
+  // onto the next animation frame means a burst applies once, at whatever value the user has
+  // landed on by the time that frame runs — MX's 5-50ms case just applies a frame later, which
+  // is imperceptible.
+  let stemApplyRaf = null;
+  /** Apply a pending stepper value right now. Called by everything that reads the stem for an
+   *  export: requestAnimationFrame stops in a background tab, so a frame that has not run yet
+   *  must never be the reason an exported stem is at the wrong tolerance. */
+  function flushStemApply() {
+    if (stemApplyRaf == null) return;
+    cancelAnimationFrame(stemApplyRaf);
+    stemApplyRaf = null;
+    applyStemTolerance();
+    if (fitTestActive) renderFitTest();
+  }
+  function scheduleStemApply() {
+    if (stemApplyRaf != null) return; // a frame is already pending; it reads stemTolValue fresh
+    stemApplyRaf = requestAnimationFrame(() => {
+      stemApplyRaf = null;
+      applyStemTolerance();
+      if (fitTestActive) renderFitTest();
+    });
+  }
+  cleanups.push(() => { if (stemApplyRaf != null) cancelAnimationFrame(stemApplyRaf); });
+  $('stemTolMinus').addEventListener('click', () => {
+    setStemTol(stemTolValue - STEM_TOL_STEP); scheduleStemApply();
+  });
+  $('stemTolPlus').addEventListener('click', () => {
+    setStemTol(stemTolValue + STEM_TOL_STEP); scheduleStemApply();
+  });
+  renderStemTol();
+
+  // ---------------------------------------------------------------- fit test (free)
+  //
+  // A free alternate view of the single cap: instead of the real keycap, the preview shows a
+  // row of small test pieces — the stem standing up out of a flat tab, its own tolerance value
+  // debossed beside it — at a fixed ladder from -0.40 to +0.40. Print the
+  // row, press each stem onto a real switch, and dial the stepper to the one that fits. Every
+  // number on a printed piece is a value the stepper itself could show, so there is never a
+  // gap between what got printed and what the app can dial in afterwards.
+  //
+  // A same-stage alternate state, like Double legends, not a stage takeover like Full set: it
+  // never calls setStageOwner or setSingleOnlyVisible, only hides the real cap's own meshes and
+  // shows its own pooled ones in their place.
+  const FIT_TEST_EXPORT_LABEL = MAKERLAB ? 'Export fit test 3MF' : 'Download fit test 3MF';
+  // What the footer restores to on exit — the same value `shell.defaultExportLabel` (below)
+  // computes for every OTHER mode handing the button back, kept as its own constant here since
+  // that one lives inside the Pro panel's own options object.
+  const FIT_TEST_IDLE_EXPORT_LABEL = MAKERLAB ? 'Export 3MF' : 'Download 3MF';
+  let fitTestActive = false;
+  let fitTestPieces = null;       // the last built row's pieces, kept for export
+  let fitTestSavedCamera = null;  // camera position/target from just before entering
+
+  /** Pooled meshes for the fit-test row, sharing capMat so a colour change follows for free —
+   *  exactly like the real stem already does. Sized to whatever the current row needs: one
+   *  mesh per watertight piece, two for the rare piece whose union came back in two bodies. */
+  const fitTestMeshes = [];
+  function ensureFitTestMeshes(n) {
+    while (fitTestMeshes.length < n) {
+      const mesh = new THREE.Mesh(undefined, capMat);
+      group.add(mesh); // NOT printGroup — the fit test ignores per-profile print rotation
+      fitTestMeshes.push(mesh);
+    }
+    while (fitTestMeshes.length > n) {
+      const mesh = fitTestMeshes.pop();
+      mesh.geometry?.dispose();
+      group.remove(mesh);
+    }
+  }
+
+  /** The step between fit-test rungs, chosen with the Step control below while Fit test is open.
+   *  Kept for the session, so leaving and re-entering Fit test does not reset it. */
+  let fitTestStep = FIT_TEST_STEP_MM;
+
+  /** Five rungs `fitTestStep` apart, centred on the Stem fit stepper: at 0 with the default step
+   *  that is -0.20 to +0.20, and after a first print a finer step tunes around the value that fit. */
+  function fitTestLadder() {
+    return computeFitTestLadder(stemTolValue, fitTestStep, STEM_TOL_MIN, STEM_TOL_MAX);
+  }
+
+  const fitStepControl = segmentedControl({
+    label: 'Fit test step',
+    options: FIT_TEST_STEP_OPTIONS.map((s) => ({ value: s.toFixed(2), label: `${s.toFixed(2)} mm` })),
+    value: FIT_TEST_STEP_MM.toFixed(2),
+    onChange: (v) => { fitTestStep = Number(v); renderFitTest(); },
+  });
+  fitStepControl.hidden = true; // setFitTestLock shows it while Fit test is open
+  $('fitTestStepMount').replaceWith(fitStepControl);
+
+  /** {positions, indices} (fitTest.js's plain output) -> a real THREE.BufferGeometry.
+   *
+   *  Copies `positions` rather than wrapping it: a `BufferAttribute` keeps whatever array it's
+   *  given, and the export path calls `.translate()` on its own copy to bake in the row offset
+   *  — sharing the array with the preview mesh's geometry would let that mutate the preview's
+   *  vertices too, out from under a mesh whose position is ALSO offset, doubling it up. */
+  function plainToFitTestGeometry(plain) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(plain.positions.slice(), 3));
+    g.setIndex(new THREE.BufferAttribute(plain.indices, 1));
+    g.computeVertexNormals();
+    return g;
+  }
+
+  /** (Re)build the row for the current ladder and cap, and reframe the camera on it. Cheap
+   *  enough (a handful of small booleans) to run with no busy chip, same as applyStemTolerance. */
+  function renderFitTest() {
+    if (!fitTestActive || !baseStemGeometry || !meta) return;
+    let pieces;
+    try {
+      pieces = buildFitTestRow(
+        {
+          api: getManifoldApi(),
+          baseStemGeometry,
+          meta,
+          letterContour: (text) => parseLetter(text, FIT_TEST_FONT_ID, 6),
+        },
+        fitTestLadder(),
+      );
+    } catch (e) {
+      console.error(e);
+      setStatus('Could not build the fit test for this cap.', 'err');
+      return;
+    }
+    fitTestPieces = pieces;
+
+    ensureFitTestMeshes(pieces.reduce((n, p) => n + (p.watertight ? 1 : 2), 0));
+    let mi = 0;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of pieces) {
+      minX = Math.min(minX, p.pieceBBox.min[0] + p.offsetX);
+      maxX = Math.max(maxX, p.pieceBBox.max[0] + p.offsetX);
+      minY = Math.min(minY, p.pieceBBox.min[1]);
+      maxY = Math.max(maxY, p.pieceBBox.max[1]);
+      minZ = Math.min(minZ, p.pieceBBox.min[2]);
+      maxZ = Math.max(maxZ, p.pieceBBox.max[2]);
+      const place = (plain) => {
+        const mesh = fitTestMeshes[mi++];
+        mesh.geometry?.dispose();
+        mesh.geometry = creaseNormals(plainToFitTestGeometry(plain));
+        mesh.position.set(p.offsetX, 0, 0);
+        mesh.visible = true;
+      };
+      if (p.watertight) place(p.geometry);
+      else { place(p.tabGeometry); place(p.stemGeometry); }
+    }
+
+    const n = pieces.length;
+    const values = pieces.map((p) => p.label).join(', ');
+    setStatus(
+      `Fit test ready · ${n} piece${n === 1 ? '' : 's'} (${values}) · press each stem onto a `
+      + 'switch, then set Stem fit tolerance to the one that fits.',
+    );
+
+    const dist = framedDistance(Math.hypot(maxX - minX, maxY - minY, maxZ - minZ) / 2);
+    const target = new THREE.Vector3(0, (maxZ - minZ) / 2, 0);
+    controls.target.copy(target);
+    camera.position.copy(target).add(new THREE.Vector3(0.5, 0.45, 0.75).multiplyScalar(dist));
+  }
+
+  /** proPanel.paint() relabels the footer on every Pro mode/tab change and does not know Fit
+   *  test exists — called after anything that can trigger a paint while Fit test is open. */
+  function syncFitTestExportLabel() {
+    if (fitTestActive && exportBtn) exportBtn.textContent = FIT_TEST_EXPORT_LABEL;
+  }
+
+  /**
+   * Fit test shows stems, not a keycap, so nothing that shapes the keycap may reach the screen
+   * while it is open. Ian, after picking an icon in Fit test put a legend floating over a test
+   * piece: "this and similar issues should not be possible".
+   *
+   * So the guarantee is structural rather than a list of mesh flags to remember:
+   *  - the whole `printGroup` (cap, legend, stem, every extra legend) is hidden, so whatever a
+   *    rebuild sets on a single mesh's `.visible`, none of it can draw;
+   *  - `canRegen()` declines while this is open, so no rebuild runs in the first place;
+   *  - the controls that only shape a keycap (the legend picker, placement, the cap toggles,
+   *    the blank export) are `inert` and dimmed, so they cannot be used and say so.
+   * Profile and size stay live (they change the stem under test), and so do the stem stepper,
+   * the colours and Print settings, which all apply to the test pieces too.
+   */
+  function setFitTestLock(on) {
+    const placement = $('stemTolVal')?.closest('.section');
+    const locked = [
+      container.querySelector('.legend-section'),
+      ...(placement ? [...placement.children].filter((node) => !node.classList.contains('fit-block')) : []),
+      $('exportBlank'),
+    ];
+    for (const node of locked) {
+      if (!node) continue;
+      node.inert = on;
+      node.classList.toggle('kc-fit-locked', on);
+    }
+    const note = $('fitTestNote');
+    if (note) note.hidden = !on;
+    fitStepControl.hidden = !on;
+  }
+
+  function enterFitTest() {
+    if (fitTestActive) return;
+    // A Pro mode owns the stage: hand it back to Single first, same as clicking its own tab —
+    // stem fit is a profile setting, not a per-mode one, so Fit test should work from wherever
+    // it's pressed rather than bouncing back with nothing shown. The one case it can't borrow
+    // the stage is a set actually generating, which has nowhere to report into if stopped.
+    if (singleCapSuspended && !proPanel?.goToSingle?.()) {
+      setStatus('The set is still generating. Let it finish or cancel it first.', 'warn');
+      fitTestControl.setValue('cap');
+      return;
+    }
+    // No stem to test — bounce the tab back rather than leave it looking selected with nothing
+    // to show.
+    if (!baseStemGeometry) { fitTestControl.setValue('cap'); return; }
+    fitTestActive = true;
+    printGroup.visible = false;
+    clearTimeout(regenTimer); // a queued rebuild would now decline anyway; do not leave it pending
+    setFitTestLock(true);
+    fitTestSavedCamera = { position: camera.position.clone(), target: controls.target.clone() };
+    if (exportBtn) exportBtn.textContent = FIT_TEST_EXPORT_LABEL;
+    renderFitTest();
+  }
+
+  function exitFitTest() {
+    if (!fitTestActive) return;
+    fitTestActive = false;
+    ensureFitTestMeshes(0);
+    fitTestPieces = null;
+    fitTestControl.setValue('cap'); // a no-op if this IS how we got here (the user clicked it)
+    setFitTestLock(false);
+    // The cap's own meshes kept whatever visibility their last rebuild gave them (single colour,
+    // shine-through, extra legends), so showing the group is enough; the rebuild below then
+    // applies anything that changed while the fit test was open.
+    printGroup.visible = true;
+    if (exportBtn) exportBtn.textContent = FIT_TEST_IDLE_EXPORT_LABEL;
+    if (fitTestSavedCamera) {
+      camera.position.copy(fitTestSavedCamera.position);
+      controls.target.copy(fitTestSavedCamera.target);
+      fitTestSavedCamera = null;
+    }
+    scheduleRegen();
+  }
+
+  const fitTestControl = segmentedControl({
+    options: [
+      { value: 'cap', label: 'Keycap' },
+      { value: 'fit', label: 'Fit test' },
+    ],
+    value: 'cap',
+    onChange: (v) => { if (v === 'fit') enterFitTest(); else exitFitTest(); },
+  });
+  $('fitTestMount').replaceWith(fitTestControl);
+
+  // ---------------------------------------------------------------- nudge d-pad
+  //
+  // The pad does not replace the nudge values, it DRIVES them: it clamps against whatever range
+  // this cap allows (setNudgeRange), writes the hidden range and its number box, and then
+  // announces — so everything already listening for a nudge hears it exactly as it would from a
+  // dragged slider. That includes a Pro mode that has the nudge pointed at a different legend,
+  // which is why this must not write `currentOpts` directly.
+  function nudgeBy(dx, dy) {
+    const move = (ctl, id, d) => {
+      if (!d) return;
+      const input = $(id);
+      const lo = parseFloat(input.min), hi = parseFloat(input.max);
+      ctl.set(Math.min(hi, Math.max(lo, Math.round((ctl.get() + d) * 100) / 100)));
+    };
+    move(C.offx, 'offx', dx);
+    move(C.offy, 'offy', dy);
+    announce(['offx', 'offy']); // the range's own listener syncs its number box
+    scheduleRegen();
+  }
+  /* The kit's nudgePad(): the d-pad and the X/Y fields as one control. It builds the two
+     number inputs, so they keep the ids the rest of this file and both paid modes already
+     bind to (`offxNum` / `offyNum`) — the pad is a new way to reach the same values, not a
+     new place for them to live. Arrow presses come back through `onMove` and go out through
+     `nudgeBy`, which is what clamps against the hidden per-cap ranges. */
+
+  $('mirror').addEventListener('change', scheduleRegen);
+  $('homingBump').addEventListener('change', scheduleRegen);
+  // Shine-through and single-colour are mutually exclusive: one prints the legend in a second
+  // (transparent) filament, the other engraves it in the single cap filament.
+  $('through').addEventListener('change', () => {
+    if ($('through').checked) $('single').checked = false;
+    applyModeFlags(); scheduleRegen();
+  });
+  $('single').addEventListener('change', () => {
+    if ($('single').checked) $('through').checked = false;
+    applyModeFlags(); scheduleRegen();
+  });
+  $('capColor').addEventListener('input', () => { capMat.color.set($('capColor').value); });
+  $('logoColor').addEventListener('input', () => { logoMat.color.set($('logoColor').value); });
+
+  /* Filament swatches, the same shelf the clicker picks from.
+
+     A `<input type="color">` is the wrong instrument for a printed object: it asks the user
+     to invent a colour out of sixteen million, when what they are choosing is a spool they
+     own. The two inputs are still here, hidden, because they are the state everything else
+     reads — `$('capColor').value`, the project file, and both paid modes, which listen for
+     their `input` event. Each row writes its hex into one and announces it, so a swatch press
+     and a typed hex are the same event to everything downstream. */
+  function paletteFor(id, label, mount, labelId) {
+    const input = $(id);
+    const row = paletteRow({
+      label,
+      labelId,
+      value: input.value,
+      onChange: (hex) => {
+        if (hex.toLowerCase() === input.value.toLowerCase()) return;
+        input.value = hex;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      },
+    });
+    $(mount).replaceWith(row);
+    // A project load, or a reset, writes the input directly — the swatches follow.
+    input.addEventListener('input', () => row.setValue(input.value));
+    return row;
+  }
+  // `logoColorLabel` is the id a paid mode renames ("Legend" -> "Legend 1"), so the row is
+  // asked for it rather than reached into afterwards.
+  const capColorRow = paletteFor('capColor', 'Keycap', 'capColorMount');
+  const logoColorRow = paletteFor('logoColor', 'Legend', 'logoColorMount', 'logoColorLabel');
+
+  // ---------------------------------------------------------------- print settings
+  /* What the exported 3MF tells the slicer. One choice today: the wall generator. Arachne by
+     default: variable-width walls keep a legend's thin strokes from dropping out and make
+     layer lines less visible. Ian asked for it to be the user's call: "add a print setting
+     section where user can set arachne wall for his export". Read at export time by
+     `printConfig()` and `projectProcess()` below. */
+  let wallGenerator = 'arachne';
+  const wallsRow = segmentedControl({
+    label: 'Walls',
+    options: [
+      { value: 'arachne', label: 'Arachne' },
+      { value: 'classic', label: 'Classic' },
+    ],
+    value: wallGenerator,
+    onChange: (v) => { wallGenerator = v; },
+  });
+  $('printSettingsMount').replaceWith(wallsRow);
+
+  // ---------------------------------------------------------------- resets
+  // Stock values for the per-section reset buttons. `size` is replaced at boot
+  // once we know the sensible default for this cap's geometry.
+  const DEFAULTS = {
+    size: 8, depth: 0.5, rot: 0, offx: 0, offy: 0, stemTol: 0,
+    mirror: false, through: false, single: false, homingBump: false,
+    // Both are shelf colours from the kit's filament list, so the palette opens with a
+    // swatch selected rather than inventing a custom one for a hex nobody prints.
+    capColor: '#161616', logoColor: '#f7f7f5',
+  };
+
+  // Reflect the current shine-through / single-colour state on dependent inputs.
+  // Shine-through prints the legend through the wall, so depth no longer applies.
+  // Single-colour engraves the legend in the cap filament, so the legend colour is moot.
+  function applyModeFlags() {
+    $('depth').disabled = $('through').checked;
+    $('depthNum').disabled = $('through').checked;
+    // Both: the hidden input is what a paid mode reads, the row is what the user sees. Only
+    // disabling the input left the swatches live in single-colour mode, offering a choice
+    // that no longer prints.
+    $('logoColor').disabled = $('single').checked;
+    logoColorRow.setDisabled($('single').checked);
+    updateStemMaterial();
+  }
+
+  /**
+   * Tell everyone the value changed.
+   *
+   * `C.*.set()` and a direct `.checked =` assign the property, which fires nothing — fine when
+   * the only listener was this file's own `scheduleRegen`, and wrong the moment anything else
+   * is listening. A Pro mode watching these inputs is exactly that: without this, Reset
+   * placement silently moved the sliders and left the board drawn at the old numbers.
+   */
+  function announce(ids, type = 'input') {
+    for (const id of ids) $(id)?.dispatchEvent(new Event(type, { bubbles: true }));
+  }
+
+  function resetPlacement() {
+    C.size.set(DEFAULTS.size);
+    C.depth.set(DEFAULTS.depth);
+    C.rot.set(DEFAULTS.rot);
+    C.offx.set(DEFAULTS.offx);
+    C.offy.set(DEFAULTS.offy);
+    setStemTol(DEFAULTS.stemTol);
+    applyStemTolerance();
+    if (fitTestActive) renderFitTest();
+    $('mirror').checked = DEFAULTS.mirror;
+    $('through').checked = DEFAULTS.through;
+    $('single').checked = DEFAULTS.single;
+    $('homingBump').checked = DEFAULTS.homingBump;
+    applyModeFlags();
+    announce(['size', 'depth', 'rot', 'offx', 'offy']);
+    announce(['mirror', 'through', 'single', 'homingBump'], 'change');
+    scheduleRegen();
+  }
+
+  function resetColors() {
+    $('capColor').value = DEFAULTS.capColor;
+    $('logoColor').value = DEFAULTS.logoColor;
+    capMat.color.set(DEFAULTS.capColor);
+    logoMat.color.set(DEFAULTS.logoColor);
+    announce(['capColor', 'logoColor']);
+  }
+
+  function resetLegend() {
+    if (currentMode !== 'icon') setLegendMode('icon');
+    searchEl.value = '';
+    rebuildGallery();
+    const first = defaultLucideIcon();
+    if (first) selectIcon(first.el || galleryEl.firstElementChild, first.getText, first.name);
+  }
+
+  $('resetPlacement').addEventListener('click', resetPlacement);
+  $('resetColors').addEventListener('click', resetColors);
+  $('resetLegend').addEventListener('click', () => legendSink.reset());
+
+  // ---------------------------------------------------------------- geometry
+  /**
+   * Where the FIRST legend's placement sits while something else has the sliders.
+   *
+   * Normally — and always, in the free build — the sliders are the first legend's placement and
+   * this is null. A mode that borrows them to edit a different legend has to park the first
+   * one's numbers somewhere, or every drag moves both legends: the sliders would be showing one
+   * legend and `currentOpts` would be carving the other with them.
+   *
+   * @type {{sizeMM:number, depth:number, rotationDeg:number, offsetX:number, offsetY:number}|null}
+   */
+  let placementOverride = null;
+
+  function currentOpts() {
+    const p = placementOverride;
+    return {
+      widthMM: p ? p.sizeMM : C.size.get(),
+      depth: p ? p.depth : C.depth.get(),
+      centerX: meta.center[0] + (p ? p.offsetX : C.offx.get()),
+      centerY: meta.center[1] + (p ? p.offsetY : C.offy.get()),
+      rotationDeg: p ? p.rotationDeg : C.rot.get(),
+      mirror: $('mirror').checked,
+      through: $('through').checked,
+      singleColor: $('single').checked,
+      homingBump: $('homingBump').checked,
+      homingBumpGeom: homingBumpGeometry,
+    };
+  }
+
+  /**
+   * The same options for an EXTRA legend, whose placement is carried on its layer rather than
+   * read off the sliders (the sliders show whichever layer is being edited).
+   *
+   * Mirror, shine-through and single-colour are still read live, because they are properties of
+   * the CAP and not of a legend: a cap cannot have one legend printed through the top and
+   * another one not, and a mirrored cap is mirrored. The homing bump is forced off for a
+   * different reason — it is unioned into the cap by the FIRST pass, and a later pass asking
+   * for it again would merge a second copy into a cap that already has one.
+   */
+  function placementOpts(p) {
+    return {
+      widthMM: p.sizeMM,
+      depth: p.depth,
+      centerX: meta.center[0] + p.offsetX,
+      centerY: meta.center[1] + p.offsetY,
+      rotationDeg: p.rotationDeg,
+      mirror: $('mirror').checked,
+      through: $('through').checked,
+      singleColor: $('single').checked,
+      homingBump: false,
+      homingBumpGeom: null,
+    };
+  }
+
+  let regenTimer = null;
+  let running = false;
+  function scheduleRegen() {
+    clearTimeout(regenTimer);
+    regenTimer = setTimeout(doRegen, 200);
+  }
+
+  /**
+   * Would `doRegen` actually rebuild anything? The guards from the top of it, hoisted so a
+   * caller can ask BEFORE handing it the busy chip.
+   *
+   * `switchKeycap` turns the chip on and leaves it to the rebuild to turn off again. When the
+   * rebuild declines — a Pro mode owns the stage, or there is no legend yet — nothing else
+   * ever did: changing profile from inside the Full set mode pinned "generating…" over the
+   * preview for the rest of the session.
+   */
+  function canRegen() {
+    // A Pro mode owns the stage — the cap this would rebuild is hidden behind its board. Fit
+    // test is the same case in the free app: the stage shows test pieces, and a rebuild is what
+    // used to put a legend back on screen over them. exitFitTest() rebuilds on the way out.
+    return !singleCapSuspended && !fitTestActive && !!currentLegend && !!meta && !!shellGeometry;
+  }
+
+  async function doRegen() {
+    if (!canRegen()) return;
+    if (running) { scheduleRegen(); return; }
+    running = true;
+    setBusyState('generating…');
+    await new Promise((r) => setTimeout(r, 0)); // let the spinner paint
+
+    try {
+      const oneOpts = currentOpts();
+      let { keycapGeometry: capG, logoGeometry: logoG, surfaceVariation } =
+        await buildBodies(shellGeometry, meta, currentLegend, oneOpts);
+
+      // Each extra legend is the same carve again, run on the cap the PREVIOUS pass produced.
+      //
+      // Chaining rather than carving every legend against the original shell is what makes two
+      // legends that touch impossible to get wrong: pass 2 intersects a cap that has already
+      // had pass 1's material taken out of it, so an overlapping sliver belongs to legend 1 and
+      // the two bodies can never claim the same space in the exported file. Carving both
+      // against the shell would hand the slicer two solids sharing a volume.
+      const extraG = [];
+      for (const layer of extraLegends) {
+        const r = await buildBodies(capG, meta, layer.legend, placementOpts(layer.placement));
+        capG.dispose(); // superseded by the cap this pass carved
+        capG = r.keycapGeometry;
+        extraG.push(r.logoGeometry);
+        surfaceVariation = Math.max(surfaceVariation, r.surfaceVariation);
+      }
+
+      // Preview meshes get creased normals (cosmetic); export keeps the clean indexed solids.
+      capMesh.geometry?.dispose();
+      logoMesh.geometry?.dispose();
+      lastBodies?.keycapGeometry?.dispose();
+      lastBodies?.logoGeometry?.dispose();
+      for (const g of lastBodies?.extraGeometries ?? []) g?.dispose();
+      capMesh.geometry = creaseNormals(capG);
+      // Single-colour mode returns no legend body — hide the legend mesh; the icon is now a
+      // recess carved into the cap geometry itself.
+      if (logoG) {
+        logoMesh.geometry = creaseNormals(logoG);
+        logoMesh.visible = true;
+      } else {
+        logoMesh.geometry = undefined;
+        logoMesh.visible = false;
+      }
+      ensureExtraMeshes(extraG.length);
+      extraG.forEach((g, i) => {
+        const { mesh, mat } = extraLegendMeshes[i];
+        mesh.geometry?.dispose();
+        mesh.geometry = g ? creaseNormals(g) : undefined;
+        mesh.visible = !!g;
+        mat.color.set(extraLegends[i].color);
+      });
+      updateStemMaterial();
+      lastBodies = { keycapGeometry: capG, logoGeometry: logoG, extraGeometries: extraG };
+
+      $('export').disabled = false;
+
+      // One footprint per legend, so the "it won't fit" warning covers the second one too —
+      // it is the layer most likely to be pushed out to an edge.
+      const fps = [logoFootprint(currentLegend.box, oneOpts.widthMM)];
+      for (const layer of extraLegends) {
+        fps.push(logoFootprint(layer.legend.box, layer.placement.sizeMM));
+      }
+      const mm = (fp) => `${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm`;
+      const word = fps.length > 1 ? 'legends' : 'legend';
+      const sizes = fps.map(mm).join(' + ');
+      const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
+      const tooBig = fps.findIndex((fp) => Math.max(fp.w, fp.h) > room);
+
+      if (tooBig >= 0) {
+        const which = fps.length > 1 ? `Legend ${tooBig + 1}` : 'Legend';
+        setStatus(`Heads up: ${which.toLowerCase()} (${mm(fps[tooBig])}) is larger than the top (~${room.toFixed(1)} mm) and will be clipped.`, 'warn');
+      } else if (surfaceVariation > 0.4) {
+        setStatus(`Ready · ${word} ${sizes}. Note: top is curved (${surfaceVariation.toFixed(1)} mm). Keep it small so it stays flush.`, 'warn');
+      } else if ($('through').checked) {
+        setStatus(`Ready · ${word} ${sizes} · shine-through: legend + stem print in the legend filament (use transparent to light up).`);
+      } else if ($('single').checked) {
+        setStatus(`Ready · ${word} ${sizes} · single colour: legend engraved ${oneOpts.depth} mm deep, prints in one filament.`);
+      } else {
+        setStatus(`Ready · ${word} ${sizes} · ${oneOpts.depth} mm deep.`);
+      }
+    } catch (e) {
+      console.error(e);
+      $('export').disabled = true;
+      setStatus('Could not generate this legend (try a simpler icon/letter or smaller size).', 'err');
+    } finally {
+      setBusyState(null);
+      running = false;
+    }
+  }
+
+  // ---------------------------------------------------------------- legend sink
+  /**
+   * Where the right panel's legend picker writes.
+   *
+   * The picker — type cards, icon gallery, search, letter box, font list — is the same
+   * control in every mode; only its TARGET changes. On the single cap it drives the one
+   * legend. In the Pro keyboard set it drives whichever key or group is selected, and the
+   * gallery, the search and the font list all work exactly as they already did.
+   *
+   * Swapping a sink rather than building a second picker is what keeps the set mode looking
+   * like the rest of the app: there is only one legend picker, and it is this one.
+   *
+   * The four events are kept apart on purpose. They all mean "re-render this legend" on the
+   * single cap, so an earlier version routed the lot through one `letter()` — and that is
+   * destructive the moment the target is a SELECTION: changing the font fired the same call
+   * that types into a legend, which wrote the letter box's contents onto every selected key.
+   */
+  const singleCapSink = {
+    icon: (name, getText, el) => { void selectIcon(el, getText, name); },
+    /** An uploaded or bundled SVG. On ONE cap it is the same act as picking a lucide icon —
+     *  parse the markup, carve it — and only the keyboard set needs the two kept apart, because
+     *  it stores a lucide icon by name and an upload by content. */
+    svg: (name, getText, el) => { void selectIcon(el, getText, name); },
+    /** The user typed in the letter box. */
+    letter: () => selectLetter(),
+    /** The user picked a different font — same legend, different shapes. */
+    font: () => selectLetter(),
+    /** The user clicked one of the Icon / SVG / Letter cards. */
+    typeChanged: (mode) => {
+      if (mode === 'letter') selectLetter();
+      else if (lastIconSelection) {
+        void selectIcon(lastIconSelection.el, lastIconSelection.getText, lastIconSelection.name);
+      }
+    },
+    reset: () => resetLegend(),
+  };
+  let legendSink = singleCapSink;
+
+  // ---------------------------------------------------------------- icons
+  async function selectIcon(el, getText, name) {
+    container.querySelectorAll('.icon.active').forEach((n) => n.classList.remove('active'));
+    el.classList.add('active');
+    setStatus('Loading icon…');
+    try {
+      currentLegend = { ...parseSvg(await getText()), name };
+      lastIconSelection = { el, getText, name };
+      updateSizeMax();
+      doRegen();
+    } catch (e) {
+      console.error(e);
+      setStatus(`Couldn't read “${name}”.`, 'err');
+    }
+  }
+
+  /**
+   * One gallery tile.
+   *
+   * `kind` says which gallery it came from, and it is the tile's job to say so because nothing
+   * downstream can tell: a lucide icon and an uploaded file arrive here as the same pair of a
+   * name and a getText. The keyboard set stores the two differently — an icon by name, an
+   * upload by content — so a tile that could not name its own kind used to be stored as a
+   * lucide icon whatever it was, and an upload then failed to resolve.
+   */
+  function makeIconEl(thumbUrl, getText, name, kind = 'icon') {
+    // A <button>, not a <div>. Icon is the default legend mode and there are ~1750 tiles in
+    // it, none of which a keyboard could reach while they were divs with a click listener.
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'icon';
+    el.title = name;
+    const img = document.createElement('img');
+    img.src = thumbUrl;
+    img.alt = name;
+    el.appendChild(img);
+    el.addEventListener('click', () => legendSink[kind](name, getText, el));
+    return el;
+  }
+
+  /** Mark one gallery tile as the chosen one. Used by every sink, including the set's. */
+  function markActiveIcon(name) {
+    for (const tile of container.querySelectorAll('.icon')) {
+      tile.classList.toggle('active', name != null && tile.title === name);
+    }
+  }
+
+  function setLegendMode(mode) {
+    currentMode = mode;
+    // `.active` is a class, which the accessibility tree cannot see. The row calls itself a
+    // tablist, so its tabs have to carry their own selected state as well.
+    for (const [id, key] of [['iconMode', 'icon'], ['uploadMode', 'upload'], ['letterMode', 'letter']]) {
+      const tab = $(id);
+      tab.classList.toggle('active', mode === key);
+      tab.setAttribute('aria-selected', mode === key ? 'true' : 'false');
+    }
+    $('iconPanel').hidden = mode !== 'icon';
+    $('uploadPanel').hidden = mode !== 'upload';
+    $('letterPanel').hidden = mode !== 'letter';
+
+    // Through the sink: on the single cap this re-renders the legend in the new type, and in a
+    // Pro mode it does nothing but show the panel — picking a type is not the same as choosing
+    // a legend, and acting on it would stamp the letter box over everything selected.
+    legendSink.typeChanged(mode);
+  }
+
+  // Bigger caps fit longer legends; 1u stays at 4 characters, scaling up with the unit.
+  function letterMaxLen(unit) {
+    return Math.max(4, Math.round((unit || 1) * 4));
+  }
+
+  // Push the current unit's character cap onto the letter input, trimming any overflow.
+  function applyLetterLimit() {
+    const input = $('letterText');
+    const max = letterMaxLen(currentUnit);
+    input.maxLength = max;
+    if (input.value.length > max) {
+      input.value = input.value.slice(0, max);
+      // Characters vanishing from a text box with nothing said reads as the app losing work.
+      toast(`Legend trimmed to ${max} characters for this cap`, { kind: 'warn' });
+      if (currentMode === 'letter') selectLetter();
+    }
+  }
+
+  function selectLetter() {
+    container.querySelectorAll('.icon.active').forEach((n) => n.classList.remove('active'));
+    try {
+      currentLegend = parseLetter($('letterText').value, $('fontSelect').value, letterMaxLen(currentUnit));
+      updateSizeMax();
+      // Fit test declines the rebuild (canRegen), so nothing would ever replace this line and it
+      // would sit over the fit-test status for good. The letter still applies on the way out.
+      if (!fitTestActive) setStatus('Generating letter…');
+      scheduleRegen();
+    } catch (e) {
+      console.error(e);
+      currentLegend = null;
+      $('export').disabled = true;
+      setStatus(e.message || 'Could not read this letter.', 'err');
+    }
+  }
+
+  /** Each entry renders in its own typeface — scanning 30 font names set in the
+   *  same UI font tells you nothing about which one you actually want. */
+  function addFontOption(font) {
+    const option = document.createElement('option');
+    option.value = font.id;
+    option.textContent = font.name;
+    if (font.cssFamily) option.style.fontFamily = font.cssFamily;
+    if (font.cssWeight) option.style.fontWeight = font.cssWeight;
+    // Display faces vary wildly in x-height; a common size keeps the list scannable.
+    option.style.fontSize = '15px';
+    $('fontSelect').appendChild(option);
+  }
+
+  for (const font of FONT_OPTIONS) addFontOption(font);
+  loadBundledFonts(addFontOption); // append the bundled open-source fonts as they parse
+
+  $('iconMode').addEventListener('click', () => setLegendMode('icon'));
+  $('uploadMode').addEventListener('click', () => setLegendMode('upload'));
+  $('letterMode').addEventListener('click', () => setLegendMode('letter'));
+  $('letterText').addEventListener('input', () => legendSink.letter());
+  // NOT legendSink.letter(): a font change must never be mistaken for typing a legend.
+  $('fontSelect').addEventListener('change', () => legendSink.font());
+
+  // The host's own picker first, when there is one. The input lives inside its own label, so
+  // the click has to be pre-empted rather than replaced or both would open.
+  $('fontUpload').parentElement?.addEventListener('click', (e) => {
+    if (!host?.pickMedia) return;
+    e.preventDefault();
+    void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'json'] }, () => {}).then(async (file) => {
+      if (!file) return;
+      try {
+        const font = await importFontFile(file);
+        addFontOption(font);
+        $('fontSelect').value = font.id;
+        setLegendMode('letter');
+        setStatus(`Imported font: ${font.name}`);
+      } catch (error) {
+        console.error(error);
+        setStatus('Could not import this font. Try a TTF, OTF, or typeface JSON file.', 'err');
+      }
+    });
+  });
+
+  $('fontUpload').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      // Kept the moment it arrives rather than when a project is saved. No-op without a
+      // host, so a browser tab still forgets it exactly as it always has.
+      void rememberFile(host, 'font', file);
+      const font = await importFontFile(file);
+      addFontOption(font);
+      $('fontSelect').value = font.id;
+      setLegendMode('letter');
+      setStatus(`Imported font: ${font.name}`);
+    } catch (error) {
+      console.error(error);
+      setStatus('Could not import this font. Try a TTF, OTF, or typeface JSON file.', 'err');
+    } finally {
+      e.target.value = '';
+    }
+  });
+
+  // Curated set shown first when no search is active — picked for keycap legends:
+  // clipboard/edit ops, media keys, navigation, and common app-launcher symbols.
+  const POPULAR_LUCIDE = [
+    // File & clipboard
+    'copy', 'clipboard', 'clipboard-paste', 'scissors', 'trash-2', 'save',
+    'file', 'files', 'folder', 'folder-open', 'archive', 'download', 'upload',
+    // Edit
+    'undo-2', 'redo-2', 'search', 'replace', 'eraser', 'pencil', 'type',
+    'bold', 'italic', 'underline',
+    // Navigation
+    'home', 'arrow-up', 'arrow-down', 'arrow-left', 'arrow-right',
+    'corner-down-left', 'chevron-up', 'chevron-down',
+    // Keys & input
+    'keyboard', 'mouse', 'command', 'delete',
+    // Media
+    'play', 'pause', 'skip-back', 'skip-forward', 'volume-2', 'volume-x',
+    'mic', 'mic-off', 'music', 'headphones',
+    // Display / system
+    'sun', 'moon', 'monitor', 'lock', 'unlock', 'eye', 'eye-off',
+    'power', 'wifi', 'bluetooth', 'battery',
+    // Apps
+    'terminal', 'code', 'settings', 'bell', 'calendar', 'mail',
+    'message-circle', 'phone', 'camera', 'image',
+    // Symbols & fun
+    'star', 'heart', 'bookmark', 'flag', 'check', 'x', 'plus', 'minus',
+    'refresh-cw', 'rotate-cw', 'flame', 'zap', 'rocket', 'ghost', 'skull',
+    'coffee', 'gamepad-2', 'trophy', 'crown',
+  ];
+
+  const GALLERY_PAGE = 240;
+  const galleryEl = $('gallery');
+  const uploadGalleryEl = $('uploadGallery');
+  const searchEl = $('iconSearch');
+  const searchClearEl = $('iconSearchClear');
+  const countEl = $('iconCount');
+
+  let lucideShown = 0;       // how many items rendered for the current query
+  let lucideMatches = [];    // current filtered Lucide list
+  let moreBtn = null;
+
+  function rankLucide(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      const popularSet = new Set(POPULAR_LUCIDE);
+      const popular = POPULAR_LUCIDE
+        .map((name) => LUCIDE_ICONS.find((ic) => ic.name === name))
+        .filter(Boolean);
+      const rest = LUCIDE_ICONS.filter((ic) => !popularSet.has(ic.name));
+      return popular.concat(rest);
+    }
+    const out = [];
+    for (const ic of LUCIDE_ICONS) {
+      const i = ic.name.indexOf(q);
+      if (i === -1) continue;
+      // exact match → 0, starts-with → 1, contains → 2 (then alpha)
+      const rank = ic.name === q ? 0 : i === 0 ? 1 : 2;
+      out.push({ ic, rank });
+    }
+    out.sort((a, b) => a.rank - b.rank || a.ic.name.localeCompare(b.ic.name));
+    return out.map((o) => o.ic);
+  }
+
+  function renderLucidePage() {
+    if (moreBtn) { moreBtn.remove(); moreBtn = null; }
+    const end = Math.min(lucideShown + GALLERY_PAGE, lucideMatches.length);
+    const frag = document.createDocumentFragment();
+    for (let i = lucideShown; i < end; i++) {
+      const ic = lucideMatches[i];
+      const svgText = buildSvg(ic.node);
+      const el = makeIconEl(svgDataUrl(svgText), async () => svgText, ic.name);
+      frag.appendChild(el);
+    }
+    galleryEl.appendChild(frag);
+    lucideShown = end;
+
+    if (lucideShown < lucideMatches.length) {
+      moreBtn = document.createElement('button');
+      moreBtn.id = 'galleryMore';
+      moreBtn.type = 'button';
+      moreBtn.textContent = `Show ${Math.min(GALLERY_PAGE, lucideMatches.length - lucideShown)} more (${lucideMatches.length - lucideShown} hidden)`;
+      moreBtn.addEventListener('click', renderLucidePage);
+      galleryEl.appendChild(moreBtn);
+    }
+    updateCount();
+  }
+
+  function updateCount() {
+    const total = lucideMatches.length;
+    if (total === 0) {
+      countEl.textContent = 'No icons match.';
+    } else {
+      const visible = Math.min(lucideShown, total);
+      countEl.textContent = searchEl.value.trim()
+        ? `${total} match${total === 1 ? '' : 'es'}` + (visible < total ? ` · showing ${visible}` : '')
+        : `${total} icons` + (visible < total ? ` · showing ${visible}` : '');
+    }
+  }
+
+  function rebuildGallery() {
+    galleryEl.innerHTML = '';
+    lucideShown = 0;
+    lucideMatches = rankLucide(searchEl.value);
+    searchClearEl.style.display = searchEl.value ? 'block' : 'none';
+    renderLucidePage();
+  }
+
+  let searchTimer = null;
+  searchEl.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(rebuildGallery, 80);
+  });
+  searchClearEl.addEventListener('click', () => {
+    searchEl.value = '';
+    rebuildGallery();
+    searchEl.focus();
+  });
+
+  function defaultLucideIcon() {
+    const first = LUCIDE_ICONS.find((ic) => ic.name === POPULAR_LUCIDE[0]) || LUCIDE_ICONS[0];
+    if (!first) return null;
+    const svgText = buildSvg(first.node);
+    // Find rendered tile so we can mark it active.
+    const idx = lucideMatches.indexOf(first);
+    const el = idx >= 0 && idx < lucideShown ? galleryEl.children[idx] : null;
+    return { el, getText: async () => svgText, name: first.name };
+  }
+
+  let uploadEmptyEl = null;
+  function refreshUploadEmptyState() {
+    const empty = uploadGalleryEl.querySelectorAll('.icon').length === 0;
+    if (empty && !uploadEmptyEl) {
+      uploadEmptyEl = document.createElement('div');
+      uploadEmptyEl.id = 'uploadGalleryEmpty';
+      uploadEmptyEl.textContent = 'No SVGs yet. Drop files in public/icons/ or use the upload button.';
+      uploadGalleryEl.appendChild(uploadEmptyEl);
+    } else if (!empty && uploadEmptyEl) {
+      uploadEmptyEl.remove();
+      uploadEmptyEl = null;
+    }
+  }
+
+  async function loadBundledSvgs() {
+    const list = await fetch(assetUrl('icons-manifest.json')).then((r) => r.json()).catch(() => []);
+    for (const { name, file } of list) {
+      const el = makeIconEl(assetUrl(file), () => fetch(assetUrl(file)).then((r) => r.text()), name, 'svg');
+      uploadGalleryEl.appendChild(el);
+    }
+    refreshUploadEmptyState();
+  }
+
+  /* Every upload goes through the import preview first: the file beside what the tracer will
+     make of it, and Fill / Outline / Off per part. What the tile stores is the file WITH those
+     choices written in (see svgPreview.js), so the paid dual legend and the keyboard set —
+     which read the tile's markup and parse it themselves — get the same result as this cap. */
+  async function addSvgFiles(files) {
+    let firstEl = null;
+    for (const file of files) {
+      // Per file, and reported. The whole loop used to run unguarded: a file the tracer threw
+      // on (applySvgChoices parses it a second time, and unlike describeSvg it does not catch)
+      // rejected the promise, nothing was shown, and the rest of the selection was dropped.
+      try {
+        const text = await openSvgPreview(await file.text(), file.name.replace(/\.svg$/i, ''));
+        if (text == null) continue; // the preview was cancelled — not a failure
+        void rememberFile(host, 'svg', file);
+        const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+        const el = makeIconEl(url, async () => text, file.name.replace(/\.svg$/i, ''), 'svg');
+        uploadGalleryEl.appendChild(el);
+        if (!firstEl) firstEl = el;
+      } catch (err) {
+        console.error(err);
+        setStatus(`Could not read ${file.name}.`, 'err');
+        toast(`Could not read ${file.name}`, { kind: 'error' });
+      }
+    }
+    refreshUploadEmptyState();
+    if (firstEl) {
+      setLegendMode('upload');
+      firstEl.click();
+    }
+  }
+
+  /* The kit's drop target, replacing a file-picker label under a line of copy that said
+     "Drop any SVG here". Nothing in this app listened for a drop, so dropping a file on that
+     panel did nothing — or, once the browser handled it, navigated the tab to the raw SVG and
+     took the session with it. */
+  const uploadDropEl = dropZone({
+    title: 'Drop an SVG here',
+    text: 'or click to browse',
+    note: 'For brand and app logos, simpleicons.org is a good source',
+    accept: '.svg,image/svg+xml',
+    multiple: true,
+    onFiles: (files) => { void addSvgFiles(files); },
+  });
+  $('uploadDrop').replaceWith(uploadDropEl);
+
+  // In a desktop host the file comes from the host's own picker, so its click has to win
+  // before the drop zone opens a browser file input. Capture phase, for that reason.
+  uploadDropEl.addEventListener('click', (e) => {
+    if (!host?.pickMedia) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void chooseFile(host, { kind: 'svg', extensions: ['svg'] }, () => {}).then(async (file) => {
+      if (file) await addSvgFiles([file]);
+    });
+  });
+
+  // ---------------------------------------------------------------- export
+  // Assemble the 3MF body list (cap, legend, and stem) for one set of carved bodies.
+  // Shared by the single-cap export and the full-alphabet batch so colour/filament
+  // assignment stays identical. The stem rides on the legend filament in shine-through,
+  // otherwise the keycap filament.
+  function buildExportParts(bodies, capColor, logoColor, through) {
+    flushStemApply();
+    // Filament slots, by colour. Slot 1 is the cap and slot 2 is the legend, unconditionally
+    // and as they always have been — even when the two are set to the same hex, which is a
+    // two-filament file someone may well have asked for on purpose.
+    //
+    // Extra legends are matched against what is already claimed instead, so a second legend in
+    // the SAME colour as the first shares its slot rather than demanding a third filament for
+    // a colour the plate is already loaded with.
+    const bySlot = [capColor];
+    const slotOf = (hex) => {
+      const i = bySlot.findIndex((c) => c.toLowerCase() === hex.toLowerCase());
+      if (i >= 0) return i + 1;
+      bySlot.push(hex);
+      return bySlot.length;
+    };
+
+    const parts = [
+      { name: 'Keycap', color: capColor, extruder: 1, geom: bodies.keycapGeometry },
+    ];
+    // Single-colour mode has no separate legend body (it's a recess in the cap) — and with no
+    // legend body there are no extra ones either, so no slot is claimed and never filled.
+    if (bodies.logoGeometry) {
+      bySlot.push(logoColor); // slot 2
+      parts.push({ name: 'Legend', color: logoColor, extruder: 2, geom: bodies.logoGeometry });
+    }
+    (bodies.extraGeometries ?? []).forEach((geom, i) => {
+      if (!geom) return;
+      const color = extraLegends[i]?.color ?? logoColor;
+      parts.push({ name: `Legend ${i + 2}`, color, extruder: slotOf(color), geom });
+    });
+    if (stemGeometry) {
+      parts.push({
+        name: 'Stem',
+        color: through ? logoColor : capColor,
+        extruder: through ? 2 : 1,
+        geom: stemGeometry,
+      });
+    }
+    return orientForPrint(parts);
+  }
+
+  /**
+   * Lay the parts out the way the profile has to be printed — the same rotation the preview
+   * applies via `printGroup`, so what the user sees on the plate is what lands in the file.
+   *
+   * Clones before transforming: these geometries are the live preview meshes.
+   */
+  function orientForPrint(parts) {
+    const m = printMatrix(currentProfile, meta);
+    if (!m) return parts;
+    return parts.map((p) => ({ ...p, geom: p.geom.clone().applyMatrix4(m) }));
+  }
+
+  // 1x1 transparent PNG — last-resort cover if the canvas can't be read. In practice
+  // preserveDrawingBuffer makes the real capture succeed.
+  const BLANK_COVER =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  // Grab the live preview as a PNG data URL for the MakerLab export cover. Render once first so
+  // the buffer holds the current frame at the moment of capture.
+  function captureCover() {
+    try {
+      renderer.render(scene, camera);
+      const url = renderer.domElement.toDataURL('image/png');
+      return url && url.length > 128 ? url : BLANK_COVER;
+    } catch (e) {
+      console.error('Cover capture failed:', e);
+      return BLANK_COVER;
+    }
+  }
+
+  /**
+   * The licence nudge, per invariant #3: the full modal on the first export of a session, a
+   * quiet reminder after. Every export path in this file ends here — single cap, blank cap,
+   * A-Z batch, host or browser — because a path that forgets to call it is a silent export,
+   * which is the thing the invariant exists to prevent. Both no-op inside a desktop host.
+   */
+  let exportsThisSession = 0;
+  function nudgeLicense() {
+    if (proPanel?.hasLicence?.()) return; // owns the lifetime licence: nothing left to pitch
+    exportsThisSession += 1;
+    if (exportsThisSession === 1) openLicenseModal();
+    else licenseReminderToast();
+  }
+
+  /**
+   * Deliver the finished keycap.
+   *
+   * In the MakerWorld build, when embedded, hand the host an OBJ (one `o` object per
+   * filament region) plus an MTL carrying the two colours.
+   *
+   * Standalone (public site, or the built app opened outside the host) still downloads the
+   * two-colour .3mf we build ourselves — unchanged.
+   *
+   * @param {() => Array} makeParts  Deferred so the standalone path doesn't pay for OBJ work
+   *                                 and the host path doesn't pay for 3MF zipping.
+   */
+  /* The licence, on the one export path a file-level mark cannot reach: a comment in an OBJ
+     is not metadata, so on the embedded route the licence rides in the export description. */
+  const LICENSE_NOTE = `Free for personal use; selling prints requires a commercial license: ${BRAND.urls.mwCommercial}`;
+
+  /* The Print settings choice, in the two shapes the two export routes need.
+
+     `printConfig()` is the same choice for the embedded export.
+
+     `projectProcess()` is the same choice for a 3MF we build ourselves: an override over the
+     system process in project_settings.config. Classic is the system preset's own value, so it
+     is left out rather than written, or Studio would show an untouched process as modified. */
+  const printConfig = () => ({ wallGenerator });
+  const projectProcess = () => (wallGenerator === 'classic' ? {} : { wall_generator: wallGenerator });
+
+  async function deliverModel(makeParts, baseName, downloadMsg, description) {
+    if (MAKERLAB && mlReady() && mlCan('export')) {
+      setStatus('Sending to MakerLab…');
+      try {
+        const { obj, mtl } = buildObjMtl(makeParts(), { mtlFileName: `${baseName}.mtl` });
+        const result = await sdkExport({
+          artifacts: [
+            {
+              fileName: `${baseName}.obj`,
+              format: 'obj',
+              buffer: objToArrayBuffer(obj),
+              mtl,
+              coverImage: captureCover(),
+              description: `${description} ${LICENSE_NOTE}`,
+              printConfig: printConfig(),
+            },
+          ],
+        });
+        if (result.success) {
+          setStatus('Exported to MakerLab ✓');
+          sdkToast({ message: 'Keycap exported to MakerLab', type: 'success' });
+          nudgeLicense();
+        } else {
+          setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
+          sdkToast({ message: 'Export failed', type: 'error' });
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus(`Export failed: ${err.message || err}`, 'err');
+      }
+      return;
+    }
+
+    const blob = buildThreeMF(makeParts(), { process: projectProcess() });
+
+    if (host) {
+      // With a host the file goes to the host's own export path rather than the browser's
+      // download bar.
+      try {
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const { indexed } = await host.exportToLibrary(
+          { name: `${baseName}.3mf`, bytes },
+          { designer: 'Keycap Legend Generator' },
+        );
+        setStatus(indexed ? 'Exported to your library ✓' : `Exported as ${baseName}.3mf ✓`);
+        toast(indexed ? 'Exported to your library' : `Exported as ${baseName}.3mf`, { kind: 'success' });
+        nudgeLicense();
+      } catch (err) {
+        console.error(err);
+        setStatus(`Export failed: ${err.message || err}`, 'err');
+      }
+      return;
+    }
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${baseName}.3mf`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus(downloadMsg);
+    // The status line is 12px of muted grey in the corner of the viewport, which is the whole
+    // reason a finished export used to feel like nothing had happened. The detail stays there;
+    // the toast is the part you cannot miss.
+    toast(downloadMsg.split('  ')[0], { kind: 'success' });
+    nudgeLicense();
+  }
+
+  /** The rendered fit-test row -> export parts. Each piece's row offset is baked into real
+   *  vertex positions, since an export part is a standalone geometry with no parent transform
+   *  (unlike the preview meshes, which carry the offset as `mesh.position`). */
+  function fitTestExportParts() {
+    const capColor = $('capColor').value;
+    const parts = [];
+    for (const p of fitTestPieces) {
+      const bake = (plain) => plainToFitTestGeometry(plain).translate(p.offsetX, 0, 0);
+      if (p.watertight) {
+        // A space, not a hyphen, before the label: the label carries its own sign, and
+        // `Test-${label}` named the negative rungs "Test--0.10" in the slicer's object list.
+        parts.push({ name: `Fit test ${p.label}`, color: capColor, extruder: 1, geom: bake(p.geometry) });
+      } else {
+        parts.push({ name: `Fit test tab ${p.label}`, color: capColor, extruder: 1, geom: bake(p.tabGeometry) });
+        parts.push({ name: `Fit test stem ${p.label}`, color: capColor, extruder: 1, geom: bake(p.stemGeometry) });
+      }
+    }
+    return parts;
+  }
+
+  /** Export whatever fit-test row is currently on screen, through the one export function
+   *  every other path in this app uses — provenance, the licence nudge, and the MakerLab vs
+   *  browser branching all come for free (invariant 8). */
+  async function exportFitTest() {
+    if (!fitTestPieces?.length) return;
+    const n = fitTestPieces.length;
+    await deliverModel(
+      fitTestExportParts,
+      `keycap-fit-test${profileSlug() ? '-' + profileSlug() : ''}`,
+      `Exported fit test 3MF ✓  ${n} piece${n === 1 ? '' : 's'} to test-fit, one filament.`,
+      `Keycap stem fit test (${n} piece${n === 1 ? '' : 's'}), made with the Keycap Legend Generator.`,
+    );
+  }
+
+  /**
+   * The one primary action, whatever the mode is pointed at.
+   *
+   * A named async function rather than the click handler it used to be, because the footer has
+   * to be able to AWAIT it. The kit's export panel disables its buttons for as long as
+   * `onExport` is pending — but the footer reached this through `$('export').click()`, which
+   * returns the moment the handler starts, so the button un-greyed itself immediately and a
+   * twenty-minute keyboard set ran with no sign that anything had happened. The hidden
+   * `#export` button stays wired to the same function: other code still clicks it.
+   */
+  async function runPrimaryExport() {
+    // Checked BEFORE the Pro panel gets a say: Fit test is free, and unlike Full set it does
+    // not take the stage, so a paid mode active underneath it (Double legends) would otherwise
+    // get first refusal here even while Fit test is what is actually on screen.
+    if (fitTestActive) { await exportFitTest(); return; }
+    // The footer's primary button is the same button in every mode. When a Pro mode owns the
+    // stage it owns this too — the keyboard set generates a board, not the cap behind it — so
+    // it gets first refusal before the single-cap path runs.
+    if (await proPanel?.handleExport?.()) return;
+    if (!lastBodies) return;
+    const legendSlug = (currentLegend?.name || 'legend').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    const baseName = `keycap-${legendSlug}${profileSlug() ? '-' + profileSlug() : ''}`;
+    // Counted from the parts rather than assumed to be two: a cap with a second legend in its
+    // own colour is a three-filament print, and "assign two filaments" would be wrong advice
+    // at the one moment the user is standing in front of the slicer.
+    const parts = buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked);
+    const filaments = new Set(parts.map((p) => p.extruder)).size;
+    const count = ['no', 'one', 'two', 'three', 'four'][filaments] ?? String(filaments);
+    await deliverModel(
+      () => parts,
+      baseName,
+      $('single').checked
+        ? 'Exported 3MF ✓  Single-colour cap with an engraved legend, one filament.'
+        : `Exported 3MF ✓  Open in your slicer and assign ${count} filaments.`,
+      `Keycap in ${count} colour${filaments === 1 ? '' : 's'}, made with the Keycap Legend Generator.`
+    );
+  }
+
+  $('export').addEventListener('click', () => { void runPrimaryExport(); });
+
+  // Export the bare cap (uncarved shell + stem) in a single colour — no legend.
+  // Works for any size; uses the loaded shell directly (already a clean indexed solid).
+  $('exportBlank').addEventListener('click', async () => {
+    flushStemApply();
+    if (!shellGeometry) return;
+    const makeParts = () => {
+      const capColor = $('capColor').value;
+      const parts = [{ name: 'Keycap', color: capColor, extruder: 1, geom: shellGeometry }];
+      if (stemGeometry) parts.push({ name: 'Stem', color: capColor, extruder: 1, geom: stemGeometry });
+      return parts;
+    };
+
+    const sizeLabel = ($('unitSelect').value || '').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    const tags = [profileSlug(), sizeLabel].filter(Boolean).join('-');
+    const baseName = `keycap-blank${tags ? '-' + tags : ''}`;
+    await deliverModel(
+      makeParts,
+      baseName,
+      'Exported blank keycap ✓  Single-colour cap with no legend.',
+      'Blank keycap, made with the Keycap Legend Generator.'
+    );
+  });
+
+  // -------------------------------------------------------- full alphabet set
+  // Batch-generate A–Z keycaps in the current font + placement/colour settings and
+  // download them as a single ZIP of 3MFs. 1u-only for now (button is disabled on
+  // other sizes). Each letter is carved with the same buildBodies path as the live
+  // preview, so what you set up for one letter is what every cap in the pack gets.
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const alphabetBtn = $('alphabetSet');
+  const alphabetHelp = $('alphabetHelp');
+
+  // The set only makes sense for a 1u cap right now; reflect that on the button.
+  function updateAlphabetAvailability() {
+    const ok = currentUnit === 1;
+    alphabetBtn.disabled = !ok || running;
+    alphabetHelp.textContent = ok
+      ? 'Generates 26 keycaps (A–Z) in the current font & settings, zipped as 3MF files.'
+      : 'Full alphabet set is available for the 1u keycap only. Switch size to 1u to enable.';
+  }
+
+  async function generateAlphabetSet() {
+    if (currentUnit !== 1 || !meta || !shellGeometry || running) return;
+
+    const fontId = $('fontSelect').value;
+    const fontName = FONT_OPTIONS.find((f) => f.id === fontId)?.name || 'font';
+    const opts = currentOpts();
+    const capColor = $('capColor').value;
+    const logoColor = $('logoColor').value;
+    const through = $('through').checked;
+
+    // Hold the regen lock so live preview rebuilds don't run Manifold concurrently.
+    clearTimeout(regenTimer);
+    running = true;
+    alphabetBtn.disabled = true;
+    // Twenty-six carves. Same trap the paid keyboard set had: without this the only way out
+    // of a slow font was closing the tab.
+    let cancelled = false;
+    setBusyState('generating…', () => { cancelled = true; });
+    const files = {};
+    // Host path: one OBJ per letter, handed over as a multi-plate export. Every letter
+    // shares the same two colours, so one MTL covers the whole set. Standalone path still
+    // zips 26 of our own .3mf files.
+    const toHost = MAKERLAB && mlReady() && mlCan('export');
+    const plates = [];
+    let plateMtl = '';
+
+    try {
+      for (let i = 0; i < ALPHABET.length; i++) {
+        if (cancelled) break;
+        const ch = ALPHABET[i];
+        setStatus(`Generating alphabet set… ${ch} (${i + 1}/26)`);
+        // Text only: rebuilding the chip here would throw away the Cancel button's own
+        // "Cancelling…" state twenty-six times.
+        busyEl.setText(`generating ${ch} (${i + 1}/26)…`);
+        await new Promise((r) => setTimeout(r, 0)); // let the spinner/status paint
+
+        const legend = parseLetter(ch, fontId, 1);
+        const bodies = await buildBodies(shellGeometry, meta, legend, opts);
+        const parts = buildExportParts(bodies, capColor, logoColor, through);
+        if (toHost) {
+          const { obj, mtl } = buildObjMtl(parts, { mtlFileName: 'keycap-alphabet.mtl' });
+          plates.push(objToArrayBuffer(obj));
+          plateMtl = mtl;
+        } else {
+          files[`keycap-${ch}.3mf`] = new Uint8Array(await buildThreeMF(parts, { process: projectProcess() }).arrayBuffer());
+        }
+        bodies.keycapGeometry.dispose();
+        bodies.logoGeometry?.dispose();
+      }
+
+      if (cancelled) {
+        setStatus('Alphabet set cancelled. Nothing was exported.', 'warn');
+        // Toast as well as status: the `finally` hands the preview back, and the rebuild's own
+        // "Ready ·  …" lands on this line a moment later and wipes the only notice there was.
+        toast('Alphabet set cancelled', { kind: 'warn' });
+        return; // the finally below still runs: lock released, chip cleared, preview restored
+      }
+
+      const fontSlug = fontName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      const baseName = `keycap-alphabet-${fontSlug}${profileSlug() ? '-' + profileSlug() : ''}`;
+
+      if (toHost) {
+        setStatus('Sending alphabet set to MakerLab…');
+        const result = await sdkExport({
+          artifacts: [
+            {
+              fileName: `${baseName}.obj`,
+              format: 'obj',
+              buffer: plates, // ArrayBuffer[] — one print plate per letter
+              mtl: plateMtl,
+              coverImage: captureCover(),
+              description: `Full A–Z keycap alphabet set (26 print plates). ${LICENSE_NOTE}`,
+              printConfig: printConfig(),
+            },
+          ],
+        });
+        if (result.success) {
+          setStatus('Exported alphabet set to MakerLab ✓  26 keycaps (A–Z).');
+          sdkToast({ message: 'Alphabet set exported', type: 'success' });
+          nudgeLicense();
+        } else {
+          setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
+          sdkToast({ message: 'Export failed', type: 'error' });
+        }
+      } else {
+        // 3MFs are already deflated zips — store (level 0) rather than re-compress.
+        const zipped = zipSync(files, { level: 0 });
+
+        if (host) {
+          /*
+           * An embedding host takes the set through its own export path, the same way the
+           * single-cap path does. `toHost` above is MakerWorld's host, a different one, so
+           * without this branch the set would fall through to the browser download below.
+           *
+           * One zip rather than twenty-six exports: the set is one thing the user asked for.
+           */
+          try {
+            const { indexed } = await host.exportToLibrary(
+              { name: `${baseName}.zip`, bytes: new Uint8Array(zipped) },
+              { designer: 'Keycap Legend Generator' },
+            );
+            setStatus(
+              indexed
+                ? 'Exported the full alphabet set to your library ✓  26 keycaps (A–Z).'
+                : `Exported the full alphabet set ✓  26 keycaps (A–Z), as ${baseName}.zip.`,
+            );
+            toast('Alphabet set exported', { kind: 'success' });
+            nudgeLicense();
+          } catch (err) {
+            console.error(err);
+            setStatus(`Export failed: ${err.message || err}`, 'err');
+          }
+          return;
+        }
+
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([zipped], { type: 'application/zip' }));
+        a.download = `${baseName}.zip`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        setStatus('Exported full alphabet set ✓  26 keycaps (A–Z) zipped. Open each 3MF in your slicer.');
+        toast('Alphabet set exported ✓', { kind: 'success' });
+        nudgeLicense();
+      }
+    } catch (e) {
+      console.error(e);
+      setStatus('Could not generate the alphabet set (try a simpler font or smaller size).', 'err');
+    } finally {
+      setBusyState(null);
+      running = false;
+      updateAlphabetAvailability();
+      scheduleRegen(); // refresh the live preview to the current inputs after the batch
+    }
+  }
+
+  alphabetBtn.addEventListener('click', generateAlphabetSet);
+
+  // ---------------------------------------------------------------- keycap swap
+  // Install a freshly loaded keycap: dispose the old geometry, clean the new stem,
+  // re-frame the camera, and reset the size to a sensible default for this cap.
+  // Called at boot and whenever the size dropdown changes. (Manifold must be ready.)
+  // Max legend size: a single icon (≈square) is capped by the cap's short side, but a wide
+  // legend (multi-letter text) can stretch along the cap's long side. Scale the ceiling by the
+  // legend's aspect ratio so long words on wide caps/spacebars can use the room available.
+  function updateSizeMax() {
+    if (!meta) return;
+    const capLong = Math.max(meta.topExtent[0], meta.topExtent[1]);
+    const capShort = Math.min(meta.topExtent[0], meta.topExtent[1]);
+    let maxW = capShort; // square / no legend yet
+    const b = currentLegend?.box;
+    if (b) {
+      const lng = Math.max(b.max.x - b.min.x, b.max.y - b.min.y);
+      const sht = Math.min(b.max.x - b.min.x, b.max.y - b.min.y);
+      const aspect = sht > 1e-6 ? lng / sht : 1;
+      maxW = Math.min(capLong, capShort * aspect);
+    }
+    C.size.setMax((maxW * 0.95).toFixed(1));
+  }
+
+  // Symmetric ± range for a nudge slider + its number box.
+  function setNudgeRange(rangeId, numId, m) {
+    $(rangeId).min = -m; $(rangeId).max = m;
+    $(numId).min = -m; $(numId).max = m;
+    // The pad clamps typed values against the same limit.
+    nudge.setRange(numId === 'offxNum' ? 'x' : 'y', m);
+  }
+
+  function setKeycap(kc) {
+    // Free everything tied to the previous cap before swapping references.
+    shellGeometry?.dispose();
+    if (stemGeometry && stemGeometry !== baseStemGeometry) stemGeometry.dispose();
+    baseStemGeometry?.dispose();
+    stemGeometry = null;
+    baseStemGeometry = null;
+    capMesh.geometry?.dispose();
+    stemMesh.geometry?.dispose();
+
+    shellGeometry = kc.shellGeometry;
+    meta = kc.meta;
+    capMesh.geometry = shellGeometry.clone(); // shown until the first regen carves it
+
+    // Run the stem(s) through Manifold once so they're a watertight, welded, manifold solid
+    // (the raw STEP tessellation has split vertices) — clean base for the fit-tolerance scale.
+    if (kc.stemGeometry) {
+      const m = geomToManifold(kc.stemGeometry);
+      baseStemGeometry = manifoldToGeom(m); // clean indexed solid, as authored
+      m.delete();
+      kc.stemGeometry.dispose();
+    }
+    applyStemTolerance(); // derive stemGeometry + preview at the current fit tolerance
+
+    // Centre every cap on the world origin so it sits on the grid regardless of its native
+    // STEP coordinates (the larger caps are modelled off-origin). The group holds cap + legend
+    // + stem, so they all shift together. Group is Z-up rotated; position is world space.
+    //
+    // A profile printed in a different orientation is placed by printGroup instead, in model
+    // space, because the rotation changes which axis rests on the plate.
+    const rotDeg = currentProfile?.printRotateX ?? 0;
+    printGroup.rotation.x = (rotDeg * Math.PI) / 180;
+    if (rotDeg) {
+      // +90° about model X maps (x, y, z) -> (x, -z, y). The cap then spans y' [-topZ, 0] and
+      // z' [bbox.min[1], bbox.max[1]], so: centre x, centre the (now horizontal) thickness,
+      // and drop it until the lowest rib touches the plate.
+      printGroup.position.set(-meta.center[0], meta.topZ / 2, -meta.bbox.min[1]);
+      group.position.set(0, 0, 0);
+    } else {
+      printGroup.position.set(0, 0, 0);
+      group.position.set(-meta.center[0], 0, meta.center[1]);
+    }
+    // How tall the cap actually stands, for the camera target: its Z height normally, but the
+    // depth of the cap once it's tipped onto its rib.
+    const standHeight = rotDeg ? meta.bbox.max[1] - meta.bbox.min[1] : meta.topZ;
+
+    // Frame the camera on the (now origin-centred) cap; pull the distance back proportionally
+    // so wide caps (spacebars) still fit the viewport.
+    const spanX = meta.bbox.max[0] - meta.bbox.min[0];
+    const spanY = meta.bbox.max[1] - meta.bbox.min[1];
+    // Aspect has to be current BEFORE the distance is computed: the framing below reads
+    // camera.aspect, and on the first cap the camera is still at its placeholder 1:1.
+    resize();
+    // Framing: the cap's bounding sphere sits at a fixed fraction of whichever field of view
+    // is narrower — vertical on a wide viewport, horizontal on a tall one — so the cap covers
+    // the same share of the stage whatever the viewport's shape. A width multiplier cannot do
+    // that: it says nothing about how much of the VIEW the cap covers. Orbit/zoom untouched,
+    // and the same framing in every build.
+    const dist = framedDistance(Math.hypot(spanX, spanY, meta.topZ) / 2);
+    const target = new THREE.Vector3(0, standHeight / 2, 0);
+    controls.target.copy(target);
+    camera.position.copy(target).add(new THREE.Vector3(0.5, 0.45, 0.75).multiplyScalar(dist));
+    resize();
+
+    // sensible default size for this cap (also the value the placement reset restores)
+    const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
+    const previousSize = C.size.get();
+    DEFAULTS.size = Math.round(room * 0.5 * 10) / 10;
+    C.size.set(DEFAULTS.size);
+    // Rotation and the offsets survive a cap swap; the size does not, because a legend sized
+    // in mm for one cap may not fit the next. That is a decision, but it used to be a silent
+    // one — the slider simply jumped.
+    if (previousSize && Math.abs(previousSize - DEFAULTS.size) > 0.05) {
+      toast(`Legend size reset to ${DEFAULTS.size} mm for this cap`);
+    }
+    updateSizeMax(); // legend-aspect-aware ceiling (wide text can use the cap's length)
+
+    // Nudge range follows the cap so the legend can reach the edges of wide caps/spacebars.
+    setNudgeRange('offx', 'offxNum', Math.max(5, Math.ceil((meta.bbox.max[0] - meta.bbox.min[0]) / 2)));
+    setNudgeRange('offy', 'offyNum', Math.max(5, Math.ceil((meta.bbox.max[1] - meta.bbox.min[1]) / 2)));
+
+    applyLetterLimit(); // longer legends on bigger caps
+    $('exportBlank').disabled = false; // blank export needs only the shell, ready now
+
+    $('meta').textContent = `Cap ${(meta.bbox.max[0] - meta.bbox.min[0]).toFixed(1)}×${(meta.bbox.max[1] - meta.bbox.min[1]).toFixed(1)}×${meta.topZ.toFixed(1)} mm · ${meta.triangles} tris · from ${meta.generatedFrom}`;
+
+    // A cap with no stem has nothing for Fit test to show.
+    fitTestControl?.setOptionVisible('fit', !!baseStemGeometry);
+    if (fitTestActive) {
+      if (!baseStemGeometry) exitFitTest();
+      else renderFitTest(); // profile/size switch while open: rebuild against the new stem
+    }
+  }
+
+  const profileSelect = $('profileSelect');
+  const unitSelect = $('unitSelect');
+  let keycapProfiles = [];     // [{ id, label, default, keycaps:[{ id, label, file, unit }] }]
+  let currentProfile = null;   // the active profile object
+  let keycapManifest = [];     // the active profile's size list (keycaps[])
+
+  // Load a different keycap (profile/size) and rebuild the current legend on it.
+  async function switchKeycap(file, label) {
+    // The chip is ours only while the single cap is what's on screen. Behind a Pro mode's board
+    // this load is invisible, and that mode may have progress of its own up there.
+    if (!singleCapSuspended) setBusyState('generating…');
+    unitSelect.disabled = true;
+    profileSelect.disabled = true;
+    try {
+      const kc = await loadKeycap(file);
+      setKeycap(kc);
+      // Hand the chip to the rebuild only when one is actually going to run — see canRegen().
+      if (canRegen()) scheduleRegen();
+      else if (!singleCapSuspended) setBusyState(null);
+    } catch (e) {
+      console.error(e);
+      if (!singleCapSuspended) setBusyState(null);
+      setStatus(`Could not load ${label || 'this keycap'}.`, 'err');
+    } finally {
+      unitSelect.disabled = false;
+      profileSelect.disabled = false;
+    }
+  }
+
+  // Fill the size dropdown from a profile, keeping the same size id when it exists (so flipping
+  // profile preserves the chosen size — both profiles carry the same set). Returns the entry.
+  function populateSizes(profile, preferredId) {
+    keycapManifest = profile.keycaps;
+    unitSelect.textContent = '';
+    for (const k of keycapManifest) {
+      const opt = document.createElement('option');
+      opt.value = k.id;
+      opt.textContent = k.label;
+      unitSelect.appendChild(opt);
+    }
+    const entry =
+      keycapManifest.find((k) => k.id === preferredId) ||
+      keycapManifest.find((k) => k.id === profile.default) ||
+      keycapManifest[0];
+    unitSelect.value = entry.id;
+    return entry;
+  }
+
+  // Slug for the active profile, used to keep exported filenames distinct between profiles.
+  // Empty when there's only one profile, so single-profile filenames stay unchanged.
+  function profileSlug() {
+    if (!currentProfile || keycapProfiles.length < 2) return '';
+    return currentProfile.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  }
+
+  // ------------------------------------------------- stage handover
+  /**
+   * Who is drawing into the viewport: this generator's single cap, or a Pro mode with a
+   * scene of its own (the keyboard set's board).
+   *
+   * Handing the stage over is four things that must happen together, which is why it is one
+   * function rather than four the caller has to remember: stop the render loop, hide the
+   * canvas, stop rebuilding a cap nobody can see, and drop the one-cap readout. Getting the
+   * third wrong is the expensive one — every slider move would run a full CSG rebuild behind
+   * the board, competing with it for the same Manifold instance.
+   */
+  let singleCapSuspended = false;
+  function setStageOwner(owner) {
+    const pro = owner === 'pro';
+    // Full set taking the stage always force-exits Fit test cleanly first — a stage-owning
+    // mode's board is the only thing that gets to be on screen, and the fit-test row is not it.
+    if (pro && fitTestActive) exitFitTest();
+    singleCapSuspended = pro;
+    setPaused(pro);
+    renderer.domElement.style.display = pro ? 'none' : '';
+    const metaEl = $('meta');
+    if (metaEl) metaEl.hidden = pro; // describes one cap; meaningless for a board
+    if (pro) {
+      // Any rebuild still queued will now decline, so the chip it was going to clear has to be
+      // put away here — before the mode starts using it for progress of its own.
+      clearTimeout(regenTimer);
+      setBusyState(null);
+    } else {
+      resize();       // the viewport may have been resized while we weren't watching it
+      scheduleRegen();
+    }
+  }
+
+  // ------------------------------------------------- mode visibility
+  /**
+   * Controls that only make sense one cap at a time.
+   *
+   * The Pro keyboard set reuses this whole panel, so rather than a second sidebar it hides
+   * the handful of controls a board has no answer for: the size dropdown (a board's widths
+   * are per key), the A–Z batch (a different feature), the blank-cap export (one cap), and
+   * the homing bump (chosen per key there, not for all sixty-one).
+   */
+  let singleOnlyVisible = true;
+  function applyModeVisibility() {
+    const show = singleOnlyVisible;
+    for (const id of ['kcUnitField', 'alphabetBlock', 'exportBlank']) {
+      const node = $(id);
+      if (node) node.hidden = !show;
+    }
+    const bumpRow = $('homingBumpRow');
+    // Two independent reasons to hide it; the profile's is not the mode's to overwrite.
+    if (bumpRow) bumpRow.hidden = !show || currentProfile?.homingBump === false;
+  }
+
+  // ------------------------------------------------- per-profile capabilities
+  // Not every profile is a Cherry-style cap with a dished top and a cross stem, and a few
+  // controls only make sense on one that is. The rules ride along on the profile entry in
+  // index.json (emitted from PROFILE_TUNING in scripts/convert-keycap.mjs), so the geometry
+  // and the rules about it stay in one place. A profile that says nothing gets everything,
+  // which is why the three original profiles are unaffected.
+  function applyProfileCaps(profile) {
+    // Homing bump: one shared mesh, positioned by constants hardcoded to the Standard 1u cap
+    // and shaped for its dish. It has no business on a flat 3.5 mm Choc top.
+    // Visibility is shared with the mode rules (set mode picks the bump per key), so it is
+    // decided in one place rather than fought over by two.
+    if ($('homingBumpRow')) {
+      const allowed = profile?.homingBump !== false;
+      applyModeVisibility();
+      if (!allowed && $('homingBump').checked) {
+        $('homingBump').checked = false;
+        scheduleRegen();
+      }
+    }
+
+    // Shine-through subtracts a prism through the FULL height of the shell. On a Cherry cap
+    // the cavity below is empty so that's safe. The two Choc stubs attach only ±2.85 mm from
+    // the cap centre — directly under the legend — so it would cut the stems off the cap.
+    const shineRow = $('shineThroughRow');
+    if (shineRow) {
+      const allowed = profile?.shineThrough !== false;
+      shineRow.hidden = !allowed;
+      if (!allowed && $('through').checked) {
+        $('through').checked = false;
+        applyModeFlags();
+        scheduleRegen();
+      }
+    }
+
+    // Depth ceiling. The stock 0.2–1.5 mm range assumes a Cherry roof (1.8–2.0 mm of material
+    // over the void). The Choc top plate is exactly 1.50 mm, so the stock maximum would carve
+    // straight through it — a hole, in single-colour recessed mode.
+    const maxDepth = profile?.maxDepth ?? 1.5;
+    $('depth').max = maxDepth;
+    $('depthNum').max = maxDepth;
+    if (C.depth.get() > maxDepth) C.depth.set(maxDepth);
+
+    // Print note: how this profile has to be oriented on the plate, if it's not the usual way.
+    const note = $('profileNote');
+    if (note) {
+      note.textContent = profile?.print ?? '';
+      note.hidden = !profile?.print;
+    }
+  }
+
+  profileSelect.addEventListener('change', () => {
+    const profile = keycapProfiles.find((p) => p.id === profileSelect.value);
+    if (!profile) return;
+    currentProfile = profile;
+    applyProfileCaps(profile);
+    const entry = populateSizes(profile, unitSelect.value); // keep the current size if it exists
+    currentUnit = entry.unit || 1;
+    updateAlphabetAvailability();
+    proPanel?.refresh(); // not every profile ships the sizes a keyboard layout needs
+    syncFitTestExportLabel(); // refresh() can repaint the footer label; Fit test owns it for now
+    switchKeycap(entry.file, `${profile.label} ${entry.label}`);
+  });
+
+  unitSelect.addEventListener('change', () => {
+    const entry = keycapManifest.find((k) => k.id === unitSelect.value);
+    if (entry) {
+      currentUnit = entry.unit || 1;
+      updateAlphabetAvailability();
+      switchKeycap(entry.file, entry.label);
+    }
+  });
+
+  // -------------------------------------------------- paid features (MakerWorld only)
+  // Paid features are gated by the host and are only offered inside the
+  // MakerLab embed, so the whole panel is fenced behind the compile-time MAKERLAB flag: the
+  // public build drops the branch, and with it the panel, the layouts and the set builder.
+  //
+  // The panel owns its own purchase prompt and progress; what it needs from here is a
+  // snapshot of the live settings and the regen lock, so a batch run can't collide with a
+  // preview rebuild.
+  let proPanel = null;
+  /** The edited keyboard set, so it rides along in Save/Load like any other setting. */
+  let keyboardSet = null;
+  /** The second legend, likewise — an opaque blob the Pro mode writes and reads. */
+  let dualLegend = null;
+  if (MAKERLAB) {
+    if ($('kcModeTabs')) {
+      proPanel = mountProFeatures({
+        container,
+        // The shell's own anchors. The Pro modes render INTO these rather than into an
+        // overlay of their own, which is the whole point: one set of panels, one look.
+        hosts: {
+          tabs: $('kcModeTabs'),
+          profileExtra: $('kcProfileExtra'),
+          /** Above the Size/Depth/Rotation/Nudge sliders — for a control that decides what
+           *  those sliders are pointed at, and so has to be read before them. */
+          placementLead: $('kcPlacementLead'),
+          placementExtra: $('kcPlacementExtra'),
+          legendExtra: $('kcLegendExtra'),
+          /** The footer's export block. A purchase prompt goes HERE rather than in the panel
+           *  that configures the paid feature, because the thing being refused is the export. */
+          exportPanel: exportPanelEl,
+          viewport,
+        },
+        /** What the shell lets a mode change about itself. */
+        shell: {
+          /** Hide the one-cap-only controls (size dropdown, A–Z, blank export, homing). */
+          setSingleOnlyVisible: (v) => { singleOnlyVisible = v; applyModeVisibility(); },
+          setStageOwner,
+          /** Retarget the right panel's legend picker. Null restores the single cap. */
+          setLegendSink: (sink) => { legendSink = sink ?? singleCapSink; },
+          /**
+           * The shell's own sink, for a mode that edits the first legend ALONGSIDE something
+           * else and wants the picker to reach both. Delegating to it is the only way to set
+           * the first legend without reimplementing the icon and letter paths — and a second
+           * implementation of "the user picked an icon" is one that will drift.
+           */
+          ownLegendSink: singleCapSink,
+          /**
+           * What the primary button says in single mode when nothing is locked, and what every
+           * paid mode restores when it hands the button back (see panel.js and setMode.js).
+           * One constant rather than a literal per mode, so the button cannot come back from
+           * Full set wearing a different name than it went in with.
+           */
+          defaultExportLabel: MAKERLAB ? 'Export 3MF' : 'Download 3MF',
+          /** The picker's own controls, so a sink can show the selected key's legend. */
+          legendUI: {
+            setType: setLegendMode,
+            markActiveIcon,
+            get letterText() { return $('letterText').value; },
+            set letterText(v) { $('letterText').value = v; },
+            get fontId() { return $('fontSelect').value; },
+            set fontId(v) { $('fontSelect').value = v; },
+            setLetterMaxLength: (n) => { $('letterText').maxLength = n; },
+            /** What the limit should be for the cap that is loaded. A mode handing the picker
+             *  back needs this: the number is a property of the cap, not of the mode. */
+            letterMaxLen: () => letterMaxLen(currentUnit),
+            get letterMaxLength() { return $('letterText').maxLength; },
+            // Readable as well as writable, so a mode that borrows the picker can put it back
+            // exactly as it found it. A mode that can only WRITE the picker has to remember
+            // what it did instead, and the two records drift the moment anything else moves.
+            get type() { return currentMode; },
+            get activeIcon() { return container.querySelector('.icon.active')?.title ?? null; },
+          },
+          /**
+           * Relabel the one primary action for the active mode — including, in a paid mode that
+           * has not been bought, to name the purchase and its price.
+           *
+           * There is deliberately no second seam for "locked". The button was greyed once, with
+           * a separate Unlock button under it, and it made the user pick between an action and a
+           * purchase that were the same intent — they pressed the dead one. One button that
+           * changes what it says is the whole mechanism; what it does is decided by the gate at
+           * the far end of the click, not here.
+           */
+          setExportLabel: (text) => { if (exportBtn) exportBtn.textContent = text; },
+          /** Subscribe to shell inputs by id. Returns an unsubscribe. */
+          onShellEvent: (ids, type, fn) => {
+            const nodes = ids.map((id) => $(id)).filter(Boolean);
+            for (const n of nodes) n.addEventListener(type, fn);
+            return () => { for (const n of nodes) n.removeEventListener(type, fn); };
+          },
+          /**
+           * Show these values on the shell's own placement controls WITHOUT announcing them.
+           * A mode calls this when the thing being edited changes (a different key selected),
+           * which is a display update — announcing it would echo straight back as an edit.
+           */
+          setPlacementValues: ({ size, depth, rot, offx, offy }) => {
+            if (size != null) C.size.set(size);
+            if (depth != null) C.depth.set(depth);
+            if (rot != null) C.rot.set(rot);
+            if (offx != null) C.offx.set(offx);
+            if (offy != null) C.offy.set(offy);
+          },
+          /**
+           * The single cap's Size ceiling is that cap's top; a board needs its own.
+           *
+           * Null puts it back — and something has to, or leaving a mode leaves the slider at
+           * whatever ceiling that mode wanted. `updateSizeMax` only runs when the legend or the
+           * cap changes, so nothing else was ever going to restore it.
+           */
+          setSizeRange: (max) => { if (max == null) updateSizeMax(); else C.size.setMax(max); },
+
+          /**
+           * Carve these legends into the cap as well as the one the picker owns.
+           *
+           * Each entry is `{ legend, placement: {sizeMM, depth, rotationDeg, offsetX, offsetY,
+           * mirror}, color }` — the placement in the same terms the sliders use, so a mode never
+           * has to know about cap metadata or where the dish sits. Null or empty puts the cap
+           * back to one legend. Always schedules a rebuild: the caller changed what the cap is.
+           */
+          setExtraLegends: (list) => {
+            extraLegends = Array.isArray(list) ? list : [];
+            scheduleRegen();
+          },
+
+          /**
+           * Park the FIRST legend's placement here while the sliders are showing something
+           * else. Null hands it back to the sliders. The object is read on every rebuild, so a
+           * mode that mutates it in place gets what it changed on the next carve.
+           */
+          setPlacementOverride: (p) => { placementOverride = p ?? null; scheduleRegen(); },
+
+          /**
+           * Re-read the extra layers' colours onto their materials.
+           *
+           * Separate from `setExtraLegends` because a colour never changes a shape, and routing
+           * it through the carve would spend a full CSG rebuild — half a second of the preview
+           * freezing — on repainting a mesh. This is the same thing the cap and legend colour
+           * inputs do for their own materials.
+           */
+          refreshExtraColors: () => {
+            extraLegends.forEach((l, i) => extraLegendMeshes[i]?.mat.color.set(l.color));
+          },
+        },
+        setMainPaused: setPaused,
+        getSavedSet: () => keyboardSet,
+        onSetChanged: (set) => { keyboardSet = set; },
+        // The second legend rides along in Save/Load the same way an edited board does: the
+        // shell keeps the blob and never looks inside it, and the mode that wrote it is the one
+        // that reads it back — when it is next opened, not on load, so opening a project cannot
+        // put you inside a paid mode you did not ask for.
+        getSavedDual: () => dualLegend,
+        onDualChanged: (v) => { dualLegend = v; },
+        getState: () => ({
+          profile: currentProfile,
+          profileSlug: profileSlug(),
+          fontId: $('fontSelect').value,
+          opts: {
+            depth: C.depth.get(),
+            rotationDeg: C.rot.get(),
+            offsetX: C.offx.get(),
+            offsetY: C.offy.get(),
+            mirror: $('mirror').checked,
+            through: $('through').checked,
+            singleColor: $('single').checked,
+            // The bump is a Cherry-shaped mesh positioned against the Standard dish; a profile
+            // that says it has none keeps its F and J plain.
+            homingBumpAllowed: currentProfile?.homingBump !== false && !!homingBumpGeometry,
+          },
+          glyphHeightMM: C.size.get(),
+          // The usable top of the cap that is loaded, so a mode can place a legend as a
+          // fraction of the room available instead of in absolute millimetres that only
+          // happen to look right on a 1u.
+          topExtent: meta ? [meta.topExtent[0], meta.topExtent[1]] : null,
+          // The first legend's artwork proportions. A mode placing a second legend beside it
+          // has to know how wide the first one actually comes out — the Size control scales the
+          // LONGER side, so everything else follows from this box and nothing else can supply
+          // it: this module owns the parsed legend.
+          legendBox: currentLegend
+            ? {
+              w: currentLegend.box.max.x - currentLegend.box.min.x,
+              h: currentLegend.box.max.y - currentLegend.box.min.y,
+            }
+            : null,
+          stemTolMM: stemTolValue,
+          capColor: $('capColor').value,
+          logoColor: $('logoColor').value,
+          homingBumpGeom: homingBumpGeometry,
+          maxDepth: currentProfile?.maxDepth ?? 1.5,
+          // Pack onto whatever plate the viewport is showing, so what the picker says fits is
+          // what the set is laid out for. `grid` has no size — the builder falls back to 256².
+          plateSize: getPlate(loadPlateChoice())?.size,
+        }),
+        begin: () => {
+          if (running) return false;
+          clearTimeout(regenTimer); // a queued preview rebuild must not run mid-batch
+          running = true;
+          return true;
+        },
+        end: () => {
+          if (!running) return; // already released — never schedule two rebuilds for one batch
+          running = false;
+          scheduleRegen(); // back to the live preview for the current inputs
+        },
+        setStatus,
+        // `onCancel` is optional and only a batch passes one: it puts a Cancel button in the
+        // chip, which is what makes "let it finish or cancel it first" a true sentence.
+        setBusy: (text, onCancel) => setBusyState(text ?? null, onCancel),
+        captureCover,
+        // Invariant #3, on the one export path a file-level mark cannot reach: a comment in
+        // an OBJ is not metadata, so the licence line has to ride in the export's
+        // description instead, and the nudge has to fire from there too. See
+        // setMode.js, where both are used exactly as the single-cap path uses them here.
+        nudgeLicense,
+        licenseNote: LICENSE_NOTE,
+        // The Print settings wall choice, so the Full set export honours it too.
+        printConfig,
+      });
+      cleanups.push(() => proPanel.destroy());
+    }
+  }
+
+  // ------------------------------------------------------- quality callout (dismissable)
+  // The kit's own component, which already builds this markup and already remembers a dismiss
+  // against a storage key. The app hand-rolled both, with the MakerWorld listing URL written
+  // into the template — and because the mw:strip fence only ever ran over index.html, that
+  // copy shipped inside the embed's bundle and was deleted again at runtime. Behind
+  // `!MAKERLAB` the bundler drops it from that build outright.
+  if (!MAKERLAB) {
+    const callout = qualityCallout({
+      html:
+        'For the best quality printed keycap, please use the print profile and instructions available on '
+        + `<a class="vl-link" href="${BRAND.urls.keycapListing}" target="_blank" rel="noopener">MakerWorld</a>.`,
+      storageKey: 'keycap_quality_callout',
+    });
+    const slot = $('qualityCalloutMount');
+    if (callout) slot.replaceWith(callout);
+    else slot.remove();
+  } else {
+    $('qualityCalloutMount')?.remove();
+  }
+
+  // ------------------------------------------------------- credit strip + updates
+  // Pinned to the foot of the left panel, outside its scroll: who made this, and what changed.
+  // Updates rides here rather than as a full-width button among the controls — it is the
+  // answer to "has my bug been fixed", a question people ask rather than one to interrupt
+  // them with, and next to the byline it reads as the version of the thing you are using.
+  /** The Updates panel's entries: the free changelog, plus the paid features' own in the
+   *  MakerWorld build (src/pro/changelog.js), merged by date so one day reads as one section.
+   *  The public build's pro stub exports an empty list, so it shows only the free one. */
+  function updateEntries() {
+    if (!MAKERLAB || !PRO_CHANGELOG.length) return CHANGELOG;
+    const byDate = new Map(CHANGELOG.map((e) => [e.date, { ...e, changes: [...e.changes] }]));
+    for (const e of PRO_CHANGELOG) {
+      const into = byDate.get(e.date);
+      if (into) into.changes.push(...e.changes);
+      else byDate.set(e.date, { ...e, changes: [...e.changes] });
+    }
+    return [...byDate.values()];
+  }
+
+  $('keycapCredit')?.append(panelCredit({
+    // The name goes in both builds. Two lines is the shape of this strip — it is what fills
+    // its left half and leaves the right half for the button.
+    title: 'Keycap Legend Generator',
+    updates: { entries: updateEntries(), title: 'Keycap updates' },
+  }));
+
+  // ------------------------------------------------------- theme (viewport sync)
+  // The shared ui-kit sidebar footer owns the light/dark toggle; it flips
+  // <html data-theme> and persists to 'keycap_theme'. Mirror that into the WebGL
+  // viewport (clear colour + grid) on every change, per the ui-kit pattern.
+  // Watches <html>, which outlives this generator — so it has to be disconnected, or every
+  // theme flip after unmount would still be calling into a disposed renderer.
+  const themeObserver = new MutationObserver(() => {
+    applyViewportTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+  });
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  cleanups.push(() => themeObserver.disconnect());
+
+  // ------------------------------------------------------- save/load project
+  //
+  // Two backends behind the same two buttons. On the web, Save writes a JSON file to
+  // Downloads and Load reads one back through a file input — stateless, and the file is the
+  // user's problem to keep. Inside a host, a project is a real stored thing with a name, a
+  // preview and a list you pick from. Both paths build and consume the same parameter blob,
+  // so a project saved in either place describes the same keycap.
+
+  /** The project currently open, so Save overwrites it instead of piling up copies. */
+  let currentProjectId;
+
+  function collectState() {
+    const projectState = {
+      size: parseFloat($('size').value),
+      depth: parseFloat($('depth').value),
+      rot: parseFloat($('rot').value),
+      offx: parseFloat($('offx').value),
+      offy: parseFloat($('offy').value),
+      stemTol: stemTolValue,
+      capColor: $('capColor').value,
+      logoColor: $('logoColor').value,
+      mirror: $('mirror').checked,
+      homingBump: $('homingBump').checked,
+      through: $('through').checked,
+      single: $('single').checked,
+      profile: $('profileSelect').value,
+      unit: $('unitSelect').value,
+      wallGenerator,
+    };
+    if (currentLegend) projectState.legend = currentLegend;
+    // An edited keyboard set is hours of work; it belongs in the project file next to
+    // everything else. Absent in the public build, where the editor doesn't exist.
+    if (keyboardSet) projectState.keyboardSet = keyboardSet;
+    if (dualLegend) projectState.dualLegend = dualLegend;
+    return projectState;
+  }
+
+  /** The preview the Open list shows. A save is still worth doing without one. */
+  function capturePreview() {
+    try {
+      // The renderer only keeps its drawing buffer when preserveDrawingBuffer is on, which
+      // outside the MakerWorld build it is not — so draw one more frame and read it in the
+      // same tick, before the browser clears it.
+      renderer.render(scene, camera);
+      return renderer.domElement.toDataURL('image/png');
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function saveToHost() {
+    const suggested = currentLegend?.name || 'Keycap';
+    const name = await promptDialog({
+      title: currentProjectId ? 'Rename and save' : 'Save project',
+      label: 'Project name',
+      value: suggested,
+    });
+    if (name === null) return;
+    try {
+      const saved = await host.saveProject({
+        id: currentProjectId,
+        name: name.trim() || suggested,
+        params: collectState(),
+        previewDataUrl: capturePreview(),
+      });
+      currentProjectId = saved.id;
+      setStatus(`Saved "${saved.name}" ✓`);
+    } catch (err) {
+      console.error(err);
+      setStatus(`Could not save: ${err.message || err}`, 'err');
+    }
+  }
+
+  async function openFromHost() {
+    let projects;
+    try {
+      projects = await host.listProjects();
+    } catch (err) {
+      console.error(err);
+      setStatus('Could not read your saved projects', 'err');
+      return;
+    }
+    if (!projects.length) {
+      setStatus('No saved projects yet', 'warn');
+      return;
+    }
+
+    const list = document.createElement('div');
+    list.className = 'kc-project-list';
+    const handle = dialog({ title: 'Open a project', content: list });
+
+    for (const p of projects) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'vl-btn vl-btn--secondary kc-project-row';
+      if (p.preview) {
+        const img = document.createElement('img');
+        img.className = 'kc-project-thumb';
+        img.alt = '';
+        // The host turns a stored path into a URL. A hand-written one can break on some
+        // platforms, and says nothing in the console when it does.
+        img.src = hostAssetUrl(host, p.preview);
+        row.append(img);
+      }
+      const label = document.createElement('span');
+      label.textContent = p.name;
+      row.append(label);
+      row.addEventListener('click', () => {
+        handle.close();
+        void openProject(p.id);
+      });
+      list.append(row);
+    }
+  }
+
+  /**
+   * Loads one saved project into the live UI.
+   *
+   * Shared by the Open list and by the host handing us a project on arrival — the user
+   * clicked a saved keycap in the app's picker rather than the generator's own tile, and
+   * making them find it again in a dialog would be a strange way to honour that click.
+   *
+   * @param {string} projectId
+   */
+  async function openProject(projectId) {
+    if (!host) return;
+    try {
+      const project = await host.loadProject(projectId);
+      applyLoadedState(project.params);
+      currentProjectId = project.id;
+      setStatus(`Opened "${project.name}" ✓`);
+    } catch (err) {
+      console.error(err);
+      setStatus(`Could not open: ${err.message || err}`, 'err');
+    }
+  }
+
+  /**
+   * Hand the host the three things it needs to own projects for this generator.
+   *
+   * Autosave, the unsaved dot, Save, Open, Rename, Delete and Start fresh then belong to
+   * the host, drawn once in its own chrome for every generator it hosts, rather than a
+   * fourth copy of that machinery living in here. Absent on the web, where every path
+   * below keeps working exactly as it did.
+   */
+  host?.registerProject?.({
+    getState: () => collectState(),
+    applyState: (loaded) => applyLoadedState(loaded),
+    capturePreview,
+    suggestName: () => currentLegend?.name || 'Keycap',
+  });
+
+  // Only when the host is *not* owning projects: with `registerProject` it opens the
+  // arriving project itself, and doing it here too would open it twice.
+  if (!host?.registerProject) {
+    const arrivingWith = host?.initialProjectId?.();
+    if (arrivingWith) void openProject(arrivingWith);
+  }
+
+  $('saveProj')?.addEventListener('click', () => {
+    if (host) { void saveToHost(); return; }
+    const blob = new Blob([JSON.stringify(collectState(), null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'keycap-project.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus('Project saved ✓');
+  });
+
+  $('projFile')?.addEventListener('change', () => {
+    const f = $('projFile').files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        applyLoadedState(JSON.parse(reader.result));
+        setStatus('Project loaded ✓');
+      } catch {
+        setStatus('Failed to load project file', 'err');
+      }
+    };
+    reader.readAsText(f);
+    $('projFile').value = '';
+  });
+
+  /** Applies a parameter blob to the live UI. Shared by both load paths. */
+  function applyLoadedState(loaded) {
+    if (!loaded || typeof loaded !== 'object') throw new Error('Not a keycap project');
+    // Fit test is never part of a saved project — opening one always lands on the normal cap
+    // view, cleanly, rather than leaving a stale row from whatever was on screen before.
+    if (fitTestActive) exitFitTest();
+    if (loaded.size != null) { $('size').value = loaded.size; $('sizeNum').value = loaded.size; }
+    if (loaded.depth != null) { $('depth').value = loaded.depth; $('depthNum').value = loaded.depth; }
+    if (loaded.rot != null) { $('rot').value = loaded.rot; $('rotNum').value = loaded.rot; }
+    if (loaded.offx != null) { $('offx').value = loaded.offx; $('offxNum').value = loaded.offx; }
+    if (loaded.offy != null) { $('offy').value = loaded.offy; $('offyNum').value = loaded.offy; }
+    if (loaded.stemTol != null) { setStemTol(loaded.stemTol); applyStemTolerance(); }
+    // `.value = ` fires nothing, and the swatch rows follow the inputs by listening for
+    // `input` — so a loaded project used to leave both palettes showing the old colour while
+    // the preview showed the new one.
+    if (loaded.capColor) { $('capColor').value = loaded.capColor; capMat.color.set(loaded.capColor); capColorRow.setValue(loaded.capColor); }
+    if (loaded.logoColor) { $('logoColor').value = loaded.logoColor; logoMat.color.set(loaded.logoColor); logoColorRow.setValue(loaded.logoColor); }
+    if (loaded.mirror != null) $('mirror').checked = loaded.mirror;
+    if (loaded.homingBump != null) $('homingBump').checked = loaded.homingBump;
+    if (loaded.through != null) $('through').checked = loaded.through;
+    if (loaded.single != null) $('single').checked = loaded.single;
+    if (loaded.profile) $('profileSelect').value = loaded.profile;
+    if (loaded.unit) $('unitSelect').value = loaded.unit;
+    if (loaded.wallGenerator === 'arachne' || loaded.wallGenerator === 'classic') {
+      wallGenerator = loaded.wallGenerator;
+      wallsRow.setValue(loaded.wallGenerator);
+    }
+    if (loaded.keyboardSet) keyboardSet = loaded.keyboardSet;
+    if (loaded.dualLegend) dualLegend = loaded.dualLegend;
+    // Trigger UI sync
+    $('size').dispatchEvent(new Event('input'));
+    $('profileSelect').dispatchEvent(new Event('change'));
+    applyModeFlags();
+  }
+
+  // ------------------------------------------------------- MakerLab handshake
+  // MakerWorld build only: connect to the host when embedded (no-op otherwise). Runs alongside
+  // boot(); the export buttons check mlReady() at click time, so ordering doesn't matter.
+  if (MAKERLAB) {
+    initMakerlab({
+      onDisconnect: () => {
+        setStatus('Disconnected from the MakerLab host.', 'warn');
+        // Losing the connection means ownership is unknown: repaint locked.
+        proPanel?.refresh();
+        syncFitTestExportLabel();
+      },
+    }).then((ctx) => {
+      if (!ctx) return;
+      document.body.classList.add('makerlab');
+      console.log('[MakerLab] connected');
+      // Repaint now: ownership and price are unknown until connected.
+      proPanel?.refresh();
+      syncFitTestExportLabel();
+    });
+  }
+
+  // ---------------------------------------------------------------- boot
+  (async function boot() {
+    try {
+      await initManifold(); // engine needed up-front to clean the stem body
+
+      // Pull the manifest; fall back to the single-cap file if it isn't there.
+      const index = await fetch(assetUrl('keycaps/index.json'))
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+
+      // Accept the profile-aware manifest, or the older flat { default, keycaps } as one profile.
+      const profiles = index?.profiles?.length
+        ? index.profiles
+        : index?.keycaps?.length
+          ? [{ id: 'default', label: 'Default', default: index.default, keycaps: index.keycaps }]
+          : null;
+
+      let defaultFile = 'keycap.json';
+      if (profiles) {
+        keycapProfiles = profiles;
+        for (const p of profiles) {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.label;
+          profileSelect.appendChild(opt);
+        }
+        const defProfile = profiles.find((p) => p.id === index.defaultProfile) || profiles[0];
+        currentProfile = defProfile;
+        profileSelect.value = defProfile.id;
+        const entry = populateSizes(defProfile, defProfile.default);
+        applyProfileCaps(defProfile);
+        defaultFile = entry.file;
+        currentUnit = entry.unit || 1;
+        // A single profile needs no picker — keep the size dropdown, hide the profile one.
+        if (profiles.length < 2) profileSelect.closest('.field').style.display = 'none';
+      } else {
+        unitSelect.closest('.section').style.display = 'none'; // no manifest — hide the picker
+      }
+
+      try {
+        const hb = await loadKeycap('keycaps/homing-bump.json');
+        homingBumpGeometry = hb.shellGeometry;
+      } catch (e) {
+        console.error('Failed to load homing bump geometry:', e);
+      }
+      setKeycap(await loadKeycap(defaultFile));
+      updateAlphabetAvailability();
+      proPanel?.refresh(); // the profile is only known now
+      syncFitTestExportLabel();
+
+      rebuildGallery();
+      loadBundledSvgs();
+      const first = defaultLucideIcon();
+      if (first && currentMode === 'icon') {
+        selectIcon(first.el || galleryEl.firstElementChild, first.getText, first.name);
+      } else if (currentMode === 'letter') {
+        selectLetter();
+      }
+    } catch (e) {
+      console.error(e);
+      setStatus(e.message || 'Failed to load.', 'err');
+    }
+  })();
+
+  // ---------------------------------------------------------------- help tooltips
+  // A single bubble reused by every ".help-badge". Appended to <body> so the right
+  // sidebar's overflow:hidden never clips it. Shown on hover/focus of a badge.
+  (function initHelpTips() {
+    const bubble = document.createElement('div');
+    bubble.className = 'help-tip-bubble';
+    bubble.hidden = true;
+    document.body.appendChild(bubble);
+    // Parked on <body>, deliberately — the right sidebar's overflow would clip it. That
+    // also puts it outside the container, so container.replaceChildren() never sees it and
+    // every mount would leave another orphan bubble behind.
+    cleanups.push(() => bubble.remove());
+
+    function show(badge) {
+      const tip = badge.getAttribute('data-tip');
+      if (!tip) return;
+      bubble.textContent = tip;
+      bubble.hidden = false;
+      const r = badge.getBoundingClientRect();
+      const b = bubble.getBoundingClientRect();
+      let left = r.left + r.width / 2 - b.width / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - b.width - 8));
+      let top = r.top - b.height - 8;
+      if (top < 8) top = r.bottom + 8; // flip below if there's no room above
+      bubble.style.left = `${left}px`;
+      bubble.style.top = `${top}px`;
+    }
+    const hide = () => { bubble.hidden = true; };
+
+    container.querySelectorAll('.help-badge').forEach((badge) => {
+      badge.addEventListener('mouseenter', () => show(badge));
+      badge.addEventListener('mouseleave', hide);
+      badge.addEventListener('focus', () => show(badge));
+      badge.addEventListener('blur', hide);
+      badge.addEventListener('click', (e) => e.preventDefault());
+    });
+  })();
+
+
+  return () => {
+    // Dialogs live on <body>, outside the container the host clears. The magnet wizard's
+    // steps carry their own WebGL preview, so a stranded one holds a context for good.
+    closeAllDialogs();
+    for (const fn of cleanups.reverse()) {
+      try { fn(); } catch { /* one failed cleanup must not strand the rest */ }
+    }
+    cleanups.length = 0;
+    container.replaceChildren();
+  };
+}

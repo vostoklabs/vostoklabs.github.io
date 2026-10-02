@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+.vite/
+*.log
+.*-test.mjs
+
+# Local only
+/*plan*.md
+/*example*/
+**/*-sdk/
+__MACOSX/

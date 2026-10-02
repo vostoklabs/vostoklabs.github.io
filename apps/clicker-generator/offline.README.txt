@@ -1,0 +1,29 @@
+Image to Clicker — offline copy
+===============================
+
+Unzip anywhere and double-click clicker-generator-offline.html. That is the whole
+thing: one file, no install, no server, no internet. It works on a plane.
+
+It is a big file (about 45 MB) because everything is inside it — the geometry
+engine, the switch and block bodies, every sample picture and all 28 text fonts.
+Give it a few seconds the first time your browser opens it. After that it is quick.
+
+Chrome, Edge, Firefox and Safari all run it. If your browser asks whether to allow
+local files, say yes — that is the page reading itself, not the network.
+
+WHAT IT DOES
+  Drop in an image, an SVG or some text and it traces the outline, thickens it into
+  a printable body and gives you a fidget clicker, a keycap or a magnet. There are
+  six sample images built in if you just want to see it work.
+
+  "Download 3MF" gives you a Bambu Studio project with the colours already assigned
+  to filament slots. It lands in your normal downloads folder.
+
+PRINTING IT
+  The 3MF opens straight into Bambu Studio or Orca with the plate laid out. No
+  supports. If you have an AMS the colours are already separated; if you do not,
+  the slicer will ask you to pause and swap.
+
+Made by Vostok Labs — https://vostoklabs.github.io
+Free to use. Selling what you print with it needs a commercial licence; the link is
+in the top bar.

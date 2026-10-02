@@ -1,0 +1,39 @@
+Keychain Carabiner Set — offline copy
+=====================================
+
+Unzip anywhere and double-click keychain-carabiner-offline.html. That is the whole
+thing: one file, no install, no server, no internet. It works on a plane.
+
+It is about 4 MB because everything is inside it — the geometry engine, the symbol
+font and the shape library. Give it a few seconds the first time your browser opens
+it. After that it is quick.
+
+Chrome, Edge, Firefox and Safari all run it. If your browser asks whether to allow
+local files, say yes — that is the page reading itself, not the network.
+
+WHAT IT DOES
+  A snap-hook clip and a chain to hang something on. Pick a shape for the hook, a
+  shape for the links, drag a symbol onto the hook, add a charm if you want one.
+  Every part prints flat, face up, exactly where it lands on the plate — no supports.
+
+  "Assembled" shows the set hanging as worn. "Print layout" shows what you download.
+
+  "Download 3MF" gives you a project with the plate already laid out. It lands in
+  your normal downloads folder. "Save" writes a small .json of your settings that
+  "Load" reads back, so a design you liked is not gone when you close the tab.
+
+PRINTING IT
+  The gate is the wavy cut in the hook. The whole ring is the spring: push the two
+  halves apart to clip it on. Firm is snappier; Soft is safer on a printer that
+  over-extrudes. PETG makes a springier gate than PLA.
+
+  Open links and connector rings have one slit each. Flex one open, thread the next
+  through, let it spring shut.
+
+  "Print in place" grows the chain out of the hook instead, already threaded. Print
+  it flat as it lands and flex the links free. A first layer squished too wide is
+  what fuses them, so if they stick, lower the first-layer flow a little.
+
+Made by Vostok Labs — https://vostoklabs.github.io
+Free to use. Selling what you print with it needs a commercial licence; the link is
+in the top bar.

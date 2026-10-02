@@ -1,0 +1,71 @@
+/* The pattern gallery (@vostok/patterns/ui): Pattern Monster's picker in the house chrome. Only
+   placement lives here — a card's border, hover and chosen state come from the kit's
+   `.vl-thumb-grid`, and every colour is a token, so the dialog belongs to whichever app opens it. */
+/* Pattern Monster's picker, in the studio's chrome: a search, a row of subjects, and a wall of
+   cards each of which IS the pattern, because that is the only way 330 tiles are browsable.
+   Everything here is placement — the tile's border, hover and chosen state come from the kit's
+   `.vl-thumb-grid`, so a pattern card and a shape tile agree without either restating it. */
+.vp-pattern-picker { display: grid; gap: var(--space-3); }
+.vp-pattern-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.vp-pattern-grid { min-height: 260px; max-height: 56vh; overflow-y: auto; padding-right: var(--space-1); }
+
+.vp-pattern-card { display: grid; gap: 4px; text-align: center; }
+
+/* The pattern bleeds to the card's corners; the name rides a pill at the foot of it, the way
+   the site labels its own cards, so the picture is never cropped to make room for the text. */
+.vp-pattern-card__art {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border-radius: var(--radius-s);
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.vp-pattern-card__art > svg { display: block; width: 100%; height: 100%; }
+
+.vp-pattern-card__pill {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  padding: 1px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-micro);
+  line-height: 1.7;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.vp-pattern-card__foot { display: block; color: var(--muted); font-size: var(--fs-micro); }
+
+/* The chosen pattern in a settings panel (`patternRow`): the same card, at the width the panel
+   allows, its name under it and the two buttons under that.
+
+   These three rules were left behind when the row moved into this package and its classes were
+   renamed `ls-pattern-*` → `vp-pattern-*`: the markup came, the stylesheet did not, so every
+   `patternRow` outside Laser Studio drew an unstyled stack with no card
+   at all. Exactly the failure `pnpm check:ui` exists to catch, and exactly the reason a class
+   ladder is not a component: renaming one is a rename nothing checks.
+
+   Laser Studio's form still draws its own `.ls-pattern-row` (a field kind, with knobs this row
+   has no place for), so the two definitions run side by side until that is unified — keep them
+   in step by hand until then. */
+.vp-pattern-row { display: grid; gap: var(--space-2); }
+
+.vp-pattern-preview {
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.vp-pattern-preview > svg { display: block; width: 100%; height: 100%; }
+.vp-pattern-row__name { font-weight: 600; color: var(--text); }
+

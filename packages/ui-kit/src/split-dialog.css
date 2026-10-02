@@ -1,0 +1,87 @@
+/* `splitDialog()` — a working surface on the left, its controls on the right.
+   See components/split-dialog.ts for why this is a component and not a third hand-built grid.
+
+   The two numbers a caller can move are declared here rather than only as `var()` fallbacks,
+   for the reason `.vl-thumb-grid` gives about `--thumb-min`: a custom property whose only
+   source is a `style.setProperty` in JS is one no stylesheet can see, which is exactly what
+   `pnpm check:ui` fails on — and rightly. */
+.vl-split {
+  --split-controls: 300px;
+  --split-stage-min: 420px;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--split-controls);
+  /* One row, allowed to be SMALLER than its content: a grid row defaults to its content's
+     height, so without `minmax(0, …)` the controls column could never scroll — it simply
+     made the dialog taller and the whole window scrolled, with the action bar sliding over
+     the controls. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* The dialog around a split never scrolls: its body is a flex column that hands the height
+   constraint down to the grid, so the CONTROLS column is the thing that scrolls and the
+   stage, the title and the action bar all stay where they are. `:has()` because the body
+   wrapper is `dialog()`'s, not this component's. */
+.vl-dialog:has(> div > .vl-split) { overflow: hidden; padding: 18px 24px; gap: 10px; max-height: calc(100dvh - 16px); }
+.vl-dialog > div:has(> .vl-split) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Fills its column, keeps its own overflow, and never pushes the dialog taller than the
+   screen: `min()` so a stage minimum written for a laptop does not become a scrollbar on a
+   netbook. A caller that wants no minimum passes 0. */
+.vl-split__stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: min(var(--split-stage-min), 46vh);
+  overflow: hidden;
+}
+
+/* `min-height: 0` is what makes the scroll work at all — a grid item's automatic minimum
+   size is its content, so without it the column grows to fit every control and the dialog
+   scrolls instead. */
+.vl-split__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.vl-split__controls::-webkit-scrollbar { width: 8px; }
+.vl-split__controls::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+/* Shares the action bar with the buttons. `margin-right: auto` inside the bar's
+   `justify-content: flex-end` is what puts it hard left without a second layout. */
+.vl-split__footer {
+  margin-right: auto;
+  align-self: center;
+  min-width: 0;
+  text-align: left;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+/* Below the two-pane width the panes stack, stage first — it is in the DOM first, so the
+   order needs no `order` property to state twice. */
+@media (max-width: 900px) {
+  .vl-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+  .vl-dialog:has(> div > .vl-split) { overflow-y: auto; }
+  .vl-split__stage { min-height: min(var(--split-stage-min), 40vh); }
+  .vl-split__controls { overflow-y: visible; }
+}

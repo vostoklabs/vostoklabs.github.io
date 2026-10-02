@@ -1,0 +1,138 @@
+/* Build-plate picker — floats over the preview stage. Positioned by the host
+   generator (top-right of `.vl-stage` by default); everything else is shared. */
+
+.vl-plate-picker {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 21;
+  font-family: var(--font-body);
+}
+
+.vl-plate-picker__btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.vl-plate-picker__btn:hover,
+.vl-plate-picker.is-open .vl-plate-picker__btn {
+  border-color: var(--accent);
+}
+
+.vl-plate-picker__btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.vl-plate-picker__btn > svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--muted);
+}
+
+.vl-plate-picker__label {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.vl-plate-picker__caret {
+  width: 0;
+  height: 0;
+  flex: none;
+  margin-left: 1px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4.5px solid var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.vl-plate-picker.is-open .vl-plate-picker__caret {
+  transform: rotate(180deg);
+}
+
+.vl-plate-picker__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 246px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: var(--radius-l);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32);
+}
+
+/* `display: flex` above outranks the UA stylesheet's [hidden] rule, so the
+   closed menu has to hide itself explicitly. */
+.vl-plate-picker__menu[hidden] {
+  display: none;
+}
+
+.vl-plate-picker__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vl-plate-picker__item:hover {
+  background: var(--panel-2);
+}
+
+.vl-plate-picker__item:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.vl-plate-picker__item.is-selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.vl-plate-picker__item-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.vl-plate-picker__item.is-selected .vl-plate-picker__item-title {
+  color: var(--accent);
+}
+
+.vl-plate-picker__item-sub {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+/* Narrow stages: the label would crowd the mode bar, so show the icon alone. */
+@media (max-width: 900px) {
+  .vl-plate-picker__label {
+    display: none;
+  }
+}
