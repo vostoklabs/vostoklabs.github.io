@@ -2478,9 +2478,17 @@ export function createUi(
   /* The most recent state, for the handful of controls that need it at CLICK time rather
      than at sync time — the shape picker opens with the knobs the app has right now, and a
      drawer that opened on stale values would silently reset them on its first repaint. */
+  /* The status line is text, never markup: it carries file and project names. Built once and
+     updated in place, so the spinner's animation does not restart on every repaint. */
+  const statusSpinner = document.createElement('span');
+  statusSpinner.className = 'spinner';
+  const statusText = document.createTextNode('');
+  statusEl.replaceChildren(statusSpinner, statusText);
+
   function update(state: UiState) {
     latestState = state;
-    statusEl.innerHTML = (state.building ? '<span class="spinner"></span> ' : '') + state.status;
+    statusSpinner.style.display = state.building ? '' : 'none';
+    statusText.data = (state.building ? ' ' : '') + state.status;
     markLoadedSample(state.loadedSampleId);
 
     // Limited mode can land on a count outside the fixed 2-12 list (a pack's own colour
