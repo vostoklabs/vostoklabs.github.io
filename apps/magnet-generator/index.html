@@ -7,11 +7,11 @@
     <title>Image to Fridge Magnet · Vostok Labs</title>
     <meta name="description" content="Turn any image or logo into a fridge magnet. Flat back, magnet pockets, ready to print." />
     <script>
-      // Set the theme before first paint so there is no light/dark flash. Same
-      // storage key the sidebar footer's toggle writes to.
+      // Set the theme before first paint so there is no light/dark flash. The shared key
+      // the theme toggle writes (THEME_KEY in @vostok/ui-kit), then this app's old one.
       (function () {
         var saved = null;
-        try { saved = localStorage.getItem('magnet-generator-theme'); } catch (e) { /* private mode */ }
+        try { saved = localStorage.getItem('vl-theme') || localStorage.getItem('magnet-generator-theme'); } catch (e) { /* private mode */ }
         var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
         document.documentElement.setAttribute('data-theme', theme);
       })();

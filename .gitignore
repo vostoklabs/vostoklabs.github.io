@@ -70,12 +70,16 @@ apps/foldbox/scripts/
 apps/foldbox/offline.README.txt
 apps/foldbox/README.internal.md
 
-# Tests are local, except these apps
+# Tests are local, except these
 **/tests/
 !apps/clicker-generator/tests/
 !apps/clicker-generator/tests/**
 !apps/keycap-generator/tests/
 !apps/keycap-generator/tests/**
+!packages/ui-kit/tests/
+!packages/ui-kit/tests/**
+!packages/fonts/tests/
+!packages/fonts/tests/**
 
 # 3MF files: only app public assets are tracked
 **/blocks/**/*.3mf

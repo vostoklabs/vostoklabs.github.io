@@ -1,10 +1,31 @@
-import { el } from '../dom';
+import { el, uid } from '../dom';
 import { ICONS, svgEl } from '../icons';
 
 /* Small parameter controls shared by every generator sidebar: the toggle, the
    labelled slider, the segmented control, the select field, and the "?" help
    tip. Markup mirrors the shipped clicker/keycap apps so a generator can drop
    these in without restyling. */
+
+/**
+ * A control's caption: a `<label>` pointed at the control, with its text in a span of its own.
+ *
+ * The control takes its accessible name from that span (`aria-labelledby`), not from the whole
+ * label, because the label also holds the "?" tip and a name read from all of it would include
+ * the tip's text. The `for` is what makes the caption clickable: tapping a switch's text flips
+ * the switch, as it does on a phone's own settings screen.
+ */
+function caption(
+  text: string,
+  help: string | undefined,
+  forId: string,
+  className?: string,
+): { label: HTMLLabelElement; text: HTMLSpanElement; textId: string } {
+  const textId = uid('vl-cap');
+  const textEl = el('span', { text, attrs: { id: textId } });
+  const label = el('label', { className, attrs: { for: forId } }, [textEl]);
+  if (help) label.append(helpTip(help));
+  return { label, text: textEl, textId };
+}
 
 /* ---------------- Toggle switch ---------------- */
 
@@ -51,17 +72,52 @@ export function withAccess<T>(
   };
 }
 
+/**
+ * Push a whole state object into its controls, and take back what each control can show.
+ *
+ * Every path that changes settings without the user touching a control (Load project, a share
+ * link, undo, a preset) needs both halves. `setValue` alone clamps only the DISPLAY: a project
+ * saying `width: 400` put the slider at its 120 mm end while the app went on building and
+ * exporting 400. Reading the value back makes each control's own range the rule for loaded
+ * data, so the screen and the model cannot disagree. A dropdown or picker keeps its current
+ * choice when handed one it does not offer, and that choice is what the state gets back.
+ *
+ * Keys without a control are left alone: derived settings (a toggle standing for `rim > 0`)
+ * stay the caller's job. Slider ranges that follow other settings (`setBounds`) must be
+ * updated before this runs, or values get clamped to the old range.
+ *
+ * Returns the keys that had to change to fit, so the caller can say so.
+ */
+export function syncControls<S extends object>(
+  state: S,
+  controls: { [K in keyof S]?: ValueRow<S[K]> },
+): (keyof S)[] {
+  const changed: (keyof S)[] = [];
+  for (const key of Object.keys(controls) as (keyof S)[]) {
+    const control = controls[key];
+    if (!control) continue;
+    control.setValue(state[key]);
+    const shown = control.getValue();
+    if (!Object.is(shown, state[key])) {
+      state[key] = shown;
+      changed.push(key);
+    }
+  }
+  return changed;
+}
+
 /** A labelled iOS-style switch (green when on). Returns the whole row. */
 export function toggleSwitch(opts: ToggleOptions): ValueRow<boolean> {
-  const input = el('input', { attrs: { type: 'checkbox' } });
+  const id = uid('vl-switch');
+  const cap = caption(opts.label, opts.help, id, 'vl-switch-label');
+  const input = el('input', {
+    attrs: { type: 'checkbox', role: 'switch', id, 'aria-labelledby': cap.textId },
+  });
   input.checked = opts.checked ?? false;
   input.addEventListener('change', () => opts.onChange?.(input.checked));
 
-  const label = el('span', { className: 'vl-switch-label', text: opts.label });
-  if (opts.help) label.append(helpTip(opts.help));
-
   const row = el('div', { className: 'vl-switch-row' }, [
-    label,
+    cap.label,
     el('label', { className: 'vl-toggle' }, [input, el('span', { className: 'vl-knob' })]),
   ]) as unknown as ValueRow<boolean>;
   row.setValue = (value, notify = false) => {
@@ -250,14 +306,14 @@ function firstNumber(text: string): number {
  * measuring: a detached element has no computed font to measure from, so measuring is
  * wrong at exactly the moment it matters, the first paint.
  */
-function valueField(ariaLabel: string): {
+function valueField(labelledBy: string, id = uid('vl-val')): {
   input: HTMLInputElement;
   fit: HTMLElement;
   show(text: string): void;
 } {
   const input = el('input', {
     className: 'vl-val',
-    attrs: { type: 'text', inputmode: 'decimal', size: '1', 'aria-label': ariaLabel },
+    attrs: { type: 'text', inputmode: 'decimal', size: '1', id, 'aria-labelledby': labelledBy },
   }) as HTMLInputElement;
   const fit = el('span', { className: 'vl-val-fit' }, [input]);
   // While someone is typing, the box is showing THEIR text rather than ours, so the copy
@@ -312,10 +368,14 @@ export function sliderRow(opts: SliderOptions): SliderRowHandle {
   // `.vl-slider` is what the track, thumb and fill are styled from — see `slider` above.
   // It used to be `.vl-slider-row input[type='range']`, which meant the styling only
   // existed inside this one row shape.
+  const rangeId = uid('vl-range');
+  const cap = caption(opts.label, opts.help, rangeId);
   const range = el('input', {
     className: 'vl-slider',
     attrs: {
       type: 'range',
+      id: rangeId,
+      'aria-labelledby': cap.textId,
       min: String(opts.min),
       max: String(opts.max),
       step: String(step),
@@ -323,7 +383,7 @@ export function sliderRow(opts: SliderOptions): SliderRowHandle {
     },
   });
 
-  const { input: valBox, fit: valFit, show: showValue } = valueField(opts.label);
+  const { input: valBox, fit: valFit, show: showValue } = valueField(cap.textId);
   showValue(fmt(opts.value));
 
   let current = opts.value;
@@ -363,10 +423,7 @@ export function sliderRow(opts: SliderOptions): SliderRowHandle {
     opts.onCommit?.(current);
   });
 
-  const labelEl = el('label', { text: opts.label });
-  if (opts.help) labelEl.append(helpTip(opts.help));
-
-  const head = el('div', { className: 'vl-slider-head' }, [labelEl]);
+  const head = el('div', { className: 'vl-slider-head' }, [cap.label]);
   if (mark.node) head.append(mark.node);
   head.append(valFit);
 
@@ -392,12 +449,13 @@ export function sliderRow(opts: SliderOptions): SliderRowHandle {
   withAccess(row, () => current, [range, valBox]);
   const handle = row as SliderRowHandle;
   handle.setBounds = (min: number, max: number, label?: string) => {
-    if (min === lo && max === hiBound && (label === undefined || label === labelEl.firstChild?.textContent)) return;
+    if (min === lo && max === hiBound && (label === undefined || label === cap.text.textContent)) return;
     lo = min;
     hiBound = max;
     range.min = String(min);
     range.max = String(max);
-    if (label !== undefined && labelEl.firstChild) labelEl.firstChild.textContent = label;
+    // The range and the box are both named from this span, so a rename reaches both.
+    if (label !== undefined) cap.text.textContent = label;
     // Re-clamp: the current value may sit outside the new range, and a slider showing a number
     // its own track cannot reach is the "control that does nothing" bug in miniature.
     commit(current, true, false);
@@ -461,7 +519,9 @@ export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
     return Number(clamp(snapped).toFixed(6));
   };
 
-  const { input: valBox, fit: valFit, show: showValue } = valueField(opts.label);
+  const valId = uid('vl-val');
+  const cap = caption(opts.label, opts.help, valId);
+  const { input: valBox, fit: valFit, show: showValue } = valueField(cap.textId, valId);
   let current = snap(opts.value);
 
   const minus = el('button', {
@@ -502,12 +562,9 @@ export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
     commit(opts.parse ? opts.parse(parsed, raw) : parsed);
   });
 
-  const labelEl = el('label', { text: opts.label });
-  if (opts.help) labelEl.append(helpTip(opts.help));
-
   // `.vl-slider-row` for the outer column, because the caption/control rhythm is the same
   // one and a second name for it would drift.
-  const head = el('div', { className: 'vl-slider-head' }, [labelEl]);
+  const head = el('div', { className: 'vl-slider-head' }, [cap.label]);
   if (mark.node) head.append(mark.node);
   const row = el('div', { className: 'vl-slider-row' }, [
     head,
@@ -615,6 +672,11 @@ export type SegmentedRow<T extends string = string> = ValueRow<T> & {
 
 /** A segmented (tab-style) picker. Exactly one option is active.
  *
+ *  It looks like tabs and behaves like a radio group, and that is how it announces itself:
+ *  `radiogroup`, one `radio` per option, one Tab stop for the group, and the arrow keys move
+ *  the choice. It picks a setting rather than switching between panels, so a screen reader
+ *  calling it "tab, 1 of 3" told people to expect a panel that never came.
+ *
  *  Returns a `ValueRow` like every other control here, so Load-project can push
  *  a saved value back into it. Widening the return type is backwards compatible:
  *  a `ValueRow` is still an HTMLElement, so existing `[segmentedControl(...)]`
@@ -629,7 +691,7 @@ export function segmentedControl<T extends string = string>(
   // could not shrink and simply ran off the panel with the last option clipped in half.
   const root = el('div', {
     className: `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : pictures ? ' vl-tabs--pictures' : ''}`,
-    attrs: { role: 'tablist', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr))` },
+    attrs: { role: 'radiogroup', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr))` },
   });
 
   /* One object the eye can track, instead of two things blinking.
@@ -710,29 +772,60 @@ export function segmentedControl<T extends string = string>(
     new ResizeObserver(() => place(false)).observe(root);
   }
 
+  const hidden = new Set<T>();
+
+  /* One Tab stop for the whole group, on the chosen option — or, while that one is hidden, on
+     the first option that is showing, so the group can never drop out of the Tab order. */
+  const syncTabStop = () => {
+    const showing = opts.options.map((o) => o.value).filter((v) => !hidden.has(v));
+    const stop = showing.includes(active as T) ? active : showing[0];
+    for (const [val, b] of buttons) b.tabIndex = val === stop ? 0 : -1;
+  };
+
   /** Repaint the active tab. Shared by clicks and setValue so the two cannot
    *  drift — a programmatic change has to look identical to a click. */
   const paint = () => {
     for (const [val, b] of buttons) {
       const on = val === active;
       b.classList.toggle('active', on);
-      b.setAttribute('aria-selected', String(on));
+      b.setAttribute('aria-checked', String(on));
     }
+    syncTabStop();
     place(true);
   };
+
+  const choose = (value: T) => {
+    if (value === active) return;
+    active = value;
+    paint();
+    opts.onChange?.(active);
+  };
+
+  // The radio-group keys: arrows step through the options that are showing and can be used,
+  // wrapping at the ends, and Home/End jump to the first and last. A step chooses, as a click does.
+  root.addEventListener('keydown', (e) => {
+    const k = (e as KeyboardEvent).key;
+    const step = k === 'ArrowRight' || k === 'ArrowDown' ? 1 : k === 'ArrowLeft' || k === 'ArrowUp' ? -1 : 0;
+    if (!step && k !== 'Home' && k !== 'End') return;
+    const order = opts.options.map((o) => o.value).filter((v) => !hidden.has(v) && !buttons.get(v)!.disabled);
+    if (!order.length) return;
+    e.preventDefault();
+    const at = order.indexOf(active as T);
+    // From nowhere (the chosen option is hidden), forward lands on the first, back on the last.
+    const from = at === -1 ? (step > 0 ? -1 : 0) : at;
+    const next =
+      k === 'Home' ? order[0]! :
+      k === 'End' ? order[order.length - 1]! :
+      order[(from + step + order.length) % order.length]!;
+    choose(next);
+    buttons.get(next)?.focus();
+  });
 
   for (const opt of opts.options) {
     const btn = el('button', {
       className: `vl-tab${opt.wide ? ' vl-tab--wide' : ''}${opt.value === active ? ' active' : ''}`,
-      attrs: { type: 'button', role: 'tab', 'aria-selected': String(opt.value === active) },
-      on: {
-        click: () => {
-          if (opt.value === active) return;
-          active = opt.value;
-          paint();
-          opts.onChange?.(active);
-        },
-      },
+      attrs: { type: 'button', role: 'radio', 'aria-checked': String(opt.value === active) },
+      on: { click: () => choose(opt.value) },
     });
     // Two render paths rather than always building children: `text` (the default `el()` path)
     // trims/collapses nothing extra, so a plain tab with no icon stays byte-identical to before
@@ -749,6 +842,7 @@ export function segmentedControl<T extends string = string>(
     buttons.set(opt.value, btn);
     root.append(btn);
   }
+  syncTabStop();
 
   // Cheap attempt for the common case of building into a panel that is already laid out.
   // Bails harmlessly when it is not, and the observer picks it up later.
@@ -756,8 +850,11 @@ export function segmentedControl<T extends string = string>(
 
   let outer = root;
   if (opts.label || opts.help) {
-    const lab = el('span', { className: 'vl-control-label', text: opts.label ?? '' });
+    // The group is named from the caption's own text, not the help tip beside it.
+    const text = el('span', { text: opts.label ?? '', attrs: { id: uid('vl-cap') } });
+    const lab = el('span', { className: 'vl-control-label' }, [text]);
     if (opts.help) lab.append(helpTip(opts.help));
+    if (opts.label) root.setAttribute('aria-labelledby', text.id);
     outer = el('div', { className: 'vl-control' }, [lab, root]);
   }
 
@@ -773,7 +870,6 @@ export function segmentedControl<T extends string = string>(
   };
   withAccess(row, () => active, [...buttons.values()]);
 
-  const hidden = new Set<T>();
   row.setOptionVisible = (value: T, visible: boolean) => {
     const btn = buttons.get(value);
     if (!btn) return;
@@ -785,6 +881,7 @@ export function segmentedControl<T extends string = string>(
     // shows, so its columns stay put.
     const shown = opts.options.length - hidden.size;
     if (!pictures) root.style.gridTemplateColumns = `repeat(${Math.max(1, shown)}, minmax(0, 1fr))`;
+    syncTabStop();
     place(false);
   };
   row.setOptionImage = (value: T, src: string | null) => {
@@ -809,7 +906,9 @@ export interface SelectFieldOptions {
 
 /** Labelled dropdown, styled to match the app's fields. */
 export function selectField(opts: SelectFieldOptions): ValueRow<string> {
-  const select = el('select');
+  const id = uid('vl-select');
+  const cap = caption(opts.label, opts.help, id);
+  const select = el('select', { attrs: { id, 'aria-labelledby': cap.textId } });
   /* A `group` on an option puts it under a native `<optgroup>`. Consecutive options sharing a
      group share one heading, so the caller states the grouping in the same list it already
      writes rather than in a second, parallel structure — and a list with no groups renders
@@ -830,10 +929,7 @@ export function selectField(opts: SelectFieldOptions): ValueRow<string> {
   }
   select.addEventListener('change', () => opts.onChange?.(select.value));
 
-  const label = el('label', { text: opts.label });
-  if (opts.help) label.append(helpTip(opts.help));
-
-  const row = el('div', { className: 'vl-field' }, [label, select]) as unknown as ValueRow<string>;
+  const row = el('div', { className: 'vl-field' }, [cap.label, select]) as unknown as ValueRow<string>;
   // The other three controls in this file have had `setValue` since Load-project
   // needed it; the dropdown was the one that did not, so every generator that has to
   // move a dropdown from code reaches through the DOM for its `<select>` instead —

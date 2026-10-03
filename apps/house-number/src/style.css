@@ -17,11 +17,6 @@ body {
   inset: 0;
 }
 
-.hn-wide {
-  width: 100%;
-  justify-content: center;
-}
-
 /* The example cards.
  *
  * Four square thumbnails at the panel's full width pushed the font picker entirely below
@@ -83,28 +78,6 @@ body {
 .hn-report__row strong {
   color: var(--text);
   font-weight: 600;
-}
-
-/* Font picker. The grid and cards are `vl-font-*` from the kit; only the layout around
-   them is this app's, since the panel is narrow and the button sits under the grid. */
-.hn-fontpicker {
-  display: grid;
-  gap: var(--space-2);
-}
-
-/* The "All fonts" dialog: a search field that fills the width, over a taller grid. 155
-   cards is a lot to scroll, so the modal gets the room the sidebar cannot spare. */
-/* The dialog carries the width now (`wide: true`); this only stacks the search over the
-   grid. Asking for a min-width here is what pushed the cards out of the box. */
-.hn-font-modal {
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.hn-font-all {
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  max-height: min(52vh, 460px);
 }
 
 .hidden {

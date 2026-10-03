@@ -22,7 +22,7 @@ import '@vostok/ui-kit/styles.css';
 import '@vostok/plates/plates.css';
 import {
   topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks,
-  chooseFile, listRow, openLicenseModal, licenseReminderToast,
+  chooseFile, listRow, licenseAfterExport, applyTheme,
 } from '@vostok/ui-kit';
 import './style.css';
 import { createStore } from './store/store';
@@ -860,11 +860,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // The cover goes in the file, so a folder of orders shows what each one is instead of
         // forty identical 3MF icons.
         downloadThreeMF(latestParts, `${designFileBase()}.3mf`, { ...(await coverImages()), ...modelExportOpts() });
-        // First download of the session → big license modal; later ones → quiet corner toast.
-        // The counter is in-memory, so a page refresh re-shows the big modal on the next download.
-        downloadCount += 1;
-        if (downloadCount === 1) showLicenseModal();
-        else showLicenseToast();
+        // First download on the page: the full licence window. Later ones: the corner reminder.
+        licenseAfterExport();
       }
     },
     onRenderPng: async () => {
@@ -1077,8 +1074,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       }
     },
     onThemeChange: (theme) => {
-      document.documentElement.setAttribute('data-theme', theme);
-      localStorage.setItem('clicker_theme', theme);
+      applyTheme(theme === 'light' ? 'light' : 'dark');
       viewer.setTheme(theme);
     },
     onEditMode: (mode) => {
@@ -2280,20 +2276,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   function firstLine(s: string): string {
     return s.split('\n')[0];
   }
-
-  // ---- License reminders on download ----
-  // In-memory only (resets on refresh) so the big modal reappears for new sessions.
-  let downloadCount = 0;
-
-  // The kit's pair, not a local copy of it. The two functions that used to live here were
-  // a re-derivation of `openLicenseModal` / `licenseReminderToast` that had drifted in three
-  // ways that matter: they hardcoded a creativecommons.org URL (invariant #4), they had no
-  // `isDesktop()` guard so they popped up inside a host, where web-only chrome does not
-  // belong (invariant #7), and they were missing the focus handling and `role="dialog"` the kit
-  // grew later. Seven apps call the kit pair; this was the eighth going its own way, and it
-  // is the highest-traffic one.
-  const showLicenseModal = () => { openLicenseModal(); };
-  const showLicenseToast = () => { licenseReminderToast(); };
 
   // ---- Render / project save-load / AI prompt ----
   function downloadBlob(blob: Blob, fileName: string) {

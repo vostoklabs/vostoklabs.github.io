@@ -23,14 +23,16 @@ import {
   panelCredit,
   toast,
   dialog,
-  openLicenseModal,
-  licenseReminderToast,
+  licenseAfterExport,
+  buildLoop,
+  syncControls,
+  colorSwatch,
   ICONS,
   el,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
-import { mountPlatePicker } from '@vostok/plates';
+import { mountPlatePicker, plateSize, loadPlateChoice } from '@vostok/plates';
 import { downloadThreeMF, type ExportPart } from '@vostok/export';
 import { DEFAULT_SETTINGS, coerceSettings, type TagSettings, type RGB } from './state';
 import { buildTag } from './geometry';
@@ -68,29 +70,38 @@ let settings: TagSettings = { ...DEFAULT_SETTINGS };
 let parts: ExportPart[] = [];
 
 // ---------------------------------------------------------------------------
-// 2. REBUILD — recompute geometry and push it to the viewer.
-//    Heavy generators do this in a worker; this one is instant, so it runs
-//    inline, coalesced so a slider drag rebuilds once per tick.
-//    Deliberately setTimeout and not requestAnimationFrame: rAF is frozen while
-//    the tab is in the background, which would leave a model that never builds.
+// 2. REBUILD — the kit's build loop. It runs one build at a time, always from the
+//    newest settings, and a burst of slider moves costs one build. Download waits on
+//    it (`loop.settled()` in section 5), so a click a beat after a slider can never
+//    export the model from before the slider moved, and a failed build is refused
+//    rather than replaced by the last good one.
+//    Heavy generators build in a worker: `run` returns the worker's answer, from
+//    `workerClient()` in the kit, with `answerRequests()` inside the worker. This one
+//    is instant, so it builds inline.
 // ---------------------------------------------------------------------------
-let rebuildQueued = 0;
+let refitNext = false;
+let started = 0;
+const loop = buildLoop<ExportPart[]>({
+  run: () => {
+    started = performance.now();
+    return buildTag(settings);
+  },
+  onResult: (built) => {
+    parts = built;
+    viewer.setParts(parts, refitNext);
+    refitNext = false;
+    const tris = parts.reduce((n, p) => n + p.indices.length / 3, 0);
+    status.set(
+      `${settings.width} × ${settings.height} × ${(settings.thickness + (settings.rim > 0 ? settings.rimHeight : 0)).toFixed(1)} mm` +
+        ` · ${parts.length} part${parts.length === 1 ? '' : 's'} · ${tris} triangles · ${Math.round(performance.now() - started)} ms`,
+    );
+  },
+  onError: (err) => status.set(`Could not build the model: ${err.message}`, 'error'),
+});
+
 function triggerRebuild(refit = false) {
-  clearTimeout(rebuildQueued);
-  rebuildQueued = setTimeout(() => {
-    const started = performance.now();
-    try {
-      parts = buildTag(settings);
-      viewer.setParts(parts, refit);
-      const tris = parts.reduce((n, p) => n + p.indices.length / 3, 0);
-      status.set(
-        `${settings.width} × ${settings.height} × ${(settings.thickness + (settings.rim > 0 ? settings.rimHeight : 0)).toFixed(1)} mm` +
-          ` · ${parts.length} part${parts.length === 1 ? '' : 's'} · ${tris} triangles · ${Math.round(performance.now() - started)} ms`,
-      );
-    } catch (err) {
-      status.set(`Could not build the model: ${(err as Error).message}`, 'error');
-    }
-  });
+  if (refit) refitNext = true;
+  loop.request();
 }
 
 // ---------------------------------------------------------------------------
@@ -100,8 +111,9 @@ const rimEnabled = () => settings.rim > 0;
 let lastRim = DEFAULT_SETTINGS.rim || 2;
 
 // Every control is kept in a named handle so Load-project can push the loaded
-// values straight back into the UI (`setValue`) — a generator whose sliders
-// don't follow a loaded project always feels broken.
+// values straight back into the UI — a generator whose sliders don't follow a
+// loaded project always feels broken. Never build a control inline inside a
+// section's body: a control nobody holds a handle to can never be synced.
 const controls = {
   width: sliderRow({
     label: 'Width', min: 20, max: 120, step: 1, value: settings.width, unit: 'mm',
@@ -140,16 +152,29 @@ const controls = {
   }),
 };
 
-/** Push `settings` back into every control — used after Load project. */
-function syncControls() {
-  controls.width.setValue(settings.width);
-  controls.height.setValue(settings.height);
-  controls.thickness.setValue(settings.thickness);
-  controls.radius.setValue(settings.radius);
-  controls.hole.setValue(settings.hole);
+/**
+ * Put `settings` into every control, and keep only what the controls can show. Run it after
+ * anything that changes settings without the user touching a control: Load, Reset, a share
+ * link, undo.
+ *
+ * The kit's `syncControls` does the one-to-one fields, and writes each control's clamped value
+ * back. That is what stops a loaded project with `width: 400` building 400 mm behind a slider
+ * that shows 120. Settings that are not one-to-one (the rim switch stands for `rim > 0`) are
+ * done by hand below, and must clamp the same way.
+ */
+function showSettings() {
+  syncControls(settings, {
+    width: controls.width,
+    height: controls.height,
+    thickness: controls.thickness,
+    radius: controls.radius,
+    hole: controls.hole,
+  });
   controls.rim.setValue(rimEnabled());
   if (rimEnabled()) lastRim = settings.rim;
   controls.rimWidth.setValue(lastRim);
+  lastRim = controls.rimWidth.getValue();
+  if (rimEnabled()) settings.rim = lastRim;
   controls.rimWidth.classList.toggle('hidden', !rimEnabled());
   syncThickness();
 }
@@ -181,7 +206,8 @@ const resetButton = button({
   block: true,
   onClick: () => {
     settings = { ...DEFAULT_SETTINGS };
-    syncControls();
+    showSettings();
+    syncColorInputs();
     triggerRebuild(true);
     toast('Settings reset', { kind: 'ok' });
   },
@@ -270,25 +296,24 @@ const inputSection = section({
 const toHex = (c: RGB) => `#${c.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('')}`;
 
 function colorRow(label: string, get: () => RGB, set: (rgb: RGB) => void, partIndex: number) {
-  const input = el('input', {
-    className: 'tpl-color',
-    attrs: { type: 'color', value: toHex(get()), 'aria-label': label },
-  }) as HTMLInputElement;
-  input.addEventListener('input', () => {
-    const hex = input.value;
-    const rgb: RGB = [
-      parseInt(hex.slice(1, 3), 16),
-      parseInt(hex.slice(3, 5), 16),
-      parseInt(hex.slice(5, 7), 16),
-    ];
-    set(rgb);
-    // Recolour in place — a colour change needs no geometry rebuild. It does
-    // need to reach `parts`, which is what the exporter reads.
-    const part = parts[partIndex];
-    if (part) part.color = rgb;
-    viewer.setPartColor(partIndex, rgb);
+  const swatch = colorSwatch({
+    value: toHex(get()),
+    label,
+    onChange: (hex) => {
+      const rgb: RGB = [
+        parseInt(hex.slice(1, 3), 16),
+        parseInt(hex.slice(3, 5), 16),
+        parseInt(hex.slice(5, 7), 16),
+      ];
+      set(rgb);
+      // Recolour in place — a colour change needs no geometry rebuild. It does
+      // need to reach `parts`, which is what the exporter reads.
+      const part = parts[partIndex];
+      if (part) part.color = rgb;
+      viewer.setPartColor(partIndex, rgb);
+    },
   });
-  return { row: el('div', { className: 'vl-switch-row' }, [el('span', { text: label }), input]), input, get };
+  return { row: el('div', { className: 'vl-switch-row' }, [el('span', { text: label }), swatch]), swatch, get };
 }
 
 const colorRows = [
@@ -297,7 +322,7 @@ const colorRows = [
 ];
 
 function syncColorInputs() {
-  for (const r of colorRows) r.input.value = toHex(r.get());
+  for (const r of colorRows) r.swatch.setValue(toHex(r.get()));
 }
 
 const colourSection = section({
@@ -313,29 +338,28 @@ const quality = qualityCallout({
   storageKey: 'template-quality-callout',
 });
 
-/** Downloads so far this session — the licence nudge escalates on the first one
- *  and stays light afterwards. */
-let downloads = 0;
-
 const footer = sidebarFooter({
   // 3MF only, exactly as every shipped generator does it. A separate STL button
   // is a downgrade offered at the moment of success: STL carries no colours and
   // no part split, so anyone who takes it loses the whole point of the model.
   formats: [{ id: '3mf', label: '3MF' }],
   onExport: async (format) => {
-    if (parts.length === 0) return toast('Nothing to export yet', { kind: 'warn' });
     if (format !== '3mf') throw new Error('Unknown format: ' + format);
-    downloadThreeMF(parts, {
+    // The build that matches the screen. Waits for one still running; refuses, with the
+    // reason as a toast from the export panel, if it failed or nothing is built yet. Never
+    // export `parts` directly: that is whichever build finished last.
+    const built = await loop.settled();
+    downloadThreeMF(built, {
       title: 'Tag',
       generator: 'generator-template',
       application: 'Vostok Labs Generator Template',
       buildId: import.meta.env.VITE_BUILD_ID,
+      // Centred on the plate the user picked, not on the profile's A1.
+      plateSize: plateSize(loadPlateChoice()),
     }, 'tag.3mf');
 
-    // Full modal on the first download, corner reminder after — the shipped flow.
-    downloads += 1;
-    if (downloads === 1) openLicenseModal();
-    else licenseReminderToast();
+    // Full modal on the first download, corner reminder after (invariant #3).
+    licenseAfterExport();
   },
   onSave: () => downloadJSON('tag-project.json', settings),
   // `sidebarFooter`'s onLoad hands back `File | undefined` — the picker can be dismissed
@@ -345,7 +369,7 @@ const footer = sidebarFooter({
   onLoad: (file?: File) =>
     file && loadJSON(file, (data) => {
       settings = coerceSettings(data);
-      syncControls();
+      showSettings();
       syncColorInputs();
       triggerRebuild(true);
       toast('Project loaded', { kind: 'ok' });
@@ -454,7 +478,7 @@ viewer.onPartPick((index) => {
 });
 
 // Everything is built — put the settings into the controls, then draw.
-syncControls();
+showSettings();
 triggerRebuild(true);
 
 // ---------------------------------------------------------------------------

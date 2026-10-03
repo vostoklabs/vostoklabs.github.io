@@ -22,7 +22,7 @@ import '@vostok/plates/plates.css';
 import {
   topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs,
   promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile,
-  button, dropZone, toast, themeColorHex, openLicenseModal, licenseReminderToast,
+  button, dropZone, toast, themeColorHex, licenseAfterExport,
   nudgePad, busyChip, panelCredit, paletteRow, segmentedControl,
 } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
@@ -1603,12 +1603,9 @@ export function mount(container, host) {
    * A-Z batch, host or browser — because a path that forgets to call it is a silent export,
    * which is the thing the invariant exists to prevent. Both no-op inside a desktop host.
    */
-  let exportsThisSession = 0;
   function nudgeLicense() {
     if (proPanel?.hasLicence?.()) return; // owns the lifetime licence: nothing left to pitch
-    exportsThisSession += 1;
-    if (exportsThisSession === 1) openLicenseModal();
-    else licenseReminderToast();
+    licenseAfterExport();
   }
 
   /**

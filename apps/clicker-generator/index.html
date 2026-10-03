@@ -15,7 +15,8 @@
     <link rel="apple-touch-icon" href="./assets/favicon/Vostokfaviconblack.png" />
     <script>
       (function() {
-        const saved = localStorage.getItem('clicker_theme');
+        // The shared key first (see THEME_KEY in @vostok/ui-kit), then this app's old one.
+        const saved = localStorage.getItem('vl-theme') || localStorage.getItem('clicker_theme');
         const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const theme = saved || (systemDark ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', theme);

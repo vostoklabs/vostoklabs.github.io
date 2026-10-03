@@ -89,3 +89,65 @@
 .vl-font-picker__sentinel {
   height: 1px;
 }
+
+/* `layout: 'cards'`: the curated grid's own cards (`.vl-font-card`, patterns.css), as many
+   columns as fit, for the whole library in a wide dialog. Headings, the empty note and the
+   sentinel take the full row. */
+.vl-font-picker__list--cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  align-content: start;
+  gap: var(--space-2);
+  max-height: min(58vh, 540px);
+  padding: var(--space-2);
+}
+.vl-font-picker__list--cards > .vl-font-picker__heading,
+.vl-font-picker__list--cards > .vl-font-picker__empty,
+.vl-font-picker__list--cards > .vl-font-picker__sentinel {
+  grid-column: 1 / -1;
+}
+.vl-font-picker__list--cards .vl-font-card:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* Name and category on one line under the sample: what the face is called, and what it is for. */
+.vl-font-card__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+.vl-font-card__meta > .vl-font-card__name { width: auto; min-width: 0; }
+.vl-font-card__cat {
+  flex: 0 0 auto;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
+/* In a list row the missing-characters mark sits in line, before the name, not in a corner. */
+.vl-font-row > .vl-font-card__warn { position: static; flex: 0 0 auto; }
+
+/* ---------------------------------------------------------------- font chooser */
+/* The whole font block in a panel: the curated cards, "Browse all", and the import row. */
+.vl-font-chooser {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* `fill`: the cards take every pixel the block is given (inside a `section({ fill: true })`)
+   and scroll themselves; "Browse all" and the import row stay put under them. The floor keeps
+   a short window from squeezing the grid to nothing. */
+.vl-font-chooser--fill {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.vl-font-chooser--fill > .vl-font-grid {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: none;
+}
+.vl-font-chooser--fill > :not(.vl-font-grid) {
+  flex: 0 0 auto;
+}

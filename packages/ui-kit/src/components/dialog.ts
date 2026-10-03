@@ -1,5 +1,6 @@
 import { el } from '../dom';
 import { button, type ButtonEmphasis } from './button';
+import { holdModal } from './modal';
 
 export interface DialogAction {
   label: string;
@@ -84,11 +85,10 @@ export function closeAllDialogs(): void {
   }
 }
 
-/** Accessible modal dialog: Esc closes, backdrop click closes, focus is
- *  moved in on open and restored on close. */
+/** Accessible modal dialog: Esc closes, backdrop click closes, the page behind is inert while it
+ *  is open, focus moves in on open and is restored on close. See `holdModal`. */
 export function dialog(opts: DialogOptions): DialogHandle {
-  const previouslyFocused =
-    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  let release = (): void => {};
 
   const body = el('div');
   body.append(typeof opts.content === 'string' ? document.createTextNode(opts.content) : opts.content);
@@ -108,9 +108,8 @@ export function dialog(opts: DialogOptions): DialogHandle {
     close() {
       openDialogs.delete(handle);
       overlay.remove();
-      document.removeEventListener('keydown', onKey);
+      release();
       opts.onClose?.();
-      previouslyFocused?.focus();
     },
   };
 
@@ -137,18 +136,13 @@ export function dialog(opts: DialogOptions): DialogHandle {
     box.append(row);
   }
 
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') handle.close();
-  };
-  document.addEventListener('keydown', onKey);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) handle.close();
   });
 
   document.body.append(overlay);
   openDialogs.add(handle);
-  const firstButton = box.querySelector<HTMLElement>('button, a[href]');
-  (firstButton ?? box).focus?.();
+  release = holdModal(overlay, { onEscape: () => handle.close() });
   return handle;
 }
 

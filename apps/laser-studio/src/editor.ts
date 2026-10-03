@@ -15,8 +15,7 @@ import {
   panelCredit,
   toast,
   dialog,
-  openLicenseModal,
-  licenseReminderToast,
+  licenseAfterExport,
   el,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
@@ -49,8 +48,6 @@ export interface EditorOptions {
   /** Open another template (a loaded project names one). */
   onSwitch(id: string, carry: Values): void;
 }
-
-let downloads = 0;
 
 /** How long to wait for the host before the UI admits it does not know; see `sendToMakerlab`. */
 const EXPORT_TIMEOUT_MS = 60_000;
@@ -293,9 +290,7 @@ export function createEditor(opts: EditorOptions): HTMLElement {
       }
 
       downloadLaserStudioSvg(output, `${stem}.svg`, import.meta.env.VITE_BUILD_ID);
-      downloads += 1;
-      if (downloads === 1) openLicenseModal();
-      else licenseReminderToast();
+      licenseAfterExport();
     },
     // The embedded build has no download path, so the kit hides Save and Open there.
     hostOwnsProjects: MAKERLAB,

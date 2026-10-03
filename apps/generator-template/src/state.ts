@@ -29,7 +29,10 @@ export const DEFAULT_SETTINGS: TagSettings = {
   rimColor: [91, 157, 255],
 };
 
-/** Merge a loaded project over the defaults, dropping anything unrecognised. */
+/** Merge a loaded project over the defaults, dropping anything unrecognised or of the wrong
+ *  type. Ranges are not checked here: the controls own them, and `showSettings()` in main.ts
+ *  clamps every loaded value to its control before anything is built from it. A setting with
+ *  no control must be range-checked here instead. */
 export function coerceSettings(raw: unknown): TagSettings {
   const out = { ...DEFAULT_SETTINGS };
   if (!raw || typeof raw !== 'object') return out;

@@ -24,8 +24,7 @@ import {
   generatorHeader,
   qualityCallout,
   sidebarFooter,
-  openLicenseModal,
-  licenseReminderToast,
+  licenseAfterExport,
   sliderRow,
   segmentedControl,
   toggleSwitch,
@@ -51,6 +50,7 @@ import {
   sourceCards,
   sampleGrid,
   uploadCta,
+  fontChooser,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import type { RegionSet } from './types';
@@ -92,17 +92,14 @@ import {
   sliderMinBodySizeFor,
   effectivePocketFit,
 } from './types';
-import { unzipSync } from 'fflate';
 import {
   FONTS,
-  type FontChoice,
   FALLBACK_FONT_ID,
   getFont,
-  parseFont,
-  registerCustomFont,
-  isFontSupported,
-  fontFamilyFor,
   curatedFonts,
+  importFontFiles,
+  toPickerFont,
+  fontSupportsText,
 } from '@vostok/fonts';
 import { buildTextRegionSet } from './image/text';
 
@@ -325,7 +322,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let activeSource: ImportMode | null = null;
   let regionSet: RegionSet | null = null;
   let latestParts: MagnetPart[] = [];
-  let downloads = 0;
   let refitNext = true;
   let firstBuildDone = false;
   /** Which magnet the pad and the stage drag act on. */
@@ -336,6 +332,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *  only mean something for a raster/vector import. Declared up here because the
    *  shell builds that section during module init, long before its own line runs. */
   let syncRemoveBg: (mode: ImportMode | null) => void = () => {};
+  /** Assigned by importSourceSection(); puts the text, its font and the font cards back in
+   *  step with the settings after Undo or a project load. Those rebuild the left panel, but
+   *  this one is built once and would otherwise keep showing the old word and face. */
+  let syncTextPanel: () => void = () => {};
 
   // ---------------------------------------------------------------------------
   // Fit rules
@@ -531,6 +531,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     isUndoRedo = false;
     baseline = clone(next);
     rebuildSections();
+    syncTextPanel();
     scheduleRebuild();
     syncHistoryButtons();
   }
@@ -1385,9 +1386,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     downloadThreeMF(latestParts, `${stem}.3mf`);
 
     // Licence nudges are a web-only thing; the ui-kit no-ops them inside a desktop host.
-    downloads += 1;
-    if (downloads === 1) openLicenseModal();
-    else licenseReminderToast();
+    licenseAfterExport();
   }
 
   // ---------------------------------------------------------------------------
@@ -1424,136 +1423,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   const debouncedTextRebuild = debounce(() => void applyTextSource(), 220);
 
-  /** Searchable, category-filtered font picker with a live preview of the user's
-   *  own text. Ported from the keychain; the registry it reads is shared. */
-  function openFontBrowser(currentId: string, sampleText: string, onPick: (id: string) => void) {
-    const categories = ['All', ...Array.from(new Set(FONTS.map((f) => f.category))).sort()];
-    let cat = 'All';
-    let search = '';
-
-    const list = el('div', { className: 'mg-fb__list' });
-    const searchField = textField({
-      label: 'Search',
-      type: 'search',
-      placeholder: `Search ${FONTS.length} fonts…`,
-      onInput: (v) => {
-        search = v;
-        render();
-      },
-    });
-    const catRow = segmentedControl<string>({
-      options: categories.map((c) => ({ value: c, label: c })),
-      value: cat,
-      onChange: (c) => {
-        cat = c;
-        render();
-      },
-    });
-
-    const render = () => {
-      const q = search.trim().toLowerCase();
-      const matches = FONTS.filter(
-        (f) =>
-          (cat === 'All' || f.category === cat) &&
-          (!q || f.label.toLowerCase().includes(q) || f.category.toLowerCase().includes(q)),
-      );
-      list.replaceChildren(
-        ...matches.map((f) => {
-          const row = el('button', {
-            className: `mg-fb__row${f.id === currentId ? ' active' : ''}`,
-            attrs: { type: 'button', 'data-font': f.id },
-          }, [
-            el('span', {
-              className: 'mg-fb__preview',
-              text: sampleText.slice(0, 12) || f.label,
-              attrs: { style: `font-family: ${fontFamilyFor(f.id)}` },
-            }),
-            el('span', { className: 'mg-fb__meta' }, [
-              el('span', { className: 'mg-fb__name', text: f.label }),
-              el('span', { className: 'mg-fb__cat', text: f.category }),
-            ]),
-          ]);
-          row.addEventListener('click', () => {
-            onPick(f.id);
-            modal.close();
-          });
-          return row;
-        }),
-      );
-      if (matches.length === 0) {
-        list.append(el('p', { className: 'vl-hint', text: 'No fonts match that search.' }));
-      }
-    };
-
-    render();
-
-    const modal = dialog({
-      title: 'Browse fonts',
-      content: el('div', { className: 'mg-fb' }, [searchField, catRow, list]),
-      actions: [{ label: 'Close' }],
-    });
-  }
-
-  /** Import a .ttf/.otf, or a .zip of them, and select the last one loaded. */
-  async function importCustomFont(file: File, onLoaded: (id: string) => void) {
-    try {
-      const raw = await file.arrayBuffer();
-      const items: { name: string; buffer: ArrayBuffer }[] = [];
-      if (file.name.toLowerCase().endsWith('.zip')) {
-        const unzipped = unzipSync(new Uint8Array(raw));
-        for (const [name, data] of Object.entries(unzipped)) {
-          const lower = name.toLowerCase();
-          if (name.endsWith('/') || !(lower.endsWith('.ttf') || lower.endsWith('.otf'))) continue;
-          items.push({
-            name: name.split('/').pop() || name,
-            buffer: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
-          });
-        }
-        if (items.length === 0) {
-          toast('No .ttf or .otf files found in that zip.', { kind: 'error' });
-          return;
-        }
-      } else {
-        items.push({ name: file.name, buffer: raw });
-      }
-
-      let last = '';
-      let n = 0;
-      for (const item of items) {
-        try {
-          const parsed = parseFont(item.buffer);
-          const id = `custom-${Date.now()}-${n++}`;
-          registerCustomFont(id, parsed);
-          // The face is usable either way; this is what stops it being usable only until
-          // the tab closes. Per-face rather than per-zip, so a twelve-weight family shows
-          // up as twelve things the user can reach for again.
-          void rememberBytes(host, 'font', item.name, item.buffer);
-          // Give the HTML preview the same face the geometry will use.
-          const style = document.createElement('style');
-          style.textContent = `@font-face { font-family: '${fontFamilyFor(id)}'; src: url('${URL.createObjectURL(new Blob([item.buffer]))}'); }`;
-          document.head.appendChild(style);
-          FONTS.unshift({
-            id,
-            label: item.name.replace(/\.[^/.]+$/, ''),
-            category: 'Custom',
-            curated: true,
-            subsets: ['latin', 'latin-ext', 'cyrillic', 'greek'],
-          });
-          last = id;
-        } catch (err) {
-          console.error(`Failed to load font ${item.name}:`, err);
-        }
-      }
-      if (!last) {
-        toast('Could not read that font file.', { kind: 'error' });
-        return;
-      }
-      toast(items.length > 1 ? `Imported ${items.length} fonts` : 'Font imported', { kind: 'ok' });
-      onLoaded(last);
-    } catch (err) {
-      toast('Could not read that font file.', { kind: 'error' });
-      console.error(err);
-    }
+  /** The font chooser's "Import a font": a .ttf, .otf, .woff or a .zip of them. The
+   *  chooser lists, selects and announces what comes back; keeping the files is ours. */
+  async function importFont(file: File) {
+    const { fonts, files, failed } = await importFontFiles(file);
+    // The face is usable either way; this is what stops it being usable only until
+    // the tab closes. Per-face rather than per-zip, so a twelve-weight family shows
+    // up as twelve things the user can reach for again.
+    for (const [name, bytes] of files) void rememberBytes(host, 'font', name, bytes);
+    // The chooser says which faces would not load.
+    return { fonts: fonts.map(toPickerFont), failed };
   }
 
   // ---------------------------------------------------------------------------
@@ -1581,9 +1460,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       <div id="textPanel" class="mode-panel" hidden>
         <p class="hint-text">Type a word and pick a font. Base shape "Image outline" hugs the letters; the preset shapes put them on a plate.</p>
         <div id="mgTextInputMount"></div>
-        <div id="mgFontGrid" class="mg-font-grid"></div>
-        <div id="mgBrowseFontsMount"></div>
-        <div id="mgFontUploadMount"></div>
+        <div id="mgFontChooserMount"></div>
         <div id="mgTextTuning"></div>
       </div>
     `;
@@ -1715,95 +1592,41 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }));
 
     // ---- Text source ----
-    const fontGrid = $('#mgFontGrid');
-
-    const fontCard = (font: FontChoice): HTMLButtonElement => {
-      const supported = isFontSupported(font, s().text);
-      const btn = el('button', {
-        className: `mg-font-card${font.id === s().textFont ? ' active' : ''}${supported ? '' : ' unsupported'}`,
-        attrs: {
-          type: 'button',
-          'data-font': font.id,
-          title: supported ? font.label : `${font.label} (characters missing)`,
-        },
-      }, [
-        el('span', {
-          className: 'mg-font-card__sample',
-          text: s().text.slice(0, 6) || 'Abc',
-          attrs: { style: `font-family: ${fontFamilyFor(font.id)}` },
-        }),
-        el('span', { className: 'mg-font-card__name', text: font.label }),
-      ]) as HTMLButtonElement;
-      btn.addEventListener('click', () => {
-        patchImage({ textFont: font.id });
-        renderFontGrid();
+    // The kit's font block: the curated cards in the user's own word, "Browse all" for the
+    // whole library, and "Import a font". A pick from any of them is the same edit.
+    const textFontChooser = fontChooser({
+      fonts: FONTS.map(toPickerFont),
+      curated: curatedFonts().map((f) => f.id),
+      value: s().textFont,
+      sample: s().text,
+      supports: (f, t) => fontSupportsText(f.id, t),
+      onChange: (id) => {
+        patchImage({ textFont: id });
         void applyTextSource();
-      });
-      return btn;
-    };
-
-    // The active font is pinned first when it isn't curated, so a pick made in the
-    // browse-all modal stays visible in the grid.
-    const renderFontGrid = () => {
-      fontGrid.replaceChildren();
-      const active = FONTS.find((f) => f.id === s().textFont);
-      if (active && !active.curated) fontGrid.append(fontCard(active));
-      for (const f of curatedFonts()) fontGrid.append(fontCard(f));
-    };
-    renderFontGrid();
+      },
+      onImport: importFont,
+      // With a host, its own picker opens instead of the browser's.
+      host,
+    });
+    $('#mgFontChooserMount').replaceWith(textFontChooser);
 
     const textInputField = textField({
       label: 'Text',
       value: s().text,
       onInput: (v) => {
         patchImage({ text: v });
-        renderFontGrid(); // samples and the "characters missing" flag follow the text
+        textFontChooser.setSample(v); // samples and the "characters missing" flag follow the text
         debouncedTextRebuild();
       },
     });
     textInputField.field.maxLength = 24;
     $('#mgTextInputMount').replaceWith(textInputField);
 
-    const browseBtn = button({
-      label: `Browse all ${FONTS.length} fonts →`,
-      emphasis: 'secondary',
-      block: true,
-      onClick: () => {
-        openFontBrowser(s().textFont, s().text, (id) => {
-          patchImage({ textFont: id });
-          renderFontGrid();
-          void applyTextSource();
-        });
-      },
-    });
-    $('#mgBrowseFontsMount').replaceWith(browseBtn);
-
-    const fontUploadCta = uploadCta({
-      label: 'Import custom font (.ttf/.otf/.zip)',
-      icon: UPLOAD_ICON,
-      accept: '.ttf,.otf,.zip',
-      onFiles: (files) => {
-        const f = files[0];
-        if (f) void importCustomFont(f, (id) => {
-          patchImage({ textFont: id });
-          renderFontGrid();
-          void applyTextSource();
-        });
-      },
-    });
-    fontUploadCta.classList.add('mg-font-import');
-    fontUploadCta.addEventListener('click', (e) => {
-      if (!host?.pickMedia) return;
-      e.preventDefault();
-      void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'zip'] }, () => {}).then((f) => {
-        if (f) void importCustomFont(f, (id) => {
-          patchImage({ textFont: id });
-          renderFontGrid();
-          void applyTextSource();
-        });
-      });
-    });
-    $('#mgFontUploadMount').replaceWith(fontUploadCta);
+    syncTextPanel = () => {
+      textInputField.setValue(s().text);
+      textFontChooser.setSample(s().text);
+      textFontChooser.setValue(s().textFont);
+    };
 
     // Letter spacing now lives in the left panel's Shape & size step, next to the
     // other geometry controls.
@@ -3005,6 +2828,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         magnets: project.settings.magnets ?? [],
       });
       store.set({ settings: loaded });
+      syncTextPanel();
       if (project.sourceMode === 'text') {
         // A custom-imported font is gone once the tab closes; applyTextSource
         // reports that rather than silently rendering the wrong face.

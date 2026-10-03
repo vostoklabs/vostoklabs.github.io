@@ -5,16 +5,16 @@ import './style.css';
 
 import {
   appShell, topbarLinks, generatorHeader, qualityCallout, section, collapsibleSection, sampleGrid,
-  sliderRow, toggleSwitch, segmentedControl, sidebarFooter, stageStatus,
+  sliderRow, toggleSwitch, segmentedControl, fontChooser, sidebarFooter, stageStatus,
   filamentRow, contrastRatio,
-  toast, dialog, openLicenseModal, licenseReminderToast, el, button,
+  toast, dialog, licenseAfterExport, el,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
-import { mountPlatePicker } from '@vostok/plates';
+import { mountPlatePicker, plateSize, loadPlateChoice } from '@vostok/plates';
 import { downloadThreeMF, type ExportPart } from '@vostok/export';
 import {
-  FONTS, curatedFonts, getFont, parseFont, registerCustomFont, isFontSupported,
+  FONTS, curatedFonts, getFont, importFontFiles, toPickerFont, fontSupportsText,
   getHorizontalContours, getVerticalContours,
 } from '@vostok/fonts';
 import {
@@ -24,15 +24,12 @@ import {
 import type { GeometryRequest, GeometryResponse, PartMesh } from './types';
 import { applyPreset, coerceSettings, PRESETS } from './state';
 import { textRow, selectRow } from './controls';
-import { fontPicker } from './fontPicker';
 import { platePreviewSvg, type PreviewTheme } from './previews';
 
 /* ── 1 · State ──────────────────────────────────────────────────────────────── */
 
 let params: SignParams = { ...DEFAULTS, fontId: curatedFonts()[0]?.id ?? FONTS[0]!.id };
 let parts: ExportPart[] = [];
-/** A font the user uploaded this session, so a rebuild does not re-parse it. */
-let customFontId = '';
 
 /* ── 2 · Geometry, off the main thread ──────────────────────────────────────── */
 
@@ -174,17 +171,63 @@ function triggerRebuild(refit = false) {
 
 /* ── 3 · Controls ───────────────────────────────────────────────────────────── */
 
-/** Cards showing your own text in each face — see `fontPicker.ts` for why, not a dropdown. */
-const fonts = fontPicker({
+/**
+ * The faces shown as cards: ones that suit a sign read at a distance — heavy or condensed
+ * grotesques, a couple of geometrics, and two serifs for a formal plaque. Ordered as they
+ * should be shown.
+ *
+ * A shortlist is shown, not the whole registry: for a door plate most of the catalogue is
+ * noise (Creepster, Pacifico, Press Start 2P). The rest stay reachable behind "Browse all",
+ * so nothing is taken away.
+ *
+ * Deliberately not `curatedFonts()` — that list is tuned for keychains and leads with
+ * novelty faces. Anton, its first entry, is this generator's silent default.
+ */
+const FONT_SHORTLIST = [
+  'bebas-neue', 'anton', 'oswald', 'archivo-black', 'russo-one', 'montserrat',
+  'barlow-condensed', 'rajdhani', 'aldrich', 'poppins', 'playfair-display', 'cinzel',
+];
+
+/**
+ * What every font card shows: `123 abc`, always — not the user's own text.
+ *
+ * Showing your own text sounds better and reads worse. A house sign is usually two or
+ * three digits, so every card said "12" and the one thing you actually need to judge —
+ * whether this face has letters worth putting a street name in, and whether its digits and
+ * letters sit together — was invisible. A fixed specimen with both is what a type
+ * specimen has always been.
+ */
+const FONT_SPECIMEN = '123 abc';
+
+/**
+ * The font block — the shortlist as cards, "Browse all" for the rest, and a font of your
+ * own — is the kit's `fontChooser`, the same block the other generators show.
+ *
+ * The ⚠ on a face is about the user's OWN text, not the specimen: the question it answers
+ * is "will my sign render in this face", which the specimen cannot tell you. So the chooser
+ * shows the specimen and checks `checkText`, both lines of the sign, and a text edit hands it
+ * the new lines.
+ */
+const fonts = fontChooser({
+  fonts: FONTS.map(toPickerFont),
+  curated: FONT_SHORTLIST,
   value: params.fontId,
-  sampleText: () => params.text,
+  sample: FONT_SPECIMEN,
+  checkText: params.text + params.text2,
+  supports: (f, text) => fontSupportsText(f.id, text),
   onChange: (id) => {
     params.fontId = id;
-    const f = FONTS.find((x) => x.id === id);
-    if (f && !isFontSupported(f, params.text + params.text2)) {
+    if (!fontSupportsText(id, params.text + params.text2)) {
       toast('This font has no glyph for some of those characters', { kind: 'warn' });
     }
     triggerRebuild();
+  },
+  // The id comes from the file's bytes, so a saved project that names an imported font finds
+  // it again once the same file is imported, in this session or a later one, whatever the
+  // file is called by then.
+  onImport: async (file) => {
+    const { fonts, failed } = await importFontFiles(file);
+    return { fonts: fonts.map(toPickerFont), failed };
   },
 });
 
@@ -193,13 +236,13 @@ const controls = {
   // that assumption justified was the first thing they hit.
   text: textRow({
     label: 'First line', value: params.text, placeholder: '12', maxLength: 24,
-    // The font cards render this text, so they follow along as it is typed.
-    onInput: (v) => { params.text = v; fonts.refresh(params.fontId); triggerRebuild(); },
+    // The font cards flag a face that cannot set this text, so they check again as it is typed.
+    onInput: (v) => { params.text = v; fonts.setSample(FONT_SPECIMEN, params.text + params.text2); triggerRebuild(); },
   }),
   text2: textRow({
     label: 'Second line', value: params.text2, placeholder: 'Street or name (optional)', maxLength: 24,
     // Alignment and line spacing only mean anything once there is a second line to place.
-    onInput: (v) => { params.text2 = v; syncVisibility(); triggerRebuild(); },
+    onInput: (v) => { params.text2 = v; fonts.setSample(FONT_SPECIMEN, params.text + params.text2); syncVisibility(); triggerRebuild(); },
   }),
   /*
    * One handle on how big the sign is, above the controls that decide its proportions.
@@ -604,7 +647,8 @@ function syncVisibility() {
 function syncControls() {
   controls.text.setValue(params.text);
   controls.text2.setValue(params.text2);
-  fonts.refresh(params.fontId);
+  fonts.setValue(params.fontId);
+  fonts.setSample(FONT_SPECIMEN, params.text + params.text2);
   controls.scale.setValue(params.scale);
   controls.textSize.setValue(params.textSize);
   controls.line2Size.setValue(params.line2Size);
@@ -649,40 +693,7 @@ function syncControls() {
   syncColourInputs();
 }
 
-/* ── 4 · Fonts you bring yourself ───────────────────────────────────────────── */
-
-const fontUpload = el('input', {
-  attrs: { type: 'file', accept: '.ttf,.otf,.woff', hidden: 'hidden' },
-}) as HTMLInputElement;
-
-fontUpload.addEventListener('change', async () => {
-  const file = fontUpload.files?.[0];
-  if (!file) return;
-  try {
-    const parsed = parseFont(await file.arrayBuffer());
-    customFontId = 'custom-upload';
-    registerCustomFont(customFontId, parsed);
-    params.fontId = customFontId;
-    // The upload joins the grid at the top and stays selected. Its card renders in the
-    // uploaded face like any other, because `registerCustomFont` has already added the
-    // matching `@font-face` under the same `VL-` name the cards use.
-    fonts.addCustom(customFontId, file.name.replace(/\.(ttf|otf|woff2?)$/i, ''));
-    toast(`Using ${file.name}`, { kind: 'ok' });
-    triggerRebuild();
-  } catch (err) {
-    toast(`That font would not load: ${(err as Error).message}`, { kind: 'error' });
-  } finally {
-    fontUpload.value = '';
-  }
-});
-
-const fontUploadBtn = button({
-  label: 'Use a font from your computer',
-  className: 'hn-wide',
-  onClick: () => fontUpload.click(),
-});
-
-/* ── 5 · Examples ───────────────────────────────────────────────────────────── */
+/* ── 4 · Examples ───────────────────────────────────────────────────────────── */
 
 /**
  * The four presets, as a 2x2 of pictures of the plate they make.
@@ -747,7 +758,7 @@ async function paintExamples() {
   if (after && before > 0) after.scrollTop = before;
 }
 
-/* ── 6 · Colours ────────────────────────────────────────────────────────────── */
+/* ── 5 · Colours ────────────────────────────────────────────────────────────── */
 
 /**
  * Filament swatches, not a colour wheel.
@@ -815,15 +826,13 @@ function warnLowContrast() {
   }
 }
 
-/* ── 7 · Chrome ─────────────────────────────────────────────────────────────── */
+/* ── 6 · Chrome ─────────────────────────────────────────────────────────────── */
 
 const quality = qualityCallout({
   html: 'Outdoors, print in <strong>ASA</strong>. PETG goes brittle in UV without a blocker, '
       + 'and dark colours fade and soften fastest in direct sun.',
   storageKey: 'house-number-quality',
 });
-
-let downloads = 0;
 
 const footer = sidebarFooter({
   formats: [{ id: '3mf', label: '3MF' }],
@@ -836,11 +845,10 @@ const footer = sidebarFooter({
       generator: 'house-number',
       application: 'Vostok Labs House Number Generator',
       buildId: import.meta.env.VITE_BUILD_ID,
+      plateSize: plateSize(loadPlateChoice()),
     }, `${name}.3mf`);
 
-    downloads += 1;
-    if (downloads === 1) openLicenseModal();
-    else licenseReminderToast();
+    licenseAfterExport();
   },
   onSave: () => {
     const blob = new Blob([JSON.stringify(params, null, 2)], { type: 'application/json' });
@@ -877,7 +885,7 @@ const footer = sidebarFooter({
   themeStorageKey: 'house-number-theme',
 });
 
-/* ── 8 · Assemble ───────────────────────────────────────────────────────────── */
+/* ── 7 · Assemble ───────────────────────────────────────────────────────────── */
 
 /**
  * The right panel's results block.
@@ -1009,7 +1017,7 @@ const shell = appShell({
   right: {
     scroll: [
       section({ title: 'Start from an example', body: [examplesGrid] }),
-      section({ title: 'Font', body: [fonts.root, fontUploadBtn, fontUpload] }),
+      section({ title: 'Font', body: [fonts] }),
     ],
     footer: [footer],
   },

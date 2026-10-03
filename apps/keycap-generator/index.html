@@ -8,7 +8,8 @@
     <!-- Chakra Petch is bundled locally by @vostok/ui-kit (fonts.css), so no CDN is needed. -->
     <script>
       (function() {
-        var saved = localStorage.getItem('keycap_theme');
+        // The shared key first (see THEME_KEY in @vostok/ui-kit), then this app's old one.
+        var saved = localStorage.getItem('vl-theme') || localStorage.getItem('keycap_theme');
         var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         var theme = saved || (systemDark ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', theme);

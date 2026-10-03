@@ -1,6 +1,7 @@
 import { el } from '../dom';
 import { ICONS, svgEl } from '../icons';
 import { isDesktop, noopHandle } from '../host-env';
+import { holdModal } from './modal';
 
 export interface WhatsNewItem {
   /** Bold lead-in, e.g. 'Sharper image tracing'. */
@@ -33,37 +34,32 @@ export function showWhatsNew(opts: WhatsNewOptions): { close(): void } {
   const dismiss = el('label', { className: 'vl-dismiss' }, [checkbox, "Don't show again"]);
 
   const overlay = el('div', { className: 'vl-overlay' });
+  let release = (): void => {};
   const handle = {
     close() {
       overlay.remove();
-      document.removeEventListener('keydown', onKey);
+      release();
       opts.onClose?.(checkbox.checked);
     },
   };
 
+  const gotIt = el('button', {
+    className: 'vl-btn vl-btn--primary',
+    text: 'Got it →',
+    attrs: { type: 'button' },
+    on: { click: () => handle.close() },
+  });
   const card = el('div', { className: 'vl-card', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': "What's new" } }, [
     el('div', { className: 'vl-badge vl-badge--accent', text: "What's new" }),
     el('h2', { text: opts.title ?? 'Latest updates' }),
     el('p', { text: opts.intro ?? 'A few improvements landed since your last visit:' }),
     list,
-    el('div', { className: 'vl-whatsnew-foot' }, [
-      dismiss,
-      el('button', {
-        className: 'vl-btn vl-btn--primary',
-        text: 'Got it →',
-        on: { click: () => handle.close() },
-      }),
-    ]),
+    el('div', { className: 'vl-whatsnew-foot' }, [dismiss, gotIt]),
   ]);
   overlay.append(card);
 
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') handle.close();
-  };
-  document.addEventListener('keydown', onKey);
-
   document.body.append(overlay);
-  card.querySelector<HTMLElement>('button.vl-btn--primary')?.focus();
+  release = holdModal(overlay, { onEscape: () => handle.close(), initialFocus: gotIt });
   return handle;
 }
 

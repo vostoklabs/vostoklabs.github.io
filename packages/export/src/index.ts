@@ -45,6 +45,12 @@ export interface ExportMeta {
   /** Build id; pass `import.meta.env.VITE_BUILD_ID`. */
   buildId?: string;
   /**
+   * The bed the user picked, in mm: `plateSize(loadPlateChoice())` from `@vostok/plates`. The
+   * model is centred on it. Left out, it is centred on the profile's own bed, an A1, so an
+   * A1 mini owner opened a layout sitting 45 mm off the back of their plate.
+   */
+  plateSize?: [number, number];
+  /**
    * A PNG of the model, for the file's thumbnail.
    *
    * Written as `Metadata/plate_1.png` and pointed at by three relationships: the OPC
@@ -429,7 +435,7 @@ export function buildThreeMF(parts: ExportPart[], meta: ExportMeta): Uint8Array 
         `</components></object>`,
     )
     .join('');
-  const transform = plateItemTransform(xyBounds(parts.map((p) => p.positions)));
+  const transform = plateItemTransform(xyBounds(parts.map((p) => p.positions)), meta.plateSize);
   const buildItems = groups
     .map((_, i) => `<item objectid="${wrapperIdFor(i)}" transform="${transform}" printable="1"/>`)
     .join('');

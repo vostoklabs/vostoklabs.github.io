@@ -1,22 +1,38 @@
 import { el } from '../dom';
 import { ICONS, svgEl } from '../icons';
 
-/** Read the active theme from localStorage, falling back to the OS preference. */
-export function resolveTheme(storageKey: string): 'dark' | 'light' {
+/**
+ * The one place the light/dark choice is kept, for every app.
+ *
+ * The apps share an origin, so they share storage. They used to keep the choice under ten
+ * different keys, so picking Light in one generator was forgotten in the next. An app's old key
+ * is still read once, as a fallback, so nobody loses the choice they had already made there.
+ * Pre-paint scripts in an app's index.html must read this key first, for the same reason.
+ */
+export const THEME_KEY = 'vl-theme';
+
+function readTheme(key: string): 'dark' | 'light' | null {
   let saved: string | null = null;
-  try { saved = localStorage.getItem(storageKey); } catch { /* private mode */ }
-  if (saved === 'light' || saved === 'dark') return saved;
+  try { saved = localStorage.getItem(key); } catch { /* private mode */ }
+  return saved === 'light' || saved === 'dark' ? saved : null;
+}
+
+/** Read the active theme: the shared choice, then `legacyKey` (an app's old key), then the OS. */
+export function resolveTheme(legacyKey?: string): 'dark' | 'light' {
+  const saved = readTheme(THEME_KEY) ?? (legacyKey ? readTheme(legacyKey) : null);
+  if (saved) return saved;
   return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
-/** Set <html data-theme> and persist the choice. */
-export function applyTheme(theme: 'dark' | 'light', storageKey: string): void {
+/** Set <html data-theme> and persist the choice under the shared key. The second argument is
+ *  ignored; it is still accepted so the apps that pass their old key keep compiling. */
+export function applyTheme(theme: 'dark' | 'light', _legacyKey?: string): void {
   document.documentElement.setAttribute('data-theme', theme);
-  try { localStorage.setItem(storageKey, theme); } catch { /* private mode */ }
+  try { localStorage.setItem(THEME_KEY, theme); } catch { /* private mode */ }
 }
 
 export interface ThemeToggleOptions {
-  /** localStorage key (default 'vl-theme'). */
+  /** An app's old storage key, read once as a fallback. The choice is saved under `THEME_KEY`. */
   storageKey?: string;
   /** Apply the saved/system theme immediately on creation (default true). Do this
    *  before building a 3D viewer so it reads the right value. */
@@ -37,8 +53,7 @@ export interface ThemeToggleOptions {
  * data-theme in the app to re-theme the 3D viewer.
  */
 export function themeToggleButton(opts: ThemeToggleOptions = {}): HTMLElement {
-  const storageKey = opts.storageKey ?? 'vl-theme';
-  if (opts.applyOnInit ?? true) applyTheme(resolveTheme(storageKey), storageKey);
+  if (opts.applyOnInit ?? true) applyTheme(resolveTheme(opts.storageKey));
 
   const btn = el('button', {
     className: `vl-theme-toggle${opts.variant === 'action' ? ' vl-btn vl-btn--secondary vl-action-btn' : ''}${opts.className ? ` ${opts.className}` : ''}`,
@@ -52,7 +67,7 @@ export function themeToggleButton(opts: ThemeToggleOptions = {}): HTMLElement {
   };
   btn.addEventListener('click', () => {
     const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-    applyTheme(next, storageKey);
+    applyTheme(next);
     render();
   });
   render();

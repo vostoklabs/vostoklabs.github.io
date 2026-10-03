@@ -21,7 +21,7 @@
 
   The layer is now `packages/ui-kit/src/components/button.ts`. This file is what keeps it.
 
-  ## The three checks
+  ## The checks
 
   1. **Hand-built controls** — a raw `<button>`/`<select>`/`<input>`/`<textarea>`, or an
      `el('button')`/`createElement('button')`, in app code where a kit component exists.
@@ -29,6 +29,28 @@
      commit until they are, so each baseline holds today's line and the check fails only
      when a count goes *up*. When one falls it prints the new baseline and asks for it to
      be lowered, so ground gained is never given back.
+
+     The ratchet is kept **per app**. A single total let one app add a control while
+     another removed one, and the drift moved round the catalogue with the check green.
+     An app with no line in the table has a budget of zero for everything, so a new
+     generator starts clean or does not build.
+
+     App code is `src/` in TypeScript **or JavaScript**, plus `index.html`. The keycap
+     generator is plain `.js`, and while this read `.ts` only, its entirely hand-built
+     sidebar (16 buttons, 3 dropdowns, 5 sliders) reported as clean.
+
+  1b. Three more ratcheted counts, kept the same way:
+     - **`html`**: markup built from a string (`innerHTML`, `outerHTML`,
+       `insertAdjacentHTML`). `el()` and `textContent` cannot run a script and a string can:
+       a file name carried into the clicker's status line ran as code on the site.
+     - **`licence`**: an app calling `openLicenseModal()` or `licenseReminderToast()`
+       itself. The licence rule (invariant #3) is `licenseAfterExport()` in the kit; an app
+       re-deriving it is how one generator came to show the full window on every download.
+     - **`restyle`**: an app stylesheet rule whose selector names a kit class (`.vl-…`).
+       The kit's components are styled in the kit; a rule in one app changes the component
+       in that app only, which is how section headings came to be 14 px in three apps and
+       11 px in the rest. A placement-only rule (a grid area, a margin) is counted too: the
+       way to tell placement from restyling is to look, and the ratchet makes someone look.
 
   2. **Tokens that resolve nowhere** — a `var(--x)` no stylesheet declares. **Hard
      failure**, because an unresolvable `var()` invalidates the whole declaration and the
@@ -46,7 +68,7 @@
   Run by CI (`.github/workflows/check.yml`) and on its own with `pnpm check:ui`.
 */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,10 +76,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /*
-  The baselines, and the only numbers to edit.
-
-  Lower one whenever the check tells you to. Never raise one: if a change genuinely needs
-  a control the kit cannot express, widen the component, not the budget.
+  The history of the totals, from when this check kept one budget for the whole catalogue.
+  The per-app table that replaced it on 2026-10-03 is `BUDGET`, below this one.
 
   2026-08-25, the day `button()` landed. Where the 163 buttons sit:
     83  apps/clicker-generator/src/ui/ui.ts
@@ -72,7 +92,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
     range     eleven hand-built sliders, every one of which `sliderRow` already expresses
     input     the colour wells and text fields the kit has no component for yet
 */
-const BUDGET = {
+const HISTORY_OF_TOTALS = {
   // 163 -> 138 on 2026-08-26: wave 1 of the migration moved every `el('button')` that was
   // already wearing a `vl-btn` class onto `button()`. What is left is either a control the
   // kit does not express yet (chips, cards, pickers) or a `<button>` written inside an
@@ -139,6 +159,35 @@ const BUDGET = {
   textarea: 0,
   range: 2,
 };
+void HISTORY_OF_TOTALS;
+
+/*
+  The baselines, per app, and the only numbers to edit. A kind not listed is zero.
+
+  Lower one whenever the check tells you to. Never raise one: if a change genuinely needs a
+  control the kit cannot express, widen the component, not the budget. An app that is not in
+  this table at all has a budget of zero for everything. `node scripts/check-ui-drift.mjs
+  --baseline` prints the current counts in this shape, for when a number has to be lowered.
+
+  2026-10-03, the day the table went per app and started reading .js: keycap's numbers are
+  the hand-built sidebar the .ts-only scan could not see, not new drift. `kit-demo` calls the
+  licence windows directly because demonstrating them is its job; nothing else may.
+  The same day, the four hand-built font pickers moved onto the kit's fontChooser(): house-number
+  and name-keychain lost their hand-built buttons and inputs, magnet two buttons.
+*/
+const BUDGET = {
+  'bubble-pop-generator': { button: 1, html: 2, restyle: 17 },
+  'clicker-generator': { button: 10, input: 8, html: 20, restyle: 7 },
+  foldbox: { html: 1, restyle: 8 },
+  'house-number': { restyle: 5 },
+  hub: { html: 2, restyle: 10 },
+  'keycap-generator': { button: 16, select: 3, input: 13, range: 5, html: 2, restyle: 5 },
+  'keychain-carabiner': { restyle: 1 },
+  'kit-demo': { licence: 4 },
+  'laser-studio': { restyle: 34 },
+  'magnet-generator': { button: 6, input: 2, range: 2, html: 3, restyle: 17 },
+  'name-keychain': { input: 2 },
+};
 
 /*
   Already broken when this check was written. A new one is a hard failure; these are the
@@ -161,6 +210,10 @@ const KNOWN_ORPHAN_CLASSES = new Set([
   'edge-radius-label', 'reset-part-colors', 'edge-size-minus', 'edge-size-plus',
   // magnet-generator
   'body-row', 'region-row', 'mg-magnet-step',
+  // keycap-generator — a state flag on <body>, set once the MakerWorld build has connected to
+  // its host. Nothing in this repo styles it. First seen 2026-10-03, when this check started
+  // reading .js files.
+  'makerlab',
   // laser-studio — arrived with the app when it was published on 2026-09-22, exactly as the
   // note below this list predicts. All three are QUERY HOOKS, like
   // the clicker's above: `tests/browser.test.mjs`, `tests/node/probe.mjs` and
@@ -172,7 +225,7 @@ const KNOWN_ORPHAN_CLASSES = new Set([
   'ls-preview__unit', 'ls-symbol-text-field', 'ls-symbol-readout',
   // the rest
   'hn-report', 'hub-hero__license-btn', 'nk-reset-section', 'nk-reset-btn',
-  'pt-pauses', 'pt-fb__name',
+  'pt-pauses',
 ]);
 
 /*
@@ -195,7 +248,9 @@ const KNOWN_ORPHAN_CLASSES = new Set([
 const tracked = (dir) =>
   execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', dir], { cwd: ROOT, encoding: 'utf8' })
     .split(/\r?\n/)
-    .filter(Boolean);
+    // `--cached` still lists a file deleted in the working tree until the deletion is staged;
+    // reading it crashed the check in the middle of exactly the kind of change it exists for.
+    .filter((f) => f && existsSync(join(ROOT, f)));
 
 const rel = (p) => p;
 const abs = (p) => join(ROOT, p);
@@ -203,11 +258,16 @@ const abs = (p) => join(ROOT, p);
 const APP_FILES = tracked('apps');
 const PKG_FILES = tracked('packages');
 
-const isCode = (f) => (/\.ts$/.test(f) && !f.endsWith('.d.ts')) || f.endsWith('.html');
+const isCode = (f) => (/\.(ts|js)$/.test(f) && !f.endsWith('.d.ts')) || f.endsWith('.html');
 
 /* Only app code is *counted*. `packages/` is the definition layer — a raw <button> in the
-   kit is a component being defined, which is exactly where one belongs. */
-const CODE = APP_FILES.filter(isCode);
+   kit is a component being defined, which is exactly where one belongs. App code is what an
+   app ships: its `src/` (TypeScript or JavaScript) and its index.html — not configs, build
+   scripts, or the node checks that live beside the geometry. */
+const isShipped = (f) =>
+  /^apps\/[^/]+\/(src\/.+|index\.html)$/.test(f) && isCode(f) && !/\.(check|test)\.[cm]?[jt]s$/.test(f);
+const CODE = APP_FILES.filter(isShipped);
+const appOf = (f) => f.split('/')[1];
 
 /* But the correctness checks read the kit too. A dead class or an unresolvable token is a
    bug wherever it lives, and it is worst in the kit, because every app inherits it —
@@ -232,7 +292,26 @@ const PATTERNS = {
   input: /<input\b(?![^>]*type=["']range["'])|(?:el|createElement)\(\s*['"`]input['"`]/g,
   textarea: built('textarea'),
   range: /type=["']range["']/g,
+  // See 1b in the header for these three.
+  html: /\.(?:innerHTML|outerHTML)\s*\+?=(?!=)|\binsertAdjacentHTML\s*\(/g,
+  licence: /\b(?:openLicenseModal|licenseReminderToast)\s*\(/g,
 };
+
+/** Every kind the per-app table can hold, in report order. `restyle` is counted from CSS. */
+const KINDS = [...Object.keys(PATTERNS), 'restyle'];
+
+/** Rules in one stylesheet whose selector names a kit class. Comments are stripped first,
+ *  and at-rule preludes (`@media …`) are not selectors. */
+function restyleRules(css) {
+  const src = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  let n = 0;
+  for (const m of src.matchAll(/([^{}]+)\{/g)) {
+    const selector = m[1].trim();
+    if (!selector.startsWith('@') && /\.vl-[\w-]/.test(selector)) n++;
+  }
+  return n;
+}
+const APP_CSS = APP_FILES.filter((f) => /^apps\/[^/]+\/src\/.+\.css$/.test(f));
 
 /*
   Comments are prose, not markup.
@@ -252,20 +331,37 @@ const PATTERNS = {
 const stripComments = (src) =>
   src.replace(/(^|[\s(,;={])\/\*[\s\S]*?\*\//gm, '$1 ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
-const counts = Object.fromEntries(Object.keys(BUDGET).map((k) => [k, 0]));
+/** app -> kind -> count, and where each count came from. */
+const counts = new Map();
 const byFile = [];
+const bump = (file, kind, n) => {
+  const app = appOf(file);
+  if (!counts.has(app)) counts.set(app, {});
+  const c = counts.get(app);
+  c[kind] = (c[kind] ?? 0) + n;
+  byFile.push({ file: rel(file), app, kind, n });
+};
 
 for (const file of CODE) {
   const src = stripComments(readFileSync(abs(file), 'utf8'));
-  let any = 0;
   for (const [kind, re] of Object.entries(PATTERNS)) {
     const n = (src.match(re) ?? []).length;
-    if (n) {
-      counts[kind] += n;
-      any += n;
-    }
+    if (n) bump(file, kind, n);
   }
-  if (any) byFile.push({ file: rel(file), any });
+}
+for (const file of APP_CSS) {
+  const n = restyleRules(readFileSync(abs(file), 'utf8'));
+  if (n) bump(file, 'restyle', n);
+}
+
+if (process.argv.includes('--baseline')) {
+  const table = {};
+  for (const app of [...counts.keys()].sort()) {
+    const c = counts.get(app);
+    table[app] = Object.fromEntries(KINDS.filter((k) => c[k]).map((k) => [k, c[k]]));
+  }
+  console.log(JSON.stringify(table, null, 2).replace(/"([\w]+)":/g, '$1:').replace(/"/g, "'"));
+  process.exit(0);
 }
 
 /* --------------------------------------------------------------- 2 · tokens */
@@ -356,26 +452,42 @@ for (const file of ALL_CODE) {
 
 let failed = false;
 
-const over = Object.keys(BUDGET).filter((k) => counts[k] > BUDGET[k]);
-const under = Object.keys(BUDGET).filter((k) => counts[k] < BUDGET[k]);
+const APPS = [...new Set([...Object.keys(BUDGET), ...counts.keys()])].sort();
+const have = (app, kind) => counts.get(app)?.[kind] ?? 0;
+const allowed = (app, kind) => BUDGET[app]?.[kind] ?? 0;
+const over = [];
+const under = [];
+for (const app of APPS) {
+  for (const kind of KINDS) {
+    if (have(app, kind) > allowed(app, kind)) over.push([app, kind]);
+    else if (have(app, kind) < allowed(app, kind)) under.push([app, kind]);
+  }
+}
+
+const ADVICE = {
+  button: 'button(), iconButton(), buttonRow()',
+  select: 'selectField()',
+  input: 'toggleSwitch(), textField(), numberField(), colorSwatch(), checkbox()',
+  textarea: 'textareaField()',
+  range: 'sliderRow(), slider()',
+  html: 'el() and textContent; never a string of markup',
+  licence: 'licenseAfterExport() at the end of the export path',
+  restyle: 'change the component in packages/ui-kit, or pass it an option',
+};
 
 if (over.length > 0) {
   failed = true;
-  console.error('\nUI drift: a hand-built control was added instead of using @vostok/ui-kit.\n');
-  for (const k of Object.keys(BUDGET)) {
-    const flag = counts[k] > BUDGET[k] ? '  <-- up' : '';
-    console.error(`  ${k.padEnd(9)} ${String(counts[k]).padStart(4)}  (budget ${BUDGET[k]})${flag}`);
-  }
-  console.error('\nThe worst offenders right now:');
-  for (const f of byFile.sort((a, b) => b.any - a.any).slice(0, 8)) {
-    console.error(`  ${String(f.any).padStart(3)}  ${f.file}`);
+  console.error('\nUI drift: a count went up. Use @vostok/ui-kit instead.\n');
+  for (const [app, kind] of over) {
+    console.error(`  ${app}  ${kind}: ${have(app, kind)} (budget ${allowed(app, kind)})  -> ${ADVICE[kind]}`);
+    for (const f of byFile.filter((x) => x.app === app && x.kind === kind).sort((a, b) => b.n - a.n).slice(0, 5)) {
+      console.error(`      ${String(f.n).padStart(3)}  ${f.file}`);
+    }
   }
   console.error(
-    '\nUse the kit: button, iconButton, buttonRow, toggleSwitch, sliderRow,\n' +
-      'segmentedControl, selectField, dpad, dialog, toast, exportPanel, dropZone.\n' +
-      'They render the same element with the same class, so adopting one is a one-line\n' +
-      'change. If the kit genuinely cannot express what you need, widen the component\n' +
-      'rather than the budget — see invariant #9 in CLAUDE.md.\n',
+    '\nThe kit components render the same element with the same class, so adopting one is\n' +
+      'usually a one-line change. If the kit genuinely cannot express what you need, widen\n' +
+      'the component rather than the budget — see invariant #9 in CLAUDE.md.\n',
   );
 }
 
@@ -412,16 +524,15 @@ const fixedClasses = [...KNOWN_ORPHAN_CLASSES].filter((c) => !orphanClasses.has(
 
 if (under.length > 0 || fixedTokens.length > 0 || fixedClasses.length > 0) {
   console.log('\nUI drift: ground gained. Update scripts/check-ui-drift.mjs:\n');
-  for (const k of under) console.log(`  BUDGET.${k}: ${BUDGET[k]} -> ${counts[k]}`);
+  for (const [app, kind] of under) console.log(`  BUDGET['${app}'].${kind}: ${allowed(app, kind)} -> ${have(app, kind)}`);
   for (const t of fixedTokens) console.log(`  drop '${t}' from KNOWN_UNRESOLVED_TOKENS`);
   for (const c of fixedClasses) console.log(`  drop '${c}' from KNOWN_ORPHAN_CLASSES`);
   console.log('');
 }
 
+const total = (kind) => APPS.reduce((n, app) => n + have(app, kind), 0);
 console.log(
-  'ui drift ok — ' +
-    Object.keys(BUDGET)
-      .map((k) => `${k} ${counts[k]}`)
-      .join(', ') +
+  `ui drift ok (${APPS.length} apps) — ` +
+    KINDS.map((k) => `${k} ${total(k)}`).join(', ') +
     '; tokens and class names all resolve',
 );

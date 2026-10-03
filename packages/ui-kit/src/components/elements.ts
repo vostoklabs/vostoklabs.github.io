@@ -1,4 +1,4 @@
-import { el } from '../dom';
+import { el, uid } from '../dom';
 import { ICONS, svgEl } from '../icons';
 import { helpTip } from './controls';
 
@@ -235,7 +235,7 @@ export function textareaField(opts: TextareaFieldOptions): TextareaHandle {
 
   const label = el('label', { text: opts.label });
   if (opts.help) label.append(helpTip(opts.help));
-  const id = `vl-ta-${Math.round(performance.now() * 1000)}`;
+  const id = uid('vl-ta');
   area.id = id;
   label.setAttribute('for', id);
 
@@ -390,7 +390,7 @@ export function textField(opts: TextFieldOptions): TextFieldHandle {
     }
   });
 
-  const id = `vl-tf-${Math.round(performance.now() * 1000)}`;
+  const id = uid('vl-tf');
   input.id = id;
   const label = el('label', { text: opts.label });
   label.setAttribute('for', id);
@@ -570,7 +570,7 @@ export function numberField(opts: NumberFieldOptions): NumberFieldHandle {
     }
   });
 
-  const id = `vl-nf-${Math.round(performance.now() * 1000)}`;
+  const id = uid('vl-nf');
   input.id = id;
   const label = el('label', { text: opts.label });
   label.setAttribute('for', id);

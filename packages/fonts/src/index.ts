@@ -113,3 +113,6 @@ export function isFontSupported(font: FontChoice, text: string): boolean {
 
 /** The icon fallback font, used when a glyph is missing from the chosen face. */
 export const FALLBACK_FONT_ID = 'icon-fallback';
+
+// A font the user brings: one import path for every generator (see import.ts).
+export { importFontBuffer, importFontFiles, toPickerFont, fontSupportsText, type ImportedFonts } from './import';

@@ -23,17 +23,14 @@ import {
   closeAllDialogs,
   drawer,
   closeAllDrawers,
-  openLicenseModal,
-  licenseReminderToast,
+  licenseAfterExport,
   readParamsFromHash,
   bindExternalLinks,
-  chooseFile,
   button,
-  chip,
   textField,
   textareaField,
   filamentRow,
-  uploadCta,
+  fontChooser,
   el,
   type DesktopHost,
   type HostAsset,
@@ -45,15 +42,15 @@ import { mountPlatePicker, plateSize, loadPlateChoice } from '@vostok/plates';
 import { buildThreeMF, type ExportPart } from '@vostok/export';
 import {
   FONTS,
-  type FontChoice,
   ICONS,
   getFont,
   getFontUrl,
-  parseFont,
-  registerCustomFont,
-  isFontSupported,
   fontFamilyFor,
-  curatedFonts as curatedFontsOf,
+  curatedFonts,
+  importFontFiles,
+  importFontBuffer,
+  toPickerFont,
+  fontSupportsText,
   getHorizontalContours,
   getVerticalContours,
   FALLBACK_FONT_ID,
@@ -110,14 +107,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         holding but have never measured.
   */
 
-  const curatedFonts = curatedFontsOf();
-
   let settings: TopperSettings = { ...DEFAULT_SETTINGS };
   const shared = readParamsFromHash();
   if (shared) settings = coerceSettings({ ...settings, ...shared });
 
   let parts: ExportPart[] = [];
-  let downloads = 0;
 
   // ---------------------------------------------------------------------------
   // 1. WORKER — every boolean happens over there.
@@ -269,7 +263,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     placeholder: 'Name or initial',
     onInput: (v) => {
       settings.name = v;
-      refreshFontCards();
+      fontControl.setSample(fontSample(), fontCheckText());
       triggerRebuild();
     },
   });
@@ -283,6 +277,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     placeholder: 'Optional second line',
     onInput: (v) => {
       settings.secondLine = v;
+      // The cards show only the first line, but the missing-letter marks read both.
+      fontControl.setSample(fontSample(), fontCheckText());
       syncVisibility();
       triggerRebuild();
     },
@@ -841,228 +837,55 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---------------------------------------------------------------------------
   // 4. FONTS
   // ---------------------------------------------------------------------------
-  const fontGrid = el('div', { className: 'pt-font-grid' });
+  /** All the text the topper carries, both lines in full: what a face must be able to set.
+   *  The cards show only as much of the name as fits; the warning is about the print. */
+  const fontCheckText = () => settings.name + settings.secondLine;
 
   function fontSample(): string {
     const t = settings.name.trim() || 'Aa';
     return t.length > 6 ? t.slice(0, 5) + '…' : t;
   }
 
-  function makeFontCard(font: FontChoice): HTMLButtonElement {
-    const text = settings.name + settings.secondLine;
-    const supported = isFontSupported(font, text);
-    const btn = button({
-      label: '',
-      className: `pt-font-card${supported ? '' : ' unsupported'}${font.id === settings.font ? ' active' : ''}`,
-      title: supported ? font.label : `${font.label} (characters missing)`,
-      onClick: () => selectFont(font.id),
-    });
-    btn.dataset.font = font.id;
-    btn.append(
-      el('span', { className: 'pt-font-card__sample', text: fontSample(), attrs: { style: `font-family: ${fontFamilyFor(font.id)}` } }),
-      el('span', { className: 'pt-font-card__name', text: font.label }),
-    );
-    return btn;
-  }
-
-  function renderFontGrid() {
-    fontGrid.replaceChildren();
-    const active = FONTS.find((f) => f.id === settings.font);
-    if (active && !active.curated) fontGrid.append(makeFontCard(active));
-    for (const font of curatedFonts) fontGrid.append(makeFontCard(font));
-  }
-
-  function refreshFontCards() {
-    const sample = fontSample();
-    const text = settings.name + settings.secondLine;
-    for (const btn of fontGrid.querySelectorAll<HTMLButtonElement>('button')) {
-      const font = FONTS.find((f) => f.id === btn.dataset.font);
-      if (font) btn.classList.toggle('unsupported', !isFontSupported(font, text));
-      btn.classList.toggle('active', btn.dataset.font === settings.font);
-      const s = btn.querySelector('.pt-font-card__sample');
-      if (s) s.textContent = sample;
-    }
-  }
-
-  function selectFont(id: string) {
-    settings.font = id;
-    renderFontGrid();
-    triggerRebuild();
-  }
-
-  function openFontBrowser() {
-    let query = '';
-    let cat = 'All';
-    const categories = ['All', ...Array.from(new Set(FONTS.map((f) => f.category))).sort()];
-
-    const searchField = textField({
-      label: 'Search fonts',
-      type: 'search',
-      placeholder: `Search ${FONTS.length} fonts…`,
-      onInput: (v) => { query = v; render(); },
-    });
-    searchField.field.className = 'pt-fb__search';
-    const searchInput = searchField.field;
-    const chips = el('div', { className: 'pt-fb__chips' });
-    const list = el('div', { className: 'pt-fb__list' });
-
-    // Load each row's face only when it scrolls in; fetching 152 TTFs on open is a
-    // second of network for a list nobody has scrolled yet.
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const row = entry.target as HTMLElement;
-          const preview = row.querySelector<HTMLElement>('.pt-fb__preview');
-          if (preview) preview.style.fontFamily = fontFamilyFor(row.dataset.font!);
-          io.unobserve(row);
-        }
-      },
-      { root: list, rootMargin: '250px' },
-    );
-
-    function render() {
-      io.disconnect();
-      list.replaceChildren();
-      const q = query.trim().toLowerCase();
-      const matches = FONTS.filter(
-        (f) => (cat === 'All' || f.category === cat) && (!q || f.label.toLowerCase().includes(q) || f.category.toLowerCase().includes(q)),
-      );
-      if (!matches.length) {
-        list.append(el('p', { className: 'pt-fb__empty', text: `No font matches “${query.trim()}”.` }));
-        return;
-      }
-      const sample = settings.name.trim() || 'Sample';
-      matches.forEach((f, i) => {
-        const preview = el('span', { className: 'pt-fb__preview', text: sample.slice(0, 14) });
-        if (i < 30) preview.style.fontFamily = fontFamilyFor(f.id);
-        const row = button({
-          label: '',
-          className: `pt-fb__row${f.id === settings.font ? ' active' : ''}`,
-          onClick: () => { selectFont(f.id); handle.close(); },
-        });
-        row.dataset.font = f.id;
-        row.append(preview, el('span', { className: 'pt-fb__meta' }, [
-          el('span', { className: 'pt-fb__name', text: f.label }),
-          el('span', { className: 'pt-fb__cat', text: f.category }),
-        ]));
-        list.append(row);
-        if (i >= 30) io.observe(row);
-      });
-    }
-
-    const categoryChips = new Map<string, ReturnType<typeof chip>>();
-    for (const c of categories) {
-      const catChip = chip({
-        label: c,
-        pressed: c === cat,
-        onToggle: () => {
-          cat = c;
-          for (const [name, other] of categoryChips) other.setPressed(name === c);
-          render();
-        },
-      });
-      categoryChips.set(c, catChip);
-      chips.append(catChip);
-    }
-
-    const handle = dialog({
-      title: 'Choose a font',
-      content: el('div', { className: 'pt-fontmodal' }, [searchField, chips, list]),
-      wide: true,
-    });
-    render();
-    searchInput.focus();
-  }
-
-  const browseFontsBtn = button({
-    label: `Browse all ${FONTS.length} fonts →`,
-    emphasis: 'secondary',
-    className: 'pt-browse',
-    onClick: openFontBrowser,
-  });
-
-  /**
-   * Makes an imported font usable: parsed for the mesh builder, injected as an @font-face
-   * for the preview cards, and pushed to the front of the font list.
-   *
-   * Split out of the import handler because a font now arrives two ways — the user picks a
-   * file, or a saved project is opened and its faces come back off disk — and the two have
-   * to produce an identical result. Where they drift, opening a project restores every
-   * parameter perfectly and silently renders the name in the wrong typeface.
-   */
-  function registerImportedFont(label: string, buffer: ArrayBuffer): string {
-    const id = `custom-${Date.now()}-${importedFontCounter++}`;
-    registerCustomFont(id, parseFont(buffer));
-    const url = URL.createObjectURL(new Blob([buffer]));
-    objectUrls.push(url);
-    const style = document.createElement('style');
-    style.textContent = `@font-face { font-family: '${fontFamilyFor(id)}'; src: url('${url}'); }`;
-    document.head.append(style);
-    injectedStyles.push(style);
-    const choice: FontChoice = {
-      id,
-      label,
-      category: 'Custom',
-      curated: true,
-      subsets: ['latin', 'latin-ext', 'cyrillic', 'greek'],
-    };
-    FONTS.unshift(choice);
-    curatedFonts.unshift(choice);
-    return id;
-  }
-
-  /** One typeface, from the file input or from the host's own picker. Both hand over a
-   *  `File`, so both end up here and neither has to know about the other. */
-  async function handleFontFile(file: File): Promise<void> {
-    try {
-      const buffer = await file.arrayBuffer();
-      const label = file.name.replace(/\.[^/.]+$/, '');
-      const id = registerImportedFont(label, buffer);
-
-      // Keep the file, not just the parsed font, so the host can restore it with the
+  /*
+    The whole font block is the kit's: the curated cards in the user's own text, "Browse
+    all" for the library, and the import row. Importing goes through `@vostok/fonts`, which
+    gives a file the same id every time it comes in, so a saved project that names an
+    imported face finds that face again when it is opened.
+  */
+  const fontControl = fontChooser({
+    fonts: FONTS.map(toPickerFont),
+    curated: curatedFonts().map((f) => f.id),
+    value: settings.font,
+    sample: fontSample(),
+    checkText: fontCheckText(),
+    supports: (f, text) => fontSupportsText(f.id, text),
+    onChange: (id) => {
+      settings.font = id;
+      triggerRebuild();
+    },
+    onImport: async (file) => {
+      const { fonts, files, failed } = await importFontFiles(file);
+      // Keep the files, not just the parsed fonts, so the host can restore them with the
       // project.
       if (host) {
-        try {
-          importedFontAssets.push(
-            await host.importAsset('font', { name: file.name, bytes: new Uint8Array(buffer) }),
-          );
-        } catch {
-          toast(`"${file.name}" is usable now but could not be kept for next time`, { kind: 'warn' });
+        for (const [name, bytes] of files) {
+          try {
+            importedFontAssets.push(await host.importAsset('font', { name, bytes: new Uint8Array(bytes) }));
+          } catch {
+            toast(`"${name}" is usable now but could not be kept for next time`, { kind: 'warn' });
+          }
         }
       }
-
-      selectFont(id);
-      toast(`Imported ${label}`, { kind: 'ok' });
-    } catch {
-      toast('That file is not a font this reader understands', { kind: 'error' });
-    }
-  }
-
-  const importFontCta = uploadCta({
-    label: 'Import a .ttf / .otf',
-    accept: '.ttf,.otf',
-    onFiles: (files) => {
-      const file = files[0];
-      if (file) void handleFontFile(file);
+      return { fonts: fonts.map(toPickerFont), failed };
     },
-  });
-  // The host's own picker goes first when there is one. The click is intercepted before the
-  // label opens the hidden input, and `onFiles` alone still serves the no-host path.
-  importFontCta.addEventListener('click', (e) => {
-    if (!host?.pickMedia) return;
-    e.preventDefault();
-    void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf'] }, () => {}).then((f) => {
-      if (f) void handleFontFile(f);
-    });
+    // The host's own picker opens instead of the browser's, when it has one.
+    host,
   });
 
-  const objectUrls: string[] = [];
   const injectedStyles: HTMLStyleElement[] = [];
   /** Imported typefaces as the host stored them, so a saved project travels with the faces
    *  it was built in rather than coming back in the fallback one. */
   const importedFontAssets: HostAsset[] = [];
-  let importedFontCounter = 0;
 
   // The symbol picker renders its glyphs in the fallback face, so it needs the rule.
   const fallbackUrl = getFontUrl(FALLBACK_FONT_ID);
@@ -1146,7 +969,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     shapeControl.setValue(settings.plateShape);
     refreshShape(1);
     layoutControl.setValue(settings.layout);
-    renderFontGrid();
+    fontControl.setSample(fontSample(), fontCheckText());
+    fontControl.setValue(settings.font);
     refreshPath();
     refreshMount();
     syncVisibility();
@@ -1173,6 +997,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         generator: 'pen-topper',
         application: 'Vostok Labs Pen Topper Generator',
         buildId: import.meta.env.VITE_BUILD_ID,
+        plateSize: plateSize(loadPlateChoice()),
       };
 
       /**
@@ -1218,9 +1043,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         await deliver(buildThreeMF(parts, meta), `${slug}-pen-topper.3mf`, 'model/3mf');
       }
 
-      downloads += 1;
-      if (downloads === 1) openLicenseModal({ badge: '✓ 3MF export started' });
-      else licenseReminderToast();
+      licenseAfterExport({ badge: '✓ 3MF export started' });
     },
     // The host draws Save and Open itself once it owns projects; two Save buttons that do
     // different things is worse than either one alone. `Boolean(...)` and not `isDesktop()`:
@@ -1525,7 +1348,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     ],
     right: {
       scroll: [
-        section({ title: 'Font', body: [fontGrid, browseFontsBtn, importFontCta] }),
+        section({ title: 'Font', body: [fontControl] }),
         section({
           title: 'Printing',
           body: [
@@ -1579,8 +1402,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    * It used to be a `beforeunload` listener, which is the right hook for a browser tab:
    * there is only ever one generator in it and the page is going away regardless. Inside a
    * host it never fires — the user moves from one generator to the next without the
-   * document ever unloading — so the worker, the WebGL context, the object URLs and the
-   * injected @font-face rules would all survive, one more set of them per visit.
+   * document ever unloading — so the worker, the WebGL context and the injected
+   * @font-face rule would all survive, one more set of them per visit.
    */
   const teardown = () => {
     // Dialogs and drawers render on <body>, outside the container the host clears.
@@ -1589,7 +1412,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     clearTimeout(rebuildTimer);
     worker.terminate();
     viewer.dispose();
-    for (const url of objectUrls) URL.revokeObjectURL(url);
     for (const style of injectedStyles) style.remove();
     for (const fn of cleanups.reverse()) {
       try { fn(); } catch { /* one failed cleanup must not strand the rest */ }
@@ -1653,12 +1475,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       try {
         const bytes = await host.readAsset(asset.path);
         const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-        registerImportedFont(asset.originalName.replace(/\.[^/.]+$/, ''), buffer);
+        // The same call the import made, so the same file comes back under the id the
+        // saved settings name.
+        await importFontBuffer(asset.originalName, buffer);
         importedFontAssets.push(asset);
       } catch {
         toast(`Could not load the font "${asset.originalName}"`, { kind: 'warn' });
       }
     }
+    // The chooser keeps its own copy of the library: show it the faces that just came back.
+    fontControl.setFonts(FONTS.map(toPickerFont), curatedFonts().map((f) => f.id));
   }
 
   /** A still of the stage for the host's project list. Undefined rather than a throw: a

@@ -14,11 +14,17 @@ export interface SectionOptions {
   body: (Node | string)[];
   /** Collapsible sections start open unless told otherwise. */
   open?: boolean;
+  /**
+   * `section()` only: take the rest of the panel's height instead of scrolling with it, for a
+   * panel whose one job is this section (the name keychain's right column is its font). A child
+   * that can grow into the space, such as `fontChooser({ fill: true })`, then does.
+   */
+  fill?: boolean;
 }
 
 /** A plain, always-open section: heading + rows. Pass `title: ''` for no heading. */
 export function section(opts: SectionOptions): HTMLElement {
-  return el('div', { className: 'vl-section' }, [
+  return el('div', { className: `vl-section${opts.fill ? ' vl-section--fill' : ''}` }, [
     ...(opts.title ? [el('p', { className: 'vl-label', text: opts.title })] : []),
     el('div', { className: 'vl-section__body' }, opts.body),
   ]);
@@ -125,6 +131,18 @@ export function makeCollapsible(details: HTMLDetailsElement): void {
       void collapse.offsetHeight; // flush: gives the transition a 0fr start
       collapse.removeAttribute('data-closed');
     }
+  });
+
+  /*
+    An app that opens or closes the section itself (a project load restoring which sections were
+    open, an undo) sets `open` and nothing else. The marker has to follow, or the section shows
+    as open with a body of zero height and takes two clicks to come back. `toggle` fires for
+    those changes and for the click path above alike; for the click path the marker is already
+    right, so this does nothing there.
+  */
+  details.addEventListener('toggle', () => {
+    if (details.open) collapse.removeAttribute('data-closed');
+    else collapse.setAttribute('data-closed', '');
   });
 }
 

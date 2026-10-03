@@ -15,8 +15,7 @@ import {
   toggleSwitch,
   toast,
   dialog,
-  openLicenseModal,
-  licenseReminderToast,
+  licenseAfterExport,
   dropZone,
   sampleGrid,
   filamentRow,
@@ -149,7 +148,6 @@ let originalImage: RgbaImage | null = null;
 let preprocess: PreprocessParams = { ...DEFAULT_PREPROCESS };
 let latestParts: PopPart[] = [];
 let shapePreviews = new Map<ShapeKind, Ring[]>();
-let downloads = 0;
 
 /** A unit square: the silhouette used when no image is loaded. The plate comes
  *  from the shape library then, and the outline only seeds the image aspect. */
@@ -937,11 +935,7 @@ const footer = sidebarFooter({
     }
     const stem = s().source === 'image' ? s().sourceName || 'image' : s().shape;
     downloadThreeMF(latestParts, `bubble-pop-${stem}-${Math.round(s().fitSizeMm)}mm.3mf`);
-    // First download gets the full modal, every later one a toast — the same
-    // flow as the clicker and magnet generators.
-    downloads += 1;
-    if (downloads === 1) openLicenseModal();
-    else licenseReminderToast();
+    licenseAfterExport();
   },
   onSave: () => {
     const blob = new Blob([JSON.stringify({ settings: s(), palette: store.get().palette }, null, 2)], {

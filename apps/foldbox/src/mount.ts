@@ -25,8 +25,7 @@ import {
   changelogButton,
   closeAllDialogs,
   closeAllDrawers,
-  openLicenseModal,
-  licenseReminderToast,
+  licenseAfterExport,
   bindExternalLinks,
   el,
   type DesktopHost,
@@ -1302,15 +1301,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // no API for showing a subset, so the buttons are paired back up by position further
   // down. Two literals that had to agree by hand is how the print-only build would have
   // shipped a 3MF button wired to the zip exporter.
-  let downloads = 0;
-
-  /** Full modal on the first download of a session, corner reminder after. */
-  function nudgeLicense(): void {
-    downloads += 1;
-    if (downloads === 1) openLicenseModal();
-    else licenseReminderToast();
-  }
-
   const EXPORT_FORMATS = CUT
     ? [
         { id: 'zip', label: 'Cut files' },
@@ -1360,7 +1350,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           `${headline}: ${stats.sheetMm.toFixed(2)} mm sheet, ${stats.hingeMm.toFixed(2)} mm hinges.${mountains}`,
           { kind: 'ok' },
         );
-        nudgeLicense();
+        licenseAfterExport();
         return;
       }
 
@@ -1371,7 +1361,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           buildId: import.meta.env.VITE_BUILD_ID,
         });
         toast(`${files.baseName}.zip: SVG, DXF and an assembly sheet.`, { kind: 'ok' });
-        nudgeLicense();
+        licenseAfterExport();
         return;
       }
 

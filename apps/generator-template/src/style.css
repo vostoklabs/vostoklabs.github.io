@@ -47,17 +47,6 @@ body {
   background: #fff;
 }
 
-/* Native colour well, sized to sit in a .vl-switch-row. */
-.tpl-color {
-  width: 44px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-s);
-  background: none;
-  cursor: pointer;
-}
-
 .hidden {
   display: none !important;
 }

@@ -40,65 +40,6 @@ body {
   font: inherit;
 }
 
-/* ---- Font grid (right panel) ---- */
-.nk-font-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-2);
-  height: 190px;
-  flex-shrink: 0;
-  overflow-y: auto;
-  padding-right: var(--space-1);
-}
-
-.nk-font-card {
-  min-height: 66px;
-  text-align: left;
-  padding: var(--space-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-field);
-  background: var(--panel-2);
-  cursor: pointer;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  justify-content: space-between;
-  overflow: hidden;
-}
-
-.nk-font-card:hover {
-  border-color: var(--muted);
-}
-
-.nk-font-card.active {
-  border-color: var(--accent);
-  box-shadow: var(--ring);
-}
-
-.nk-font-card__sample {
-  display: block;
-  font-size: 1.6rem;
-  line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  width: 100%;
-  padding-right: 20px;
-}
-
-.nk-font-card__name {
-  display: block;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  width: 100%;
-}
-
 /* ---- Stage (3D viewport) — keychain adds a radial gradient bg ---- */
 .nk-stage {
   background: radial-gradient(circle at center, var(--panel-2), var(--bg) 70%);
@@ -150,41 +91,6 @@ body {
   display: none !important;
 }
 
-/* ---- Font section in the right column: fill the height, grid scrolls ---- */
-.nk-font-section-scroll { overflow: hidden; }
-.nk-font-section {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.nk-font-section .vl-label { flex: 0 0 auto; }
-.nk-font-section .nk-font-grid {
-  flex: 1 1 auto;
-  height: auto;
-  min-height: 120px;
-}
-.nk-font-section .nk-browse-fonts { flex: 0 0 auto; }
-
-/* ---- Font section: browse-all button ---- */
-.nk-browse-fonts {
-  margin-top: var(--space-2);
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-field);
-  background: var(--panel-2);
-  color: var(--text);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    border-color var(--dur-hover) var(--ease-standard),
-    color var(--dur-hover) var(--ease-standard);
-}
-.nk-browse-fonts:hover { border-color: var(--accent); color: var(--accent); }
-
 /* ---- Advanced section ---- */
 .nk-advanced {
   /* No special borders needed since it's a vl-section now */
@@ -209,72 +115,6 @@ body {
 }
 .nk-advanced[open] .nk-advanced__summary::after { transform: rotate(180deg); }
 .nk-nudge { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-
-/* ---- Font browser modal ---- */
-.vl-dialog:has(.nk-fontmodal) { width: min(760px, 96vw); }
-.nk-fontmodal { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); }
-.nk-fb__chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.nk-fb__list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: var(--space-2);
-  max-height: 56vh;
-  overflow-y: auto;
-  padding: 2px;
-}
-.nk-fb__row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  text-align: left;
-  padding: 10px 12px;
-  min-height: 72px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-field);
-  background: var(--panel-2);
-  color: var(--text);
-  cursor: pointer;
-  position: relative;
-}
-.nk-fb__row:hover { border-color: var(--muted); }
-.nk-fb__row.active { border-color: var(--accent); box-shadow: var(--ring); }
-.nk-fb__preview {
-  font-size: 1.75rem;
-  line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-height: 1.9rem;
-}
-.nk-fb__meta { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.nk-fb__name { font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nk-fb__cat { color: var(--muted); font-size: 0.68rem; flex: 0 0 auto; }
-.nk-fb__empty { color: var(--muted); grid-column: 1 / -1; text-align: center; padding: 24px; }
-
-/* Unsupported fonts */
-.nk-font-card.unsupported,
-.nk-fb__row.unsupported {
-  opacity: 0.5;
-}
-.nk-font-card__warn,
-.nk-fb__warn {
-  color: #ff4747;
-  font-weight: 900;
-  margin-left: auto;
-}
-.nk-font-card__warn {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  background: var(--panel-2);
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-}
 
 /* ---- Emoji Picker ---- */
 .nk-emoji-toggle {

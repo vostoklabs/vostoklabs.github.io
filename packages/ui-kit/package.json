@@ -5,10 +5,12 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./build-loop": "./src/build-loop.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "esbuild tests/build-loop.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/build-loop.test.mjs --log-level=error && node node_modules/.cache/build-loop.test.mjs"
   },
   "dependencies": {
     "@vostok/brand": "workspace:*"

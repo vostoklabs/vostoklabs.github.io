@@ -61,7 +61,10 @@ export function coerceSettings(raw: unknown): SignParams {
     stackSpacing: num(o.stackSpacing, DEFAULTS.stackSpacing, 0.8, 2),
     letterSpacing: num(o.letterSpacing, DEFAULTS.letterSpacing, -0.1, 0.5),
     orientation: oneOf(o.orientation, ORIENTATIONS, DEFAULTS.orientation),
-    fontId: str(o.fontId, DEFAULTS.fontId, 64),
+    // An imported font's id is built from its file name (`custom-<name>-<hash>`), so the bound
+    // is a file name's, not a registry id's. Cut short, it names no font — and every example
+    // card passes through here too.
+    fontId: str(o.fontId, DEFAULTS.fontId, 300),
 
     /*
      * Three generations of this setting still have to load.

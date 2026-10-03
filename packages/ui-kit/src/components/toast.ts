@@ -12,7 +12,9 @@ let container: HTMLDivElement | null = null;
 
 function getContainer(): HTMLDivElement {
   if (!container || !container.isConnected) {
-    container = el('div', { className: 'vl-toasts', attrs: { 'aria-live': 'polite' } });
+    // Above a modal, not under it: an export error raised while a dialog is open still has to
+    // be seen and heard (see `holdModal`).
+    container = el('div', { className: 'vl-toasts', attrs: { 'aria-live': 'polite', 'data-vl-above-modal': '' } });
     document.body.append(container);
   }
   return container;

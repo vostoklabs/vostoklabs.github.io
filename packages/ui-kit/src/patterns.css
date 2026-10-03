@@ -70,6 +70,21 @@ details.vl-section--collapsible[open] > summary {
   padding-bottom: 16px;
 }
 
+/* `section({ fill: true })`: the section takes the rest of the panel's height, and the panel
+   stops scrolling while it holds one; whatever inside can grow (a `fontChooser({ fill })` card
+   grid) takes the space and scrolls itself. */
+.vl-panel__scroll:has(> .vl-section--fill) { overflow-y: hidden; }
+.vl-section--fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.vl-section--fill > .vl-section__body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* A collapsible INSIDE a section body — a "Fine tune" fold — is a row, not a section: a
    compact summary, and when open a body with no padding of its own, so a closed fold is one
    line tall and an open one ends where its last row does. Every generator had 40–60 px of
@@ -716,10 +731,9 @@ details.vl-section--collapsible[open] > summary {
  *
  * A `<select>` of 155 names is the wrong control for choosing a typeface: you cannot judge
  * one from its name, and the thing that decides the choice — how it actually looks — stays
- * invisible until you pick it. name-keychain worked this out first as `.nk-font-*`; this is
- * that pattern promoted, so the second generator to want it did not copy the CSS. The
- * keychain still carries its own copy and should move onto these classes when it is next
- * touched.
+ * invisible until you pick it. name-keychain worked this out first; this is that pattern
+ * promoted. Generators use it through `fontChooser()` (components/font-chooser.ts), which puts
+ * these cards, the full library and the import row together, so no app styles a font card.
  */
 .vl-font-grid {
   display: grid;

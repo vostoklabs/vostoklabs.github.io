@@ -34,6 +34,17 @@ export interface FontPickerOptions {
    *  suit it says "Recommended for this design". */
   featuredLabel?: string;
   label?: string;
+  /**
+   * `'list'` (default): one row per font, sample on the left, name on the right. It fits a
+   * narrow panel, which is where Laser Studio keeps the whole library.
+   *
+   * `'cards'`: the same `.vl-font-card` the curated grid uses, as many columns as fit, with the
+   * category in the corner. For the library opened in a wide dialog (`fontChooser`), where one
+   * sample per row leaves most of the width empty.
+   */
+  layout?: 'list' | 'cards';
+  /** Flags a face that lacks glyphs for the sample. Shown and marked, never hidden. */
+  supports?: (font: FontPickerFont, sample: string) => boolean;
 }
 
 export type FontPickerHandle = HTMLElement & {
@@ -87,10 +98,13 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
   addCatChip('All', 'All');
   for (const c of categories) addCatChip(c, c);
 
+  const cards = opts.layout === 'cards';
   const list = el('div', {
-    className: 'vl-font-picker__list',
+    className: `vl-font-picker__list${cards ? ' vl-font-picker__list--cards' : ''}`,
     attrs: { role: 'listbox', 'aria-label': 'Fonts' },
   });
+  /** Which font each rendered button stands for, so a new sample can re-check its glyphs. */
+  const fontOf = new WeakMap<HTMLElement, FontPickerFont>();
   const sentinel = el('div', { className: 'vl-font-picker__sentinel' });
   let observer: IntersectionObserver | null = null;
 
@@ -134,17 +148,43 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
     return ordered;
   }
 
+  /** Mark a face that cannot set the sample, and unmark it once it can. */
+  function markSupport(btn: HTMLElement, f: FontPickerFont) {
+    const ok = opts.supports ? opts.supports(f, sample) : true;
+    const warn = btn.querySelector(':scope > .vl-font-card__warn');
+    if (!ok && !warn) btn.append(el('span', { className: 'vl-font-card__warn', text: '⚠', attrs: { 'aria-hidden': 'true' } }));
+    else if (ok && warn) warn.remove();
+    btn.title = ok ? f.label : `${f.label} (characters missing)`;
+  }
+
   function row(f: FontPickerFont): HTMLButtonElement {
-    const sampleEl = el('span', { className: 'vl-font-row__sample', text: sample });
+    const on = f.id === value;
+    const sampleEl = el('span', { className: cards ? 'vl-font-card__sample' : 'vl-font-row__sample', text: sample });
     sampleEl.style.fontFamily = f.family;
+    const parts: HTMLElement[] = cards
+      ? [
+          sampleEl,
+          el('span', { className: 'vl-font-card__meta' }, [
+            el('span', { className: 'vl-font-card__name', text: f.label }),
+            ...(f.category ? [el('span', { className: 'vl-font-card__cat', text: f.category })] : []),
+          ]),
+        ]
+      : [sampleEl, el('span', { className: 'vl-font-row__name', text: f.label })];
     const btn = el(
       'button',
-      { className: 'vl-font-row', attrs: { type: 'button', role: 'option', title: f.label, 'data-font-id': f.id, 'aria-pressed': String(f.id === value) } },
-      [sampleEl, el('span', { className: 'vl-font-row__name', text: f.label })],
+      {
+        className: cards ? `vl-font-card${on ? ' is-on' : ''}` : 'vl-font-row',
+        attrs: { type: 'button', role: 'option', 'data-font-id': f.id, 'aria-pressed': String(on) },
+      },
+      parts,
     ) as HTMLButtonElement;
+    fontOf.set(btn, f);
+    markSupport(btn, f);
     btn.addEventListener('click', () => setValue(f.id, true));
     return btn;
   }
+
+  const buttons = () => Array.from(list.querySelectorAll<HTMLButtonElement>('.vl-font-row, .vl-font-card'));
 
   function setupObserver() {
     if (observer) {
@@ -205,13 +245,16 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
 
   list.addEventListener('keydown', (e) => {
     const ke = e as KeyboardEvent;
-    if (ke.key !== 'ArrowDown' && ke.key !== 'ArrowUp') return;
-    const buttons = Array.from(list.querySelectorAll<HTMLButtonElement>('.vl-font-row'));
-    const idx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    // Cards sit in a grid, so left and right move too; a list only goes up and down.
+    const back = ke.key === 'ArrowUp' || (cards && ke.key === 'ArrowLeft');
+    const fwd = ke.key === 'ArrowDown' || (cards && ke.key === 'ArrowRight');
+    if (!back && !fwd) return;
+    const all = buttons();
+    const idx = all.indexOf(document.activeElement as HTMLButtonElement);
     if (idx === -1) return;
     ke.preventDefault();
-    const next = ke.key === 'ArrowDown' ? Math.min(idx + 1, buttons.length - 1) : Math.max(idx - 1, 0);
-    buttons[next]?.focus();
+    const next = fwd ? Math.min(idx + 1, all.length - 1) : Math.max(idx - 1, 0);
+    all[next]?.focus();
   });
 
   function setValue(id: string, notify = false) {
@@ -220,8 +263,10 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
       // In place, never repaint — the same reason `setSample` does it this way. A
       // repaint here destroyed the very button being clicked, took the focus ring
       // with it, and reset the scroll to the top of the list.
-      for (const b of list.querySelectorAll<HTMLElement>('.vl-font-row')) {
-        b.setAttribute('aria-pressed', String(b.dataset.fontId === value));
+      for (const b of buttons()) {
+        const on = b.dataset.fontId === value;
+        b.setAttribute('aria-pressed', String(on));
+        if (cards) b.classList.toggle('is-on', on);
       }
     }
     if (notify) opts.onChange(id);
@@ -234,7 +279,12 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
     // own name, and rebuilding the list would take the focus ring and scroll position with it —
     // the same reason `thumbTile.setText` exists instead of re-rendering the grid.
     sample = text || 'Aa';
-    for (const s of list.querySelectorAll<HTMLElement>('.vl-font-row__sample')) s.textContent = sample;
+    for (const s of list.querySelectorAll<HTMLElement>('.vl-font-row__sample, .vl-font-card__sample')) s.textContent = sample;
+    // A face that could set the old word may lack a letter of the new one, and the other way round.
+    for (const b of buttons()) {
+      const f = fontOf.get(b);
+      if (f) markSupport(b, f);
+    }
   };
   root.getValue = () => value;
   paint();

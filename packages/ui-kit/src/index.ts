@@ -3,11 +3,27 @@
 
 export { toast, type ToastKind, type ToastOptions } from './components/toast';
 export { dialog, closeAllDialogs, promptDialog, type DialogOptions, type DialogHandle, type DialogAction, type PromptOptions } from './components/dialog';
+export { holdModal, type ModalOptions } from './components/modal';
+// The build loop and the worker transport. Also importable on its own as
+// '@vostok/ui-kit/build-loop', which touches no DOM, for use inside a worker.
+export {
+  buildLoop,
+  workerClient,
+  answerRequests,
+  NothingBuiltError,
+  BuildTimeoutError,
+  type BuildLoop,
+  type BuildLoopOptions,
+  type WorkerClient,
+  type WorkerClientOptions,
+  type AnswerOptions,
+} from './build-loop';
 export {
   licenseNudge,
   openCommercialModal,
   openLicenseModal,
   licenseReminderToast,
+  licenseAfterExport,
   type LicenseModalOptions,
   type LicenseNudgeOptions,
 } from './components/license';
@@ -18,7 +34,7 @@ export {
   type LicenceCertificateOptions,
 } from './components/lifetime-licence';
 export { topbarLinks, type TopbarLinksOptions } from './components/topbar-links';
-export { resolveTheme, applyTheme, themeToggleButton, type ThemeToggleOptions } from './components/theme';
+export { THEME_KEY, resolveTheme, applyTheme, themeToggleButton, type ThemeToggleOptions } from './components/theme';
 export {
   resolveMotion,
   effectiveMotion,
@@ -70,6 +86,7 @@ export {
 export { offlineDownloadButton, type OfflineDownloadOptions } from './components/offline-download';
 export { encodeParamsToHash, readParamsFromHash, presetShareButton } from './components/preset-share';
 export {
+  syncControls,
   toggleSwitch,
   slider,
   sliderRow,
@@ -142,6 +159,7 @@ export {
   type FontPickerHandle,
 } from './components/font-picker';
 export { fontCards, type FontCardsOptions, type FontCardsHandle } from './components/font-cards';
+export { fontChooser, type FontChooserOptions, type FontChooserHandle } from './components/font-chooser';
 export {
   sourceCards,
   dropZone,

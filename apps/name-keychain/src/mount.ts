@@ -6,7 +6,7 @@ import './style.css';
 import {
   el,
   toast,
-  openLicenseModal,
+  licenseAfterExport,
   topbarLinks,
   segmentedControl,
   selectField,
@@ -23,19 +23,15 @@ import {
   promptDialog,
   hostAssetUrl,
   bindExternalLinks,
-  chooseFile,
   button,
-  chip,
   listRow,
   section,
   filamentRow,
   symbolPickerButton,
-  uploadCta,
-  textField,
+  fontChooser,
   type SymbolItem,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
-import { unzipSync } from 'fflate';
 import { createViewer } from './viewer/viewer';
 import { mountPlatePicker } from '@vostok/plates';
 import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
@@ -43,13 +39,13 @@ import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
 // @vostok/fonts so every generator that puts type on a model shares one set.
 import {
   FONTS,
-  type FontChoice,
   getFont,
-  registerCustomFont,
-  parseFont,
-  isFontSupported,
+  importFontFiles,
+  importFontBuffer,
+  toPickerFont,
+  fontSupportsText,
   fontFamilyFor,
-  curatedFonts as curatedFontsOf,
+  curatedFonts,
   getHorizontalContours,
   getVerticalContours,
   getFontUrl,
@@ -81,9 +77,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // Outbound links go to the user's real browser rather than to this window, which has no
   // address bar and so no way back. One delegated listener, and a no-op on the web.
   bindExternalLinks(host);
-
-  // Curated fonts show as instant cards; the rest live in the "Browse all" modal.
-  const curatedFonts = curatedFontsOf();
 
   const state = {
     name: 'Name',
@@ -243,7 +236,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   });
   emojiToggle.addEventListener('pointerdown', captureSymbolCaret);
 
-  const fontGrid = el('div', { className: 'nk-font-grid' });
   const stage = el('section', { className: 'nk-stage' });
   const statusEl = el('div', { className: 'nk-status show', text: 'Loading worker...' });
 
@@ -557,188 +549,44 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     return t.length > 8 ? t.slice(0, 7) + '…' : t;
   }
 
+  /** Everything that will be printed, both lines in full: what a face must be able to set, as
+   *  opposed to the shortened first line the cards show. */
+  const fontCheckText = () => state.name + (state.secondLine || '');
 
-
-  function makeFontCard(font: FontChoice): HTMLButtonElement {
-    const text = state.name + (state.secondLine || '');
-    const supported = isFontSupported(font, text);
-
-    const btn = el('button', {
-      className: `nk-font-card${supported ? '' : ' unsupported'}`,
-      attrs: { type: 'button', 'data-font': font.id, title: supported ? font.label : `${font.label} (Characters missing)` },
-    }, [
-      el('span', { className: 'nk-font-card__sample', text: fontSampleText(), attrs: { style: `font-family: ${fontFamilyFor(font.id)}` } }),
-      el('span', { className: 'nk-font-card__name', text: font.label }),
-      ...(!supported ? [el('span', { className: 'nk-font-card__warn', text: '⚠' })] : [])
-    ]) as HTMLButtonElement;
-    btn.addEventListener('click', () => selectFont(font.id));
-    return btn;
-  }
-
-  // Curated cards; the active font is pinned first when it isn't one of them
-  // (e.g. chosen from the Browse-all modal) so the grid always shows the selection.
-  function renderFontGrid() {
-    fontGrid.replaceChildren();
-    const active = FONTS.find((f) => f.id === state.font);
-    if (active && !active.curated) fontGrid.append(makeFontCard(active));
-    for (const font of curatedFonts) fontGrid.append(makeFontCard(font));
-    updateActiveFont();
-  }
-
-  function updateActiveFont() {
-    const sample = fontSampleText();
-    const text = state.name + (state.secondLine || '');
-    for (const btn of fontGrid.querySelectorAll<HTMLButtonElement>('button')) {
-      const fontId = btn.dataset.font!;
-      const font = FONTS.find(f => f.id === fontId);
-      if (font) {
-        const supported = isFontSupported(font, text);
-        btn.classList.toggle('unsupported', !supported);
-        btn.title = supported ? font.label : `${font.label} (Characters missing)`;
-        const warn = btn.querySelector('.nk-font-card__warn');
-        if (!supported && !warn) {
-          btn.append(el('span', { className: 'nk-font-card__warn', text: '⚠' }));
-        } else if (supported && warn) {
-          warn.remove();
+  // The whole font block: the curated cards in the user's own name, "Browse all" for the
+  // library, and "Import a font". Declared before the host persistence below, whose
+  // load paths update it.
+  const chooser = fontChooser({
+    fonts: FONTS.map(toPickerFont),
+    curated: curatedFonts().map((f) => f.id),
+    value: state.font,
+    sample: fontSampleText(),
+    checkText: fontCheckText(),
+    supports: (f, text) => fontSupportsText(f.id, text),
+    onChange: (id) => {
+      state.font = id;
+      triggerRebuild();
+    },
+    onImport: async (file) => {
+      const { fonts, files, failed } = await importFontFiles(file);
+      // Keep the file, not just the parsed font, so the host can restore it with the project.
+      if (host) {
+        for (const [name, bytes] of files) {
+          try {
+            importedFontAssets.push(await host.importAsset('font', { name, bytes: new Uint8Array(bytes) }));
+          } catch {
+            toast(`"${name}" is usable now but could not be saved for next time`, { kind: 'warn' });
+          }
         }
       }
+      return { fonts: fonts.map(toPickerFont), failed };
+    },
+    // The host's own file picker opens instead of the browser's, when it has one.
+    host,
+    fill: true,
+  });
 
-      btn.classList.toggle('active', fontId === state.font);
-      const s = btn.querySelector('.nk-font-card__sample');
-      if (s) s.textContent = sample;
-    }
-  }
-
-  function selectFont(id: string) {
-    state.font = id;
-    renderFontGrid();
-    triggerRebuild();
-  }
-
-  // "Browse all fonts" — a searchable, category-filterable modal with a live
-  // preview rendered in each font (the current name, or "Sample").
-  function openFontBrowser() {
-    let search = '';
-    let cat = 'All';
-    const categories = ['All', ...Array.from(new Set(FONTS.map((f) => f.category))).sort()];
-
-    const searchField = textField({
-      label: 'Search',
-      type: 'search',
-      placeholder: `Search ${FONTS.length} fonts…`,
-      onInput: (value) => { search = value; render(); },
-    });
-    const chips = el('div', { className: 'nk-fb__chips' });
-    const list = el('div', { className: 'nk-fb__list' });
-
-    // Lazy-load each row's font only as it scrolls into view — avoids fetching
-    // all bundled fonts at once when the modal opens.
-    const io = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        const row = entry.target as HTMLElement;
-        const preview = row.querySelector<HTMLElement>('.nk-fb__preview');
-        if (preview) preview.style.fontFamily = `${fontFamilyFor(row.dataset.font!)}`;
-        io.unobserve(row);
-      }
-    }, { root: list, rootMargin: '250px' });
-
-    const sampleText = () => {
-      const t = state.name.trim();
-      return t ? (t.length > 14 ? t.slice(0, 14) : t) : 'Sample';
-    };
-
-    function render() {
-      io.disconnect();
-      list.replaceChildren();
-      const q = search.trim().toLowerCase();
-      const matches = FONTS.filter((f) =>
-        (cat === 'All' || f.category === cat) &&
-        (!q || f.label.toLowerCase().includes(q) || f.category.toLowerCase().includes(q)),
-      );
-      if (!matches.length) {
-        list.append(el('p', { className: 'nk-fb__empty', text: `No fonts match “${search.trim()}”.` }));
-        return;
-      }
-      const sample = sampleText();
-      matches.forEach((f, i) => {
-        const preview = el('span', { className: 'nk-fb__preview', text: sample });
-        // Eager-load the first screenful; lazy-load the rest as they scroll in.
-        if (i < 36) preview.style.fontFamily = `${fontFamilyFor(f.id)}`;
-        const supported = isFontSupported(f, state.name + (state.secondLine || ''));
-        const row = el('button', {
-          className: `nk-fb__row${f.id === state.font ? ' active' : ''}${supported ? '' : ' unsupported'}`,
-          attrs: { type: 'button', 'data-font': f.id, title: supported ? f.label : `${f.label} (Characters missing)` },
-        }, [
-          preview,
-          el('span', { className: 'nk-fb__meta' }, [
-            el('span', { className: 'nk-fb__name', text: f.label }),
-            el('span', { className: 'nk-fb__cat', text: f.category }),
-            ...(!supported ? [el('span', { className: 'nk-fb__warn', text: '⚠' })] : [])
-          ]),
-        ]);
-        row.addEventListener('click', () => { selectFont(f.id); handle.close(); });
-        list.append(row);
-        if (i >= 36) io.observe(row);
-      });
-    }
-
-    const catChips: ReturnType<typeof chip>[] = [];
-    for (const c of categories) {
-      const catChip = chip({
-        label: c,
-        pressed: c === cat,
-        onToggle: () => {
-          cat = c;
-          for (const other of catChips) other.setPressed(other === catChip);
-          render();
-        },
-      });
-      catChips.push(catChip);
-      chips.append(catChip);
-    }
-    const content = el('div', { className: 'nk-fontmodal' }, [searchField, chips, list]);
-    const handle = dialog({ title: 'Choose a font', content });
-    render();
-    searchField.field.focus();
-  }
-
-  /**
-   * Makes an imported font usable: parsed for the mesh builder, injected as an @font-face
-   * for the preview cards, and pushed to the front of the font list.
-   *
-   * Extracted because a font arrives two ways — the user picks a file, or a saved project
-   * is opened and its fonts come back off disk — and the two must produce an identical
-   * result. When they drifted, opening a project restored every parameter perfectly and
-   * silently rendered it in the wrong typeface.
-   */
-  function registerImportedFont(label: string, buffer: ArrayBuffer): string {
-    const font = parseFont(buffer);
-    const fontId = `custom-${Date.now()}-${importedFontCounter++}`;
-    registerCustomFont(fontId, font);
-
-    const fontUrl = URL.createObjectURL(new Blob([buffer]));
-    objectUrls.push(fontUrl);
-    const style = document.createElement('style');
-    style.textContent = `@font-face { font-family: '${fontFamilyFor(fontId)}'; src: url('${fontUrl}'); }`;
-    document.head.appendChild(style);
-    injectedStyles.push(style);
-
-    const fontChoice = {
-      id: fontId,
-      label,
-      category: 'Custom',
-      curated: true,
-      subsets: ['latin', 'latin-ext', 'cyrillic', 'greek'],
-    };
-    FONTS.unshift(fontChoice);
-    curatedFonts.unshift(fontChoice);
-    return fontId;
-  }
-
-  let importedFontCounter = 0;
-  /** Object URLs and <style> tags leak past unmount unless they are tracked and revoked. */
-  const objectUrls: string[] = [];
+  /** <style> tags leak past unmount unless they are tracked and removed. */
   const injectedStyles: HTMLStyleElement[] = [];
 
   const fallbackUrl = getFontUrl(FALLBACK_FONT_ID);
@@ -810,7 +658,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     secondInput.value = state.secondLine;
     holeDpad.setReadout(`X: ${state.ringPosX.toFixed(1)} mm, Y: ${state.ringPosY.toFixed(1)} mm`);
     updateControlsVisibility();
-    renderFontGrid();
+    chooser.setSample(fontSampleText(), fontCheckText());
+    chooser.setValue(state.font);
     triggerRebuild();
   }
 
@@ -890,7 +739,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *
    * Without this, opening a project that used an imported font silently falls back to a
    * different typeface — the parameters would restore perfectly and the keychain would be
-   * wrong, which is worse than an error.
+   * wrong, which is worse than an error. `importFontBuffer` takes the font's id from its
+   * file name and bytes, so it comes back under the id the project saved.
    */
   async function restoreFonts(assets: { role: string; path: string; originalName: string }[]) {
     if (!host) return;
@@ -900,12 +750,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       try {
         const bytes = await host.readAsset(asset.path);
         const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-        registerImportedFont(asset.originalName.replace(/\.[^/.]+$/, ''), buffer);
+        await importFontBuffer(asset.originalName, buffer);
         importedFontAssets.push(asset);
       } catch {
         toast(`Could not load the font "${asset.originalName}"`, { kind: 'warn' });
       }
     }
+    chooser.setFonts(FONTS.map(toPickerFont), curatedFonts().map((f) => f.id));
   }
 
   /**
@@ -932,7 +783,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         toast(indexed ? 'Exported to your library' : `Exported as ${fn}`, { kind: 'ok' });
       } else {
         downloadThreeMF(lastParts, fn);
-        openLicenseModal({ badge: '✓ 3MF Export started' });
+        licenseAfterExport({ badge: '✓ 3MF Export started' });
       }
     } else if (formatId === 'stl') {
       toast('STL multi-part export is zipped in 3MF, download 3MF for Orca/Bambu separate plates.', { kind: 'warn' });
@@ -941,108 +792,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   nameInput.addEventListener('input', () => {
     state.name = nameInput.value || 'Name';
-    updateActiveFont();
+    chooser.setSample(fontSampleText(), fontCheckText());
     triggerRebuild();
   });
   secondInput.addEventListener('input', () => {
     state.secondLine = secondInput.value;
     updateControlsVisibility();
+    // The second line is not on the cards, but it is in their missing-glyph check, which
+    // this re-runs.
+    chooser.setSample(fontSampleText(), fontCheckText());
     triggerRebuild();
   });
-
-  const browseFontsBtn = button({
-    label: `Browse all ${FONTS.length} fonts →`,
-    className: 'nk-browse-fonts',
-    onClick: openFontBrowser,
-  });
-
-  // `uploadCta()` owns its own hidden file input. The host's own picker goes first when
-  // there is one. Its click is intercepted before the label opens the hidden input — the
-  // same interception the magnet generator's font import uses — and `onFiles` alone
-  // serves the no-host path.
-  const importFontCta = uploadCta({
-    label: `Import custom font (.ttf/.otf/.zip)`,
-    accept: '.ttf,.otf,.zip',
-    onFiles: (files) => {
-      const f = files[0];
-      if (f) void handleFontFiles(f);
-    },
-  });
-  importFontCta.addEventListener('click', (e) => {
-    if (!host?.pickMedia) return;
-    e.preventDefault();
-    void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'zip'] }, () => {})
-      .then((f) => { if (f) void handleFontFiles(f); });
-  });
-
-  /**
-   * One typeface, or a zip of them, from wherever it came.
-   *
-   * Named rather than inline on the input's `change`, because there are two ways in now:
-   * the file input, and the host's own picker. Both hand over a `File`, so both end up
-   * here and neither has to know about the other.
-   */
-  async function handleFontFiles(file: File) {
-    try {
-      const rawBuffer = await file.arrayBuffer();
-      const isZip = file.name.toLowerCase().endsWith('.zip');
-    
-      const filesToProcess: { name: string; buffer: ArrayBuffer }[] = [];
-
-      if (isZip) {
-        const unzipped = unzipSync(new Uint8Array(rawBuffer));
-        for (const [name, data] of Object.entries(unzipped)) {
-          if (!name.endsWith('/') && (name.toLowerCase().endsWith('.ttf') || name.toLowerCase().endsWith('.otf'))) {
-            const cleanName = name.split('/').pop() || name;
-            const arrayBuf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-            filesToProcess.push({ name: cleanName, buffer: arrayBuf });
-          }
-        }
-        if (filesToProcess.length === 0) {
-          toast('No .ttf or .otf files found in the zip.', { kind: 'error' });
-          return;
-        }
-      } else {
-        filesToProcess.push({ name: file.name, buffer: rawBuffer });
-      }
-
-      let lastFontId = '';
-      let count = 0;
-
-      for (const f of filesToProcess) {
-        try {
-          const fontName = f.name.replace(/\.[^/.]+$/, "");
-          const fontId = registerImportedFont(fontName, f.buffer);
-          count++;
-
-          // Keep the file, not just the parsed font, so the host can restore it with the
-          // project.
-          if (host) {
-            try {
-              const asset = await host.importAsset('font', { name: f.name, bytes: new Uint8Array(f.buffer) });
-              importedFontAssets.push(asset);
-            } catch {
-              toast(`"${f.name}" is usable now but could not be saved for next time`, { kind: 'warn' });
-            }
-          }
-
-          lastFontId = fontId;
-        } catch (err) {
-          console.error(`Failed to load font ${f.name}:`, err);
-        }
-      }
-
-      if (count > 0) {
-        selectFont(lastFontId);
-        toast(`Imported ${count} font${count !== 1 ? 's' : ''}`, { kind: 'ok' });
-      } else {
-        toast('Failed to load any fonts from the file.', { kind: 'error' });
-      }
-    } catch (err) {
-      console.error(err);
-      toast('Failed to process file. Make sure it is a valid TTF, OTF or ZIP file.', { kind: 'error' });
-    }
-  }
 
   // Advanced tuning. The inner `nk-advanced__body` div keeps its own indented,
   // bordered look (see style.css) as the one child of the kit's section body.
@@ -1213,13 +973,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   ]);
 
   // Right column = pick the font (the "source" of the look), then export.
-  const controlsRightScroll = el('div', { className: 'vl-panel__scroll nk-font-section-scroll' }, [
-    el('div', { className: 'vl-section nk-font-section' }, [
-      el('p', { className: 'vl-label', text: 'Font' }),
-      fontGrid,
-      browseFontsBtn,
-      importFontCta,
-    ]),
+  const controlsRightScroll = el('div', { className: 'vl-panel__scroll' }, [
+    // The column is the font: the cards take all of it and scroll themselves.
+    section({ title: 'Font', body: [chooser], fill: true }),
   ]);
 
   const controlsRightExport = sidebarFooter({
@@ -1251,7 +1007,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           secondInput.value = state.secondLine;
           holeDpad.setReadout(`X: ${state.ringPosX.toFixed(1)} mm, Y: ${state.ringPosY.toFixed(1)} mm`);
           updateControlsVisibility();
-          renderFontGrid();
+          chooser.setSample(fontSampleText(), fontCheckText());
+          chooser.setValue(state.font);
           triggerRebuild();
           toast('Project loaded', { kind: 'ok' });
         } catch {
@@ -1310,7 +1067,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   // Build plate picker (top-right of the stage); the plate is shared across generators.
   mountPlatePicker(stage, viewer);
-  renderFontGrid();
   updateControlsVisibility();
 
   // Update theme changes
@@ -1359,11 +1115,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       content: el('div', { attrs: { style: 'display: flex; flex-direction: column; gap: 16px; margin-top: 8px;' } }, [
         el('div', {}, [
           el('strong', { text: 'Custom Font Import' }),
-          el('p', { text: 'You can now import your own .ttf or .otf files directly into the generator using the new "Import custom font" button.', attrs: { style: 'margin-top: 4px; line-height: 1.4;' } })
+          el('p', { text: 'You can now import your own .ttf or .otf files directly into the generator using the new "Import a font" button.', attrs: { style: 'margin-top: 4px; line-height: 1.4;' } })
         ]),
         el('div', {}, [
           el('strong', { text: 'Cyrillic & Non-English Support' }),
-          el('p', { text: 'Fonts with non-English characters are now fully supported. Unsupported fonts are automatically dimmed in the preview panel so you know exactly what works.', attrs: { style: 'margin-top: 4px; line-height: 1.4;' } })
+          el('p', { text: 'Fonts with non-English characters are now fully supported. Unsupported fonts are marked with ⚠ in the preview panel so you know exactly what works.', attrs: { style: 'margin-top: 4px; line-height: 1.4;' } })
         ]),
         el('div', {}, [
           el('strong', { text: 'Solid Icon Symbols' }),
@@ -1382,10 +1138,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     worker.terminate();
     viewer.dispose();
     if (rebuildTimeout) clearTimeout(rebuildTimeout);
-    // Imported fonts add an <style> tag to <head> and hold a blob URL. Both live outside
-    // the container, so replaceChildren() would not touch them and every mount would
-    // leave another pair behind.
-    for (const url of objectUrls) URL.revokeObjectURL(url);
+    // The icon fallback face adds a <style> tag to <head>. It lives outside the container,
+    // so replaceChildren() would not touch it and every mount would leave another behind.
+    // An imported font stays registered for the session: its id comes from the file, so
+    // the next mount finds it rather than adding another.
     for (const style of injectedStyles) style.remove();
     container.replaceChildren();
   };

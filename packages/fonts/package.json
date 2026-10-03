@@ -13,9 +13,10 @@
     "fetch-fonts": "node scripts/fetch-fonts.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "fetch-icons": "node scripts/fetch-icons.mjs",
-    "test": "esbuild tests/symbols.mts --bundle --platform=node --format=esm --external:opentype.js --outfile=node_modules/.cache/symbols.mjs --log-level=error && node node_modules/.cache/symbols.mjs"
+    "test": "esbuild tests/symbols.mts --bundle --platform=node --format=esm --external:opentype.js --outfile=node_modules/.cache/symbols.mjs --log-level=error && node node_modules/.cache/symbols.mjs && esbuild tests/import.test.mts --bundle --platform=node --format=esm --external:opentype.js --define:import.meta.glob=globalThis.__viteGlob --inject:tests/vite-glob-shim.mts --outfile=node_modules/.cache/import.test.mjs --log-level=error && node node_modules/.cache/import.test.mjs"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "opentype.js": "^1.3.4"
   },
   "devDependencies": {

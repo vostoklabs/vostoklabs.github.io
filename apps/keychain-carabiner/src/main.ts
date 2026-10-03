@@ -31,8 +31,7 @@ import {
   readParamsFromHash,
   toast,
   dialog,
-  openLicenseModal,
-  licenseReminderToast,
+  licenseAfterExport,
   ICONS,
   el,
   type ThumbTileHandle,
@@ -104,7 +103,6 @@ let assembled: ExportPart[] = [];
 let hookFrame: HookFrame | null = null;
 /** How the chain hangs in the assembled layout; what the dangle animates. */
 let chain: ChainInfo | null = null;
-let downloads = 0;
 
 const shown = () => (view === 'print' ? parts : assembled);
 
@@ -1240,13 +1238,11 @@ const footer = sidebarFooter({
       generator: 'keychain-carabiner',
       application: 'Vostok Labs Keychain Carabiner Set',
       buildId: import.meta.env.VITE_BUILD_ID,
+      plateSize: plateSize(loadPlateChoice()),
       cover,
     }, `${exportSlug()}.3mf`);
 
-    // Full modal on the first download, corner reminder after — the shipped flow.
-    downloads += 1;
-    if (downloads === 1) openLicenseModal();
-    else licenseReminderToast();
+    licenseAfterExport();
   },
   onSave: () => downloadJSON(`${exportSlug()}.json`, settings),
   onLoad: (file?: File) =>

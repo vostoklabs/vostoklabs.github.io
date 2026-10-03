@@ -1,5 +1,19 @@
 // Tiny DOM helper, keeps components dependency-free and readable.
 
+let lastId = 0;
+
+/**
+ * A document-unique id, for pointing a label or a description at its control.
+ *
+ * A counter, not a clock. The fields used `performance.now()`, which browsers coarsen to tens of
+ * microseconds, so two fields built in the same loop got the same id and the second label
+ * pointed at the first field.
+ */
+export function uid(prefix = 'vl'): string {
+  lastId += 1;
+  return `${prefix}-${lastId}`;
+}
+
 interface ElProps {
   className?: string;
   text?: string;

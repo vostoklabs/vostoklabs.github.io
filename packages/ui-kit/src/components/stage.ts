@@ -247,9 +247,14 @@ export interface StageStatus {
   set(text: string, kind?: StatusKind): void;
 }
 
-/** Bottom-left one-liner: what the generator is doing, or warning about. */
+/** Bottom-left one-liner: what the generator is doing, or warning about. A live region, so a
+ *  build error or a warning is read out when it appears, not only when someone goes looking. */
 export function stageStatus(initial = ''): StageStatus {
-  const root = el('p', { className: 'vl-stage-status', text: initial });
+  const root = el('p', {
+    className: 'vl-stage-status',
+    text: initial,
+    attrs: { role: 'status', 'aria-live': 'polite' },
+  });
   return {
     root,
     set(text, kind = 'idle') {

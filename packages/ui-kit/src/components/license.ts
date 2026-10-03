@@ -1,6 +1,7 @@
 import { BRAND } from '@vostok/brand';
 import { el } from '../dom';
 import { isDesktop, noopHandle, renderNothing } from '../host-env';
+import { holdModal } from './modal';
 
 const fmt = (n: number) => `$${n.toLocaleString('en-US')}`;
 
@@ -18,8 +19,7 @@ export interface LicenseModalOptions {
 export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): void } {
   if (isDesktop()) return noopHandle();
   const s = BRAND.pricing.subscription;
-  const previouslyFocused =
-    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  let release = (): void => {};
 
   const ccLine = el('p');
   ccLine.append(
@@ -62,31 +62,45 @@ export function openLicenseModal(opts: LicenseModalOptions = {}): { close(): voi
   const handle = {
     close() {
       overlay.remove();
-      document.removeEventListener('keydown', onKey);
+      release();
       opts.onClose?.();
-      previouslyFocused?.focus();
     },
   };
 
-  card.append(
-    el('button', {
-      className: 'vl-btn vl-btn--primary vl-btn--block',
-      text: 'Got it',
-      on: { click: () => handle.close() },
-    }),
-  );
+  const gotIt = el('button', {
+    className: 'vl-btn vl-btn--primary vl-btn--block',
+    text: 'Got it',
+    attrs: { type: 'button' },
+    on: { click: () => handle.close() },
+  });
+  card.append(gotIt);
 
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') handle.close();
-  };
-  document.addEventListener('keydown', onKey);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) handle.close();
   });
 
   document.body.append(overlay);
-  card.querySelector<HTMLElement>('a, button')?.focus();
+  // Focus "Got it", not the first focusable thing, which is the sales link: this window opens
+  // straight after a download click, and a second Enter must close it, not open a shop.
+  release = holdModal(overlay, { onEscape: () => handle.close(), initialFocus: gotIt });
   return handle;
+}
+
+/** Exports on this page so far. In memory on purpose: a new visit gets the full window again. */
+let exportsThisPage = 0;
+
+/**
+ * Invariant #3 in one call: the full licence window after the first export on this page, the
+ * corner reminder after every later one. Call it at the end of every export path.
+ *
+ * Every generator used to keep its own counter and its own `if (downloads === 1)`. One of them
+ * forgot the counter and showed the full window on every download. The rule lives here now, so
+ * it cannot be half-copied again. `badge` only affects the first-export window.
+ */
+export function licenseAfterExport(opts: Pick<LicenseModalOptions, 'badge'> = {}): void {
+  exportsThisPage += 1;
+  if (exportsThisPage === 1) openLicenseModal(opts);
+  else licenseReminderToast();
 }
 
 /** Corner reminder for subsequent downloads (red-bordered card, top right),
@@ -134,7 +148,7 @@ export function licenseReminderToast(): { close(): void } {
     attrs: { 'aria-label': 'Dismiss' },
   });
 
-  const toastCard = el('div', { className: 'vl-license-toast', attrs: { role: 'status' } }, [
+  const toastCard = el('div', { className: 'vl-license-toast', attrs: { role: 'status', 'data-vl-above-modal': '' } }, [
     closeBtn,
     el('div', { className: 'vl-license-toast-title', text: 'Download started' }),
     body,

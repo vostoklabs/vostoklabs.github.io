@@ -5,12 +5,16 @@ import '@vostok/ui-kit/styles.css';
 import './hub.css';
 
 import { BRAND } from '@vostok/brand';
-import { el, button, openCommercialModal, segmentedControl, supportLinks, textField, ICONS, svgEl } from '@vostok/ui-kit';
+import { el, button, openCommercialModal, segmentedControl, supportLinks, textField, ICONS, svgEl, resolveTheme } from '@vostok/ui-kit';
 import registryData from '../../../generators.json';
 import type { Registry } from './registry';
 import { generatorCard, sellerToolCard } from './cards';
 
 const registry = registryData as unknown as Registry;
+
+// The light/dark choice made in any generator holds here too: they share one key. Read only:
+// the hub has no switch of its own, so it must not save the system default as a choice.
+document.documentElement.setAttribute('data-theme', resolveTheme());
 
 // Inline the logo SVG so it inherits currentColor for theming.
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 568.55431 524.21602" fill="none" stroke="currentColor" stroke-width="16.551" role="img" aria-label="Vostok Labs" class="hub-logo-svg">

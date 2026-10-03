@@ -4,12 +4,12 @@ import type { FontPickerFont } from './font-picker';
 /*
   The curated font grid: the user's own word set in each face, two cards to a row.
 
-  `.vl-font-grid` / `.vl-font-card` have been in patterns.css since the name keychain's
-  `.nk-font-*` was promoted — with no function behind them, which is the exact "class ladder is
-  not a component" trap: the keychain kept its hand-rolled `<button class="nk-font-card">`, and
-  the next generator to want a font grid had nothing to call. This is that function. The full
-  library with search and categories is `fontPicker()`; this is the short list that sits in a
-  panel and opens it.
+  `.vl-font-grid` / `.vl-font-card` have been in patterns.css since the name keychain's own
+  font cards were promoted — with no function behind them, which is the exact "class ladder is
+  not a component" trap: the keychain kept its hand-rolled card buttons, and the next generator
+  to want a font grid had nothing to call. This is that function. The full library with search
+  and categories is `fontPicker()`; `fontChooser()` puts the two together with an import row,
+  and is what a generator's panel should use.
 */
 
 export interface FontCardsOptions {
