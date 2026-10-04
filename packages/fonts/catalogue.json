@@ -1,0 +1,9 @@
+{
+  "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
+  "blocks": [
+    { "name": "Font library", "category": "asset", "use": ["FONTS", "curatedFonts"], "with": ["fontScripts", "fontFamilyFor", "getFontUrl", "FONT_FAMILY_PREFIX", "FALLBACK_FONT_ID", "UNCOVERED", "getRequiredSubsets", "isFontSupported"], "licence": "OFL-1.1 or Apache-2.0: every face comes from the google/fonts repository, whose folder is its licence; faces with a reserved name ship as the original files", "for": "Every bundled typeface, with its alphabets, a preview family name and a check for whether it can write a given text. Shown to people through the Font chooser." },
+    { "name": "Font import", "category": "behaviour", "use": ["importFontFiles"], "with": ["importFontBuffer", "toPickerFont", "fontSupportsText", "parseFont", "registerCustomFont"], "for": "Bring in a customer's own .ttf, .otf, .woff or a .zip of them; the id is a fingerprint of the bytes, so a saved project finds it again." },
+    { "name": "Text to outlines", "category": "engine", "use": ["getHorizontalContours", "getVerticalContours", "getFont"], "with": ["measureLine", "pathCommandsToPolygons"], "for": "Lay out one or two lines of text in any bundled or imported font and return the letter outlines in millimetres, for laser or 3D alike." },
+    { "name": "Symbol font: Material Symbols", "category": "asset", "use": ["ICONS", "SYMBOL_GROUPS"], "with": ["ICON_CATEGORIES", "searchIcons", "iconById", "iconByChar", "POPULAR_IDS", "POPULAR", "QUICK_PICKS", "searchGroup"], "licence": "Apache-2.0 (Google Material Symbols Rounded)", "for": "About 1,500 symbols customers can type into their text, grouped and searchable; shown through the Symbol picker." }
+  ]
+}

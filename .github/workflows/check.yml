@@ -60,6 +60,27 @@ jobs:
       - name: UI drift check
         run: pnpm check:ui
 
+      # Every value a package exports is in its catalogue.json, under a plain name with a line on
+      # what it is for, and every UI block is shown in kit-demo. `pnpm catalogue` is how the next
+      # app finds a block instead of writing it again.
+      - name: Catalogue check
+        run: pnpm check:catalogue
+
+      # An app re-writing what the shelf already has, an import pointing the wrong way (a core that
+      # knows about a machine, an app reaching into another), the same code in two places.
+      # Ratchets per app, like the UI drift check: a count may fall, never rise.
+      - name: Shelf checks
+        run: |
+          pnpm check:blocks
+          pnpm check:layers
+          pnpm check:copies
+
+      # The licence and third-party notice files are generated; a stale one ships the wrong terms.
+      - name: Licence and notice files are current
+        run: |
+          pnpm check:licenses
+          pnpm check:notices
+
       - name: Typecheck every package and app
         run: pnpm typecheck
 
@@ -71,3 +92,7 @@ jobs:
       # The template has to build, or `pnpm new:generator` hands someone a broken app.
       - name: Build the generator template
         run: pnpm build:template
+
+      # kit-demo shows every UI block: the visual half of the catalogue.
+      - name: Build kit-demo
+        run: pnpm build:demo

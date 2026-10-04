@@ -56,6 +56,7 @@ export {
   type PanelCreditOptions,
 } from './components/generator-chrome';
 export { sidebarFooter, type SidebarFooterOptions } from './components/sidebar-footer';
+export { readProjectFile } from './components/project-file';
 export { appShell, type AppShellOptions, type AppShell, type PanelOptions } from './components/app-shell';
 export { showWhatsNew, maybeShowWhatsNew, type WhatsNewItem, type WhatsNewOptions } from './components/whats-new';
 export {

@@ -1,0 +1,9 @@
+{
+  "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
+  "blocks": [
+    { "name": "Print plates", "category": "print3d", "use": ["PLATES", "plateSize", "loadPlateChoice"], "with": ["DEFAULT_PLATE", "getPlate", "toPlateChoice", "plateLabel", "savePlateChoice"], "for": "The Bambu Lab plate sizes (A1 and P/X series, A1 mini, H series) and the customer's chosen plate, remembered across apps." },
+    { "name": "Plate picker", "category": "print3d", "use": ["mountPlatePicker", "platePicker"], "for": "The printer/plate picker on the stage, wired to the shared choice in one call." },
+    { "name": "Plate packing", "category": "print3d", "use": ["packOnPlate", "packFits"], "with": ["packShelf"], "for": "Lay several parts out on a plate, and say how many plates it takes and what will not fit." },
+    { "name": "Build plate model", "category": "print3d", "use": ["createBuildPlate"], "with": ["PLATE_MESHES"], "for": "The 3D model of the chosen plate that sits under the part in the viewer." }
+  ]
+}

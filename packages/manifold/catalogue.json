@@ -1,0 +1,6 @@
+{
+  "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
+  "blocks": [
+    { "name": "Leak-free CSG calls", "category": "engine", "use": ["csOf", "ringsOf", "extrude"], "for": "The three manifold-3d calls whose own glue leaks memory on every rebuild, without the leak. pnpm check:manifold flags the leaking forms." }
+  ]
+}

@@ -26,6 +26,7 @@ import {
   licenseAfterExport,
   buildLoop,
   syncControls,
+  readProjectFile,
   colorSwatch,
   ICONS,
   el,
@@ -33,7 +34,7 @@ import {
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
 import { mountPlatePicker, plateSize, loadPlateChoice } from '@vostok/plates';
-import { downloadThreeMF, type ExportPart } from '@vostok/export';
+import { downloadThreeMF, downloadFile, type ExportPart } from '@vostok/export';
 import { DEFAULT_SETTINGS, coerceSettings, type TagSettings, type RGB } from './state';
 import { buildTag } from './geometry';
 import { CHANGELOG } from './changelog';
@@ -361,19 +362,20 @@ const footer = sidebarFooter({
     // Full modal on the first download, corner reminder after (invariant #3).
     licenseAfterExport();
   },
-  onSave: () => downloadJSON('tag-project.json', settings),
+  onSave: () => downloadFile(JSON.stringify(settings, null, 2), 'tag-project.json', 'application/json'),
   // `sidebarFooter`'s onLoad hands back `File | undefined` — the picker can be dismissed
   // with nothing chosen. Guarding is what every shipped generator does, and without it the
   // template does not typecheck, which is a poor start for the thing everything is copied
   // from.
-  onLoad: (file?: File) =>
-    file && loadJSON(file, (data) => {
-      settings = coerceSettings(data);
-      showSettings();
-      syncColorInputs();
-      triggerRebuild(true);
-      toast('Project loaded', { kind: 'ok' });
-    }),
+  onLoad: async (file?: File) => {
+    const data = file && (await readProjectFile(file));
+    if (data == null) return;
+    settings = coerceSettings(data);
+    showSettings();
+    syncColorInputs();
+    triggerRebuild(true);
+    toast('Project loaded', { kind: 'ok' });
+  },
   onHelp: () =>
     dialog({
       title: 'Generator Template help',
@@ -480,26 +482,3 @@ viewer.onPartPick((index) => {
 // Everything is built — put the settings into the controls, then draw.
 showSettings();
 triggerRebuild(true);
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function downloadJSON(name: string, data: unknown) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function loadJSON(file: File, apply: (data: unknown) => void) {
-  const r = new FileReader();
-  r.onload = () => {
-    try {
-      apply(JSON.parse(r.result as string));
-    } catch {
-      toast('Invalid project file', { kind: 'error' });
-    }
-  };
-  r.readAsText(file);
-}

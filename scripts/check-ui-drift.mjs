@@ -72,6 +72,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { privateFiles, privateBudgets } from './lib/source.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -254,8 +255,16 @@ const tracked = (dir) =>
 const rel = (p) => p;
 const abs = (p) => join(ROOT, p);
 
-const APP_FILES = tracked('apps');
-const PKG_FILES = tracked('packages');
+/* Since 2026-10-04 the check also reads what git IGNORES under apps/ and packages/: the
+   private apps and the private folders of published ones, where drift had been growing
+   unseen. A count from a private file goes to a private budget (`scripts/budgets.private.json`,
+   "ui"), and a dead class or token found only in private files is excused only by that file's
+   lists, so no public file names anything private. A public clone has no private files, so
+   there this check reads exactly what it always did. */
+const PRIVATE_FILES = new Set(privateFiles());
+const PRIVATE = privateBudgets();
+const APP_FILES = [...tracked('apps'), ...[...PRIVATE_FILES].filter((f) => f.startsWith('apps/'))];
+const PKG_FILES = [...tracked('packages'), ...[...PRIVATE_FILES].filter((f) => f.startsWith('packages/'))];
 
 const isCode = (f) => (/\.(ts|js)$/.test(f) && !f.endsWith('.d.ts')) || f.endsWith('.html');
 
@@ -330,15 +339,18 @@ const APP_CSS = APP_FILES.filter((f) => /^apps\/[^/]+\/src\/.+\.css$/.test(f));
 const stripComments = (src) =>
   src.replace(/(^|[\s(,;={])\/\*[\s\S]*?\*\//gm, '$1 ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
-/** app -> kind -> count, and where each count came from. */
+/** app -> kind -> count, and where each count came from. Private files count separately. */
 const counts = new Map();
+const privateCounts = new Map();
 const byFile = [];
 const bump = (file, kind, n) => {
   const app = appOf(file);
-  if (!counts.has(app)) counts.set(app, {});
-  const c = counts.get(app);
+  const isPrivate = PRIVATE_FILES.has(file);
+  const into = isPrivate ? privateCounts : counts;
+  if (!into.has(app)) into.set(app, {});
+  const c = into.get(app);
   c[kind] = (c[kind] ?? 0) + n;
-  byFile.push({ file: rel(file), app, kind, n });
+  byFile.push({ file: rel(file), app, kind, n, isPrivate });
 };
 
 for (const file of CODE) {
@@ -360,6 +372,12 @@ if (process.argv.includes('--baseline')) {
     table[app] = Object.fromEntries(KINDS.filter((k) => c[k]).map((k) => [k, c[k]]));
   }
   console.log(JSON.stringify(table, null, 2).replace(/"([\w]+)":/g, '$1:').replace(/"/g, "'"));
+  const priv = {};
+  for (const app of [...privateCounts.keys()].sort()) {
+    const c = privateCounts.get(app);
+    priv[app] = Object.fromEntries(KINDS.filter((k) => c[k]).map((k) => [k, c[k]]));
+  }
+  if (Object.keys(priv).length) console.log(`\nscripts/budgets.private.json, "ui" of each app (its private files only):\n${JSON.stringify(priv, null, 2)}`);
   process.exit(0);
 }
 
@@ -463,6 +481,19 @@ for (const app of APPS) {
   }
 }
 
+// The same for private files, against the private budgets.
+const PRIVATE_UI = Object.fromEntries(Object.entries(PRIVATE).filter(([, v]) => v?.ui).map(([app, v]) => [app, v.ui]));
+const pHave = (app, kind) => privateCounts.get(app)?.[kind] ?? 0;
+const pAllowed = (app, kind) => PRIVATE_UI[app]?.[kind] ?? 0;
+const overPrivate = [];
+const underPrivate = [];
+for (const app of [...new Set([...Object.keys(PRIVATE_UI), ...privateCounts.keys()])].sort()) {
+  for (const kind of KINDS) {
+    if (pHave(app, kind) > pAllowed(app, kind)) overPrivate.push([app, kind]);
+    else if (pHave(app, kind) < pAllowed(app, kind)) underPrivate.push([app, kind]);
+  }
+}
+
 const ADVICE = {
   button: 'button(), iconButton(), buttonRow()',
   select: 'selectField()',
@@ -474,15 +505,19 @@ const ADVICE = {
   restyle: 'change the component in packages/ui-kit, or pass it an option',
 };
 
-if (over.length > 0) {
+if (over.length > 0 || overPrivate.length > 0) {
   failed = true;
   console.error('\nUI drift: a count went up. Use @vostok/ui-kit instead.\n');
-  for (const [app, kind] of over) {
-    console.error(`  ${app}  ${kind}: ${have(app, kind)} (budget ${allowed(app, kind)})  -> ${ADVICE[kind]}`);
-    for (const f of byFile.filter((x) => x.app === app && x.kind === kind).sort((a, b) => b.n - a.n).slice(0, 5)) {
-      console.error(`      ${String(f.n).padStart(3)}  ${f.file}`);
+  const report = (list, isPrivate, haveOf, allowedOf) => {
+    for (const [app, kind] of list) {
+      console.error(`  ${app}${isPrivate ? ' (private files)' : ''}  ${kind}: ${haveOf(app, kind)} (budget ${allowedOf(app, kind)})  -> ${ADVICE[kind]}`);
+      for (const f of byFile.filter((x) => x.app === app && x.kind === kind && x.isPrivate === isPrivate).sort((a, b) => b.n - a.n).slice(0, 5)) {
+        console.error(`      ${String(f.n).padStart(3)}  ${f.file}`);
+      }
     }
-  }
+  };
+  report(over, false, have, allowed);
+  report(overPrivate, true, pHave, pAllowed);
   console.error(
     '\nThe kit components render the same element with the same class, so adopting one is\n' +
       'usually a one-line change. If the kit genuinely cannot express what you need, widen\n' +
@@ -490,7 +525,14 @@ if (over.length > 0) {
   );
 }
 
-const newTokens = [...unresolvedTokens].filter(([t]) => !KNOWN_UNRESOLVED_TOKENS.has(t));
+// A name found only in private files may be excused by the private lists; anywhere public, only
+// by the lists in this file.
+const onlyPrivate = (files) => [...files].every((f) => PRIVATE_FILES.has(f));
+const PRIVATE_KNOWN_TOKENS = new Set(PRIVATE.uiKnownTokens ?? []);
+const PRIVATE_KNOWN_ORPHANS = new Set(PRIVATE.uiKnownOrphans ?? []);
+const newTokens = [...unresolvedTokens].filter(
+  ([t, files]) => !KNOWN_UNRESOLVED_TOKENS.has(t) && !(onlyPrivate(files) && PRIVATE_KNOWN_TOKENS.has(t)),
+);
 if (newTokens.length > 0) {
   failed = true;
   console.error('\nUI drift: a CSS custom property is used but declared nowhere.');
@@ -501,7 +543,9 @@ if (newTokens.length > 0) {
   console.error('');
 }
 
-const newOrphans = [...orphanClasses].filter(([n]) => !KNOWN_ORPHAN_CLASSES.has(n));
+const newOrphans = [...orphanClasses].filter(
+  ([n, files]) => !KNOWN_ORPHAN_CLASSES.has(n) && !(onlyPrivate(files) && PRIVATE_KNOWN_ORPHANS.has(n)),
+);
 if (newOrphans.length > 0) {
   failed = true;
   console.error('\nUI drift: a class name is used in code but no stylesheet defines it.');
@@ -526,6 +570,16 @@ if (under.length > 0 || fixedTokens.length > 0 || fixedClasses.length > 0) {
   for (const [app, kind] of under) console.log(`  BUDGET['${app}'].${kind}: ${allowed(app, kind)} -> ${have(app, kind)}`);
   for (const t of fixedTokens) console.log(`  drop '${t}' from KNOWN_UNRESOLVED_TOKENS`);
   for (const c of fixedClasses) console.log(`  drop '${c}' from KNOWN_ORPHAN_CLASSES`);
+  console.log('');
+}
+
+const fixedPrivateTokens = [...PRIVATE_KNOWN_TOKENS].filter((t) => !unresolvedTokens.has(t));
+const fixedPrivateClasses = [...PRIVATE_KNOWN_ORPHANS].filter((c) => !orphanClasses.has(c));
+if (underPrivate.length > 0 || fixedPrivateTokens.length > 0 || fixedPrivateClasses.length > 0) {
+  console.log('\nUI drift: ground gained in private files. Update scripts/budgets.private.json:\n');
+  for (const [app, kind] of underPrivate) console.log(`  ${app}.ui.${kind}: ${pAllowed(app, kind)} -> ${pHave(app, kind)}`);
+  for (const t of fixedPrivateTokens) console.log(`  drop '${t}' from uiKnownTokens`);
+  for (const c of fixedPrivateClasses) console.log(`  drop '${c}' from uiKnownOrphans`);
   console.log('');
 }
 
