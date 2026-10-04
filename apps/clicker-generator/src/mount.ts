@@ -129,13 +129,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     fetch(base + 'assets/switch/mx/mx-socket.3mf').then((r) => r.arrayBuffer()),
     fetch(base + 'assets/switch/mx/mx-stem.3mf').then((r) => r.arrayBuffer()),
     fetch(base + 'assets/switch/mx/mx-switch.3mf').then((r) => r.arrayBuffer()),
-    fetch(base + 'assets/blocks/block no sides to connect.3mf').then((r) => r.arrayBuffer()),
-    fetch(base + 'assets/blocks/block south side to connect.3mf').then((r) => r.arrayBuffer()),
-    fetch(base + 'assets/blocks/block north and south side to connect.3mf').then((r) => r.arrayBuffer()),
-    // Grid shells: a corner (two adjacent faces), an edge (three) and an interior (four).
-    fetch(base + 'assets/blocks/block north and west side to connect.3mf').then((r) => r.arrayBuffer()),
-    fetch(base + 'assets/blocks/block north, south and west side to connect.3mf').then((r) => r.arrayBuffer()),
-    fetch(base + 'assets/blocks/block all sides to connect.3mf').then((r) => r.arrayBuffer()),
+    // Letter blocks need only the keycap: their bodies are generated (geometry/keyBody.ts).
     fetch(base + 'assets/keycap.json').then((r) => r.json()),
   ]).catch((err) => {
     console.error('[assets] Pre-fetch failed:', err);
@@ -1835,17 +1829,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   async function initAssets() {
     try {
-      const [socket, stem, sw, blockNoSides, blockSouth, blockNorthSouth,
-             blockNorthWest, blockNorthSouthWest, blockAllSides, keycapJson] = await assetsPromise;
+      const [socket, stem, sw, keycapJson] = await assetsPromise;
       worker.postMessage(
-        {
-          type: 'init', socket, stem, switch: sw,
-          blockNoSides, blockSouth, blockNorthSouth,
-          blockNorthWest, blockNorthSouthWest, blockAllSides,
-          keycapJson,
-        },
-        [socket, stem, sw, blockNoSides, blockSouth, blockNorthSouth,
-         blockNorthWest, blockNorthSouthWest, blockAllSides]
+        { type: 'init', socket, stem, switch: sw, keycapJson },
+        [socket, stem, sw],
       );
     } catch (err) {
       store.set({ status: 'Failed to load switch assets: ' + String(err) });

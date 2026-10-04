@@ -1,64 +1,27 @@
-// Letter-block clickers: one printed block per letter, each holding its own MX switch
-// and a real (dished, 1u) keycap with the letter debossed into the top as a separate
-// colour body. Blocks snap together into a chain — every joint is two half-walls that
-// meet to form one full wall, so the finished row reads as a single object.
+// Letter-block clickers: one key per letter — a real MX switch under a real (dished, 1u)
+// keycap with the letter debossed into its top as a separate colour body — in one printed body
+// that holds them all.
 //
-// Frame (shared with buildClicker): Z = 0 is the switch-plate plane — the top of the MX
-// socket cut-out, which in a block is the floor of the keycap well. The bundled
-// keycap.json is authored in that same frame (its stem IS the mx-stem asset, verified
-// by cross-section), so a keycap needs no Z shift at all: skirt bottom lands exactly on
-// the well floor and the cap sits ~3.9 mm proud of the block rim.
+// The body is generated from the layout (keyBody.ts): a wall between every key, or one open
+// well round them all like a keyboard; in a row, a column, a grid or any shape with holes in it,
+// such as a WASD cluster; smooth or textured outside. It replaced six CAD shells that were
+// rotated into place so their half-walls met, which could make a row or a column but never a
+// clean grid. Its dimensions are the shells' own, measured: see BODY_DIMS.
 //
-// The chain runs along +X so text reads left-to-right in the viewer. Ian's block assets
-// are authored with their connectable ("half") walls on the NORTH/SOUTH faces, so every
-// block is rotated 90° about Z; the keycap and the preview switch are rotated with it so
-// the stem cross, the socket and the cap stay mutually aligned.
+// Frame (shared with buildClicker): Z = 0 is the switch-plate plane — the top of the MX socket
+// cut-out. The bundled keycap.json is authored in that same frame (its stem IS the mx-stem
+// asset, verified by cross-section), so a keycap only moves up by the height it rests at.
+//
+// The arrangement runs along +X so text reads left-to-right in the viewer, rows running down.
+import { csOf, extrude } from '@vostok/manifold';
 import type { BuildParams, BuildRegion, ClickerPart, Ring, RGB, SwitchPlacement } from '../types';
 import { hardcodedVoids, getMarkSeed, markVoids } from './identityMark';
 import { applyStemFit } from './stemFit';
+import { BODY_DIMS, buildKeyBody, wellSize, type KeyBodyDims, type KeyCell } from './keyBody';
 
 type Wasm = any;
 type Solid = any;
 type Section = any;
-
-/** Which faces of a block are halved so they can meet a neighbour. Bit flags in the
- *  assembly frame: N is +Y, S is −Y, E is +X, W is −X. */
-export const DIR = { N: 1, S: 2, E: 4, W: 8 } as const;
-
-/** Rotate a connect-mask by +90° CCW: E→N, N→W, W→S, S→E. */
-function rotMask(mask: number, quarters: number): number {
-  let m = mask;
-  for (let q = ((quarters % 4) + 4) % 4; q > 0; q--) {
-    m =
-      ((m & DIR.E) ? DIR.N : 0) |
-      ((m & DIR.N) ? DIR.W : 0) |
-      ((m & DIR.W) ? DIR.S : 0) |
-      ((m & DIR.S) ? DIR.E : 0);
-  }
-  return m;
-}
-
-/** The six block shells, normalised into the assembly frame (switch axis at the XY
- *  origin, well floor at Z 0) and indexed by the set of faces they connect on. Ian's CAD
- *  covers every one of the 16 possible neighbour patterns once rotations are allowed:
- *  none / 1 face / 2 opposite / 2 adjacent / 3 faces / 4 faces. */
-export interface BlockAssets {
-  /** mask → the asset that provides it and the Z rotation (degrees) that gets it there. */
-  byMask: Map<number, { solid: Solid; rot: number }>;
-  /** Centre-to-centre spacing when both blocks at a joint present the same axis (mm). */
-  pitch: number;
-  /** The larger of the two axis pitches. The shells are not perfectly square (they are
-   *  0.34 mm wider than they are deep), so a grid — where neighbours are rotated 90° from
-   *  each other — has joints that pair a wide face with a narrow one. Spacing those at the
-   *  larger pitch leaves a hair of slop instead of making the parts interfere. */
-  pitchMax: number;
-  /** The normalised MX socket, kept so the switch pocket can be resized.
-   *
-   *  Unlike the flat clicker — where the pocket IS a subtraction and scaling the cutter scales
-   *  the pocket — a block's pocket is authored into its shell, so there is nothing to scale.
-   *  Resizing it means cutting or filling against this solid afterwards. See `fitSocket`. */
-  socket: Solid;
-}
 
 export interface KeycapAsset {
   shell: { positions: number[]; indices: number[] };
@@ -104,134 +67,37 @@ function ringArea(ring: Ring): number {
   return Math.abs(a / 2);
 }
 
+/** The switch opening the CAD shells had, mm square. The socket asset's is 13.86 × 13.84. */
+export const BLOCK_POCKET_MM = 13.93;
+
 /**
- * Normalise one raw block asset into the assembly frame.
+ * The switch pocket cut under each key, centred on the origin.
  *
- * The blocks are exported from CAD at arbitrary XY positions, so nothing can be placed
- * until each one is re-anchored on its own switch axis. Both anchors are *measured*
- * from the geometry rather than hard-coded, so re-exported assets keep working:
- *   • XY  — slice through the switch pocket (the lower cavity) and take the centre of
- *           the inner ring. On an end block that centre is offset from the bbox centre
- *           by half the wall that was shaved off, which is exactly the offset we need.
- *   • Z   — the pocket floor (measured by intersecting a column over the switch axis)
- *           plus the height of the MX socket asset = the socket's top face = the floor
- *           of the keycap well = Z 0 in the clicker frame.
+ * It is the MX socket asset, grown in X and Y to the 13.93 mm opening the CAD shells had (the
+ * shells' pocket was exactly that: the socket scaled 1.0048 × 1.0067, cavity included), then
+ * scaled again by the Socket fit setting — the same way the flat clicker's fit works, because
+ * now the pocket is a subtraction here too. The opening is carried up through the plate the
+ * shells kept above the socket's top face, to the well floor.
+ *
+ * Z is never scaled: the pocket's depth is what seats the switch.
  */
-function normaliseBlock(wasm: Wasm, raw: Solid, socketHeight: number): { solid: Solid; size: [number, number] } {
-  const { Manifold, CrossSection } = wasm;
-  const bb = raw.boundingBox();
-  const sizeX = bb.max[0] - bb.min[0];
-  const sizeY = bb.max[1] - bb.min[1];
-  const height = bb.max[2] - bb.min[2];
-  // Work from a copy sitting on Z = 0 and centred on its own bbox.
-  const centred = raw.translate([
-    -(bb.min[0] + bb.max[0]) / 2,
-    -(bb.min[1] + bb.max[1]) / 2,
-    -bb.min[2],
-  ]);
-
-  let cx = 0;
-  let cy = 0;
-  try {
-    // 25 % of the height is comfortably inside the switch pocket on these assets.
-    const polys = centred.slice(height * 0.25).toPolygons() as Ring[];
-    let best: ReturnType<typeof ringsBBox> | null = null;
-    let bestArea = Infinity;
-    for (const p of polys) {
-      const a = ringArea(p);
-      if (a < bestArea) {
-        bestArea = a;
-        best = ringsBBox([p]);
-      }
-    }
-    if (best && polys.length > 1) {
-      cx = (best.minX + best.maxX) / 2;
-      cy = (best.minY + best.maxY) / 2;
-    }
-  } catch {
-    /* keep the bbox centre */
-  }
-
-  // Pocket floor: the only material inside a 13 mm column over the switch axis is the
-  // block's bottom slab, so its top face is the floor the switch drops onto.
-  let floorZ = 0;
-  try {
-    const col = Manifold.extrude(
-      CrossSection.square([13, 13], true).translate([cx, cy]),
-      height + 2,
-    ).translate([0, 0, -1]);
-    const slab = centred.intersect(col);
-    floorZ = slab.boundingBox().max[2];
-    col.delete();
-    slab.delete();
-  } catch {
-    floorZ = 0;
-  }
-
-  const solid = centred.translate([-cx, -cy, -(floorZ + socketHeight)]);
-  centred.delete();
-  return { solid, size: [sizeX, sizeY] };
-}
-
-/**
- * Measure the block assets once (at worker init) so every build is pure placement.
- * `socket` is the already-normalised MX socket solid (its top face at Z = 0).
- */
-export interface RawBlocks {
-  noSides: Solid;
-  south: Solid;
-  northSouth: Solid;
-  northWest?: Solid;
-  northSouthWest?: Solid;
-  allSides?: Solid;
-}
-
-export function prepareBlockAssets(wasm: Wasm, socket: Solid, raw: RawBlocks): BlockAssets {
-  const sbb = socket.boundingBox();
-  const socketHeight = sbb.max[2] - sbb.min[2];
-
-  // Local connect masks, verified against the geometry (the file names are accurate:
-  // N = +Y, S = −Y, W = −X, E = +X).
-  const sources: [Solid | undefined, number][] = [
-    [raw.noSides, 0],
-    [raw.south, DIR.S],
-    [raw.northSouth, DIR.N | DIR.S],
-    [raw.northWest, DIR.N | DIR.W],
-    [raw.northSouthWest, DIR.N | DIR.S | DIR.W],
-    [raw.allSides, DIR.N | DIR.S | DIR.E | DIR.W],
-  ];
-
-  const byMask = new Map<number, { solid: Solid; rot: number }>();
-  let noSidesSize: [number, number] | null = null;
-  let southSize: [number, number] | null = null;
-  let northSouthSize: [number, number] | null = null;
-
-  for (const [src, localMask] of sources) {
-    if (!src) continue;
-    const { solid, size } = normaliseBlock(wasm, src, socketHeight);
-    if (localMask === 0) noSidesSize = size;
-    else if (localMask === DIR.S) southSize = size;
-    else if (localMask === (DIR.N | DIR.S)) northSouthSize = size;
-    // One normalised shell serves all four of its rotations.
-    for (let q = 0; q < 4; q++) {
-      const m = rotMask(localMask, q);
-      if (!byMask.has(m)) byMask.set(m, { solid, rot: q * 90 });
-    }
-  }
-
-  // A both-ends-connected block is exactly one pitch deep: both walls are halved, so
-  // stacking them bbox-to-bbox reproduces a full wall at every joint.
-  let pitch = northSouthSize?.[1] ?? 0;
-  let pitchMax = pitch;
-  if (noSidesSize && southSize) {
-    const halfWall = noSidesSize[1] - southSize[1]; // material removed from one face
-    const expected = noSidesSize[1] - 2 * halfWall;
-    if (!(pitch > 1) || Math.abs(pitch - expected) > 0.05) pitch = expected;
-    // Same wall on the other axis — the shells are slightly wider than deep.
-    pitchMax = Math.max(pitch, noSidesSize[0] - 2 * halfWall);
-  }
-
-  return { byMask, pitch, pitchMax, socket };
+export function blockPocket(
+  wasm: Wasm,
+  socket: Solid,
+  fitPct: number,
+  floorZ: number,
+  track: <T extends { delete(): void }>(o: T) => T,
+): Solid {
+  const top = track(socket.slice(-0.05));
+  const b = top.bounds();
+  const f = 1 + (fitPct || 0) / 100;
+  const sx = (BLOCK_POCKET_MM / Math.max(1, b.max[0] - b.min[0])) * f;
+  const sy = (BLOCK_POCKET_MM / Math.max(1, b.max[1] - b.min[1])) * f;
+  const grown = track(socket.scale([sx, sy, 1]));
+  if (floorZ <= 0.001) return grown;
+  const opening = track(top.scale([sx, sy]));
+  const riser = track(track(extrude(wasm, opening, floorZ + 0.2)).translate([0, 0, -0.1]));
+  return track(grown.add(riser));
 }
 
 /** Build the keycap shell (+ stem) once, centred on the switch axis. */
@@ -256,7 +122,7 @@ function buildCapBlank(wasm: Wasm, keycap: KeycapAsset, stemFitMm: number, warni
   return cap;
 }
 
-/** Copy a mesh out of a solid, shifted in XY (cheap instancing for repeated blocks). */
+/** Copy a mesh out of a solid, shifted in XY (cheap instancing for repeated caps). */
 function meshPart(
   solid: Solid,
   offset: [number, number],
@@ -285,39 +151,16 @@ function meshPart(
   };
 }
 
-/**
- * Open or tighten a block's switch pocket by `pct` of the socket footprint.
- *
- * The flat clicker gets this for free: its pocket is a subtraction, so scaling the cutter
- * scales the pocket. A block's pocket is cut into the shell by whoever authored the CAD, so
- * there is no cutter here and the control did nothing — the switch-pocket fit was simply
- * absent in blocks mode, and hidden in the UI, which is why nobody noticed.
- *
- * Both directions, and they are not symmetric:
- *
- *  - **Looser (+)**: subtract a socket scaled up. Whatever the shell authored, the pocket ends
- *    up at least that size.
- *  - **Tighter (−)**: add back the ring between the authored socket and a scaled-down copy.
- *    That shim lines the pocket walls. Its underside sits on the pocket floor, so even if the
- *    shell's pocket is slightly larger than this socket it rests on something rather than
- *    floating — which is the failure this shape avoids.
- *
- * Z is never scaled: the pocket's depth is what seats the switch, and the whole block stack is
- * hung off the socket's top face at Z 0.
- */
-function fitSocket(block: Solid, socket: Solid, pct: number, track: <T extends { delete(): void }>(o: T) => T): Solid {
-  if (Math.abs(pct) < 0.01) return block;
-  const f = 1 + pct / 100;
-  const scaled = track(socket.scale([f, f, 1]));
-  if (pct > 0) return track(block.subtract(scaled));
-  // A shell between the authored socket and the smaller one: material added to the walls.
-  const shim = track(socket.subtract(scaled));
-  return track(block.add(shim));
+/** The keycap's footprint, read off the asset: its bounding box, which is square. */
+function capFootprint(keycap: KeycapAsset): number {
+  const bb = keycap.meta.bbox;
+  const w = Math.max(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1]);
+  return Number.isFinite(w) && w > 10 ? w : BODY_DIMS.cap;
 }
 
 export function buildBlocks(
   wasm: Wasm,
-  blocks: BlockAssets,
+  socket: Solid,
   keycap: KeycapAsset,
   regions: BuildRegion[],
   params: BuildParams,
@@ -333,527 +176,365 @@ export function buildBlocks(
   const switchPlacements: SwitchPlacement[] = [];
   const warnings: string[] = [];
 
-  // ---------- Layout ----------
-  // Everything is a grid: a row is one row, a column is one column, and "grid" wraps at
-  // `blockColumns`. Slots with no drawable outline (a space, or a cell the user emptied)
-  // still consume a cell — that is what lets a WASD shape have holes in it.
-  const layout = params.blockOrientation ?? 'horizontal';
-  const cols =
-    layout === 'vertical' ? 1
-    : layout === 'grid' ? Math.max(1, Math.round(params.blockColumns ?? 2))
-    : regions.length;
-  const cells = regions.map((r, i) => ({
-    region: r,
-    row: Math.floor(i / cols),
-    col: i % cols,
-    filled: r.rings.some((ring) => ring.length >= 3),
-  }));
-  const filled = cells.filter((c) => c.filled);
-  if (filled.length === 0) {
-    return { parts, switchPlacements, warnings: ['Add a letter or a symbol to build blocks.'] };
-  }
+  try {
+    // ---------- Layout ----------
+    // Everything is a grid: a row is one row, a column is one column, and "grid" wraps at
+    // `blockColumns`. Slots with no drawable outline (a space, or a cell the user emptied)
+    // still consume a cell — that is what lets a WASD shape have holes in it.
+    const layout = params.blockOrientation ?? 'horizontal';
+    const cols =
+      layout === 'vertical' ? 1
+      : layout === 'grid' ? Math.max(1, Math.round(params.blockColumns ?? 2))
+      : regions.length;
+    const cells = regions.map((r, i) => ({
+      region: r,
+      row: Math.floor(i / cols),
+      col: i % cols,
+      filled: r.rings.some((ring) => ring.length >= 3),
+    }));
+    const filled = cells.filter((c) => c.filled);
+    if (filled.length === 0) {
+      return { parts, switchPlacements, warnings: ['Add a letter or a symbol to build blocks.'] };
+    }
+    const N = filled.length;
 
-  // ---------- Block bases ----------
-  // A block's shape is decided purely by which of its four neighbours exist, so identical
-  // neighbour patterns share one CSG pass and are then instanced by shifting vertices.
-  const occupied = new Set(filled.map((c) => `${c.row},${c.col}`));
-  const has = (row: number, col: number) => occupied.has(`${row},${col}`);
-  const masks = filled.map(
-    (cell) =>
-      (has(cell.row - 1, cell.col) ? DIR.N : 0) |
-      (has(cell.row + 1, cell.col) ? DIR.S : 0) |
-      (has(cell.row, cell.col + 1) ? DIR.E : 0) |
-      (has(cell.row, cell.col - 1) ? DIR.W : 0),
-  );
-
-  // Spacing depends on the rotations the masks force. A row or a column turns every block
-  // the same way, so both blocks at a joint present the same face and the tight pitch is
-  // exact. A grid alternates 90° rotations, pairing a wide face with a narrow one — space
-  // those at the larger pitch so the joint has a little slop rather than interfering.
-  const rots = masks.map((m) => blocks.byMask.get(m)?.rot ?? 0);
-  const swapped = rots.map((r) => Math.round(r / 90) % 2 === 1);
-  const pitch = swapped.every((v) => v === swapped[0]) ? blocks.pitch : blocks.pitchMax;
-
-  // Centre the whole arrangement on the origin. Rows run DOWN the screen (−Y), matching
-  // reading order; legends are always cut in world space, so they stay upright.
-  const minRow = Math.min(...filled.map((c) => c.row));
-  const maxRow = Math.max(...filled.map((c) => c.row));
-  const minCol = Math.min(...filled.map((c) => c.col));
-  const maxCol = Math.max(...filled.map((c) => c.col));
-  const originX = -((minCol + maxCol) / 2) * pitch;
-  const originY = ((minRow + maxRow) / 2) * pitch;
-  const at = (c: { row: number; col: number }): [number, number] => [
-    originX + c.col * pitch,
-    originY - c.row * pitch,
-  ];
-  const variantCache = new Map<number, { solid: Solid; rot: number }>();
-  const blockVariant = (mask: number): { solid: Solid; rot: number } => {
-    const cached = variantCache.get(mask);
-    if (cached) return cached;
-    const src = blocks.byMask.get(mask) ?? blocks.byMask.get(0);
-    if (!src) throw new Error('No block asset for connect pattern ' + mask);
-    let solid = src.rot ? track(src.solid.rotate([0, 0, src.rot])) : src.solid;
-    solid = squareConnectTops(solid, mask);
-    solid = applyIdentityVoids(solid);
-    const v = { solid, rot: src.rot };
-    variantCache.set(mask, v);
-    return v;
-  };
-
-  const N = filled.length;
-  // Which block carries the keyring loop: the one furthest towards the chosen side, and on
-  // a tie (every block in a row shares a Y, so "top" ties across all of them) the one
-  // closest to the middle, which is where a hanger looks deliberate rather than lopsided.
-  const loopSide = params.keychainEnd ?? 'left';
-  const loopCellIndex = (() => {
-    const along = (c: { row: number; col: number }) =>
-      loopSide === 'left' ? -c.col
-      : loopSide === 'right' ? c.col
-      : loopSide === 'top' ? -c.row
-      : c.row;
-    const across = (c: { row: number; col: number }) =>
-      loopSide === 'left' || loopSide === 'right' ? c.row - (minRow + maxRow) / 2
-                                                 : c.col - (minCol + maxCol) / 2;
-    let best = 0;
-    filled.forEach((c, i) => {
-      const b = filled[best];
-      if (along(c) > along(b) || (along(c) === along(b) && Math.abs(across(c)) < Math.abs(across(b)))) {
-        best = i;
-      }
+    // ---------- The body ----------
+    const dims: KeyBodyDims = { ...BODY_DIMS, cap: capFootprint(keycap) };
+    const pocket = blockPocket(wasm, socket, params.socketFitPct ?? 0, dims.floorZ, track);
+    const body = buildKeyBody(wasm, filled.map((c): KeyCell => ({ row: c.row, col: c.col })), {
+      style: params.blockStyle ?? 'walls',
+      texture: params.blockTexture ?? 'smooth',
+      dims,
+      pocket,
     });
-    return best;
-  })();
+    let solid: Solid = track(body.solid);
+    const pitch = body.pitch;
+    const centres = body.centres;
+    // From a key's centre to the outer face of the wall beside it.
+    const halfCell = wellSize(dims) / 2 + dims.wall;
 
-  /* The maker's mark, on EVERY block.
+    const minRow = Math.min(...filled.map((c) => c.row));
+    const maxRow = Math.max(...filled.map((c) => c.row));
+    const minCol = Math.min(...filled.map((c) => c.col));
+    const maxCol = Math.max(...filled.map((c) => c.col));
+    const occupied = new Set(filled.map((c) => `${c.row},${c.col}`));
+    const has = (row: number, col: number) => occupied.has(`${row},${col}`);
 
-     Letter-blocks mode had no mark at all: `brandMark` is applied in buildClicker, and this is a
-     separate build path that never read the field. An optional feature simply did not exist in
-     one of the app's five import modes, silently, and the only way to find out was to print one.
-
-     Every block rather than just the first, because in this mode each block is its own printed
-     piece, and the mark belongs on the underside of every piece.
-
-     Sizing is per block and clamped the same way buildClicker clamps it: 0.6 of the block's
-     shorter side, so the mark stays clear of the walls and of the corner rounding. A block too
-     small to carry a legible mark gets a smaller one rather than an overhanging one. */
-  function debossMark(block: Solid): Solid {
-    const mark = params.brandMark;
-    if (!mark || mark.rings.length === 0) return block;
-    const MARK_DEPTH = 0.6;
-    const bb = block.boundingBox();
-    const cx = (bb.min[0] + bb.max[0]) / 2;
-    const cy = (bb.min[1] + bb.max[1]) / 2;
-    const maxSide = Math.min(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1]) * 0.6;
-    const size = Math.min(Math.max(3, mark.sizeMm), maxSide);
-    // Negated X is the mirror: the underside is read from below. One CrossSection with NonZero
-    // over all rings, so counters stay holes and overlapping shapes merge — see buildClicker.
-    const polys = mark.rings
-      .filter((ring) => ring.length >= 3)
-      .map((ring) => ring.map(([x, y]) => [-x * size + cx, y * size + cy] as [number, number]));
-    if (!polys.length) return block;
-    const section = track(CrossSection.ofPolygons(polys, 'NonZero'));
-    if (section.isEmpty()) return block;
-    // From just below the underside up to MARK_DEPTH above it: the overshoot guarantees a clean
-    // cut through the face rather than a coplanar one, which renders as z-fighting.
-    const cut = track(
-      track(section.extrude(MARK_DEPTH + 0.3)).translate([0, 0, bb.min[2] - 0.3]),
-    );
-    return track(block.subtract(cut));
-  }
-
-  // The socket cut turns with its block, so the switch and the keycap on top of it have
-  // to turn by the same amount to stay aligned with the stem cross.
-  const cellRot: number[] = [];
-  filled.forEach((cell, i) => {
-    const mask = masks[i];
-    const variant = blockVariant(mask);
-    let solid = variant.solid;
-    cellRot.push(variant.rot);
-    /* Switch-pocket fit. Applied per cell rather than in `blockVariant`, because the variants
-       are CACHED and shared between cells — resizing one there would resize every block that
-       happens to have the same connect mask, including on a later rebuild with a different
-       setting. */
-    solid = fitSocket(solid, blocks.socket, params.socketFitPct ?? 0, track);
-    // The keyring loop welds onto a free outer face of one end block, so that block stops
-    // being a shared instance.
-    const loop = keychainLoop(i, N, mask, solid);
-    if (loop) solid = track(solid.add(loop));
-    solid = debossMark(solid);
-    parts.push(meshPart(solid, at(cell), 'body', 'base', params.bodyColorRgb, `block-${i}`));
-    switchPlacements.push({ x: at(cell)[0], y: at(cell)[1], rotation: variant.rot });
-  });
-
-  // ---------- Keycaps + debossed letters ----------
-  const capBlank = track(buildCapBlank(wasm, keycap, params.stemFitMm ?? 0, warnings));
-
-  // Seat the cap AT REST on the switch stem.
-  //
-  // Two numbers set this. The well floor is where the cap bottoms out: keycap.json is
-  // authored with its skirt at Z 0 (the socket's top face), but a block keeps a plate ring
-  // around the switch cut-out, so the floor sits a fraction higher — measured, not assumed,
-  // because the only block material under the cap's own footprint IS that floor. Then the
-  // cap has to sit one full switch travel ABOVE it: the cap is carried by the stem, so if
-  // it rested on the floor the switch could never be pressed. That leaves the cross fully
-  // engaged in the cap's stem tube, stopping `travel` short of bottoming out on the tube's
-  // ceiling — which is exactly how far a keycap is pushed onto a real MX switch.
-  const anyBlock = variantCache.values().next().value?.solid;
-  const floorZ = anyBlock ? Math.max(0, wellFloorZ(anyBlock)) : 0;
-  const capLift = floorZ + Math.max(0, params.travel ?? 4);
-  // The switch itself doesn't move — it latches on that same plate ring.
-  for (const p of switchPlacements) p.z = floorZ;
-
-  // One seated cap blank per distinct block rotation (at most four), so a grid's rotated
-  // blocks keep their stem cross aligned. The cap shell is square, so this only matters
-  // for the stem — the legend is still cut afterwards in world space and stays upright.
-  const capByRot = new Map<number, Solid>();
-  const capFor = (rot: number): Solid => {
-    const key = ((rot % 360) + 360) % 360;
-    const hit = capByRot.get(key);
-    if (hit) return hit;
-    const rotated = key ? track(capBlank.rotate([0, 0, key])) : capBlank;
-    const seated = capLift > 0.001 ? track(rotated.translate([0, 0, capLift])) : rotated;
-    capByRot.set(key, seated);
-    return seated;
-  };
-
-  const topZ = keycap.meta.topZ + capLift;
-  const dishBottomZ = (keycap.meta.dishBottomZ ?? keycap.meta.topZ - 2) + capLift;
-  // Legend size: one scale for the whole word (so "i" isn't blown up to "W" size),
-  // driven by the tallest/widest glyph and capped to the cap's flat top.
-  const capTop = keycap.meta.topExtent?.[0] ?? 15.2;
-  const maxLegend = Math.max(6, capTop - 4.2); // keep the legend off the cap's shoulders
-  let tallest = 0;
-  let widest = 0;
-  for (const c of filled) {
-    const b = ringsBBox(c.region.rings);
-    if (isFinite(b.h)) tallest = Math.max(tallest, b.h);
-    if (isFinite(b.w)) widest = Math.max(widest, b.w);
-  }
-  // parseBlockChain hands over one shared scale for the letters (and its own for icons),
-  // so the biggest slot in the chain sets the size and the rest stay in proportion.
-  const sizeMul = Math.min(1.6, Math.max(0.4, params.legendScale ?? 1));
-  const legendScale = (maxLegend / Math.max(tallest, widest, 1e-6)) * sizeMul;
-  // Fixed: 0.8 mm is four 0.2 mm layers of legend colour, which is what a multi-colour
-  // print needs to read cleanly. It was a slider, but there is no good reason to move it.
-  const debossDepth = 0.8;
-  // "Boldness": grow (or thin) every legend outline in the plane before it is cut. Lucide
-  // symbols are hairline strokes, so this is what makes them printable at all.
-  const bold = Math.max(-0.35, Math.min(0.9, params.legendBold ?? 0));
-
-  for (let i = 0; i < N; i++) {
-    const cell = filled[i];
-    const offset = at(cell);
-    const capOriented = capFor(cellRot[i]);
-    const region = cell.region;
-    const b = ringsBBox(region.rings);
-    const gcx = (b.minX + b.maxX) / 2;
-    const gcy = (b.minY + b.maxY) / 2;
-
-    const polys: Ring[] = [];
-    for (const ring of region.rings) {
-      if (ring.length < 3) continue;
-      const scaled: Ring = ring.map(([x, y]) => [
-        (x - gcx) * legendScale,
-        (y - gcy) * legendScale,
-      ]);
-      if (ringArea(scaled) > 0.0005) polys.push(scaled);
-    }
-
-    let capBody: Solid = capOriented;
-    let letterBody: Solid | null = null;
-
-    if (polys.length === 0) {
-      warnings.push(`Letter ${i + 1} has no printable outline. Its cap is blank.`);
-    } else {
-      try {
-        let legend = track(new CrossSection(polys, 'NonZero'));
-        if (Math.abs(bold) > 0.005) {
-          const grown = track(legend.offset(bold, 'Round', 2.0, 24));
-          if (!grown.isEmpty()) legend = grown;
+    // Which key carries the keyring loop: the one furthest towards the chosen side, and on a
+    // tie (every key in a row shares a Y, so "top" ties across all of them) the one closest to
+    // the middle, which is where a hanger looks deliberate rather than lopsided.
+    const loopSide = params.keychainEnd ?? 'left';
+    const loopCellIndex = (() => {
+      const along = (c: { row: number; col: number }) =>
+        loopSide === 'left' ? -c.col
+        : loopSide === 'right' ? c.col
+        : loopSide === 'top' ? -c.row
+        : c.row;
+      const across = (c: { row: number; col: number }) =>
+        loopSide === 'left' || loopSide === 'right' ? c.row - (minRow + maxRow) / 2
+                                                   : c.col - (minCol + maxCol) / 2;
+      let best = 0;
+      filled.forEach((c, i) => {
+        const b = filled[best];
+        if (along(c) > along(b) || (along(c) === along(b) && Math.abs(across(c)) < Math.abs(across(b)))) {
+          best = i;
         }
-        // Deboss depth is measured from the LOWEST cap surface under the legend, so the
-        // letter body is at least `debossDepth` thick everywhere despite the dish.
-        const loZ = lowestSurfaceZ(capOriented, legend, dishBottomZ, topZ);
-        const bottomZ = loZ - debossDepth;
-        const prism = track(
-          track(Manifold.extrude(legend, topZ + 3 - bottomZ)).translate([0, 0, bottomZ]),
-        );
-        const cut = track(capOriented.subtract(prism));
-        const ink = track(capOriented.intersect(prism));
-        if (!ink.isEmpty()) {
-          capBody = cut;
-          letterBody = ink;
-        } else {
-          warnings.push(`Letter ${i + 1} did not reach the cap surface.`);
-        }
-      } catch {
-        warnings.push(`Letter ${i + 1} could not be engraved (bad outline).`);
-      }
-    }
+      });
+      return best;
+    })();
 
-    // Caps are individually recolourable (clicked in the viewport); the palette's Caps row
-    // clears those overrides and sets them all back to one colour.
-    const capName = `cap-${i}`;
-    const capRgb = params.partOverrides?.[capName] ?? params.baseFilamentRgb;
-    parts.push(meshPart(capBody, offset, 'cap', 'top', capRgb, capName));
-    if (letterBody) {
-      parts.push(meshPart(letterBody, offset, 'cap', 'top', region.filamentRgb, region.partName));
-    }
-  }
+    /** Keyring loop on the outer face beside one key, or null when the keychain is off.
+     *  A disc with a ring hole, welded to that face by a bridge that reaches back into the
+     *  body, flush with the body's underside so the whole thing still prints flat. */
+    const keychainLoop = (): Solid | null => {
+      const kc = params.keychain;
+      if (!kc?.enabled) return null;
+      const cell = filled[loopCellIndex];
+      // Prefer the face the user asked for; fall back to any free face if that one is taken
+      // by a neighbour (a left-side loop on a vertical column, say).
+      const free = { left: !has(cell.row, cell.col - 1), right: !has(cell.row, cell.col + 1),
+                     top: !has(cell.row - 1, cell.col), bottom: !has(cell.row + 1, cell.col) };
+      const order: (keyof typeof free)[] = [loopSide, 'left', 'right', 'top', 'bottom'];
+      const side = order.find((s) => free[s]);
+      if (!side) return null;
 
-  for (const o of trash) {
-    try {
-      o.delete();
-    } catch {
-      /* already freed */
-    }
-  }
-
-  return { parts, switchPlacements, warnings };
-
-  /**
-   * Square off the top edge of the faces that meet a neighbour.
-   *
-   * The shells carry a ~0.05 mm × 0.15 mm edge break on some of their connectable faces
-   * (it is asymmetric — the north+south shell has it on one side only). Two of those meet
-   * at a joint and open a hairline V-groove along the top of the shared wall: invisible on
-   * a print, but it catches the light in the preview and reads as a crack between blocks.
-   *
-   * The fix takes the cross-section from just BELOW the break — where the face is at its
-   * true plane — and uses it to extend the top section outwards along each connecting
-   * direction only, then fills that back up to the top. Nothing else moves: the outer top
-   * chamfer of the free faces is defined by the top section itself, which is left alone.
-   * On a shell without the break this adds nothing at all.
-   */
-  function squareConnectTops(block: Solid, mask: number): Solid {
-    if (!mask) return block;
-    try {
-      const bb = block.boundingBox();
-      const topZ = bb.max[2];
-      const BREAK = 0.4; // depth to look below the top for the true face plane
-      const trueFace = track(block.slice(topZ - BREAK));
-      let section = track(block.slice(topZ - 0.02));
-      if (trueFace.isEmpty() || section.isEmpty()) return block;
-
-      for (const [dir, vec] of [
-        [DIR.N, [0, 1]],
-        [DIR.S, [0, -1]],
-        [DIR.E, [1, 0]],
-        [DIR.W, [-1, 0]],
-      ] as [number, number[]][]) {
-        if (!(mask & dir)) continue;
-        // Smear the top section outwards, then clip it back to the real face plane.
-        section = track(section.add(track(section.translate([vec[0] * 0.12, vec[1] * 0.12]))));
-      }
-      const patchSection = track(section.intersect(trueFace));
-      if (patchSection.isEmpty()) return block;
-      const patch = track(
-        track(Manifold.extrude(patchSection, BREAK)).translate([0, 0, topZ - BREAK]),
-      );
-      return track(block.add(patch));
-    } catch {
-      return block;
-    }
-  }
-
-  /** Keyring loop for the block at `i`, or null when it isn't the end that carries one.
-   *  A disc with a ring hole, welded to the block's OUTER end face by a bridge that
-   *  reaches back into the block, sitting flush with the block's bottom so the whole thing
-   *  still prints flat. Local coordinates, so it rides along with the block instance. */
-  function keychainLoop(i: number, _count: number, mask: number, block: Solid): Solid | null {
-    const kc = params.keychain;
-    if (!kc?.enabled) return null;
-    if (i !== loopCellIndex) return null;
-
-    // Prefer the face the user asked for; fall back to any free face if that one is taken
-    // by a neighbour (a left-side loop on a vertical column, say).
-    const side = params.keychainEnd ?? 'left';
-    const wanted =
-      side === 'right' ? DIR.E : side === 'top' ? DIR.N : side === 'bottom' ? DIR.S : DIR.W;
-    const order = [wanted, DIR.W, DIR.E, DIR.N, DIR.S];
-    const free = order.find((d) => !(mask & d));
-    if (free === undefined) return null;
-
-    const bb = block.boundingBox();
-    const holeR = Math.max(1.5, (kc.holeDiameterMm ?? 5.2) / 2);
-    const loopR = Math.max(3.2, holeR + 1.8);
-    const th = Math.max(2.5, Math.min(5.0, (bb.max[2] - bb.min[2]) * 0.3));
-    const dir: [number, number] =
-      free === DIR.E ? [1, 0] : free === DIR.W ? [-1, 0] : free === DIR.N ? [0, 1] : [0, -1];
-    const face =
-      free === DIR.E ? bb.max[0]
-      : free === DIR.W ? bb.min[0]
-      : free === DIR.N ? bb.max[1]
-      : bb.min[1];
-    /* Slide along the face.
-
-       Two guards, and both matter:
-
-        - Only when the user got the face they ASKED for. `order` above falls back to a
-          perpendicular free face when the wanted one is taken by a neighbour, and `dir` follows
-          the fallback — so an unguarded slide would be measured along the wrong axis and walk
-          the bridge straight off the block.
-        - Clamped to half the block pitch. Past that the bridge stops overlapping its own block
-          and the loop welds tangentially or not at all. `pitch` is the both-ends-halved depth
-          measured off the real assets at worker init, so it errs inward, which is the side to
-          err on. The clamp has to live HERE rather than in the UI because the main thread never
-          sees `pitch` — it is measured in the worker and never crosses back.
-
-       A clamp that is silent is the Size-slider bug again: the number on the control moves and
-       the geometry does not. So an over-run reports itself through `warnings`, which the status
-       line already joins and shows. */
-    const slideLimit = pitch / 2;
-    const asked = free === wanted ? (params.keychainSlideMm ?? 0) : 0;
-    const slide = Math.max(-slideLimit, Math.min(slideLimit, asked));
-    if (Math.abs(asked) > slideLimit + 0.01) {
-      warnings.push(
-        `The keyring can only slide ${slideLimit.toFixed(0)} mm along that side before it comes `
-        + 'off the block. Move it to a different side for more room.',
-      );
-    }
-    // Perpendicular to `dir`, so the bridge stays the same length and keeps its overlap —
-    // the weld is volumetric, never a tangent kiss.
-    const tan: [number, number] = [-dir[1], dir[0]];
-    const cx = dir[0] * (Math.abs(face) + loopR) + tan[0] * slide;
-    const cy = dir[1] * (Math.abs(face) + loopR) + tan[1] * slide;
-
-    // See the note in buildClicker's keychain loop: the outer track() frees the translated
-    // result, not the circle it came from.
-    const disc = track(track(CrossSection.circle(loopR, 64)).translate([cx, cy]));
-    // The bridge starts inside the block (so the union is volumetric, never a tangent
-    // kiss) and runs out to the loop centre.
-    const bridgeLen = loopR + 3;
-    const alongY = dir[1] !== 0;
-    const bridge = track(
-      CrossSection.square(
-        alongY ? [loopR * 2, bridgeLen] : [bridgeLen, loopR * 2],
-        true,
-      ).translate([cx - (dir[0] * bridgeLen) / 2, cy - (dir[1] * bridgeLen) / 2]),
-    );
-    const fp = track(disc.add(bridge));
-    const zBottom = bb.min[2];
-    let loop = track(track(Manifold.extrude(fp, th)).translate([0, 0, zBottom]));
-    // Break the tab's top and bottom rims so it reads as part of the block instead of a
-    // flat sheet stuck to its side (and so the print has no sharp lip to catch on).
-    const bevel = Math.min(0.6, th * 0.25);
-    for (const [z, down] of [
-      [zBottom + th, false],
-      [zBottom, true],
-    ] as [number, boolean][]) {
-      const cutter = edgeBevelCutter(fp, bevel, z, down);
-      if (cutter) loop = track(loop.subtract(cutter));
-    }
-    const hole = track(
-      track(Manifold.extrude(track(track(CrossSection.circle(holeR, 48)).translate([cx, cy])), th + 2))
-        .translate([0, 0, zBottom - 1]),
-    );
-    loop = track(loop.subtract(hole));
-    return loop;
-  }
-
-  /** Cutter that chamfers one horizontal rim of a prism with footprint `fp`: the space
-   *  between the footprint and a copy of it shrunk by `r`, swept over `r` of height. Same
-   *  single-face approach buildClicker uses for the clicker body, so the two match. */
-  function edgeBevelCutter(fp: Section, r: number, zRef: number, isBottom: boolean): Solid | null {
-    if (r < 0.05) return null;
-    try {
-      const b = fp.bounds();
-      const W = b.max[0] - b.min[0];
-      const H = b.max[1] - b.min[1];
-      if (W < 2 * r || H < 2 * r) return null;
-      const cx = (b.min[0] + b.max[0]) / 2;
-      const cy = (b.min[1] + b.max[1]) / 2;
-      const centred = track(fp.translate([-cx, -cy]));
-      const outer = track(centred.offset(0.6, 'Round', 2.0, 16));
-      const shell = track(Manifold.extrude(outer, r + 0.02));
-      const taper = track(
-        Manifold.extrude(centred, r + 0.02, 0, 0, [(W - 2 * r) / W, (H - 2 * r) / H]),
-      );
-      let cutter = track(shell.subtract(taper));
-      if (isBottom) {
-        cutter = track(
-          track(track(cutter.translate([0, 0, -(r + 0.02) / 2])).scale([1, 1, -1]))
-            .translate([0, 0, (r + 0.02) / 2]),
+      const holeR = Math.max(1.5, (kc.holeDiameterMm ?? 5.2) / 2);
+      const loopR = Math.max(3.2, holeR + 1.8);
+      const th = Math.max(2.5, Math.min(5.0, (dims.rimZ - dims.bottomZ) * 0.3));
+      const dir: [number, number] =
+        side === 'right' ? [1, 0] : side === 'left' ? [-1, 0] : side === 'top' ? [0, 1] : [0, -1];
+      const [kx, ky] = centres[loopCellIndex];
+      /* Slide along the face — only on the face the user ASKED for (on a fallback face the
+         slide would be measured along the wrong axis and walk the bridge off the body), and
+         clamped to half a key: past that the bridge stops overlapping the body and the loop
+         welds tangentially or not at all. A clamp that is silent is the Size-slider bug again —
+         the number on the control moves and the geometry does not — so an over-run says so
+         through `warnings`, which the status line shows. */
+      const slideLimit = pitch / 2;
+      const asked = side === loopSide ? (params.keychainSlideMm ?? 0) : 0;
+      const slide = Math.max(-slideLimit, Math.min(slideLimit, asked));
+      if (Math.abs(asked) > slideLimit + 0.01) {
+        warnings.push(
+          `The keyring can only slide ${slideLimit.toFixed(0)} mm along that side before it comes `
+          + 'off the block. Move it to a different side for more room.',
         );
       }
-      return track(cutter.translate([cx, cy, isBottom ? zRef - 0.02 : zRef - r]));
-    } catch {
-      return null;
-    }
-  }
+      // Perpendicular to `dir`, so the bridge stays the same length and keeps its overlap.
+      const tan: [number, number] = [-dir[1], dir[0]];
+      const cx = kx + dir[0] * (halfCell + loopR) + tan[0] * slide;
+      const cy = ky + dir[1] * (halfCell + loopR) + tan[1] * slide;
 
-  /** Height of the keycap well's floor in `block`, measured by dropping the cap's own
-   *  footprint through it: the cap is narrower than the well, so the only material the
-   *  prism can hit is the plate ring below the well. Returns 0 if nothing is in the way. */
-  function wellFloorZ(block: Solid): number {
-    try {
-      const bb = block.boundingBox();
-      const fp = track(capBlank.project());
-      const prism = track(
-        track(Manifold.extrude(fp, bb.max[2] - bb.min[2] + 2)).translate([0, 0, bb.min[2] - 1]),
+      const disc = track(track(CrossSection.circle(loopR, 64)).translate([cx, cy]));
+      // The bridge starts inside the body (so the union is volumetric, never a tangent kiss)
+      // and runs out to the loop centre.
+      const bridgeLen = loopR + 3;
+      const alongY = dir[1] !== 0;
+      const bridge = track(
+        track(CrossSection.square(alongY ? [loopR * 2, bridgeLen] : [bridgeLen, loopR * 2], true))
+          .translate([cx - (dir[0] * bridgeLen) / 2, cy - (dir[1] * bridgeLen) / 2]),
       );
-      const under = track(block.intersect(prism));
-      if (under.isEmpty()) return 0;
-      const ub = under.boundingBox();
-      // Sanity: the floor must be near Z 0, not the block rim (which would mean the
-      // footprint clipped a wall and the measurement is meaningless).
-      return ub.max[2] > 0 && ub.max[2] < 3 ? ub.max[2] : 0;
-    } catch {
-      return 0;
-    }
-  }
+      const fp = track(disc.add(bridge));
+      const zBottom = dims.bottomZ;
+      let loop = track(track(extrude(wasm, fp, th)).translate([0, 0, zBottom]));
+      // Break the tab's top and bottom rims so it reads as part of the body instead of a flat
+      // sheet stuck to its side (and so the print has no sharp lip to catch on).
+      const bevel = Math.min(0.6, th * 0.25);
+      for (const [z, down] of [
+        [zBottom + th, false],
+        [zBottom, true],
+      ] as [number, boolean][]) {
+        const cutter = edgeBevelCutter(fp, bevel, z, down);
+        if (cutter) loop = track(loop.subtract(cutter));
+      }
+      const hole = track(
+        track(extrude(wasm, track(track(CrossSection.circle(holeR, 48)).translate([cx, cy])), th + 2))
+          .translate([0, 0, zBottom - 1]),
+      );
+      return track(loop.subtract(hole));
+    };
 
-  /** Lowest point of the cap's top surface over `legend`: the highest Z at which the cap
-   *  still completely covers the legend footprint. Binary search over slices — no
-   *  raycaster, and it follows whatever dish the cap profile has. */
-  function lowestSurfaceZ(cap: Solid, legend: Section, lo: number, hi: number): number {
-    const covered = (z: number): boolean => {
+    /** Cutter that chamfers one horizontal rim of a prism with footprint `fp`: the space
+     *  between the footprint and a copy of it shrunk by `r`, swept over `r` of height. Same
+     *  single-face approach buildClicker uses for the clicker body, so the two match. */
+    const edgeBevelCutter = (fp: Section, r: number, zRef: number, isBottom: boolean): Solid | null => {
+      if (r < 0.05) return null;
       try {
-        const cs = cap.slice(z);
-        const outside = legend.subtract(cs);
-        const empty = outside.isEmpty ? outside.isEmpty() : outside.area() < 1e-6;
-        cs.delete();
-        outside.delete();
-        return empty;
+        const b = fp.bounds();
+        const W = b.max[0] - b.min[0];
+        const H = b.max[1] - b.min[1];
+        if (W < 2 * r || H < 2 * r) return null;
+        const cx = (b.min[0] + b.max[0]) / 2;
+        const cy = (b.min[1] + b.max[1]) / 2;
+        const centred = track(fp.translate([-cx, -cy]));
+        const outer = track(centred.offset(0.6, 'Round', 2.0, 16));
+        const shell = track(extrude(wasm, outer, r + 0.02));
+        const taper = track(extrude(wasm, centred, r + 0.02, 0, 0, [(W - 2 * r) / W, (H - 2 * r) / H]));
+        let cutter = track(shell.subtract(taper));
+        if (isBottom) {
+          cutter = track(
+            track(track(cutter.translate([0, 0, -(r + 0.02) / 2])).scale([1, 1, -1]))
+              .translate([0, 0, (r + 0.02) / 2]),
+          );
+        }
+        return track(cutter.translate([cx, cy, isBottom ? zRef - 0.02 : zRef - r]));
       } catch {
-        return false;
+        return null;
       }
     };
-    if (!covered(lo)) return hi; // legend overhangs the cap top — fall back to a flat cut
-    let a = lo;
-    let bZ = hi;
-    for (let k = 0; k < 12; k++) {
-      const mid = (a + bZ) / 2;
-      if (covered(mid)) a = mid;
-      else bZ = mid;
-    }
-    return a;
-  }
 
-  /** Covert provenance voids, identical in spirit to the ones buildClicker buries in the
-   *  clicker body: each sphere is only subtracted when it lands fully inside material, so
-   *  it can never break a surface. Applied per block variant (each block is its own
-   *  printed part, so each one carries the mark). */
-  function applyIdentityVoids(block: Solid): Solid {
-    let out = block;
-    const seed = getMarkSeed();
-    const all = [...(seed ? markVoids(seed) : []), ...hardcodedVoids()];
-    for (const v of all) {
-      const ang = (v.thetaDeg * Math.PI) / 180;
-      const sphere = track(
-        track(Manifold.sphere(v.d / 2, 16)).translate([
-          v.r * Math.cos(ang),
-          v.r * Math.sin(ang),
-          v.z,
-        ]),
-      );
-      try {
-        const inter = track(out.intersect(sphere));
-        if (inter.volume() >= sphere.volume() * 0.98) out = track(out.subtract(sphere));
-      } catch {
-        /* skip this void */
+    /* The maker's mark, debossed into the underside — the one large, flat, support-free face.
+
+       Under the key nearest the middle of the body, rather than at the middle of its bounding
+       box, which for an L or a WASD cluster can fall outside the body altogether. Sized the
+       way buildClicker sizes it, clamped to 0.6 of a key so it stays clear of the walls and of
+       the corner rounding. One mark: the body is one printed piece now. */
+    const debossMark = (part: Solid): Solid => {
+      const mark = params.brandMark;
+      if (!mark || mark.rings.length === 0) return part;
+      const MARK_DEPTH = 0.6;
+      const bb = part.boundingBox();
+      const mx = (bb.min[0] + bb.max[0]) / 2;
+      const my = (bb.min[1] + bb.max[1]) / 2;
+      let [cx, cy] = centres[0];
+      for (const [x, y] of centres) if (Math.hypot(x - mx, y - my) < Math.hypot(cx - mx, cy - my)) [cx, cy] = [x, y];
+      const maxSide = 2 * halfCell * 0.6;
+      const size = Math.min(Math.max(3, mark.sizeMm), maxSide);
+      // Negated X is the mirror: the underside is read from below. One CrossSection with NonZero
+      // over all rings, so counters stay holes and overlapping shapes merge — see buildClicker.
+      const polys = mark.rings
+        .filter((ring) => ring.length >= 3)
+        .map((ring) => ring.map(([x, y]) => [-x * size + cx, y * size + cy] as [number, number]));
+      if (!polys.length) return part;
+      const section = track(csOf(wasm, polys, 'NonZero'));
+      if (section.isEmpty()) return part;
+      // From just below the underside up to MARK_DEPTH above it: the overshoot guarantees a
+      // clean cut through the face rather than a coplanar one, which renders as z-fighting.
+      const cut = track(track(extrude(wasm, section, MARK_DEPTH + 0.3)).translate([0, 0, bb.min[2] - 0.3]));
+      return track(part.subtract(cut));
+    };
+
+    /** Covert provenance voids, identical in spirit to the ones buildClicker buries in the
+     *  clicker body: each sphere is only subtracted when it lands fully inside material, so it
+     *  can never break a surface. Laid out round the first key, the frame the CAD blocks had. */
+    const applyIdentityVoids = (part: Solid): Solid => {
+      let out = part;
+      const [ox, oy] = centres[0];
+      const seed = getMarkSeed();
+      const all = [...(seed ? markVoids(seed) : []), ...hardcodedVoids()];
+      for (const v of all) {
+        const ang = (v.thetaDeg * Math.PI) / 180;
+        const sphere = track(
+          track(Manifold.sphere(v.d / 2, 16)).translate([
+            ox + v.r * Math.cos(ang),
+            oy + v.r * Math.sin(ang),
+            v.z,
+          ]),
+        );
+        try {
+          const inter = track(out.intersect(sphere));
+          if (inter.volume() >= sphere.volume() * 0.98) out = track(out.subtract(sphere));
+        } catch {
+          /* skip this void */
+        }
+      }
+      return out;
+    };
+
+    solid = applyIdentityVoids(solid);
+    const loop = keychainLoop();
+    if (loop) solid = track(solid.add(loop));
+    solid = debossMark(solid);
+    // One body. Named like the blocks it replaces so every `block-N` match in the app (colour
+    // picking, the body palette row) still finds it.
+    parts.push(meshPart(solid, [0, 0], 'body', 'base', params.bodyColorRgb, 'block-0'));
+    // The switch latches on the plate under the well floor, which is where the shells had it.
+    for (const [x, y] of centres) switchPlacements.push({ x, y, rotation: 0, z: dims.floorZ });
+
+    // ---------- Keycaps + debossed letters ----------
+    const capBlank = track(buildCapBlank(wasm, keycap, params.stemFitMm ?? 0, warnings));
+
+    // Seat the cap AT REST on the switch stem: one full switch travel above the well floor.
+    // The cap is carried by the stem, so if it rested on the floor the switch could never be
+    // pressed. That leaves the cross fully engaged in the cap's stem tube, stopping `travel`
+    // short of bottoming out on the tube's ceiling — which is exactly how far a keycap is
+    // pushed onto a real MX switch.
+    const capLift = dims.floorZ + Math.max(0, params.travel ?? 4);
+    const cap = capLift > 0.001 ? track(capBlank.translate([0, 0, capLift])) : capBlank;
+
+    const topZ = keycap.meta.topZ + capLift;
+    const dishBottomZ = (keycap.meta.dishBottomZ ?? keycap.meta.topZ - 2) + capLift;
+    // Legend size: one scale for the whole word (so "i" isn't blown up to "W" size),
+    // driven by the tallest/widest glyph and capped to the cap's flat top.
+    const capTop = keycap.meta.topExtent?.[0] ?? 15.2;
+    const maxLegend = Math.max(6, capTop - 4.2); // keep the legend off the cap's shoulders
+    let tallest = 0;
+    let widest = 0;
+    for (const c of filled) {
+      const b = ringsBBox(c.region.rings);
+      if (isFinite(b.h)) tallest = Math.max(tallest, b.h);
+      if (isFinite(b.w)) widest = Math.max(widest, b.w);
+    }
+    // parseBlockChain hands over one shared scale for the letters (and its own for icons),
+    // so the biggest slot in the chain sets the size and the rest stay in proportion.
+    const sizeMul = Math.min(1.6, Math.max(0.4, params.legendScale ?? 1));
+    const legendScale = (maxLegend / Math.max(tallest, widest, 1e-6)) * sizeMul;
+    // Fixed: 0.8 mm is four 0.2 mm layers of legend colour, which is what a multi-colour
+    // print needs to read cleanly. It was a slider, but there is no good reason to move it.
+    const debossDepth = 0.8;
+    // "Boldness": grow (or thin) every legend outline in the plane before it is cut. Thin
+    // symbols are hairline strokes, so this is what makes them printable at all.
+    const bold = Math.max(-0.35, Math.min(0.9, params.legendBold ?? 0));
+
+    for (let i = 0; i < N; i++) {
+      const cell = filled[i];
+      const offset = centres[i];
+      const region = cell.region;
+      const b = ringsBBox(region.rings);
+      const gcx = (b.minX + b.maxX) / 2;
+      const gcy = (b.minY + b.maxY) / 2;
+
+      const polys: Ring[] = [];
+      for (const ring of region.rings) {
+        if (ring.length < 3) continue;
+        const scaled: Ring = ring.map(([x, y]) => [(x - gcx) * legendScale, (y - gcy) * legendScale]);
+        if (ringArea(scaled) > 0.0005) polys.push(scaled);
+      }
+
+      let capBody: Solid = cap;
+      let letterBody: Solid | null = null;
+
+      if (polys.length === 0) {
+        warnings.push(`Letter ${i + 1} has no printable outline. Its cap is blank.`);
+      } else {
+        try {
+          let legend = track(csOf(wasm, polys, 'NonZero'));
+          if (Math.abs(bold) > 0.005) {
+            const grown = track(legend.offset(bold, 'Round', 2.0, 24));
+            if (!grown.isEmpty()) legend = grown;
+          }
+          // Deboss depth is measured from the LOWEST cap surface under the legend, so the
+          // letter body is at least `debossDepth` thick everywhere despite the dish.
+          const loZ = lowestSurfaceZ(cap, legend, dishBottomZ, topZ);
+          const bottomZ = loZ - debossDepth;
+          const prism = track(track(extrude(wasm, legend, topZ + 3 - bottomZ)).translate([0, 0, bottomZ]));
+          const cut = track(cap.subtract(prism));
+          const ink = track(cap.intersect(prism));
+          if (!ink.isEmpty()) {
+            capBody = cut;
+            letterBody = ink;
+          } else {
+            warnings.push(`Letter ${i + 1} did not reach the cap surface.`);
+          }
+        } catch {
+          warnings.push(`Letter ${i + 1} could not be engraved (bad outline).`);
+        }
+      }
+
+      // Caps are individually recolourable (clicked in the viewport); the palette's Caps row
+      // clears those overrides and sets them all back to one colour.
+      const capName = `cap-${i}`;
+      const capRgb = params.partOverrides?.[capName] ?? params.baseFilamentRgb;
+      parts.push(meshPart(capBody, offset, 'cap', 'top', capRgb, capName));
+      if (letterBody) {
+        parts.push(meshPart(letterBody, offset, 'cap', 'top', region.filamentRgb, region.partName));
       }
     }
-    return out;
+
+    return { parts, switchPlacements, warnings };
+  } finally {
+    for (const o of trash) {
+      try {
+        o.delete();
+      } catch {
+        /* already freed */
+      }
+    }
   }
+}
+
+/** Lowest point of the cap's top surface over `legend`: the highest Z at which the cap still
+ *  completely covers the legend footprint. Binary search over slices — no raycaster, and it
+ *  follows whatever dish the cap profile has. */
+function lowestSurfaceZ(cap: Solid, legend: Section, lo: number, hi: number): number {
+  const covered = (z: number): boolean => {
+    try {
+      const cs = cap.slice(z);
+      const outside = legend.subtract(cs);
+      const empty = outside.isEmpty ? outside.isEmpty() : outside.area() < 1e-6;
+      cs.delete();
+      outside.delete();
+      return empty;
+    } catch {
+      return false;
+    }
+  };
+  if (!covered(lo)) return hi; // legend overhangs the cap top — fall back to a flat cut
+  let a = lo;
+  let bZ = hi;
+  for (let k = 0; k < 12; k++) {
+    const mid = (a + bZ) / 2;
+    if (covered(mid)) a = mid;
+    else bZ = mid;
+  }
+  return a;
 }

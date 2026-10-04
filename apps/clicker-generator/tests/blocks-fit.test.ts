@@ -26,7 +26,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Module from 'manifold-3d';
 import { parse3MF } from '../src/geometry/threemfImport.ts';
-import { buildBlocks, prepareBlockAssets } from '../src/geometry/buildBlocks.ts';
+import { buildBlocks } from '../src/geometry/buildBlocks.ts';
 import type { BuildParams, BuildRegion, ClickerPart } from '../src/types.ts';
 
 const A = (p: string) =>
@@ -47,20 +47,7 @@ function normalisedSocket(buf: ArrayBuffer) {
   return out;
 }
 
-/** A block shell, raw — `prepareBlockAssets` does its own normalisation. */
-function rawSolid(buf: ArrayBuffer) {
-  const raw = parse3MF(buf);
-  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.vertProperties, triVerts: raw.triVerts });
-  mesh.merge();
-  return wasm.Manifold.ofMesh(mesh);
-}
-
 const socket = normalisedSocket(A('switch/mx/mx-socket.3mf'));
-const blocks = prepareBlockAssets(wasm, socket, {
-  noSides: rawSolid(A('blocks/block no sides to connect.3mf')),
-  south: rawSolid(A('blocks/block south side to connect.3mf')),
-  northSouth: rawSolid(A('blocks/block north and south side to connect.3mf')),
-} as never);
 
 const keycapJson = JSON.parse(
   readFileSync(join(process.cwd(), 'apps/clicker-generator/public/assets/keycap.json'), 'utf-8'),
@@ -117,7 +104,7 @@ const volOf = (parts: ClickerPart[], pred: (p: ClickerPart) => boolean): number 
 };
 
 const run = (p: Partial<BuildParams>) =>
-  buildBlocks(wasm, blocks, keycapAsset as never, regions, { ...base, ...p });
+  buildBlocks(wasm, socket, keycapAsset as never, regions, { ...base, ...p });
 
 const isBlock = (p: ClickerPart) => p.name.startsWith('block-');
 const isCap = (p: ClickerPart) => !p.name.startsWith('block-');

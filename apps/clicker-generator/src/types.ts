@@ -234,6 +234,11 @@ export interface BuildParams {
   // ---- Letter-block mode ----
   /** Arrangement: a row, a column, or a grid that wraps at `blockColumns`. */
   blockOrientation?: BlockOrientation;
+  /** A wall between every key (the original blocks), or one open well round them all, like a
+   *  keyboard. Absent = 'walls'. */
+  blockStyle?: BlockStyle;
+  /** The outside of the block body. Absent = 'smooth'. */
+  blockTexture?: BlockTexture;
   /** Columns per row when the layout is 'grid'. */
   blockColumns?: number;
   /** Legend size multiplier on the keycap (1 = the default fit). */
@@ -268,17 +273,17 @@ export type BlockSlot =
   | { kind: 'icon'; name: string }
   | { kind: 'empty' };
 
-/** 'grid' is implemented in the geometry (and covered by the headless tests) but is NOT
- *  offered in the UI, because the current shells can't tile one cleanly:
- *   • They are 0.34 mm wider than they are deep, and a grid puts neighbours 90° apart, so
- *     every rotated joint pairs a wide face with a narrow one (0.17–0.34 mm of slop).
- *   • A wall with no neighbour stays FULL, which is 0.875 mm thicker than a halved one —
- *     so in a non-rectangular shape (an L, a WASD cluster) two diagonal blocks run their
- *     full outer walls into each other's corner.
- *  Both go away if the block CAD is made square; then this can be re-exposed as-is. */
+/** Which side of a block set the keyring loop hangs from. */
 export type KeychainSide = 'left' | 'right' | 'top' | 'bottom';
 
+/** A row, a column, or a grid that wraps at `blockColumns`. A grid tiles cleanly in any shape
+ *  now that the body is generated rather than assembled from CAD shells (geometry/keyBody.ts). */
 export type BlockOrientation = 'horizontal' | 'vertical' | 'grid';
+
+/** Letter blocks: walls between the keys, or none. */
+export type BlockStyle = 'walls' | 'open';
+/** Letter blocks: what the outside of the body looks like. */
+export type BlockTexture = 'smooth' | 'knurl' | 'ribs' | 'flutes' | 'dots' | 'chevron';
 
 /** Mesh payload (transferable). First 3 of each `numProp` stride are x,y,z. */
 export interface MeshData {
@@ -327,12 +332,6 @@ export type GeometryRequest =
       socket: ArrayBuffer; 
       stem: ArrayBuffer; 
       switch: ArrayBuffer;
-      blockNoSides?: ArrayBuffer;
-      blockSouth?: ArrayBuffer;
-      blockNorthSouth?: ArrayBuffer;
-      blockNorthWest?: ArrayBuffer;
-      blockNorthSouthWest?: ArrayBuffer;
-      blockAllSides?: ArrayBuffer;
       keycapJson?: any;
     }
   | {
