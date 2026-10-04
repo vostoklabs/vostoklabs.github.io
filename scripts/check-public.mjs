@@ -19,8 +19,8 @@
 */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { join, dirname } from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -185,6 +185,23 @@ if (mode === '--hook') {
   try { command = JSON.parse(input)?.tool_input?.command ?? ''; } catch { process.exit(0); }
   // Only a real `git ... commit` invocation, not text that mentions one.
   if (!/(^|[;&|\n(]|\$\()\s*git(\s+-[A-Za-z-]+(\s+(?!commit\b)[^\s;&|-]\S*)?)*\s+commit\b/.test(command)) process.exit(0);
+  // The commit runs in the tree the command names (`cd X && git commit`, `git -C X commit`),
+  // which is not always the one this script lives in: a worktree is its own checkout. Check that
+  // tree's pending changes, with that tree's copy of this script.
+  const dir = /^\s*cd\s+("([^"]+)"|'([^']+)'|(\S+))\s*&&/.exec(command) ?? /\bgit\s+-C\s+("([^"]+)"|'([^']+)'|(\S+))/.exec(command);
+  if (dir) {
+    let top = '';
+    try { top = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: dir[2] ?? dir[3] ?? dir[4], encoding: 'utf8' }).trim(); } catch {}
+    if (top && resolve(top).toLowerCase() !== resolve(ROOT).toLowerCase()) {
+      const r = spawnSync(process.execPath, [join(top, 'scripts', 'check-public.mjs'), '--staged'], { cwd: top, encoding: 'utf8' });
+      const own = report(scanText(null, command));
+      if (r.status !== 0 || own.length) {
+        process.stderr.write(`${r.stderr ?? ''}${own.length ? `check:public (command text):\n${own.join('\n')}\n` : ''}`);
+        process.exit(2);
+      }
+      process.exit(0);
+    }
+  }
   const lines = report([...scanPending(), ...scanText(null, command)]);
   if (lines.length) fail(lines, true);
   process.exit(0);
