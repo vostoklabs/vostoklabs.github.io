@@ -483,7 +483,8 @@ for (const id of readdirSync(appsDir)) {
 
   if (CHECK) {
     if (!existsSync(out)) { stale.push(`${id}: public/THIRD-PARTY-NOTICES.txt is missing`); continue; }
-    if (readFileSync(out, 'utf8') !== text) stale.push(`${id}: public/THIRD-PARTY-NOTICES.txt is out of date`);
+    // Line endings aside: a Windows checkout turns every LF into CRLF, which is not staleness.
+    if (readFileSync(out, 'utf8').split('\r\n').join('\n') !== text) stale.push(`${id}: public/THIRD-PARTY-NOTICES.txt is out of date`);
     continue;
   }
   if (!existsSync(publicDir)) mkdirSync(publicDir, { recursive: true });
