@@ -157,6 +157,119 @@ body {
 .kit-swatch__name { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
 .kit-swatch__val { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 
+/* ---------- Demo surfaces ---------- */
+/* Boxes the demos sit in, never a style for a kit component. */
+.kit-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+.kit-stack--pad { padding: var(--space-4); }
+
+/* A list at a panel's width, rows flush: listRow() brings its own padding. */
+.kit-list {
+  inline-size: 320px;
+  max-inline-size: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+
+/* The page's own drawing of a line of text with symbols in it, as an app's preview would show it. */
+.kit-symbol-preview {
+  margin: 0;
+  min-block-size: 1.4em;
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.kit-symbol-preview svg {
+  inline-size: 1em;
+  block-size: 1em;
+  margin-inline: 0.06em;
+  vertical-align: -0.14em;
+}
+
+/* A stand-in stage: positioned, so the stage overlays find their slots in it. */
+.kit-stage {
+  position: relative;
+  block-size: 460px;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+/* The "model": a lid and a base on a plate, drawn by the page where the viewer's canvas would be.
+   The base is 100 px tall and 200 px wide because the cut grip is placed on it in px. */
+.kit-model {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  inline-size: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: gap var(--dur-in-md) var(--ease-standard);
+}
+.kit-model.is-exploded { gap: 30px; }
+.kit-model__lid,
+.kit-model__base {
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+}
+.kit-model__lid { block-size: 44px; }
+.kit-model__base { position: relative; block-size: 100px; box-sizing: border-box; }
+.kit-model__plate {
+  block-size: 8px;
+  margin-inline: -48px;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+}
+.kit-model__cut {
+  position: absolute;
+  left: -16px;
+  right: -16px;
+  border-top: 2px dashed var(--accent-2);
+}
+
+/* Centres a placeholder where a stage's canvas would sit. */
+.kit-stage-fill {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+}
+
+/* A settings rail at a panel's size and a fixed height. */
+.kit-rail-frame {
+  display: flex;
+  flex-direction: column;
+  block-size: 400px;
+  inline-size: 440px;
+  max-inline-size: 100%;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+
+/* A whole-window layout in a framed box at a fixed height. It spans the window rather than the
+   page column, because the layouts size their columns in vw; the gutter keeps it clear of the
+   edges with a scrollbar showing. */
+.kit-window {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  block-size: min(560px, 85dvh);
+  margin-inline: calc((100% - 100vw) / 2 + var(--space-4));
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+
 /* ---------- Footer ---------- */
 .kit-footer {
   margin-top: var(--space-6);

@@ -33,6 +33,9 @@ export interface AppShellOptions {
   stage?: (HTMLElement | Node)[];
   /** Right panel (fonts / output / export). */
   right: PanelOptions;
+  /** Fill the box it is placed in instead of the window: a preview inside a page, or a host's
+   *  frame. Default: the window (`100dvh`), which is what an app wants. */
+  contained?: boolean;
 }
 
 export interface AppShell {
@@ -76,7 +79,9 @@ export function appShell(opts: AppShellOptions): AppShell {
      dead space, which also means they resize every time a panel's content changes. An embedded
      build is exactly the case that omits the bar, so every MakerLab embed had it. */
   const root = el('main', {
-    className: [left ? 'vl-app' : 'vl-app vl-app--2col', opts.topbar ? '' : 'vl-app--no-topbar'].filter(Boolean).join(' '),
+    className: [left ? 'vl-app' : 'vl-app vl-app--2col', opts.topbar ? '' : 'vl-app--no-topbar', opts.contained ? 'vl-app--contained' : '']
+      .filter(Boolean)
+      .join(' '),
   });
   if (opts.topbar) root.append(opts.topbar);
   if (left) root.append(left.panel);

@@ -20,6 +20,10 @@
 }
 .vl-app > .vl-topbar { grid-column: 1 / -1; }
 
+/* `appShell({ contained: true })`: fill the box it is placed in, not the window. A preview of
+   the shell inside a page (kit-demo) is the case; an app never sets it. */
+.vl-app.vl-app--contained { min-height: 0; max-height: none; height: 100%; }
+
 /* No topbar — an embedded build, where the host draws its own chrome.
    The rows above exist for a bar that is not there, so without this the panels are placed in
    the `auto` row and sized to their CONTENT: a 532 px band of app at the top of a 920 px window,

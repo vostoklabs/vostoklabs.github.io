@@ -36,9 +36,10 @@ import { ROOT, rel as relRoot, blankComments, ignored } from './lib/source.mjs';
   UI blocks missing from kit-demo. Lower it when the check says so; never raise it. A new UI
   block is shown in kit-demo in the same change that adds it.
 
-  23 on 2026-10-04, the day the catalogue was written.
+  23 on 2026-10-04, the day the catalogue was written; 1 the same evening, when kit-demo gained
+  the other 22 (the one left is the pattern picker, from a package kit-demo does not use).
 */
-const KIT_DEMO_MISSING_BUDGET = 23;
+const KIT_DEMO_MISSING_BUDGET = 1;
 
 /** The catalogue's sections, in reading order. A block's `category` is one of these keys. */
 const CATEGORIES = {

@@ -16,6 +16,8 @@
   background: var(--bg);
   color: var(--text);
 }
+/* `designShell({ contained: true })`: fill the box it is placed in, not the window. */
+.vl-editor.vl-editor--contained { min-height: 0; max-height: none; height: 100%; }
 .vl-editor__body { display: grid; min-height: 0; }
 .vl-editor__body > * { min-height: 0; }
 

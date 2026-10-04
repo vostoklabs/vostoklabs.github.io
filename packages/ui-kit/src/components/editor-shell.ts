@@ -119,6 +119,9 @@ export function suiteBar<T extends string = string>(opts: SuiteBarOptions<T>): S
 export interface DesignShellOptions {
   topbar: HTMLElement;
   statusbar?: HTMLElement;
+  /** Fill the box it is placed in instead of the window, as `appShell({ contained })` does.
+   *  Default: the window. */
+  contained?: boolean;
 }
 
 export interface DesignShell {
@@ -129,7 +132,7 @@ export interface DesignShell {
 
 export function designShell(opts: DesignShellOptions): DesignShell {
   const body = el('div', { className: 'vl-editor__body' });
-  const root = el('main', { className: 'vl-editor' }, [opts.topbar, body]);
+  const root = el('main', { className: opts.contained ? 'vl-editor vl-editor--contained' : 'vl-editor' }, [opts.topbar, body]);
   if (opts.statusbar) root.append(opts.statusbar);
   return {
     root,

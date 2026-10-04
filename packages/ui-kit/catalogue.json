@@ -38,7 +38,7 @@
     { "name": "Undo/redo buttons", "category": "ui", "use": ["historyControls"], "for": "The undo, refresh and redo buttons. The history itself is still each app's own." },
     { "name": "Stage overlays", "category": "ui", "use": ["modeBar", "stagePanel", "stageTools", "previewBar", "stageHandle"], "with": ["stepper", "stageRow"], "for": "Controls floating on the 3D or 2D stage: the click-mode pill, the bottom panel, the view switches, and a grip on the model with its value." },
     { "name": "Status line", "category": "ui", "use": ["stageStatus"], "for": "The one-line status at the bottom left of the stage: what the generator is doing, or what is wrong. Announced to screen readers." },
-    { "name": "Keyboard shortcuts list", "category": "ui", "use": ["keyMap"], "for": "A readable table of the keyboard shortcuts." },
+    { "name": "Key grid", "category": "ui", "use": ["keyMap"], "for": "A small map of a grid of keys laid out exactly as they will sit, each showing its legend; tapping a cell adds or removes a key, which is how a custom block layout is drawn." },
     { "name": "Changelog", "category": "ui", "use": ["changelogButton", "openChangelog"], "with": ["changelogList"], "for": "The update timeline, opened from its button into a drawer." },
     { "name": "What's new card", "category": "ui", "use": ["showWhatsNew", "maybeShowWhatsNew"], "for": "A card listing what changed, shown once per version." },
     { "name": "Export panel", "category": "ui", "use": ["exportPanel"], "with": ["setExportNote", "buildExportMetadata"], "for": "Format buttons with a busy state and a note. No app uses it yet: the generators export from the Sidebar footer." },
