@@ -41,16 +41,9 @@ const LICENCE_FILE = {
 
 /* The typeface JSONs each app also bundles. They are three.js example fonts, not .ttf files,
    so there is no name table to read; their attribution is stated here and the MgOpen notice is
-   read from the app's own `src/typefaces/LICENSE` so it ships verbatim. */
+   read from the app's own `src/typefaces/LICENSE` so it ships verbatim. The clicker is not here:
+   it takes its fonts from @vostok/fonts, and its THIRD-PARTY-NOTICES.txt carries its typefaces. */
 const APPS = [
-  {
-    id: 'clicker-generator',
-    typefaces: [
-      { shownAs: 'Standard, Standard Bold', file: 'helvetiker_regular / helvetiker_bold',
-        origin: 'three.js example font, derived from MgOpen Moderna', holder: 'MAGENTA Ltd, 2004',
-        licence: 'MgOpen licence (below)' },
-    ],
-  },
   {
     id: 'keycap-generator',
     typefaces: [

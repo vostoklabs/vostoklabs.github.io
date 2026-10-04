@@ -84,7 +84,7 @@ export const HALLOWEEN: Pack = {
     { id: 'web',               name: 'Cobweb',            file: 'web.png' },
   ],
 
-  /* Creepster is already bundled (see public/fonts) and licensed OFL, so the pack costs
+  /* Creepster is already bundled (@vostok/fonts) and licensed OFL, so the pack costs
      nothing to suggest it.
 
      NOTHING READS THIS YET, or `palette` below. Both were written against an `onPackApply`
