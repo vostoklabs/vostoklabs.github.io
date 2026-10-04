@@ -52,15 +52,24 @@ function fontLines() {
   return names;
 }
 
-/** What the font files themselves declare. Verified 2026-09-18 by reading nameID 13
- *  and 14 out of all 153 TTFs and cross-checking each family against the directory
- *  it lives in upstream (`ofl/` vs `apache/` in google/fonts, which IS the licence):
- *  140 OFL-1.1, 12 Apache-2.0, and the symbol font. Nothing else. */
+/** What the font files themselves declare. Verified 2026-10-04 for all 251 faces against the
+ *  directory each family lives in upstream (`ofl/` vs `apache/` in google/fonts, which IS the
+ *  licence) and the licence its METADATA.pb names: 236 OFL-1.1, 15 Apache-2.0, plus the symbol
+ *  font. Every family whose OFL.txt declares a Reserved Font Name ships as its original file
+ *  (packages/fonts/scripts/fetch-fonts.mjs, ORIGINALS), so no modified copy carries one. */
 const FONT_LICENCES = `  All bundled typefaces come from Google Fonts and are licensed under either the
   SIL Open Font License 1.1 or the Apache License 2.0. Both permit embedding and
   bundling in commercial software, and the OFL states explicitly that documents
   created with the font are not restricted by it — so anything you export from
   this generator is yours, with no attribution owed for the lettering.
+
+  What the files are. Most are Google Fonts' own Latin builds of each family, as
+  its font API serves them. A family whose licence reserves its name ships as the
+  family's original file from the google/fonts repository, unmodified, because a
+  modified copy may not carry a Reserved Font Name. The Korean, Japanese and
+  Chinese faces were cut by Vostok Labs to the common characters of their
+  alphabet, and Noto Sans SC pinned to its Black weight; those changes are ours,
+  and every file stays under its original licence.
 
   SIL Open Font License 1.1   https://openfontlicense.org
   Apache License 2.0          https://www.apache.org/licenses/LICENSE-2.0
@@ -156,9 +165,16 @@ function licenceOf(appDir, name, extraDirs = []) {
     const j = JSON.parse(readFileSync(c, 'utf8'));
     const license = typeof j.license === 'string' ? j.license : j.license?.type
       ?? (Array.isArray(j.licenses) ? j.licenses.map((l) => l.type ?? l).join(' OR ') : undefined);
-    if (license) return { version: j.version, license };
+    if (license) return { version: j.version, license, text: licenceFileIn(join(c, '..')) };
   }
   return null;
+}
+
+/** The licence file a package ships beside its package.json, as text. MIT, ISC and Apache all
+ *  ask for the notice itself to travel, not the name of the licence. */
+function licenceFileIn(dir) {
+  const file = readdirSync(dir).find((f) => /^(licen[cs]e|copying)(\.(md|txt))?$/i.test(f));
+  return file ? readFileSync(join(dir, file), 'utf8').split('\r\n').join('\n').trim() : null;
 }
 
 /** The dependencies of one of our own workspace packages, read from packages/<x>/package.json.
@@ -205,16 +221,54 @@ function libsFor(appDir, pkg) {
   visit(pkg.dependencies);
   const deps = [...collected];
   const out = [];
+  const texts = [];
   const unresolved = [];
   for (const d of deps.sort()) {
     const info = licenceOf(appDir, d, ownerDirs);
-    if (info?.license) out.push(`  ${d}${info.version ? ` ${info.version}` : ''} — ${info.license}`);
+    const label = `${d}${info?.version ? ` ${info.version}` : ''}`;
+    if (info?.license) out.push(`  ${label} — ${info.license}`);
     else { out.push(`  ${d} — see its package for licence terms`); unresolved.push(d); }
+    if (info?.text) texts.push(`--- ${label} ---\n\n${info.text}`);
   }
   // A licence we could not read is a licence nobody has checked, and invariant #6
   // ("no GPL in a shipped bundle") is only worth anything if this file can prove it.
   if (unresolved.length) console.warn(`  ! could not read a licence for: ${unresolved.join(', ')} — run pnpm install`);
-  return out;
+  return { lines: out, texts };
+}
+
+/** Typefaces an app vendors itself in three.js's typeface format (`src/typefaces/`), each with
+ *  the copyright and licence its own file carries. The clicker's Standard pair is MgOpen's,
+ *  whose licence asks for its notice in every copy. */
+function appTypefacesSection(appDir, number) {
+  const dir = join(appDir, 'src', 'typefaces');
+  if (!existsSync(dir)) return '';
+  const files = [];
+  const walk = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(join(d, e.name));
+      else if (e.name.endsWith('.typeface.json')) files.push(join(d, e.name));
+    }
+  };
+  walk(dir);
+  if (!files.length) return '';
+  const byLicence = new Map();
+  for (const f of files.sort()) {
+    const info = JSON.parse(readFileSync(f, 'utf8')).original_font_information ?? {};
+    const licence = (info.license_description || info.license_url || 'see the font file').split('\r\n').join('\n').trim();
+    const entry = byLicence.get(licence) ?? [];
+    entry.push(`  ${info.full_font_name || f.split(/[\\/]/).pop()}: ${(info.copyright || '').trim()}`);
+    byLicence.set(licence, entry);
+  }
+  const blocks = [...byLicence].map(([licence, faces]) => `${faces.join('\n')}\n\n${licence.split('\n').map((l) => `  ${l}`.trimEnd()).join('\n')}`);
+  return `
+
+${number}. TYPEFACES BUNDLED WITH THIS APP
+${'-'.repeat(60)}
+
+  Converted to three.js's typeface format; the outlines are the fonts' own.
+
+${blocks.join('\n\n')}
+`;
 }
 
 // ─────────────────────────────── emit ───────────────────────────────
@@ -345,7 +399,7 @@ export function noticesText(appName, pkg, appDir) {
   const bundlesPatterns = !!pkg.dependencies?.['@vostok/patterns'];
   const bundlesSymbols = usesSymbolCatalog(appDir);
   const fonts = bundlesFonts ? fontLines() : [];
-  const libs = libsFor(appDir, pkg);
+  const { lines: libs, texts: libTexts } = libsFor(appDir, pkg);
   const patternSection = bundlesPatterns ? patternTilesSection(bundlesFonts ? 3 : 1) : '';
   const symbolNumber = (bundlesFonts ? 2 : 0) + (bundlesPatterns ? 1 : 0) + 1;
   const symbolSection = bundlesSymbols ? symbolArtSection(symbolNumber) : '';
@@ -367,7 +421,9 @@ ${ICON_NOTICE}
 
 `
     : '';
-  const libHeading = `${symbolNumber + (bundlesSymbols ? 1 : 0)}. RUNTIME LIBRARIES`;
+  const facesNumber = symbolNumber + (bundlesSymbols ? 1 : 0);
+  const appFaces = appTypefacesSection(appDir, facesNumber);
+  const libHeading = `${facesNumber + (appFaces ? 1 : 0)}. RUNTIME LIBRARIES`;
   return `THIRD-PARTY NOTICES
 ${'='.repeat(60)}
 
@@ -380,7 +436,7 @@ licences it is used under. It ships with every distribution of the app.
 Nothing here restricts what you may do with a file you EXPORT from this
 generator — see the application's own licence for that.
 
-${fontSections}${patternSection}${symbolSection}
+${fontSections}${patternSection}${symbolSection}${appFaces}
 
 ${libHeading}
 ${'-'.repeat(60)}
@@ -394,7 +450,14 @@ ${'-'.repeat(60)}
 ${libs.length ? libs.join('\n') : '  (none)'}
 
 
-${bundlesFonts ? fontAppendix() : ''}
+${bundlesFonts ? fontAppendix() : ''}${libTexts.length ? `
+${'='.repeat(60)}
+LIBRARY LICENCES (full text)
+${'='.repeat(60)}
+
+${libTexts.join('\n\n\n')}
+
+` : ''}
 ${'='.repeat(60)}
 Questions about any of the above: see the project's licence, or get in touch.
 `;

@@ -4,7 +4,7 @@ import { FontLoader, Font } from 'three/examples/jsm/loaders/FontLoader.js';
 // folder after 0.171, so the old imports break on any newer version. See typefaces/README.md.
 import helvetikerRegular from '../typefaces/helvetiker_regular.typeface.json';
 import helvetikerBold from '../typefaces/helvetiker_bold.typeface.json';
-import { FONTS, getFont, importFontFiles, pathCommandsToPolygons } from '@vostok/fonts';
+import { FONTS, fontSupportsText, getFont, getRequiredSubsets, importFontFiles, pathCommandsToPolygons } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg } from './lucideIcons';
 import { parseSvg } from './logo';
 import type { BlockSlot, LegendLook, RegionSet, Ring, RGB } from '../types';
@@ -127,6 +127,57 @@ export function fontHasText(id: string, text: string): boolean {
   if (!f) return true;
   for (const ch of text) if (/[\p{L}\p{N}]/u.test(ch) && !f.has(ch)) return false;
   return true;
+}
+
+/** The letters of a text, without its symbols (private-use characters no face has). */
+const lettersOf = (text: string) => Array.from(text).filter((ch) => (ch.codePointAt(0) ?? 0) < 0xf0000).join('');
+
+/** Can this face draw every letter and digit of `text`? The Standard pair (and an imported
+ *  typeface) answers from its glyphs, every shared face from the coverage its file was measured
+ *  to have, so a face that is not loaded yet is judged too. */
+export function fontWritesText(id: string, text: string): boolean {
+  const letters = lettersOf(text);
+  return STANDARD_FONTS.some((f) => f.id === id) ? fontHasText(id, letters) : fontSupportsText(id, letters);
+}
+
+const ALPHABETS: Record<string, string> = {
+  cyrillic: 'Cyrillic', greek: 'Greek', korean: 'Korean', kana: 'Japanese', japanese: 'Japanese',
+  'chinese-simplified': 'Chinese', 'latin-ext': 'accented',
+};
+
+/** What `text` needs beyond plain Latin, as the shared library names it ('cyrillic', 'kana'…). */
+const needsOf = (text: string) => new Set(getRequiredSubsets(lettersOf(text)).flatMap((need) => need.split('|')));
+
+/** The first alphabet `text` needs beyond plain Latin, by name ("Cyrillic"), for a message. An
+ *  accented Latin letter needs no subset but can still be missing from a face: "accented". */
+export function alphabetOf(text: string): string | null {
+  for (const name of needsOf(text)) if (ALPHABETS[name]) return ALPHABETS[name];
+  return /[^\x00-\x7f]/.test(Array.from(lettersOf(text)).filter((ch) => /\p{L}/u.test(ch)).join('')) ? 'accented' : null;
+}
+
+/** The plain face for each alphabet, most telling first: a text with kana in it is Japanese
+ *  whatever else it holds, Hangul is Korean, a Han character with neither is Chinese. Gothic A1
+ *  also writes Cyrillic and Greek, so a Korean name mixed with Russian still lands on one face. */
+const PLAIN_FACES: [need: string, face: string][] = [
+  ['kana', 'm-plus-1p'],
+  ['korean', 'gothic-a1'],
+  ['chinese-simplified', 'noto-sans-sc'],
+  ['greek', 'gothic-a1'],
+  ['cyrillic', 'montserrat'],
+  ['latin-ext', 'montserrat'],
+];
+/** The plain faces, for a text that needs none of them by alphabet (accented Latin, say). */
+const PLAIN_ORDER = ['montserrat', 'gothic-a1', 'm-plus-1p', 'noto-sans-sc'];
+
+/** Every face that writes `text`: Standard when it can, then the plain face for the alphabet it
+ *  needs (and the other plain faces), then the rest in library order. Text in an alphabet
+ *  Standard lacks therefore starts on a face that suits it, rather than on whichever display
+ *  face comes first alphabetically. */
+export function facesThatWrite(text: string): string[] {
+  const needs = needsOf(text);
+  const plain = [...PLAIN_FACES.filter(([need]) => needs.has(need)).map(([, face]) => face), ...PLAIN_ORDER];
+  const lead = [...new Set([...STANDARD_FONTS.map((f) => f.id), ...plain])].filter((id) => fontWritesText(id, text));
+  return [...lead, ...fontOptions().map((f) => f.id).filter((id) => !lead.includes(id) && fontWritesText(id, text))];
 }
 
 /**

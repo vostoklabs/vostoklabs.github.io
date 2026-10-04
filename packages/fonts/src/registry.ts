@@ -10,7 +10,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 53500
+    "bytes": 67364
   },
   {
     "id": "aldrich",
@@ -66,7 +66,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 91272
+    "bytes": 97376
   },
   {
     "id": "allura",
@@ -145,7 +145,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 37476
+    "bytes": 38780
   },
   {
     "id": "audiowide",
@@ -156,7 +156,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 46408
+    "bytes": 69916
   },
   {
     "id": "bad-script",
@@ -247,7 +247,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 51204
+    "bytes": 58400
   },
   {
     "id": "bevan",
@@ -273,7 +273,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 149332
+    "bytes": 173280
   },
   {
     "id": "black-han-sans",
@@ -306,7 +306,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 23888
+    "bytes": 33960
   },
   {
     "id": "bowlby-one",
@@ -316,7 +316,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 39196
+    "bytes": 59856
   },
   {
     "id": "bowlby-one-sc",
@@ -326,7 +326,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 46780
+    "bytes": 55200
   },
   {
     "id": "bree-serif",
@@ -337,7 +337,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 40212
+    "bytes": 46572
   },
   {
     "id": "bungee",
@@ -381,7 +381,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 62740
+    "bytes": 66100
   },
   {
     "id": "cabin",
@@ -437,7 +437,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 18316
+    "bytes": 22736
   },
   {
     "id": "cherry-bomb-one",
@@ -470,7 +470,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 37028
+    "bytes": 41032
   },
   {
     "id": "chonburi",
@@ -503,7 +503,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 55460
+    "bytes": 60408
   },
   {
     "id": "comfortaa",
@@ -518,7 +518,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 110000
+    "bytes": 137180
   },
   {
     "id": "comic-neue",
@@ -561,7 +561,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 68368
+    "bytes": 71028
   },
   {
     "id": "cookie",
@@ -571,7 +571,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 34220
+    "bytes": 43800
   },
   {
     "id": "courgette",
@@ -582,7 +582,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 112472
+    "bytes": 122072
   },
   {
     "id": "coustard",
@@ -603,7 +603,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 57492
+    "bytes": 62724
   },
   {
     "id": "crete-round",
@@ -614,7 +614,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 51508
+    "bytes": 59312
   },
   {
     "id": "cutive-mono",
@@ -648,7 +648,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 76340
+    "bytes": 83600
   },
   {
     "id": "days-one",
@@ -656,9 +656,10 @@ export const FONTS: FontChoice[] = [
     "category": "Display",
     "curated": false,
     "subsets": [
+      "cyrillic",
       "latin"
     ],
-    "bytes": 43564
+    "bytes": 65580
   },
   {
     "id": "dela-gothic-one",
@@ -695,7 +696,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 45160
+    "bytes": 63052
   },
   {
     "id": "dm-mono",
@@ -751,7 +752,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 79120
+    "bytes": 83928
   },
   {
     "id": "eb-garamond",
@@ -772,7 +773,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 51228
+    "bytes": 55712
   },
   {
     "id": "ewert",
@@ -782,7 +783,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 67112
+    "bytes": 70752
   },
   {
     "id": "exo-2",
@@ -804,7 +805,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 83812
+    "bytes": 94044
   },
   {
     "id": "faustina",
@@ -859,7 +860,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 178096
+    "bytes": 184784
   },
   {
     "id": "fredoka",
@@ -879,7 +880,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 220044
+    "bytes": 227860
   },
   {
     "id": "fugaz-one",
@@ -889,7 +890,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 23748
+    "bytes": 27868
   },
   {
     "id": "gaegu",
@@ -943,7 +944,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 33692
+    "bytes": 37352
   },
   {
     "id": "gothic-a1",
@@ -971,7 +972,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 59744
+    "bytes": 65012
   },
   {
     "id": "grandstander",
@@ -993,7 +994,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 33876
+    "bytes": 41448
   },
   {
     "id": "great-vibes",
@@ -1016,7 +1017,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 197620
+    "bytes": 208776
   },
   {
     "id": "gruppo",
@@ -1053,7 +1054,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 35908
+    "bytes": 39132
   },
   {
     "id": "henny-penny",
@@ -1063,7 +1064,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 79548
+    "bytes": 92596
   },
   {
     "id": "homemade-apple",
@@ -1081,10 +1082,13 @@ export const FONTS: FontChoice[] = [
     "category": "Mono",
     "curated": false,
     "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
       "latin",
-      "latin-ext"
+      "latin-ext",
+      "vietnamese"
     ],
-    "bytes": 64256
+    "bytes": 135580
   },
   {
     "id": "iceland",
@@ -1094,7 +1098,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 32932
+    "bytes": 47632
   },
   {
     "id": "inconsolata",
@@ -1191,7 +1195,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 36024
+    "bytes": 39800
   },
   {
     "id": "josefin-sans",
@@ -1203,7 +1207,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 57844
+    "bytes": 53488
   },
   {
     "id": "josefin-slab",
@@ -1213,7 +1217,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 28544
+    "bytes": 21220
   },
   {
     "id": "jua",
@@ -1283,7 +1287,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 174424
+    "bytes": 210672
   },
   {
     "id": "khand",
@@ -1302,10 +1306,9 @@ export const FONTS: FontChoice[] = [
     "category": "Slab",
     "curated": false,
     "subsets": [
-      "latin",
-      "latin-ext"
+      "latin"
     ],
-    "bytes": 43264
+    "bytes": 35452
   },
   {
     "id": "lacquer",
@@ -1324,9 +1327,10 @@ export const FONTS: FontChoice[] = [
     "curated": false,
     "subsets": [
       "latin",
-      "latin-ext"
+      "latin-ext",
+      "vietnamese"
     ],
-    "bytes": 55308
+    "bytes": 99892
   },
   {
     "id": "libre-baskerville",
@@ -1347,7 +1351,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 25732
+    "bytes": 28092
   },
   {
     "id": "literata",
@@ -1372,7 +1376,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 392208
+    "bytes": 406076
   },
   {
     "id": "lobster-two",
@@ -1382,7 +1386,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 204780
+    "bytes": 254332
   },
   {
     "id": "lora",
@@ -1396,7 +1400,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 132188
+    "bytes": 188336
   },
   {
     "id": "luckiest-guy",
@@ -1469,7 +1473,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 42176
+    "bytes": 46004
   },
   {
     "id": "marck-script",
@@ -1481,7 +1485,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 81208
+    "bytes": 83664
   },
   {
     "id": "martian-mono",
@@ -1500,10 +1504,13 @@ export const FONTS: FontChoice[] = [
     "category": "Serif",
     "curated": false,
     "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
       "latin",
-      "latin-ext"
+      "latin-ext",
+      "vietnamese"
     ],
-    "bytes": 320716
+    "bytes": 156096
   },
   {
     "id": "metal-mania",
@@ -1556,7 +1563,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 48116
+    "bytes": 51604
   },
   {
     "id": "montserrat",
@@ -1592,7 +1599,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 159092
+    "bytes": 173224
   },
   {
     "id": "niconne",
@@ -1602,7 +1609,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 38972
+    "bytes": 45616
   },
   {
     "id": "norican",
@@ -1623,7 +1630,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 41000
+    "bytes": 43272
   },
   {
     "id": "nothing-you-could-do",
@@ -1669,7 +1676,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 78216
+    "bytes": 87968
   },
   {
     "id": "nunito",
@@ -1693,7 +1700,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 16176
+    "bytes": 36340
   },
   {
     "id": "oswald",
@@ -1768,7 +1775,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 56584
+    "bytes": 61248
   },
   {
     "id": "passion-one",
@@ -1778,7 +1785,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 20344
+    "bytes": 24940
   },
   {
     "id": "patrick-hand",
@@ -1800,7 +1807,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 30960
+    "bytes": 35624
   },
   {
     "id": "paytone-one",
@@ -1812,7 +1819,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 110408
+    "bytes": 114648
   },
   {
     "id": "permanent-marker",
@@ -1833,7 +1840,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 156920
+    "bytes": 175068
   },
   {
     "id": "petrona",
@@ -1866,7 +1873,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 51428
+    "bytes": 56316
   },
   {
     "id": "pixelify-sans",
@@ -1890,7 +1897,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 123240
+    "bytes": 210208
   },
   {
     "id": "podkova",
@@ -1926,7 +1933,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 115280
+    "bytes": 118204
   },
   {
     "id": "pt-serif",
@@ -1934,10 +1941,12 @@ export const FONTS: FontChoice[] = [
     "category": "Serif",
     "curated": false,
     "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
       "latin",
       "latin-ext"
     ],
-    "bytes": 97556
+    "bytes": 359048
   },
   {
     "id": "quantico",
@@ -1947,7 +1956,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 14584
+    "bytes": 20940
   },
   {
     "id": "quicksand",
@@ -1959,7 +1968,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 73224
+    "bytes": 110268
   },
   {
     "id": "racing-sans-one",
@@ -1970,7 +1979,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 109432
+    "bytes": 145796
   },
   {
     "id": "rajdhani",
@@ -1989,10 +1998,13 @@ export const FONTS: FontChoice[] = [
     "category": "Clean",
     "curated": false,
     "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
       "latin",
-      "latin-ext"
+      "latin-ext",
+      "vietnamese"
     ],
-    "bytes": 84140
+    "bytes": 132000
   },
   {
     "id": "rammetto-one",
@@ -2003,7 +2015,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 65920
+    "bytes": 69392
   },
   {
     "id": "ranchers",
@@ -2014,7 +2026,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 128864
+    "bytes": 167420
   },
   {
     "id": "reenie-beanie",
@@ -2035,7 +2047,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 38848
+    "bytes": 43104
   },
   {
     "id": "roboto-mono",
@@ -2252,7 +2264,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 37452
+    "bytes": 40040
   },
   {
     "id": "russo-one",
@@ -2264,7 +2276,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 36816
+    "bytes": 39124
   },
   {
     "id": "rye",
@@ -2274,7 +2286,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 176252
+    "bytes": 183244
   },
   {
     "id": "sacramento",
@@ -2284,7 +2296,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 61944
+    "bytes": 79696
   },
   {
     "id": "saira-condensed",
@@ -2293,9 +2305,10 @@ export const FONTS: FontChoice[] = [
     "curated": false,
     "subsets": [
       "latin",
-      "latin-ext"
+      "latin-ext",
+      "vietnamese"
     ],
-    "bytes": 61956
+    "bytes": 95068
   },
   {
     "id": "sanchez",
@@ -2306,7 +2319,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 61204
+    "bytes": 72552
   },
   {
     "id": "sancreek",
@@ -2314,9 +2327,10 @@ export const FONTS: FontChoice[] = [
     "category": "Display",
     "curated": false,
     "subsets": [
-      "latin"
+      "latin",
+      "latin-ext"
     ],
-    "bytes": 44104
+    "bytes": 93252
   },
   {
     "id": "sansita",
@@ -2390,7 +2404,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 35720
+    "bytes": 43272
   },
   {
     "id": "short-stack",
@@ -2400,7 +2414,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 53316
+    "bytes": 68152
   },
   {
     "id": "shrikhand",
@@ -2453,7 +2467,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 68548
+    "bytes": 75212
   },
   {
     "id": "sora",
@@ -2472,10 +2486,14 @@ export const FONTS: FontChoice[] = [
     "category": "Mono",
     "curated": false,
     "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
+      "greek",
       "latin",
-      "latin-ext"
+      "latin-ext",
+      "vietnamese"
     ],
-    "bytes": 54676
+    "bytes": 212880
   },
   {
     "id": "space-mono",
@@ -2519,7 +2537,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 17136
+    "bytes": 19072
   },
   {
     "id": "sriracha",
@@ -2614,7 +2632,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 42020
+    "bytes": 55712
   },
   {
     "id": "titillium-web",
@@ -2773,7 +2791,7 @@ export const FONTS: FontChoice[] = [
       "latin-ext",
       "vietnamese"
     ],
-    "bytes": 103264
+    "bytes": 108016
   },
   {
     "id": "zcool-kuaile",

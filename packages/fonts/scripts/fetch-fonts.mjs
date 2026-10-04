@@ -344,6 +344,108 @@ const UPSTREAM = {
   'comic-relief': { file: 'ofl/comicrelief/ComicRelief-Bold.ttf', for: ['cyrillic', 'greek'] },
 };
 
+/** Faces whose licence reserves their name. OFL 3 lets no Modified Version use a Reserved Font
+ *  Name, and the font API serves Google's own Latin cut of each family, which is a Modified
+ *  Version. So these ship as the family's original file from google/fonts, byte for byte
+ *  (`upstream()` checks the file on disk against it). A family google/fonts now carries only as a
+ *  variable font comes from the commit at which its own static Regular was last there.
+ *
+ *  The list is every face from the API whose licence file (OFL.txt in its google/fonts folder)
+ *  declares a Reserved Font Name. A face added from the API later needs the same check. */
+const ORIGINALS = {
+  'abril-fatface': 'ofl/abrilfatface/AbrilFatface-Regular.ttf',
+  'alfa-slab-one': 'ofl/alfaslabone/AlfaSlabOne-Regular.ttf',
+  'arvo': 'ofl/arvo/Arvo-Regular.ttf',
+  'audiowide': 'ofl/audiowide/Audiowide-Regular.ttf',
+  'berkshire-swash': 'ofl/berkshireswash/BerkshireSwash-Regular.ttf',
+  'bitter': ['ofl/bitter/static/Bitter-Regular.ttf', 'e57fc4e6dc99bf9b6e0c32e4fe952e02c46361e9'],
+  'boogaloo': 'ofl/boogaloo/Boogaloo-Regular.ttf',
+  'bowlby-one': 'ofl/bowlbyone/BowlbyOne-Regular.ttf',
+  'bowlby-one-sc': 'ofl/bowlbyonesc/BowlbyOneSC-Regular.ttf',
+  'bree-serif': 'ofl/breeserif/BreeSerif-Regular.ttf',
+  'butcherman': 'ofl/butcherman/Butcherman-Regular.ttf',
+  'changa-one': 'ofl/changaone/ChangaOne-Regular.ttf',
+  'chicle': 'ofl/chicle/Chicle-Regular.ttf',
+  'cinzel-decorative': 'ofl/cinzeldecorative/CinzelDecorative-Regular.ttf',
+  'comfortaa': ['ofl/comfortaa/static/Comfortaa-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
+  'concert-one': 'ofl/concertone/ConcertOne-Regular.ttf',
+  'cookie': 'ofl/cookie/Cookie-Regular.ttf',
+  'courgette': 'ofl/courgette/Courgette-Regular.ttf',
+  'creepster': 'ofl/creepster/Creepster-Regular.ttf',
+  'crete-round': 'ofl/creteround/CreteRound-Regular.ttf',
+  'dancing-script': ['ofl/dancingscript/static/DancingScript-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
+  'days-one': 'ofl/daysone/DaysOne-Regular.ttf',
+  'delius-swash-caps': 'ofl/deliusswashcaps/DeliusSwashCaps-Regular.ttf',
+  'eater': 'ofl/eater/Eater-Regular.ttf',
+  'electrolize': 'ofl/electrolize/Electrolize-Regular.ttf',
+  'ewert': 'ofl/ewert/Ewert-Regular.ttf',
+  'faster-one': 'ofl/fasterone/FasterOne-Regular.ttf',
+  'flavors': 'ofl/flavors/Flavors-Regular.ttf',
+  'frijole': 'ofl/frijole/Frijole-Regular.ttf',
+  'fugaz-one': 'ofl/fugazone/FugazOne-Regular.ttf',
+  'gochi-hand': 'ofl/gochihand/GochiHand-Regular.ttf',
+  'grand-hotel': 'ofl/grandhotel/GrandHotel-Regular.ttf',
+  'gravitas-one': 'ofl/gravitasone/GravitasOne.ttf',
+  'griffy': 'ofl/griffy/Griffy-Regular.ttf',
+  'handlee': 'ofl/handlee/Handlee-Regular.ttf',
+  'henny-penny': 'ofl/hennypenny/HennyPenny-Regular.ttf',
+  'ibm-plex-mono': 'ofl/ibmplexmono/IBMPlexMono-Regular.ttf',
+  'iceland': 'ofl/iceland/Iceland-Regular.ttf',
+  'jolly-lodger': 'ofl/jollylodger/JollyLodger-Regular.ttf',
+  'josefin-sans': ['ofl/josefinsans/static/JosefinSans-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
+  'josefin-slab': ['ofl/josefinslab/static/JosefinSlab-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
+  'kaushan-script': 'ofl/kaushanscript/KaushanScript-Regular.ttf',
+  'kreon': ['ofl/kreon/static/Kreon-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
+  'lexend': ['ofl/lexend/Lexend-Regular.ttf', '2ef72759514b9399d24adab6cf21143c3036a23b'],
+  'lilita-one': 'ofl/lilitaone/LilitaOne-Regular.ttf',
+  'lobster': 'ofl/lobster/Lobster-Regular.ttf',
+  'lobster-two': 'ofl/lobstertwo/LobsterTwo-Regular.ttf',
+  'lora': ['ofl/lora/static/Lora-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
+  'marcellus': 'ofl/marcellus/Marcellus-Regular.ttf',
+  'marck-script': 'ofl/marckscript/MarckScript-Regular.ttf',
+  'merriweather': ['ofl/merriweather/Merriweather-Regular.ttf', 'e9263a54d43d89ddcf351c5ae8ab2179f1aebc89'],
+  'monoton': 'ofl/monoton/Monoton-Regular.ttf',
+  'new-rocker': 'ofl/newrocker/NewRocker-Regular.ttf',
+  'niconne': 'ofl/niconne/Niconne-Regular.ttf',
+  'nosifer': 'ofl/nosifer/Nosifer-Regular.ttf',
+  'nova-square': 'ofl/novasquare/NovaSquare.ttf',
+  'orbitron': ['ofl/orbitron/static/Orbitron-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
+  'parisienne': 'ofl/parisienne/Parisienne-Regular.ttf',
+  'passion-one': 'ofl/passionone/PassionOne-Regular.ttf',
+  'patua-one': 'ofl/patuaone/PatuaOne-Regular.ttf',
+  'paytone-one': 'ofl/paytoneone/PaytoneOne-Regular.ttf',
+  'petit-formal-script': 'ofl/petitformalscript/PetitFormalScript-Regular.ttf',
+  'pirata-one': 'ofl/pirataone/PirataOne-Regular.ttf',
+  'playfair-display': ['ofl/playfairdisplay/static/PlayfairDisplay-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
+  'press-start-2p': 'ofl/pressstart2p/PressStart2P-Regular.ttf',
+  'pt-serif': 'ofl/ptserif/PT_Serif-Web-Regular.ttf',
+  'quantico': 'ofl/quantico/Quantico-Regular.ttf',
+  'quicksand': ['ofl/quicksand/static/Quicksand-Regular.ttf', '76e64ff83360759b52135bc07393310509497386'],
+  'racing-sans-one': 'ofl/racingsansone/RacingSansOne-Regular.ttf',
+  'raleway': ['ofl/raleway/static/Raleway-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
+  'rammetto-one': 'ofl/rammettoone/RammettoOne-Regular.ttf',
+  'ranchers': 'ofl/ranchers/Ranchers-Regular.ttf',
+  'righteous': 'ofl/righteous/Righteous-Regular.ttf',
+  'rufina': 'ofl/rufina/Rufina-Regular.ttf',
+  'russo-one': 'ofl/russoone/RussoOne-Regular.ttf',
+  'rye': 'ofl/rye/Rye-Regular.ttf',
+  'sacramento': 'ofl/sacramento/Sacramento-Regular.ttf',
+  'saira-condensed': 'ofl/sairacondensed/SairaCondensed-Regular.ttf',
+  'sanchez': 'ofl/sanchez/Sanchez-Regular.ttf',
+  'sancreek': 'ofl/sancreek/Sancreek-Regular.ttf',
+  'share-tech-mono': 'ofl/sharetechmono/ShareTechMono-Regular.ttf',
+  'short-stack': 'ofl/shortstack/ShortStack-Regular.ttf',
+  'sniglet': 'ofl/sniglet/Sniglet-Regular.ttf',
+  'source-code-pro': ['ofl/sourcecodepro/SourceCodePro-Regular.ttf', '85c7f10bdbca85b4bcbc2c2b3761ec60513d7a57'],
+  'squada-one': 'ofl/squadaone/SquadaOne-Regular.ttf',
+  'titan-one': 'ofl/titanone/TitanOne-Regular.ttf',
+  'yeseva-one': 'ofl/yesevaone/YesevaOne-Regular.ttf',
+};
+for (const [slug, src] of Object.entries(ORIGINALS)) {
+  const [file, commit] = Array.isArray(src) ? src : [src];
+  UPSTREAM[slug] = { file, ...(commit ? { commit } : {}), for: ['latin'] };
+}
+
 /** What a NEW face is fetched from the font API with.
  *
  *  The API serves a handful of prebuilt subset combinations rather than cutting one
@@ -466,17 +568,19 @@ function problemWith(buf, spec) {
   return null;
 }
 
-const CACHE = path.join(APP, 'node_modules', '.cache', 'google-fonts', GOOGLE_FONTS.split('/').pop());
+const PINNED = GOOGLE_FONTS.split('/').pop();
 
-/** The original file from google/fonts, downloaded once into node_modules/.cache. */
-async function fetchUpstream(file) {
+/** The original file from google/fonts at `commit` (the pinned one unless a spec names its own),
+ *  downloaded once into node_modules/.cache. */
+async function fetchUpstream(file, commit = PINNED) {
   if (!/^(ofl|apache)\//.test(file)) throw new Error(`${file}: only ofl/ and apache/ are cleared for bundling`);
-  const cached = path.join(CACHE, file.replace(/\//g, '__'));
+  const cached = path.join(APP, 'node_modules', '.cache', 'google-fonts', commit, file.replace(/\//g, '__'));
   if (existsSync(cached)) return readFileSync(cached);
-  const r = await fetch(`${GOOGLE_FONTS}/${file.split('/').map(encodeURIComponent).join('/')}`);
+  const base = GOOGLE_FONTS.replace(PINNED, commit);
+  const r = await fetch(`${base}/${file.split('/').map(encodeURIComponent).join('/')}`);
   if (!r.ok) throw new Error(`${file}: HTTP ${r.status}`);
   const buf = Buffer.from(await r.arrayBuffer());
-  await mkdir(CACHE, { recursive: true });
+  await mkdir(path.dirname(cached), { recursive: true });
   await writeFile(cached, buf);
   return buf;
 }
@@ -565,7 +669,7 @@ function renameStyle(buf, to) {
 let subsetFont;
 /** The file UPSTREAM describes: the original, or the original cut, pinned and renamed. */
 async function makeFace(spec) {
-  const source = await fetchUpstream(spec.file);
+  const source = await fetchUpstream(spec.file, spec.commit);
   if (!spec.cut) return source;
   subsetFont ??= (await import('subset-font')).default;
   const cut = await subsetFont(source, Array.from(cutText(spec), (cp) => String.fromCodePoint(cp)).join(''), {
@@ -590,6 +694,8 @@ async function upstream(slug) {
   let why = 'not on disk';
   try {
     if (before) why = problemWith(before, spec);
+    // A face shipped whole has to be the very file: a copy cut elsewhere is a Modified Version.
+    if (before && !why && !spec.cut && !before.equals(await fetchUpstream(spec.file, spec.commit))) why = 'not the original file';
   } catch {
     why = 'unreadable';
   }

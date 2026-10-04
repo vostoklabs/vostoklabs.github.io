@@ -46,8 +46,8 @@ import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
 import { SAMPLES } from '../image/sample';
 import type { RgbaImage } from '../image/decode';
-import { fontHasText, STANDARD_FONTS } from '../image/letter';
-import { FONTS, curatedFonts, fontSupportsText, getRequiredSubsets, toPickerFont } from '@vostok/fonts';
+import { facesThatWrite, fontWritesText, STANDARD_FONTS } from '../image/letter';
+import { FONTS, curatedFonts, getRequiredSubsets, toPickerFont } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from '../image/lucideIcons';
 import { CHANGELOG } from '../changelog';
 import { entryForState, loadPackShapes } from '../shapes/directory';
@@ -1351,7 +1351,6 @@ export function createUi(
      chips; the import under them. When the text is not Latin, the cards are the faces that
      write it. */
   const STANDARD_FAMILY = '"Helvetica Neue", Helvetica, Arial, sans-serif';
-  const isStandard = (id: string) => STANDARD_FONTS.some((f) => f.id === id);
   let fontSample = 'Custom Text';
   /** What the text needs that Latin does not cover. The cards follow it. */
   let fontNeeds = '';
@@ -1359,11 +1358,9 @@ export function createUi(
     ...STANDARD_FONTS.map((f) => ({ id: f.id, label: f.name, family: STANDARD_FAMILY, category: f.category ?? 'Clean', scripts: ['Latin'] })),
     ...FONTS.map(toPickerFont),
   ];
-  const fontWrites = (f: FontPickerFont, text: string) => (isStandard(f.id) ? fontHasText(f.id, text) : fontSupportsText(f.id, text));
+  const fontWrites = (f: FontPickerFont, text: string) => fontWritesText(f.id, text);
   const cardsFor = (): string[] =>
-    fontNeeds
-      ? allFonts().filter((f) => fontWrites(f, fontSample)).map((f) => f.id)
-      : [...STANDARD_FONTS.map((f) => f.id), ...curatedFonts().map((f) => f.id)];
+    fontNeeds ? facesThatWrite(fontSample) : [...STANDARD_FONTS.map((f) => f.id), ...curatedFonts().map((f) => f.id)];
   function makeFontBlock(value: string): FontChooserHandle {
     return fontChooser({
       fonts: allFonts(),

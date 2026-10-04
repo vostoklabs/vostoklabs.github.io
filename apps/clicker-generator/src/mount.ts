@@ -46,7 +46,10 @@ import { allShapes, findShape, loadPackShapes } from './shapes/directory';
 // Paid features. Resolves to a no-op stub outside the MakerWorld build — see vite.config.ts.
 import { mountProFeatures, type ProPanel } from 'virtual:pro-pack';
 import { SAMPLES, SVG_SAMPLES } from './image/sample';
-import { currentFontIdOf, ensureFont, parseLetter, parseBlockChain, importFontFile } from './image/letter';
+import {
+  alphabetOf, currentFontIdOf, ensureFont, facesThatWrite, fontOptions, fontWritesText, parseLetter, parseBlockChain,
+  importFontFile,
+} from './image/letter';
 import {
   arrangeBlocks, blockBuildParams, changeLayout, gridFor, isSymbolChar, lineSymbols, loadedBlocks, loadedSymbols,
   presetText, pruneSymbols, resizeCells, toggleKey, tracedSymbols,
@@ -335,6 +338,25 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let currentFontId = 'helvetiker-regular';
   /** The latest font pick, so a slow load cannot overwrite a newer choice. */
   let fontPick = 0;
+  /**
+   * Letters the chosen face cannot draw would print as "?", so typing them moves the text to the
+   * plainest face that can (Standard has no Cyrillic, say) and says so. Only typing does this: a
+   * face picked by hand for a text it cannot write keeps its ⚠ mark and stays picked.
+   */
+  function fitFontTo(text: string): void {
+    if (fontWritesText(currentFontId, text)) return;
+    const next = facesThatWrite(text)[0];
+    if (!next || next === currentFontId) return;
+    const name = (id: string) => fontOptions().find((f) => f.id === id)?.name ?? id;
+    const alphabet = alphabetOf(text);
+    toast(`${name(currentFontId)} has no ${alphabet ? `${alphabet} letters` : 'letters for that'}, so the text is set in ${name(next)}.`);
+    currentFontId = next;
+    ui.setFont(next);
+    const pick = ++fontPick;
+    void ensureFont(next).then((ok) => {
+      if (ok && pick === fontPick) reprocess();
+    });
+  }
   let isInitialLoad = true;
 
   /* The name a downloaded file gets.
@@ -966,6 +988,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     },
     onTextChange: (text) => {
       currentText = text;
+      fitFontTo(text);
       store.set({ textSymbols: pruneSymbols(store.get().textSymbols, text.split('\n')) });
       debouncedReprocess(); // live rebuild as you type
     },
@@ -1024,6 +1047,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       const lines = [...store.get().blockLines];
       while (lines.length <= row) lines.push('');
       lines[row] = text;
+      fitFontTo(lines.join(' '));
       store.set({ blockLines: lines, blockSymbols: pruneSymbols(store.get().blockSymbols, lines) });
       debouncedReprocess();
     },
