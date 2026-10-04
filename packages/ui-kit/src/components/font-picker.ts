@@ -118,6 +118,12 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
       pressed: s === activeScript,
       onToggle: () => {
         activeScript = s;
+        // Few faces write each alphabet, so picking one shows all of them: the style goes back to
+        // All rather than leaving, say, Comic and Korean together with next to nothing in it.
+        if (s !== 'All' && activeCat !== 'All') {
+          activeCat = 'All';
+          for (const [cid, cc] of catChips) cc.setPressed(cid === activeCat);
+        }
         shown = CHUNK;
         for (const [sid, sc] of scriptChips) sc.setPressed(sid === activeScript);
         paint({ keepScroll: false });
