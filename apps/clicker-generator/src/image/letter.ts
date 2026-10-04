@@ -309,7 +309,12 @@ function bboxOf(rings: Ring[]) {
  * same height. Icons are square line-art and are normalised to their own box, trimmed a
  * little so a symbol doesn't crowd the cap more than a capital letter does.
  */
-export function parseBlockChain(slots: BlockSlot[], fontId: string): RegionSet {
+export function parseBlockChain(
+  slots: BlockSlot[],
+  fontId: string,
+  /** Rings of the traced symbols, by the private-use character a `symbol` slot names. */
+  symbols: Readonly<Record<string, { rings: Ring[] }>> = {},
+): RegionSet {
   const option = FONT_OPTIONS.find((font) => font.id === fontId) || FONT_OPTIONS[0];
   const ICON_FILL = 0.9; // icons read bigger than letters at equal height
 
@@ -317,8 +322,13 @@ export function parseBlockChain(slots: BlockSlot[], fontId: string): RegionSet {
   // builder positions cells by index, so a hole has to keep its place in the grid.
   const raw: { rings: Ring[]; icon: boolean }[] = [];
   for (const slot of slots) {
-    if (slot.kind === 'empty') {
+    if (slot.kind === 'empty' || slot.kind === 'blank') {
+      // A blank key still has a cap; it just has nothing printed on it. Which cells are keys
+      // travels separately (`BuildParams.blockKeys`), because both of these have no rings.
       raw.push({ rings: [], icon: false });
+    } else if (slot.kind === 'symbol') {
+      // Traced already, centred, longest side 1 — the same frame `parseSvg` hands back.
+      raw.push({ rings: symbols[slot.char]?.rings.map((r) => r.map(([x, y]) => [x, y] as [number, number])) ?? [], icon: true });
     } else if (slot.kind === 'icon') {
       const info = LUCIDE_ICONS.find((ic) => ic.name === slot.name);
       let rings: Ring[] = [];
@@ -333,7 +343,7 @@ export function parseBlockChain(slots: BlockSlot[], fontId: string): RegionSet {
       raw.push({ rings: glyphRings(option.font, slot.ch), icon: false });
     }
   }
-  if (!raw.some((r) => r.rings.length)) throw new Error('Add a letter or a symbol first.');
+  if (!slots.some((s) => s.kind !== 'empty')) throw new Error('Add a key first.');
 
   // One scale for every letter: the tallest/widest glyph in the chain sets it.
   let charMax = 0;

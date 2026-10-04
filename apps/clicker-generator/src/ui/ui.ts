@@ -28,10 +28,14 @@ import {
   sliderRow,
   stepperRow,
   makeCollapsible,
+  keyMap,
+  settingsRail,
+  textField,
+  type TextFieldHandle,
   toast,
 } from '@vostok/ui-kit';
 import { MAKERLAB, SELLER_PACK, isUnlocked } from 'virtual:makerlab';
-import type { BaseShapeKind, BlockOrientation, BlockSlot, KeychainSide, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
+import type { BaseShapeKind, BlockStyle, BlockTexture, KeychainSide, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
 import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
 import { SAMPLES } from '../image/sample';
@@ -47,9 +51,59 @@ import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from '../geometry/
 import { FIT_TEST_STEP_OPTIONS } from '../geometry/fitStrip';
 import type { ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
 import { modelFormatOf } from '../model/parse';
+import { arrangeBlocks, GRID_MAX, isLineLayout, keysPerRow, type BlockArrangement, type BlockLayout, type BlockSymbol } from '../geometry/blockLayout';
+import { assetUrl } from '../assets';
 
 /** Fallback swatch for the keycap row before the build derives a contrasting frame. */
 const DEFAULT_CAP_RGB: RGB = [240, 240, 240];
+
+/** The left panel's categories, in rail order. Which ones a mode shows: `RAIL_FOR_MODE`. */
+type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'body' | 'fit' | 'switch' | 'keychain';
+
+/** The categories each source has, and the one it opens on — the knob that makes the clicker
+ *  that kind of clicker, never the font (Laser Studio's rule). */
+const RAIL_FOR_MODE: Record<UiState['importMode'], { show: RailId[]; first: RailId }> = {
+  image: { show: ['shape', 'body', 'fit', 'switch', 'keychain'], first: 'shape' },
+  svg: { show: ['shape', 'body', 'fit', 'switch', 'keychain'], first: 'shape' },
+  icon: { show: ['shape', 'body', 'fit', 'switch', 'keychain'], first: 'shape' },
+  text: { show: ['shape', 'font', 'lettering', 'body', 'fit', 'switch', 'keychain'], first: 'shape' },
+  blocks: { show: ['layout', 'font', 'lettering', 'body', 'fit', 'keychain'], first: 'layout' },
+  model: { show: ['cut', 'model', 'body', 'fit'], first: 'cut' },
+};
+
+/**
+ * The Layout tiles' pictures: the keys of each arrangement, drawn as squares. An image (the
+ * kit's picture tiles take a URL), so it cannot follow the theme's text colour — a mid grey
+ * that reads on both the light and the dark panel instead.
+ */
+function layoutPicture(layout: BlockLayout): string {
+  const T: [number, number, string?][] = [[1, 0], [0, 1], [1, 1], [2, 1]];
+  const cells: [number, number, string?][] =
+    layout === 'row' ? [[0, 0], [1, 0], [2, 0], [3, 0]]
+    : layout === 'column' ? [[0, 0], [0, 1], [0, 2]]
+    : layout === 'grid' ? [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => [c, r] as [number, number]))
+    : layout === 'wasd' ? [[1, 0, 'W'], [0, 1, 'A'], [1, 1, 'S'], [2, 1, 'D']]
+    : layout === 'arrows' ? T.map(([c, r], i) => [c, r, ['M0-3l3 4h-6z', 'M-3 0l4-3v6z', 'M0 3l3-4h-6z', 'M3 0l-4-3v6z'][i]])
+    : [[0, 0], [1, 0], [2, 0, '+'], [0, 1, '+'], [1, 1], [2, 1], [0, 2], [1, 2, '+'], [2, 2]];
+  const S = 20, G = 5, P = S + G;
+  const cols = Math.max(...cells.map(([c]) => c)) + 1;
+  const rows = Math.max(...cells.map(([, r]) => r)) + 1;
+  const ox = (120 - (cols * P - G)) / 2;
+  const oy = (100 - (rows * P - G)) / 2;
+  const grey = '#8a94a6';
+  const parts = cells.map(([c, r, mark]) => {
+    const x = ox + c * P, y = oy + r * P, cx = x + S / 2, cy = y + S / 2;
+    if (mark === '+') {
+      return `<rect x="${x}" y="${y}" width="${S}" height="${S}" rx="4" fill="none" stroke="${grey}" stroke-width="1.4" stroke-dasharray="3 2.5"/>`;
+    }
+    const key = `<rect x="${x}" y="${y}" width="${S}" height="${S}" rx="4" fill="${grey}" fill-opacity="0.32" stroke="${grey}" stroke-width="1.4"/>`;
+    if (!mark) return key;
+    if (mark.startsWith('M')) return key + `<path transform="translate(${cx} ${cy})" d="${mark}" fill="${grey}"/>`;
+    return key + `<text x="${cx}" y="${cy + 4}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="700" fill="${grey}">${mark}</text>`;
+  });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">${parts.join('')}</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
 
 export interface UiState {
   status: string;
@@ -173,10 +227,21 @@ export interface UiState {
    *  Multiplies the Size so the clicker grows and the letters keep their size. */
   textSizeMul: number;
   // ---- Letter blocks (importMode 'blocks') ----
-  /** The chain, in order: one entry per printed block (a letter or a symbol). */
-  blockSlots: BlockSlot[];
-  /** Row (reads left→right) or column (top→bottom). */
-  blockOrientation: BlockOrientation;
+  /** The arrangement picked in Layout. */
+  blockLayout: BlockLayout;
+  /** Grid and Custom: how many rows and columns of cells. */
+  blockGridRows: number;
+  blockGridCols: number;
+  /** Custom: which cells hold a key, row by row. Null until the map is first changed. */
+  blockCells: boolean[] | null;
+  /** What is printed on the keys: one line per row of keys (a row or a column uses the first). */
+  blockLines: string[];
+  /** The symbols those lines use, by their private-use character. */
+  blockSymbols: Record<string, BlockSymbol>;
+  /** A wall between every key, or one open frame round them all. */
+  blockStyle: BlockStyle;
+  /** The outside of the block body. */
+  blockTexture: BlockTexture;
   /** Legend size multiplier on the keycap (1 = default fit). */
   legendScale: number;
   /** Legend outline offset in mm — "boldness". */
@@ -334,10 +399,15 @@ export interface UiCallbacks {
   onImageNudgeReset(): void;
   // ---- Letter blocks ----
   /** The whole chain changed (a chip was added or removed). */
-  onBlockSlots(slots: BlockSlot[]): void;
+  onBlockLayout(layout: BlockLayout): void;
+  onBlockGridSize(rows: number, cols: number): void;
+  /** A cell of the key map was tapped: add a key there, or take it away. */
+  onBlockCell(index: number): void;
+  /** The text of one row of keys changed. */
+  onBlockLine(row: number, text: string): void;
+  onBlockStyle(style: BlockStyle): void;
+  onBlockTexture(texture: BlockTexture): void;
   /** The blocks text box changed — retype the letter chips, keep the symbols. */
-  onBlockText(text: string): void;
-  onBlockOrientation(o: BlockOrientation): void;
   onLegendScale(v: number): void;
   onLegendBold(mm: number): void;
   /** Keycap colour (shared by every cap in the chain). */
@@ -354,19 +424,6 @@ export interface UiCallbacks {
    *  cannot use. Not a rebuild trigger; just text. */
   onStatus(text: string): void;
 }
-
-/** The symbols worth putting on a keycap: cute, playful, instantly readable at 11 mm.
- *  These lead the block symbol picker (search still reaches the full Lucide set). */
-const BLOCK_SYMBOLS = [
-  'heart', 'star', 'sun', 'moon', 'cloud', 'flower', 'flower-2', 'leaf', 'sprout',
-  'smile', 'laugh', 'ghost', 'cat', 'dog', 'bird', 'fish', 'bug', 'paw-print',
-  'rocket', 'gamepad-2', 'music', 'headphones', 'camera', 'palette', 'brush',
-  'crown', 'trophy', 'gift', 'cake', 'coffee', 'pizza', 'ice-cream-cone',
-  'zap', 'flame', 'snowflake', 'droplet', 'rainbow', 'sparkles',
-  'anchor', 'plane', 'car', 'bike', 'tent', 'mountain', 'umbrella',
-  'check', 'x', 'plus', 'minus', 'arrow-up', 'arrow-down', 'arrow-left', 'arrow-right',
-  'thumbs-up', 'hand', 'key', 'lock', 'bell', 'clock', 'map-pin', 'lightbulb',
-];
 
 const POPULAR_LUCIDE = [
   // File & clipboard
@@ -462,6 +519,9 @@ export function createUi(
   /** What the Level stepper last reported, so its absolute readout can be turned back into
    *  the delta `onExtrudeStep` actually wants — see where it is built, below. */
   let extrudeLevelLast = 0;
+  /** The source the rail last opened for, so arriving in a mode opens its first category once
+   *  and later updates leave the open one alone. */
+  let railMode: UiState['importMode'] | null = null;
 
   /** Signed millimetre offset, for a control whose 0 is a baseline rather than zero. */
   const fmtSignedMm = (v: number, dec: number) =>
@@ -486,9 +546,10 @@ export function createUi(
     }
   };
 
+  // Title only: the rail beneath it says what the tool does, and every line up here pushes the
+  // rail's last categories off a laptop screen.
   const headerEl = generatorHeader({
     title: 'Clicker Generator',
-    description: 'Generate printable 3D model of a clicker from an image',
     // The byline lives in the credit strip pinned at the foot of this panel (panelCredit,
     // below). Saying "Made by Vostok Labs" at both ends of one column is one time too many.
     hideCredit: true,
@@ -501,9 +562,9 @@ export function createUi(
     storageKey: 'clicker-quality-callout',
   });
 
-  // Populate Left Sidebar (Settings + Preview). The controls go into their own scrolling
-  // body — mirroring the right sidebar — so the credit strip can pin to the
-  // bottom-left corner instead of scrolling away with the controls (see below).
+  // Populate Left Sidebar. Laser Studio's layout: the title and the preview's switches stay put
+  // at the top — they apply whatever is open below them — the settings sit behind a rail, one
+  // category at a time, and undo/redo is at the foot.
   //
   // `#licenceCtaMount` and `#proMount` are anchors and nothing else: in the MakerWorld build
   // mount.ts fills them, and in every other build they stay empty divs. The explanation lives
@@ -512,14 +573,13 @@ export function createUi(
   //
   // The licence comes first and the seller tools directly under it.
   const leftScroll = document.createElement('div');
-  leftScroll.className = 'vl-panel__scroll';
+  leftScroll.className = 'vl-panel__scroll cg-left';
   leftScroll.innerHTML = `
+    <div class="cg-left-top">
     <div id="licenceCtaMount"></div>
     <div id="proMount"></div>
-
-    <div class="section" id="previewViewSection">
-      <span class="label">Preview &amp; view</span>
-      <div id="viewTabsMount" style="margin-bottom: 12px;"></div>
+    <div id="previewViewSection" class="cg-view">
+      <div id="viewTabsMount"></div>
       <div id="showSwitchMount"></div>
       <div id="sectionToggleMount"></div>
       <div id="sectionOpts" hidden>
@@ -527,49 +587,26 @@ export function createUi(
         <div class="prow-stacked"><div id="sectionPosMount"></div></div>
       </div>
     </div>
-
-    <!-- Letter blocks: the shape controls for the chain live here, next to the preview,
-         because the right panel is for WHAT is on the blocks (text, chips, font). -->
-    <div class="section" id="blocksSection" hidden>
-      <span class="label">Blocks</span>
-      <div class="field">
-        <label>Layout ${tip('A row reading left to right, or a column reading top to bottom.')}</label>
-        <div id="blockOrientMount"></div>
-      </div>
-      <div class="prow-stacked">
-        <div id="legendSizeMount"></div>
-      </div>
-      <div class="prow-stacked">
-        <div id="legendBoldMount"></div>
-      </div>
     </div>
-
-    <!-- Text mode: typography sits here for the same reason the blocks controls do —
-         the right panel is WHAT the text is (the words, the font); this is how it is set. -->
-    <div class="section" id="textSection" hidden>
-      <span class="label">Text</span>
-      <div class="prow-stacked"><div id="textScaleMount"></div></div>
-      <div class="prow-stacked"><div id="textBoldMount"></div></div>
-      <div class="prow-stacked"><div id="letterSpacingMount"></div></div>
-      <div class="prow-stacked"><div id="lineSpacingMount"></div></div>
-    </div>
-
-    <!-- Model mode: the cut, the model's size and turn, its colours. Built by
-         ui/modelPanel.ts and mounted here by mount.ts. -->
-    <div id="modelSectionsMount" hidden></div>
-
-    <div class="section" id="baseStyleSection">
-      <span class="label">Base style ${tip('Outline follows your image silhouette. Shape places the image on a preset base such as a circle or square.')}</span>
-      <div class="field">
-        <div id="shapeTypeTabsMount" style="margin-bottom: 12px;"></div>
+    <div data-rail="layout">
+      <div id="blockLayoutMount"></div>
+      <div class="cg-grid-size" id="blockGridSizeRow">
+        <div id="blockRowsMount"></div>
+        <div id="blockColsMount"></div>
       </div>
-      <div class="field" id="shapeSelectField" style="margin-bottom: 12px;">
+      <div id="blockKeyMapMount"></div>
+      <div id="blockStyleMount"></div>
+    </div>
+    <div data-rail="shape">
+      <div class="field" id="shapeTypeField">
+        <label>Base style ${tip('Outline follows your image silhouette. Shape places the image on a preset base such as a circle or square.')}</label>
+        <div id="shapeTypeTabsMount"></div>
+      </div>
+      <div class="field" id="shapeSelectField">
         <label>Base shape ${tip('The shape of the printed base.')}</label>
         <div id="shapePickMount"></div>
       </div>
-      <div class="prow-stacked">
-        <div id="widthMount"></div>
-      </div>
+      <div class="prow-stacked"><div id="widthMount"></div></div>
       <div class="prow-stacked"><div id="designScaleMount"></div></div>
       <div class="prow-stacked"><div id="fixedSizeMount"></div></div>
       <div id="fixedSizeFields" hidden>
@@ -582,102 +619,126 @@ export function createUi(
         <div id="imageNudgePadMount"></div>
       </div>
     </div>
-
-    <div id="geometrySettingsContainer">
-      <details class="vl-section vl-section--collapsible" id="sectionBodyFit">
-        <summary>Body &amp; fit</summary>
-        <div class="vl-section__body">
-        <div class="prow-stacked">
-          <div id="topthickMount"></div>
-        </div>
-        <div class="prow-stacked">
-          <div id="imgdepthMount"></div>
-        </div>
-        <div class="prow-stacked">
-          <div id="capProudMount"></div>
-        </div>
-        <div class="prow-stacked"><div id="hollowMount"></div></div>
-        <!-- The three fit controls. They are three because they are three different pairs of
-             surfaces, and the old two were named after parts they did not touch. -->
-        <div class="prow-stacked"><div id="gapTolMount"></div></div>
-        <div class="prow-stacked"><div id="stemFitMount"></div></div>
-        <div class="prow-stacked"><div id="socketFitMount"></div></div>
-        <div class="prow-stacked" id="fitTestBlock">
-          <p class="switch-pad-hint">Print a strip of test tiles, press each one onto a real switch, then set Switch stem fit to the number on the tile that fits.</p>
-          <div id="fitTestMount"></div>
-        </div>
-        </div>
-      </details>
-
-      <details class="vl-section vl-section--collapsible" id="sectionSwitch">
-        <summary>Switch</summary>
-        <div class="vl-section__body">
-        <div class="field" style="margin-bottom:10px;">
-          <label>Switches ${tip('Use 1 to 3 MX switches for larger or wider designs, for more click points and stability. Each switch can be moved and rotated individually.')}</label>
-          <div id="switchCountMount"></div>
-        </div>
-        <div id="switchChipsMount" style="display:none; margin-bottom:10px;"></div>
+    <div data-rail="cut"><div id="modelCutMount"></div>
+    </div>
+    <div data-rail="model"><div id="modelBodyMount"></div>
+    </div>
+    <div data-rail="font">
+      <div class="field" id="fontField">
+        <div id="fontGrid" class="font-grid"></div>
+        <label class="upload">
+          + Import font
+          <input id="fontUpload" type="file" accept=".ttf,.otf,.json,font/ttf,font/otf,application/json" />
+        </label>
+      </div>
+    </div>
+    <div data-rail="lettering">
+      <div class="prow-stacked" id="legendSizeRow"><div id="legendSizeMount"></div></div>
+      <div class="prow-stacked" id="legendBoldRow"><div id="legendBoldMount"></div></div>
+      <div class="prow-stacked" id="textScaleRow"><div id="textScaleMount"></div></div>
+      <div class="prow-stacked" id="textBoldRow"><div id="textBoldMount"></div></div>
+      <div class="prow-stacked" id="letterSpacingRow"><div id="letterSpacingMount"></div></div>
+      <div class="prow-stacked" id="lineSpacingRow"><div id="lineSpacingMount"></div></div>
+    </div>
+    <div data-rail="body">
+      <div id="blockTextureMount"></div>
+      <div class="prow-stacked"><div id="topthickMount"></div></div>
+      <div class="prow-stacked"><div id="imgdepthMount"></div></div>
+      <div class="prow-stacked"><div id="capProudMount"></div></div>
+      <div class="prow-stacked"><div id="hollowMount"></div></div>
+      <div class="field" id="colorCountField">
+        <div id="ccountMount"></div>
+        <p class="vl-hint">Most AMS units hold 4 filaments; more colors means manual swaps.</p>
+      </div>
+      <div class="prow-stacked" id="smoothingField">
+        <div id="smoothMount"></div>
+      </div>
+      <div class="palette" id="palette">
+        <div class="hint">Load an image/vector to pick colors.</div>
+      </div>
+      <div id="modelColoursMount"></div>
+    </div>
+    <div data-rail="fit">
+      <div class="prow-stacked"><div id="gapTolMount"></div></div>
+      <div class="prow-stacked"><div id="stemFitMount"></div></div>
+      <div class="prow-stacked"><div id="socketFitMount"></div></div>
+      <div class="prow-stacked" id="fitTestBlock">
+        <p class="switch-pad-hint">Print a strip of test tiles, press each one onto a real switch, then set Switch stem fit to the number on the tile that fits.</p>
+        <div id="fitTestMount"></div>
+      </div>
+    </div>
+    <div data-rail="switch">
+      <div class="field" id="switchCountField">
+        <label>Switches ${tip('Use 1 to 3 MX switches for larger or wider designs, for more click points and stability. Each switch can be moved and rotated individually.')}</label>
+        <div id="switchCountMount"></div>
+      </div>
+      <div id="switchChipsMount" style="display:none;"></div>
+      <div class="field" id="switchPadField">
         <p class="switch-pad-hint">Move &amp; rotate the MX switch ${tip('Slide and rotate the selected MX switch away from the design centre. Handy when a switch doesn\'t sit neatly in the centre of your design.')}</p>
         <div id="switchPadMount"></div>
-        <button class="secondary" id="switchResetAll" type="button" style="display:none; width:100%; margin-top:8px;">Reset all switches</button>
-        </div>
-      </details>
-
-      <!-- Below Switch: per-shape recolor lives in the 3D view, so this section is mostly the
-           count and the reset-all-recolors escape hatch. -->
-      <details class="vl-section vl-section--collapsible" id="sectionColors">
-        <summary>Colors</summary>
-        <div class="vl-section__body">
-        <div class="field" id="colorCountField">
-          <div id="ccountMount"></div>
-          <p class="vl-hint">Most AMS units hold 4 filaments; more colors means manual swaps.</p>
-        </div>
-        <div class="prow-stacked" id="smoothingField">
-          <div id="smoothMount"></div>
-        </div>
-        <div class="palette" id="palette">
-          <div class="hint">Load an image/vector to pick colors.</div>
-        </div>
-        </div>
-      </details>
-
-      <details class="vl-section vl-section--collapsible" id="sectionKeychain">
-        <summary>Keychain</summary>
-        <div class="vl-section__body">
-        <div id="keychainMount" style="margin-bottom: 12px;"></div>
-        <div id="keychainOpts" style="display:none;">
-          <!-- Free-form body: an absolute angle round the edge, a fine offset along it, and
-               a way back to the default — replacing the d-pad whose arrows moved the loop in
-               directions that did not match what they pointed at (audit: keychain controls). -->
-          <div class="prow-stacked" id="keychainAngleRow">
-            <div id="keychainAngleMount"></div>
-          </div>
-          <div class="prow-stacked" id="keychainOffsetRow">
-            <div id="keychainOffsetMount"></div>
-          </div>
-          <div id="keychainFreeResetMount" style="margin-bottom: 12px;"></div>
-
-          <!-- Letter blocks: the loop welds onto an end block's outer face, so the choice is
-               which side it hangs from and how far along that side it sits. -->
-          <div class="field" id="keychainEndField" style="display:none;">
-            <div id="keychainEndMount"></div>
-          </div>
-          <div class="prow-stacked" id="keychainSlideRow" style="display:none;">
-            <div id="keychainSlideMount"></div>
-          </div>
-          <div id="keychainBlockResetMount" style="display:none; margin-bottom: 12px;"></div>
-
-          <div class="prow-stacked"><div id="keychainSizeMount"></div></div>
-        </div>
-        </div>
-      </details>
+      </div>
+      <button class="secondary" id="switchResetAll" type="button" style="display:none; width:100%;">Reset all switches</button>
     </div>
+    <div data-rail="keychain">
+      <div id="keychainMount"></div>
+      <div id="keychainOpts" style="display:none;">
+        <!-- Free-form body: an absolute angle round the edge, a fine offset along it, and
+             a way back to the default — replacing the d-pad whose arrows moved the loop in
+             directions that did not match what they pointed at (audit: keychain controls). -->
+        <div class="prow-stacked" id="keychainAngleRow">
+          <div id="keychainAngleMount"></div>
+        </div>
+        <div class="prow-stacked" id="keychainOffsetRow">
+          <div id="keychainOffsetMount"></div>
+        </div>
+        <div id="keychainFreeResetMount" style="margin-bottom: 12px;"></div>
 
-    <div class="sidebar-sticky-footer">
-      <div id="historyControls"></div>
+        <!-- Letter blocks: the loop welds onto an end block's outer face, so the choice is
+             which side it hangs from and how far along that side it sits. -->
+        <div class="field" id="keychainEndField" style="display:none;">
+          <div id="keychainEndMount"></div>
+        </div>
+        <div class="prow-stacked" id="keychainSlideRow" style="display:none;">
+          <div id="keychainSlideMount"></div>
+        </div>
+        <div id="keychainBlockResetMount" style="display:none; margin-bottom: 12px;"></div>
+
+        <div class="prow-stacked"><div id="keychainSizeMount"></div></div>
+      </div>
     </div>
+    <div class="sidebar-sticky-footer cg-left-foot"><div id="historyControls"></div></div>
   `;
+  const leftTop = leftScroll.querySelector('.cg-left-top') as HTMLElement;
 
+  /* The categories. Each one's top-level elements are its rows: the rail takes a category off
+     when every row in it is hidden for the current mode, so a mode never opens on an empty
+     tab. Which categories a mode has at all is decided in `update()` (RAIL_FOR_MODE).
+     The rows are written once, above, inside `data-rail` holders, and moved into the rail
+     here; the holders go. */
+  const RAIL_ITEMS: { id: RailId; label: string; icon: string; title?: string }[] = [
+    { id: 'layout', label: 'Layout', icon: ICONS.grid },
+    { id: 'shape', label: 'Shape', icon: ICONS.maximize, title: 'Shape & size' },
+    // No heading: the cut's own first row is "How it clicks", with its help.
+    { id: 'cut', label: 'Cut', icon: ICONS.layers, title: '' },
+    { id: 'model', label: 'Model', icon: ICONS.box },
+    { id: 'font', label: 'Font', icon: ICONS.text },
+    { id: 'lettering', label: 'Lettering', icon: ICONS.sliders },
+    { id: 'body', label: 'Body', icon: ICONS.pattern, title: 'Body & colours' },
+    { id: 'fit', label: 'Fit', icon: ICONS.ruler },
+    { id: 'switch', label: 'Switch', icon: ICONS.target },
+    { id: 'keychain', label: 'Keychain', icon: ICONS.link },
+  ];
+  const settings = settingsRail({
+    label: 'Clicker settings',
+    items: RAIL_ITEMS.map((it) => {
+      const holder = leftScroll.querySelector(`[data-rail="${it.id}"]`) as HTMLElement;
+      const body = [...holder.children];
+      holder.remove();
+      return { ...it, body };
+    }),
+  });
+  settings.classList.add('cg-rail');
+  leftTop.after(settings);
   resolveHelpTips(leftScroll);
 
   sidebarLeft.innerHTML = '';
@@ -687,8 +748,11 @@ export function createUi(
   // the embedded build simply drops the intro header. The host page already shows the app's
   // name, so nothing is lost there.
   if (!MAKERLAB) {
-    leftScroll.prepend(...(qualityEl ? [headerEl, qualityEl] : [headerEl]));
+    leftTop.prepend(headerEl);
   }
+  // The print-quality pointer belongs with printing: it heads the Fit category rather than
+  // the panel, where four lines of it pushed the rail off the screen.
+  if (qualityEl) settings.panel('fit')?.querySelector('.vl-section__body')?.prepend(qualityEl);
 
   // The credit strip: who made this, and what changed. Appended to the panel rather than to
   // `leftScroll`, so it is OUTSIDE `.vl-panel__scroll` and stays pinned instead of scrolling
@@ -761,27 +825,13 @@ export function createUi(
       <div id="letterPanel" class="mode-panel" hidden>
         <div id="textOnlyField"></div>
 
-        <!-- Blocks-only: the chain, one chip per printed block -->
-        <div id="blocksTextField" hidden></div>
-        <div class="field" id="blocksChainField" hidden>
-          <label>Add symbol or emoji ${tip('One chip is one printed block. Click a chip to change its letter or swap in a symbol; the small + between chips drops a symbol anywhere in the row.')}</label>
-          <p class="hint-text" style="margin: 0 0 6px;">
-            Press + between two blocks to add a symbol there, or click a block to change it.
-          </p>
-          <div id="blockChips" class="block-chips"></div>
+        <div class="field" id="blockLinesField" hidden>
+          <div id="blockLinesMount" class="cg-block-lines"></div>
         </div>
         ${MAKERLAB ? '' : `<p class="hint-text" id="blocksKeycapLink" hidden>
           Want more keycap options, like profiles, sizes, or your own SVG or photo on the
           cap? Use the <a class="hint-link" href="${BRAND.urls.keycapApp}" target="_blank" rel="noopener">Vostok Labs Keycap Generator</a>.
         </p>`}
-        <div class="field">
-          <label>Font</label>
-          <div id="fontGrid" class="font-grid"></div>
-          <label class="upload">
-            + Import font
-            <input id="fontUpload" type="file" accept=".ttf,.otf,.json,font/ttf,font/otf,application/json" />
-          </label>
-        </div>
 
       </div>
 
@@ -1235,203 +1285,118 @@ export function createUi(
     fontUpload.value = '';
   });
 
-  // --- Letter-block arrangement editor ---------------------------------------------
-  // One chip per printed block. In a row or a column the chips sit in a line with a
-  // hairline "+" in every gap (that is how "I ♥ U" gets its heart); in grid mode they lay
-  // out as the actual grid, so a WASD shape is built by emptying the cells you don't want.
-  // Clicking a chip edits that block — type a letter, pick a symbol, empty it, or remove
-  // it — which is the only way to author a grid, where a text box no longer maps.
-  const blockChipsEl = $('blockChips');
-  const blocksTextRow = textareaField({
-    label: 'Text',
-    value: 'Name',
-    rows: 1,
-    maxLength: 24,
-    compact: true,
-    onInput: (v) => cb.onBlockText(v),
+  // --- Letter blocks: the arrangement, the walls, the texture, and the lines of keys -------
+  /* Layout: the arrangement as pictures, the grid's size for Grid and Custom, and a map of the
+     keys. Tapping the map adds or removes a key, which makes any arrangement a Custom one. */
+  const LAYOUT_OPTIONS: { value: BlockLayout; label: string }[] = [
+    { value: 'row', label: 'Row' },
+    { value: 'column', label: 'Column' },
+    { value: 'grid', label: 'Grid' },
+    { value: 'wasd', label: 'WASD' },
+    { value: 'arrows', label: 'Arrows' },
+    { value: 'custom', label: 'Custom' },
+  ];
+  const blockLayoutCtl = segmentedControl<BlockLayout>({
+    label: 'Layout',
+    help: 'How the keys are arranged. Say what goes on each key in the right panel.',
+    variant: 'tiles',
+    columns: 3,
+    options: LAYOUT_OPTIONS.map((o) => ({ ...o, image: layoutPicture(o.value) })),
+    value: initial.blockLayout,
+    onChange: (v) => cb.onBlockLayout(v),
   });
-  $('blocksTextField').append(blocksTextRow);
-  const blocksTextEl = blocksTextRow.field;
-  let renderedSlots: BlockSlot[] = [];
+  $('blockLayoutMount').append(blockLayoutCtl);
 
-  blocksTextEl.addEventListener('input', () => cb.onBlockText(blocksTextEl.value));
+  const blockRowsRow = stepperRow({
+    label: 'Rows', min: 1, max: GRID_MAX, value: initial.blockGridRows,
+    onInput: (v) => cb.onBlockGridSize(v, blockColsRow.getValue()),
+  });
+  const blockColsRow = stepperRow({
+    label: 'Columns', min: 1, max: GRID_MAX, value: initial.blockGridCols,
+    onInput: (v) => cb.onBlockGridSize(blockRowsRow.getValue(), v),
+  });
+  $('blockRowsMount').append(blockRowsRow);
+  $('blockColsMount').append(blockColsRow);
 
-  function chipFace(slot: BlockSlot): { el: HTMLElement; title: string } {
-    const chip = document.createElement('span');
-    chip.className = 'block-chip';
-    if (slot.kind === 'icon') {
-      chip.classList.add('is-icon');
-      const info = LUCIDE_ICONS.find((ic) => ic.name === slot.name);
-      if (info) {
+  const blockKeyMap = keyMap({
+    label: 'Keys',
+    help: 'Tap a square to add a key there, or a key to take it away.',
+    rows: 1, cols: 1, on: [true],
+    onToggle: (i) => cb.onBlockCell(i),
+  });
+  $('blockKeyMapMount').append(blockKeyMap);
+
+  const blockBordersToggle = toggleSwitch({
+    label: 'Borders',
+    help: 'A wall between every key. Off: one open frame round all of them, like a keyboard.',
+    checked: initial.blockStyle !== 'open',
+    onChange: (on) => cb.onBlockStyle(on ? 'walls' : 'open'),
+  });
+  $('blockStyleMount').append(blockBordersToggle);
+
+  /* Body: the outside of the block body, each option a picture of a real one. */
+  const TEXTURE_OPTIONS: { value: BlockTexture; label: string }[] = [
+    { value: 'smooth', label: 'Smooth' },
+    { value: 'knurl', label: 'Diamond' },
+    { value: 'ribs', label: 'Ribs' },
+    { value: 'flutes', label: 'Fluted' },
+    { value: 'dots', label: 'Dots' },
+    { value: 'chevron', label: 'Chevron' },
+  ];
+  const blockTextureCtl = segmentedControl<BlockTexture>({
+    label: 'Outside texture',
+    help: 'The pattern on the outside walls. It only adds to the wall, so the keys fit the same.',
+    variant: 'tiles',
+    columns: 2,
+    options: TEXTURE_OPTIONS.map((o) => ({ ...o, image: assetUrl(`assets/textures/${o.value}.png`) })),
+    value: initial.blockTexture,
+    onChange: (v) => cb.onBlockTexture(v),
+  });
+  $('blockTextureMount').append(blockTextureCtl);
+
+  /* The right panel: what is printed on the keys. A row or a column is one line, as long as
+     you like; a grid has a line per row of keys. Rebuilt only when the rows change shape, so
+     typing never loses the caret. */
+  let lineFields: TextFieldHandle[] = [];
+  let lineShape = '';
+  function renderBlockLines(state: UiState, arr: BlockArrangement) {
+    const lineLayout = isLineLayout(state.blockLayout);
+    const counts = lineLayout ? [0] : keysPerRow(arr.grid);
+    const rows = counts.map((keys, r) => ({ r, keys })).filter((x) => lineLayout || x.keys > 0);
+    const shape = lineLayout ? 'line' : counts.join(',');
+    if (shape !== lineShape) {
+      lineShape = shape;
+      lineFields = rows.map(({ r, keys }) => {
+        const field = textField({
+          label: lineLayout ? 'Text' : `Row ${r + 1} · ${keys} ${keys === 1 ? 'key' : 'keys'}`,
+          value: state.blockLines[r] ?? '',
+          onInput: (v) => cb.onBlockLine(r, v),
+        });
+        field.dataset.row = String(r);
+        return field;
+      });
+      $('blockLinesMount').replaceChildren(...lineFields);
+    }
+    for (const f of lineFields) {
+      if (document.activeElement !== f.field) f.setValue(state.blockLines[Number(f.dataset.row)] ?? '');
+    }
+  }
+
+  /** What each cell of the key map shows: the letter, a picture of the symbol, or nothing. */
+  function keyLegends(state: UiState, arr: BlockArrangement): (string | Element | null)[] {
+    return arr.slots.map((slot) => {
+      if (slot.kind === 'char') return slot.ch;
+      if (slot.kind === 'icon') {
+        const info = LUCIDE_ICONS.find((ic) => ic.name === slot.name);
+        if (!info) return null;
         const img = document.createElement('img');
         img.src = svgDataUrl(buildSvg(info.node));
-        img.alt = slot.name;
-        chip.appendChild(img);
-      } else {
-        chip.textContent = '?';
+        img.alt = '';
+        return img;
       }
-      return { el: chip, title: slot.name };
-    }
-    if (slot.kind === 'empty') {
-      chip.classList.add('is-empty');
-      return { el: chip, title: 'Empty, no block here' };
-    }
-    chip.textContent = slot.ch;
-    return { el: chip, title: `Letter "${slot.ch}"` };
-  }
-
-  function renderBlockChips(slots: BlockSlot[]) {
-    renderedSlots = slots;
-    blockChipsEl.innerHTML = '';
-
-    const addGap = (index: number) => {
-      const gap = document.createElement('button');
-      gap.type = 'button';
-      gap.className = 'block-gap';
-      gap.title = 'Insert a symbol here';
-      gap.setAttribute('aria-label', `Insert a symbol at position ${index + 1}`);
-      gap.textContent = '+';
-      gap.addEventListener('click', () => openSymbolPicker(index));
-      blockChipsEl.appendChild(gap);
-    };
-
-    addGap(0);
-    slots.forEach((slot, i) => {
-      const { el: chip, title } = chipFace(slot);
-      chip.title = `${title}, click to edit`;
-      chip.tabIndex = 0;
-      chip.addEventListener('click', () => openSlotEditor(i, chip));
-      chip.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          openSlotEditor(i, chip);
-        }
-      });
-      blockChipsEl.appendChild(chip);
-      addGap(i + 1);
+      if (slot.kind === 'symbol') return state.blockSymbols[slot.char]?.label?.slice(0, 1) ?? null;
+      return null;
     });
-  }
-
-  /** Edit one block: retype its letter, swap in a symbol, blank the cell, or delete it. */
-  function openSlotEditor(index: number, anchor: HTMLElement) {
-    document.querySelector('.slot-editor')?.remove();
-    const slot = renderedSlots[index];
-    // Restored on close (Escape, an outside click, or a commit) — a popover that hands focus
-    // to `<body>` when it goes away is how a keyboard user loses their place in the chip row.
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const pop = document.createElement('div');
-    pop.className = 'color-popover slot-editor';
-    pop.innerHTML = `
-      <label class="slot-editor-label">Letter</label>
-      <input class="slot-editor-input" type="text" maxlength="1" autocomplete="off" spellcheck="false"
-             value="${slot.kind === 'char' ? slot.ch.replace(/"/g, '&quot;') : ''}" />
-      <button type="button" class="secondary slot-editor-symbol">Pick a symbol…</button>
-      <button type="button" class="secondary slot-editor-remove">Remove block</button>`;
-    document.body.appendChild(pop);
-
-    const r = anchor.getBoundingClientRect();
-    pop.style.left = `${Math.min(window.innerWidth - pop.offsetWidth - 10, r.left)}px`;
-    pop.style.top = `${Math.min(window.innerHeight - pop.offsetHeight - 10, r.bottom + 6)}px`;
-
-    const close = () => {
-      pop.remove();
-      document.removeEventListener('mousedown', onOutside, true);
-      document.removeEventListener('keydown', onKey, true);
-      previouslyFocused?.focus();
-    };
-    const onOutside = (e: MouseEvent) => {
-      if (!pop.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    document.addEventListener('keydown', onKey, true);
-    setTimeout(() => document.addEventListener('mousedown', onOutside, true), 0);
-
-    const replace = (next: BlockSlot | null) => {
-      const slots = renderedSlots.slice();
-      if (next === null) slots.splice(index, 1);
-      else slots[index] = next;
-      close();
-      cb.onBlockSlots(slots);
-    };
-
-    const input = pop.querySelector('.slot-editor-input') as HTMLInputElement;
-    input.addEventListener('input', () => {
-      const ch = input.value.trim();
-      if (ch) replace({ kind: 'char', ch });
-    });
-    (pop.querySelector('.slot-editor-symbol') as HTMLElement).addEventListener('click', () => {
-      close();
-      openSymbolPicker(index, true);
-    });
-    (pop.querySelector('.slot-editor-remove') as HTMLElement).addEventListener('click', () =>
-      replace(null),
-    );
-    input.focus();
-    input.select();
-  }
-
-  /** Compact Lucide picker. Inserts the chosen symbol at `index`, or replaces the slot
-   *  already there when `replace` is set (used by the per-block editor).
-   *
-   *  Was a hand-rolled `.wz-overlay`/`.wz-modal` with its own backdrop-click and Escape
-   *  wiring — functional, but a second copy of exactly what the kit's `dialog()` already
-   *  does, and the one thing it did not do is restore focus to whatever opened it. Routing
-   *  through `dialog()` gets that back for free instead of adding a third `previouslyFocused`
-   *  variable to this file. */
-  function openSymbolPicker(index: number, replace = false) {
-    const search = document.createElement('input');
-    search.type = 'search';
-    search.className = 'symbol-search';
-    search.placeholder = 'Search symbols…';
-    search.autocomplete = 'off';
-    search.spellcheck = false;
-
-    const grid = document.createElement('div');
-    grid.className = 'symbol-grid';
-
-    const content = document.createElement('div');
-    content.className = 'symbol-picker-body';
-    content.append(search, grid);
-
-    const handle = dialog({
-      title: 'Add a symbol',
-      content,
-      wide: true,
-      actions: [{ label: 'Cancel' }],
-    });
-
-    const paint = () => {
-      grid.innerHTML = '';
-      const frag = document.createDocumentFragment();
-      // No query → the curated keycap set only. Typing searches all of Lucide.
-      const q = search.value.trim();
-      const list = q
-        ? rankLucide(q).slice(0, 180)
-        : BLOCK_SYMBOLS.map((n) => LUCIDE_ICONS.find((ic) => ic.name === n)).filter(
-            (ic): ic is (typeof LUCIDE_ICONS)[number] => !!ic,
-          );
-      for (const ic of list) {
-        const el = makeIconEl(svgDataUrl(buildSvg(ic.node)), ic.name, () => {
-          const next = renderedSlots.slice();
-          next.splice(index, replace ? 1 : 0, { kind: 'icon', name: ic.name });
-          cb.onBlockSlots(next);
-          handle.close();
-        });
-        frag.appendChild(el);
-      }
-      grid.appendChild(frag);
-    };
-    let t: number | null = null;
-    search.addEventListener('input', () => {
-      if (t !== null) clearTimeout(t);
-      t = window.setTimeout(paint, 80);
-    });
-    paint();
-    // `dialog()` moves focus to its first button (Cancel) on open; the search box is the
-    // actually useful place to land a keyboard/screen-reader user in a picker this size.
-    search.focus();
   }
 
   /* Three segmented pickers that were hand-built `<button class="tab">` rows with delegated
@@ -1479,15 +1444,6 @@ export function createUi(
     onClick: () => cb.onKeychainSlideReset(),
   }));
 
-  const blockOrientTabs = segmentedControl<BlockOrientation>({
-    options: [
-      { value: 'horizontal', label: 'Horizontal' },
-      { value: 'vertical', label: 'Vertical' },
-    ],
-    value: initial.blockOrientation,
-    onChange: (v) => cb.onBlockOrientation(v),
-  });
-  $('blockOrientMount').append(blockOrientTabs);
   /* Six sliders that were a hand-built `<div class="prow-stacked">` each: a label with a tip,
      a `<input type="text" class="val">` readout, and a bare `<input type="range">`, wired by a
      local `bindValInput()` that re-derived clamp-on-type, select-on-focus and commit-on-
@@ -1963,16 +1919,15 @@ export function createUi(
      what stops them; `.vl-control--disabled` only says so. `rebuild()` in mount.ts backs this
      up: a design build that still gets requested takes the preview back to the design. */
   const fitLockTargets = (): HTMLElement[] => {
-    const keepInBodyFit = new Set<Element | null | undefined>([
+    const keep = new Set<Element | null | undefined>([
       $('stemFitMount')?.closest('.prow-stacked'), $('fitTestBlock'),
     ]);
-    const bodyFitRows = [...($('sectionBodyFit')?.querySelector('.vl-section__body')?.children ?? [])]
-      .filter((n) => !keepInBodyFit.has(n));
-    const otherSections = [...($('geometrySettingsContainer')?.children ?? [])]
-      .filter((n) => n.id !== 'sectionBodyFit');
+    // Every row of every category, except the two the test tiles still answer to. The rail
+    // itself stays live, so the Fit category can always be reached.
+    const rows = [...settings.querySelectorAll('.vl-settings-rail__panel > .vl-section__body > *')]
+      .filter((n) => !keep.has(n));
     return [
-      $('licenceCtaMount'), $('proMount'), $('blocksSection'), $('textSection'), $('baseStyleSection'),
-      ...otherSections, ...bodyFitRows,
+      $('licenceCtaMount'), $('proMount'), ...rows,
       $('historyControls')?.closest('.sidebar-sticky-footer'),
       rightScrollWrap, editModes?.root, $('lettersToggle'),
     ].filter((n): n is HTMLElement => n instanceof HTMLElement);
@@ -2660,17 +2615,15 @@ export function createUi(
     $('svgPanel').hidden = state.importMode !== 'svg';
     $('iconPanel').hidden = state.importMode !== 'icon';
     $('modelPanel').hidden = state.importMode !== 'model';
-    $('modelSectionsMount').hidden = state.importMode !== 'model';
     // Text and Blocks share one panel — both are "type something, pick a font".
     $('letterPanel').hidden = state.importMode !== 'text' && !isBlockMode;
-    $('blocksChainField').hidden = !isBlockMode;
-    $('blocksSection').hidden = !isBlockMode;
+    $('blockLinesField').hidden = !isBlockMode;
     $('textOnlyField').hidden = isBlockMode;
-    $('textSection').hidden = state.importMode !== 'text';
-    // Both boxes live in the shared panel; each shows only in its own mode. (The Blocks
-    // box used to be unhidden on the way in and never hidden on the way back out, so
-    // Text mode showed two text fields.)
-    $('blocksTextField').hidden = !isBlockMode;
+    // Lettering holds both modes' rows; each shows only in its own.
+    for (const id of ['legendSizeRow', 'legendBoldRow']) $(id).hidden = !isBlockMode;
+    for (const id of ['textScaleRow', 'textBoldRow', 'letterSpacingRow', 'lineSpacingRow']) {
+      $(id).hidden = state.importMode !== 'text';
+    }
     if (!isBlockMode) {
       textScaleRow.setValue(Math.round(state.textScale * 100));
       textBoldRow.setValue(state.textBold);
@@ -2679,16 +2632,21 @@ export function createUi(
     }
     const keycapLink = document.getElementById('blocksKeycapLink');
     if (keycapLink) keycapLink.hidden = !isBlockMode;
+    $('blockTextureMount').hidden = !isBlockMode;
     if (isBlockMode) {
-      renderBlockChips(state.blockSlots);
-      // Keep the box in step when chips are deleted in the row below it.
-      if (document.activeElement !== blocksTextEl) {
-        blocksTextEl.value = state.blockSlots
-          .filter((s): s is { kind: 'char'; ch: string } => s.kind === 'char')
-          .map((s) => s.ch)
-          .join('');
+      const arr = arrangeBlocks(state.blockLayout, state.blockGridRows, state.blockGridCols,
+        state.blockCells, state.blockLines, state.blockSymbols);
+      blockLayoutCtl.setValue(state.blockLayout);
+      $('blockGridSizeRow').hidden = state.blockLayout !== 'grid' && state.blockLayout !== 'custom';
+      blockRowsRow.setValue(state.blockGridRows);
+      blockColsRow.setValue(state.blockGridCols);
+      $('blockKeyMapMount').hidden = isLineLayout(state.blockLayout);
+      if (!isLineLayout(state.blockLayout)) {
+        blockKeyMap.set(arr.grid.rows, arr.grid.cols, arr.grid.on, keyLegends(state, arr));
       }
-      blockOrientTabs.setValue(state.blockOrientation);
+      blockBordersToggle.setValue(state.blockStyle !== 'open');
+      blockTextureCtl.setValue(state.blockTexture);
+      renderBlockLines(state, arr);
       legendSizeRow.setValue(state.legendScale);
       legendBoldRow.setValue(state.legendBold);
       blockSideTabs.setValue(state.keychainEnd);
@@ -2727,7 +2685,6 @@ export function createUi(
     const hideForBlocks = (el: HTMLElement | null) => {
       if (el) el.style.display = isBlockMode ? 'none' : '';
     };
-    hideForBlocks(document.getElementById('baseStyleSection'));
     // By MOUNT id, not by the id of whatever the mount happens to contain. The three lookups
     // that used to live here asked for `topthick`, `imgdepth` and `socketTolStepper`: the first
     // two never existed at all, and the third stopped existing when the fit controls were
@@ -2762,7 +2719,6 @@ export function createUi(
     hideForBlocks(document.getElementById('keychainAngleRow'));
     hideForBlocks(document.getElementById('keychainOffsetRow'));
     hideForBlocks(document.getElementById('keychainFreeResetMount'));
-    hideForBlocks(document.getElementById('sectionSwitch'));
 
     /* Model mode has its own sections (modelPanel.ts) for the cut, the switch, the size and the
        colours, so the image clicker's versions of those hide. What stays is what still means
@@ -2775,15 +2731,22 @@ export function createUi(
       if (el && isModelMode) el.style.display = 'none';
     };
     // Rows the blocks pass above already puts back on the way out of model mode…
-    hideForModel(document.getElementById('baseStyleSection'));
-    hideForModel(document.getElementById('sectionSwitch'));
     for (const mount of ['topthickMount', 'imgdepthMount', 'capProudMount', 'hollowMount']) {
       hideForModel(document.getElementById(mount)?.closest('.prow-stacked') as HTMLElement | null);
     }
-    // …and three it never touches, which therefore have to be put back here.
-    for (const id of ['sectionColors', 'sectionKeychain', 'previewViewSection']) {
-      const el = document.getElementById(id);
-      if (el) el.style.display = isModelMode ? 'none' : '';
+    // …and the preview switches, which model mode floats on the stage instead.
+    $('previewViewSection').style.display = isModelMode ? 'none' : '';
+    // Body: the image clicker's palette, or model mode's own colours.
+    $('palette').hidden = isModelMode;
+    $('modelColoursMount').hidden = !isModelMode;
+
+    // The rail: the categories this source has, and the one it opens on when you arrive. A
+    // category whose rows are all hidden for this source takes itself off as well.
+    const railPlan = RAIL_FOR_MODE[state.importMode];
+    for (const it of RAIL_ITEMS) settings.setVisible(it.id, railPlan.show.includes(it.id));
+    if (state.importMode !== railMode) {
+      railMode = state.importMode;
+      settings.open(railPlan.first);
     }
 
     shapeTypeTabs.setValue(treatAsOutline ? 'outline' : 'shape');

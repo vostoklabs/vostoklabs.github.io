@@ -8,7 +8,6 @@
 import {
   button,
   buttonGrid,
-  collapsibleSection,
   dpad,
   dropZone,
   el,
@@ -42,8 +41,9 @@ export interface ModelPanelDeps {
 export interface ModelPanel {
   /** The upload and the samples, for the right panel. */
   right: HTMLElement;
-  /** How it clicks, its one control, More, then Model and Colours — for the left rail. */
-  left: HTMLElement;
+  /** The left rail's three categories: how it clicks (its one control, then More), the
+   *  model's size and turn, and its colours. Rows only — the rail draws the headings. */
+  parts: { cut: HTMLElement; model: HTMLElement; colours: HTMLElement };
   /** `sample` is the sample that is loaded, or null for the user's own file (or nothing). */
   update(state: UiState, sample: SampleId | null): void;
   /** A result card's picture, or null while it is being made. */
@@ -320,16 +320,12 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
     block: true,
     onClick: () => set({ flattenMm: null }),
   });
-  const modelSection = collapsibleSection({
-    title: 'Model',
-    open: false,
-    body: [
-      el('div', { className: 'prow-stacked' }, [sizeRow]),
-      el('div', { className: 'prow-stacked' }, [flattenRow]),
-      autoFlatten,
-      turnGrid,
-    ],
-  });
+  const modelSection = el('div', { className: 'cg-rail-rows' }, [
+    el('div', { className: 'prow-stacked' }, [sizeRow]),
+    el('div', { className: 'prow-stacked' }, [flattenRow]),
+    autoFlatten,
+    turnGrid,
+  ]);
 
   // ---- Left: colours ----
   const hex = (rgb: [number, number, number]) =>
@@ -352,13 +348,7 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
     value: hex(deps.initial.modelCut.colors.body),
     onChange: (h) => set({ colors: { ...cut().colors, body: rgb(h) } }),
   });
-  const colourSection = collapsibleSection({
-    title: 'Colours',
-    open: false,
-    body: [topColour, modelColour, bodyColour],
-  });
-
-  const left = el('div', {}, [cutSection, modelSection, colourSection]);
+  const colourSection = el('div', { className: 'cg-rail-rows' }, [topColour, modelColour, bodyColour]);
 
   function update(next: UiState, sample: SampleId | null) {
     state = next;
@@ -432,7 +422,7 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
 
   return {
     right,
-    left,
+    parts: { cut: cutSection, model: modelSection, colours: colourSection },
     update,
     setPicture: (cutter, src) => cutterCards.setOptionImage(cutter, src),
   };

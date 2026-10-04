@@ -241,6 +241,10 @@ export interface BuildParams {
   blockTexture?: BlockTexture;
   /** Columns per row when the layout is 'grid'. */
   blockColumns?: number;
+  /** Which cells hold a key, one per region in reading order. A key can have nothing printed
+   *  on it (no rings), so this, not the rings, is what decides. Absent = a cell is a key when
+   *  its region has an outline (how blocks worked before blank keys). */
+  blockKeys?: boolean[];
   /** Legend size multiplier on the keycap (1 = the default fit). */
   legendScale?: number;
   /** Outward offset applied to every legend outline, mm — the "boldness" control. */
@@ -266,11 +270,15 @@ export interface BuildParams {
   partOverrides?: Record<string, RGB>;
 }
 
-/** One cell of a block arrangement: a glyph, a Lucide symbol, or a deliberate hole (which
- *  keeps its place in the grid so shapes like WASD are possible). */
+/** One cell of a block arrangement: a glyph, a Lucide symbol, a symbol traced from the library
+ *  or an SVG (its rings travel in `parseBlockChain`'s symbol table, under this private-use
+ *  character), a key with nothing printed on it, or a deliberate hole — which keeps its place in
+ *  the grid so shapes like WASD are possible. */
 export type BlockSlot =
   | { kind: 'char'; ch: string }
   | { kind: 'icon'; name: string }
+  | { kind: 'symbol'; char: string }
+  | { kind: 'blank' }
   | { kind: 'empty' };
 
 /** Which side of a block set the keyring loop hangs from. */

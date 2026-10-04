@@ -294,3 +294,12 @@ export {
   type PopoverOptions,
   type PopoverHandle,
 } from './components/editor-shell';
+// Settings in categories behind a rail, one open at a time (Laser Studio's editor, the clicker).
+export {
+  settingsRail,
+  type SettingsRailItem,
+  type SettingsRailOptions,
+  type SettingsRailHandle,
+} from './components/settings-rail';
+// A grid of keys as they will sit; a tap adds or removes one (the clicker's block layouts).
+export { keyMap, type KeyMapOptions, type KeyMapHandle } from './components/key-map';

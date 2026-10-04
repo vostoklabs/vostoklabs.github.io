@@ -89,6 +89,22 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
    classes and the styling comes from @vostok/ui-kit. */
 .label { display: block; font-family: var(--font-display); font-size: 14px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 14px; font-weight: 600; }
 
+/* The left panel, laid out like Laser Studio's editor: the title and the preview's switches stay
+   put at the top (they apply to whatever is open below them), the settings rail takes the rest
+   of the height with each category scrolling on its own, and undo/redo sits at the foot. */
+#sidebar-left .cg-left { display: flex; flex-direction: column; padding: 0; }
+.cg-left-top { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) var(--space-4) var(--space-3); border-bottom: 1px solid var(--line); }
+.cg-view { display: flex; flex-direction: column; gap: 8px; }
+.cg-rail { flex: 1 1 auto; min-height: 0; }
+.cg-rail-rows { display: flex; flex-direction: column; gap: 18px; }
+/* Blocks: Rows over Columns (a stepper needs the panel's width); the right panel's lines of keys. */
+.cg-grid-size { display: flex; flex-direction: column; gap: 12px; }
+.cg-block-lines { display: flex; flex-direction: column; gap: 12px; }
+#sidebar-left .cg-left-foot { position: static; margin: 0; padding: var(--space-3) var(--space-4); }
+@media (min-width: 901px) {
+  #sidebar-left .cg-left { overflow: hidden; }
+}
+
 /* Grid alignments for controls — stacked layout */
 .prow-stacked {
   display: flex;

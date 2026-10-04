@@ -46,6 +46,10 @@ import { allShapes, findShape, loadPackShapes } from './shapes/directory';
 import { mountProFeatures, type ProPanel } from 'virtual:pro-pack';
 import { SAMPLES, SVG_SAMPLES } from './image/sample';
 import { parseLetter, parseBlockChain, importFontFile } from './image/letter';
+import {
+  arrangeBlocks, blockBuildParams, changeLayout, gridFor, isSymbolChar, loadedBlocks, presetText, resizeCells,
+  toggleKey, tracedSymbols,
+} from './geometry/blockLayout';
 import { LUCIDE_ICONS, buildSvg } from './image/lucideIcons';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the host
 // glue in the MakerWorld build (`--mode makerworld`) — see vite.config.ts.
@@ -60,7 +64,6 @@ import {
   sdkToast,
 } from 'virtual:makerlab';
 import type {
-  BlockSlot,
   BuildParams,
   BuildRegion,
   ClickerPart,
@@ -224,13 +227,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     textScale: 1,
     textSizeMul: 1,
     // ---- Letter blocks ----
-    blockSlots: [
-      { kind: 'char', ch: 'N' },
-      { kind: 'char', ch: 'a' },
-      { kind: 'char', ch: 'm' },
-      { kind: 'char', ch: 'e' },
-    ],
-    blockOrientation: 'horizontal',
+    blockLayout: 'row',
+    blockGridRows: 3,
+    blockGridCols: 3,
+    blockCells: null,
+    blockLines: ['Name'],
+    blockSymbols: {},
+    blockStyle: 'walls',
+    blockTexture: 'smooth',
     legendScale: 1,
     legendBold: 0,
     keychainEnd: 'left',
@@ -356,9 +360,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         label = currentText;
         break;
       case 'blocks':
-        label = s.blockSlots
-          .map((slot) => (slot.kind === 'char' ? slot.ch : slot.kind === 'icon' ? slot.name : ''))
-          .join('');
+        // What is printed on the keys, symbols left out (they have no name worth a file).
+        label = Array.from(s.blockLines.join(' ')).filter((ch) => !isSymbolChar(ch)).join('').trim();
         break;
       case 'svg':
         label = currentSvgName;
@@ -979,27 +982,44 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ textScale: v });
       debouncedRebuild();
     },
-    onBlockText: (text) => {
-      // The chain is the source of truth in Blocks mode: retype the LETTER chips from the
-      // box and leave the symbols where the user put them (clamped to the new length).
-      const slots = store.get().blockSlots;
-      const icons: { at: number; slot: BlockSlot }[] = [];
-      slots.forEach((slot, i) => {
-        if (slot.kind === 'icon') icons.push({ at: i, slot });
+    onBlockLayout: (layout) => {
+      const s = store.get();
+      if (layout === s.blockLayout) return;
+      store.set(changeLayout(s, layout));
+      debouncedReprocess();
+    },
+    onBlockGridSize: (rows, cols) => {
+      const s = store.get();
+      const custom = s.blockLayout === 'custom';
+      const before = gridFor(custom ? 'custom' : 'grid', 0, s.blockGridRows, s.blockGridCols, s.blockCells);
+      // A grid still showing the keys it started with gets the right count of them for its new
+      // size; anything typed is kept as typed.
+      const untouched = JSON.stringify(s.blockLines) === JSON.stringify(presetText('grid', s.blockGridRows, s.blockGridCols).lines);
+      store.set({
+        blockGridRows: rows,
+        blockGridCols: cols,
+        blockCells: custom ? resizeCells(before, rows, cols) : null,
+        ...(untouched && !custom ? { blockLines: presetText('grid', rows, cols).lines } : {}),
       });
-      const next: BlockSlot[] = Array.from(text.replace(/\s+/g, '')).map(
-        (ch) => ({ kind: 'char', ch }) as BlockSlot,
-      );
-      for (const { at, slot } of icons) next.splice(Math.min(at, next.length), 0, slot);
-      store.set({ blockSlots: next });
       debouncedReprocess();
     },
-    onBlockSlots: (slots) => {
-      store.set({ blockSlots: slots });
+    onBlockCell: (index) => {
+      store.set(toggleKey(store.get(), index));
       debouncedReprocess();
     },
-    onBlockOrientation: (o) => {
-      store.set({ blockOrientation: o });
+    onBlockLine: (row, text) => {
+      const lines = [...store.get().blockLines];
+      while (lines.length <= row) lines.push('');
+      lines[row] = text;
+      store.set({ blockLines: lines });
+      debouncedReprocess();
+    },
+    onBlockStyle: (style) => {
+      store.set({ blockStyle: style });
+      debouncedRebuild();
+    },
+    onBlockTexture: (texture) => {
+      store.set({ blockTexture: texture });
       debouncedRebuild();
     },
     onLegendScale: (v) => {
@@ -1180,7 +1200,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     showColorPopoverAt: (x, y, hex, options, handlers) => ui.showColorPopoverAt(x, y, hex, options, handlers),
   });
   container.querySelector('#modelPanel')?.append(modelMode.panel.right);
-  container.querySelector('#modelSectionsMount')?.append(modelMode.panel.left);
+  // Model mode's three left-rail categories (ui.ts declares their mounts).
+  container.querySelector('#modelCutMount')?.append(modelMode.panel.parts.cut);
+  container.querySelector('#modelBodyMount')?.append(modelMode.panel.parts.model);
+  container.querySelector('#modelColoursMount')?.append(modelMode.panel.parts.colours);
 
   // ---- Undo / redo ----------------------------------------------------------
   // History snapshots the editable "document" fields (colors, heights, edges,
@@ -1202,6 +1225,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     'socketFitPct',
     'switches', 'keychain',
     'modelCut',
+    // Blocks: the look. What is ON the keys (layout, lines) re-traces, which starts a new
+    // baseline the way typing does in Text mode, so it is not in here.
+    'blockStyle', 'blockTexture', 'legendScale', 'legendBold',
   ] as const;
   let history: string[] = [];
   let histIndex = -1;
@@ -2113,7 +2139,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     } else if (s.importMode === 'blocks') {
       try {
         store.set({ building: true, status: 'Generating blocks…' });
-        regionSet = parseBlockChain(s.blockSlots, currentFontId);
+        const arr = arrangeBlocks(s.blockLayout, s.blockGridRows, s.blockGridCols, s.blockCells, s.blockLines, s.blockSymbols);
+        regionSet = parseBlockChain(arr.slots, currentFontId, tracedSymbols(s.blockSymbols));
       } catch (e: any) {
         store.set({ building: false, status: 'Error: ' + e.message });
         return;
@@ -2232,7 +2259,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       edgeSettings: s.edgeSettings,
       extrudeChamfer: s.extrudeChamfer,
       componentHeights: s.componentHeights,
-      blockOrientation: s.blockOrientation,
+      ...blockBuildParams(s),
       legendScale: s.legendScale,
       legendBold: s.legendBold,
       textBold: s.importMode === 'text' ? s.textBold : 0,
@@ -2475,10 +2502,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         textBold: s.textBold,
         textScale: s.textScale,
         componentHeights: s.componentHeights,
-        // Blocks mode: which side the keyring hangs off and how far along it has been slid.
-        // NOTE: the other blocks fields (blockOrientation, legendScale, legendBold, blockSlots)
-        // are still not saved — a pre-existing gap, flagged rather than fixed here because it
-        // is a behaviour change of its own.
+        // Blocks mode: the arrangement, what is on the keys, the look, and the keyring.
+        blockLayout: s.blockLayout,
+        blockGridRows: s.blockGridRows,
+        blockGridCols: s.blockGridCols,
+        blockCells: s.blockCells,
+        blockLines: s.blockLines,
+        blockSymbols: s.blockSymbols,
+        blockStyle: s.blockStyle,
+        blockTexture: s.blockTexture,
+        legendScale: s.legendScale,
+        legendBold: s.legendBold,
         keychainEnd: s.keychainEnd,
         keychainSlideMm: s.keychainSlideMm,
         modelCut: s.modelCut,
@@ -2715,6 +2749,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         componentHeights: set.componentHeights ?? {},
         keychainEnd: set.keychainEnd ?? 'left',
         keychainSlideMm: set.keychainSlideMm ?? 0,
+        // Blocks: a project from before blocks were saved opens on the defaults.
+        ...loadedBlocks(set),
       });
 
       // Model mode: the cut settings, then the model they were made on. Nothing below this

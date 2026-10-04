@@ -252,6 +252,16 @@
 .vl-tool-rail__gap { flex: 1 1 auto; }
 .vl-tool-rail__rule { display: block; height: 1px; margin: 6px 8px; background: var(--line); }
 
+/* ------------------------------------------------------------ settings rail -- */
+
+/* settingsRail(): the rail beside one open category, as Laser Studio's editor lays it out. The
+   category scrolls on its own so the rail stays put while a long one (a font list) scrolls. */
+.vl-settings-rail { display: grid; grid-template-columns: 77px minmax(0, 1fr); flex: 1; min-height: 0; }
+.vl-settings-rail__rail { align-self: stretch; }
+.vl-settings-rail__panels { min-width: 0; min-height: 0; overflow-y: auto; padding: var(--space-4); scrollbar-width: thin; }
+.vl-settings-rail__panels > .vl-section { border-top: 0; padding-top: 0; }
+.vl-settings-rail__panels .vl-section__body { gap: 18px; }
+
 /* -------------------------------------------------------------------- canvas -- */
 
 .vl-canvas {
@@ -395,6 +405,9 @@
 
 /* Phones: everything stacks. Not the target device for an editor, but it must not break. */
 @media (max-width: 900px) {
+  .vl-settings-rail { display: flex; flex-direction: column; flex: none; min-height: auto; }
+  .vl-settings-rail__rail { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .vl-settings-rail__panels { flex: none; }
   .vl-editor { max-height: none; }
   .vl-suitebar { grid-template-columns: 1fr; gap: var(--space-2); }
   .vl-suite-centre { justify-content: flex-start; }

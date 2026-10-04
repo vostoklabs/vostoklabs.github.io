@@ -190,7 +190,7 @@ export function buildBlocks(
       region: r,
       row: Math.floor(i / cols),
       col: i % cols,
-      filled: r.rings.some((ring) => ring.length >= 3),
+      filled: params.blockKeys?.[i] ?? r.rings.some((ring) => ring.length >= 3),
     }));
     const filled = cells.filter((c) => c.filled);
     if (filled.length === 0) {
@@ -464,7 +464,9 @@ export function buildBlocks(
       let letterBody: Solid | null = null;
 
       if (polys.length === 0) {
-        warnings.push(`Letter ${i + 1} has no printable outline. Its cap is blank.`);
+        // A key nobody printed anything on is a blank cap, on purpose; one whose character
+        // the font could not draw is worth saying.
+        if (region.rings.length) warnings.push(`Letter ${i + 1} has no printable outline. Its cap is blank.`);
       } else {
         try {
           let legend = track(csOf(wasm, polys, 'NonZero'));

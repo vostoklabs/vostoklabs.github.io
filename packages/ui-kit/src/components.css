@@ -1213,3 +1213,34 @@
   opacity: 0;
   cursor: pointer;
 }
+
+/* ----------------------------------------------------------------- key map -- */
+
+/* keyMap(): the grid of keys as they will sit. A key shows its legend; a dashed square is a
+   cell with no key. A tap switches either one. */
+.vl-keymap { --keymap-cell: 40px; display: grid; gap: 6px; justify-content: start; }
+.vl-keymap__cell {
+  width: var(--keymap-cell);
+  height: var(--keymap-cell);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: var(--control-fs);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
+}
+.vl-keymap__cell.is-key { border-style: solid; background: var(--panel-2); color: var(--text); }
+.vl-keymap__cell:hover { border-color: var(--accent); color: var(--accent); }
+.vl-keymap__cell:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-keymap__cell svg { width: 60%; height: 60%; }
