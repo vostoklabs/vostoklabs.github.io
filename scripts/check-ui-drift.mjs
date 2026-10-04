@@ -184,7 +184,7 @@ const BUDGET = {
   'keycap-generator': { button: 16, select: 3, input: 13, range: 5, html: 2, restyle: 5 },
   'keychain-carabiner': { restyle: 1 },
   'kit-demo': { licence: 4 },
-  'laser-studio': { restyle: 34 },
+  'laser-studio': { restyle: 31 },
   'magnet-generator': { button: 6, input: 2, range: 2, html: 3, restyle: 17 },
   'name-keychain': { input: 2 },
 };

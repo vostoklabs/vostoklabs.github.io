@@ -63,6 +63,46 @@ export type FontPickerHandle = HTMLElement & {
  *  list of ~150 webfont rows costs real layout time up front; most of it is below the fold. */
 const CHUNK = 40;
 
+export type FontStyleChipsHandle = HTMLElement & {
+  /** Press `style` without calling `onPick`: a filter elsewhere reset it. */
+  setActive(style: string): void;
+  /** The styles offered, without "All". */
+  styles: string[];
+};
+
+/**
+ * The style chips: "All", then each category the fonts name, A to Z, one pressed at a time.
+ * The library (`fontPicker`) and the panel's cards (`fontChooser`) both put this row over their
+ * fonts, so the two are one row and cannot drift into two looks.
+ */
+export function fontStyleChips(fonts: FontPickerFont[], active: string, onPick: (style: string) => void): FontStyleChipsHandle {
+  const styles = Array.from(new Set(fonts.map((f) => f.category).filter((c): c is string => !!c))).sort();
+  const row = el('div', {
+    className: 'vl-font-picker__cats',
+    attrs: { role: 'group', 'aria-label': 'Font category' },
+  }) as unknown as FontStyleChipsHandle;
+  const chips = new Map<string, ReturnType<typeof chip>>();
+  const press = (style: string) => {
+    for (const [id, c] of chips) c.setPressed(id === style);
+  };
+  for (const style of ['All', ...styles]) {
+    const c = chip({
+      label: style,
+      pressed: style === active,
+      onToggle: () => {
+        // A pressed chip clicked again stays pressed: there is always one style.
+        press(style);
+        onPick(style);
+      },
+    });
+    chips.set(style, c);
+    row.append(c);
+  }
+  row.setActive = press;
+  row.styles = styles;
+  return row;
+}
+
 export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
   let value = opts.value;
   let sample = opts.sample || 'Aa';
@@ -70,10 +110,6 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
   let activeCat = 'All';
   let activeScript = 'All';
   let shown = CHUNK;
-
-  const categories = Array.from(
-    new Set(opts.fonts.map((f) => f.category).filter((c): c is string => !!c)),
-  ).sort();
 
   const search = textField({
     label: opts.label ?? 'Search fonts',
@@ -86,24 +122,11 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
     },
   });
 
-  const catRow = el('div', { className: 'vl-font-picker__cats', attrs: { role: 'group', 'aria-label': 'Font category' } });
-  const catChips = new Map<string, ReturnType<typeof chip>>();
-  function addCatChip(id: string, label: string) {
-    const c = chip({
-      label,
-      pressed: id === activeCat,
-      onToggle: () => {
-        activeCat = id;
-        shown = CHUNK;
-        for (const [cid, cc] of catChips) cc.setPressed(cid === activeCat);
-        paint({ keepScroll: false });
-      },
-    });
-    catChips.set(id, c);
-    catRow.append(c);
-  }
-  addCatChip('All', 'All');
-  for (const c of categories) addCatChip(c, c);
+  const catRow = fontStyleChips(opts.fonts, activeCat, (style) => {
+    activeCat = style;
+    shown = CHUNK;
+    paint({ keepScroll: false });
+  });
 
   // Alphabet: a second row of the same chips, labelled, since a bare second row would read as
   // more categories. It narrows the list together with the category and the search.
@@ -122,7 +145,7 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
         // All rather than leaving, say, Comic and Korean together with next to nothing in it.
         if (s !== 'All' && activeCat !== 'All') {
           activeCat = 'All';
-          for (const [cid, cc] of catChips) cc.setPressed(cid === activeCat);
+          catRow.setActive(activeCat);
         }
         shown = CHUNK;
         for (const [sid, sc] of scriptChips) sc.setPressed(sid === activeScript);

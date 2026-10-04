@@ -186,6 +186,9 @@
   flex: 1 1 auto;
   min-height: 120px;
   max-height: none;
+  /* Fewer cards than the space (a design's eight recommended faces): they keep their own height
+     at the top, rather than each stretching to share the slack. */
+  align-content: start;
 }
 .vl-font-chooser--fill > :not(.vl-font-grid) {
   flex: 0 0 auto;

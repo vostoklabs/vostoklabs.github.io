@@ -6,6 +6,14 @@ import type { ChangelogEntry } from '@vostok/ui-kit';
 */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-04',
+    title: 'A new font picker',
+    changes: [
+      { kind: 'changed', text: 'Fonts are cards in your own text: this design’s recommended faces first, then the popular ones. Style chips (Clean, Comic, Script…) show every font of one style, and Browse all opens the whole library.' },
+      { kind: 'added', text: 'Import a font also reads .woff files and the .zip that font sites hand out.' },
+    ],
+  },
+  {
     date: '2026-09-29',
     title: 'Clearer categories, and business card lettering you can move',
     changes: [

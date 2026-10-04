@@ -21,9 +21,9 @@ import {
   FONTS,
   fontFamilyFor,
   curatedFonts,
+  importFontFiles,
+  toPickerFont,
   isFontSupported,
-  parseFont,
-  registerCustomFont,
   iconByChar,
   FALLBACK_FONT_ID,
   type FontChoice,
@@ -35,7 +35,7 @@ import {
   ICONS as UI_ICONS,
   dialog,
   el,
-  fontPicker,
+  fontChooser,
   inlineDisclosure,
   nudgePad,
   section,
@@ -51,7 +51,6 @@ import {
   thumbTile,
   toast,
   toggleSwitch,
-  uploadCta,
   dropZone,
 } from '@vostok/ui-kit';
 import { BATCH_SHEETS } from './engine/batch';
@@ -62,10 +61,11 @@ import { lines, type Field, type Values } from './templates/types';
 
 const SYMBOL_FAMILY = fontFamilyFor(FALLBACK_FONT_ID);
 
-/** Fonts the user dropped in this session. They outlive one editor: a template switch keeps them. */
-const customFonts: FontChoice[] = [];
-const allFonts = () => [...customFonts, ...FONTS];
-const toPickerFont = (x: { id: string; label: string; category: string }) => ({ id: x.id, label: x.label, family: `${fontFamilyFor(x.id)}, ${SYMBOL_FAMILY}`, category: x.category });
+/** A face for the font block, with the icon font behind it so a symbol in the sample draws. */
+const pickerFont = (x: FontChoice) => {
+  const p = toPickerFont(x);
+  return { ...p, family: `${p.family}, ${SYMBOL_FAMILY}` };
+};
 
 export interface FormOptions {
   fields: Field[];
@@ -181,60 +181,38 @@ export function renderForm(opts: FormOptions): Form {
         return { node: field, set: (v) => field.setValue(String(v)) };
       }
       case 'font': {
-        // The whole library, scrolling inside the tab: the kit's font picker — search, category
-        // chips, this design's recommended faces pinned first, the rest below, rows added as you
-        // scroll — with the import under it. No dialog: the list is the picker.
-        const host = el('div', { className: 'ls-font-list' });
-        // A picker named for its ROLE ("Calendar font", "Initial font") prints that name above
-        // the list, the way the rulebook wants two card blocks each labelled with their role
-        // (§3.5). The generic "Font" stays silent — the category it sits in already says so.
-        // Two pickers under one heading were two identical, unnamed lists (2026-09-22).
-        if (f.label && f.label !== 'Font') host.append(labelOf(f));
+        // The kit's font block, the one the clicker has: style chips over this design's faces as
+        // cards in the customer's own word, "Browse all" for the whole library, and the import.
+        // It fills the tab: the cards scroll, Browse all and Import stay put under them.
         const recommended = f.recommended ?? [];
-        let picker: ReturnType<typeof fontPicker> | null = null;
-        function makePicker(): HTMLElement {
-          // A stale handle would go on being sent samples after an import replaced the list.
-          if (picker) { const i = fontHandles.findIndex((x) => x.key === f.key); if (i >= 0) fontHandles.splice(i, 1); }
-          const pinned = recommended.length ? recommended : curatedFonts().map((x) => x.id);
-          picker = fontPicker({
-            fonts: allFonts().map(toPickerFont),
-            value: String(values[f.key]),
-            sample: fontSample(f.key),
-            label: '',
-            featured: [...customFonts.map((x) => x.id), ...pinned],
-            featuredLabel: recommended.length ? 'Recommended for this design' : 'Popular',
-            onChange: (id) => change(f.key, id),
-          });
-          fontHandles.push({ key: f.key, setSample: (s: string) => picker?.setSample(s) });
-          return picker;
-        }
-        host.append(makePicker());
-        const importFont = uploadCta({
-          label: 'Import your own font (.ttf / .otf)',
-          accept: '.ttf,.otf',
-          onFiles: async ([file]) => {
-            if (!file) return;
-            try {
-              const buffer = await file.arrayBuffer();
-              const parsed = parseFont(buffer);
-              const id = `custom-${file.name.replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '-').toLowerCase()}`;
-              registerCustomFont(id, parsed);
-              const face = new FontFace(fontFamilyFor(id), buffer);
-              await face.load();
-              document.fonts.add(face);
-              const label = (parsed?.names?.fullName?.en as string | undefined) ?? file.name.replace(/\.[^.]+$/, '');
-              if (!customFonts.some((x) => x.id === id)) customFonts.unshift({ id, label, category: 'Custom', curated: true, subsets: ['latin'] });
-              values[f.key] = id;
-              host.replaceChildren(makePicker());
-              change(f.key, id);
-              toast(`Imported ${label}`, { kind: 'ok' });
-            } catch (err) {
-              toast(`Could not read that font: ${(err as Error).message}`, { kind: 'error' });
-            }
+        // The cards under "All": a face imported this session first (the import lists it first in
+        // FONTS, as Custom), then this design's recommended faces, then the popular ones — about
+        // thirty, as in the clicker. Eight recommended faces alone was a short, unscrolling grid.
+        const imported = FONTS.filter((x) => x.category === 'Custom').map((x) => x.id);
+        const chooser = fontChooser({
+          fonts: FONTS.map(pickerFont),
+          curated: [...new Set([...imported, ...recommended, ...curatedFonts().map((x) => x.id)])],
+          value: String(values[f.key]),
+          sample: fontSample(f.key),
+          featuredLabel: recommended.length ? 'Recommended and popular' : 'Popular',
+          fill: true,
+          styleChips: true,
+          onChange: (id) => change(f.key, id),
+          onImport: async (file) => {
+            const { fonts, failed } = await importFontFiles(file);
+            return { fonts: fonts.map(pickerFont), failed };
           },
         });
-        const node = el('div', { className: 'ls-font-block' }, [host, importFont]);
-        return { node, set: (v) => picker?.setValue(String(v)) };
+        fontHandles.push({ key: f.key, setSample: (s: string) => chooser.setSample(s) });
+        // A picker named for its ROLE ("Calendar font", "Initial font") prints that name above
+        // the cards, the way the rulebook wants two card blocks each labelled with their role
+        // (§3.5). The generic "Font" stays silent — the category it sits in already says so.
+        // Two pickers under one heading were two identical, unnamed lists (2026-09-22).
+        const node = el('div', { className: 'ls-font-block' }, [
+          ...(f.label && f.label !== 'Font' ? [labelOf(f)] : []),
+          chooser,
+        ]);
+        return { node, set: (v) => chooser.setValue(String(v)) };
       }
       case 'number': {
         const row = sliderRow({
@@ -596,10 +574,11 @@ export function renderForm(opts: FormOptions): Form {
   if (ordered.length > 1 && ordered[0]![0] === fontTitle) ordered.splice(1, 0, ordered.splice(0, 1)[0]!);
   const panels = el('div', { className: 'ls-settings-panels' });
   const entries = ordered.map(([title, body], i) => {
-    const panel = section({ title, body });
     // The Font category fills its tab: the cards scroll inside it and Browse all / Import stay
     // put underneath.
-    if (body.some((node) => node.classList.contains('ls-font-block'))) panel.classList.add('ls-font-panel');
+    const isFont = body.some((node) => node.classList.contains('ls-font-block'));
+    const panel = section({ title, body, ...(isFont ? { fill: true } : {}) });
+    if (isFont) panel.classList.add('ls-font-panel');
     panel.id = 'ls-settings-' + i;
     panel.hidden = i !== 0;
     panels.append(panel);

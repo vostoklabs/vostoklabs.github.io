@@ -157,19 +157,10 @@
   gap: 4px;
 }
 
-/* The Font category: the kit's font picker inline — search, category chips and the whole
-   library as a list that scrolls INSIDE the tab, taking whatever height the tab has left once
-   the import and the lettering knobs are placed (never less than six rows). The kit's own
-   320 px cap on the list is lifted: the tab's height is the cap. */
-/* The rows list is sized `height: 0` + a 280 px floor + `flex: 1 1 0`: it contributes only its
-   floor to every ancestor's intrinsic height (a scrolling box's CONTENT would otherwise be what
-   its parents refuse to shrink below), then grows to whatever the tab has left. So no ancestor
-   needs `min-height: 0` — the ones that had it shrank past the floor and the import painted
-   over the rows — and a tab shorter than the floor scrolls the panel, never the rows. */
+/* The Font category: the kit's font block, the clicker's too, in the kit's `fill` section — its
+   cards scroll inside the tab, Browse all and Import stay under them. A role label ("Calendar
+   font") sits over the block. */
 .ls-font-block { display: flex; flex-direction: column; gap: var(--space-3); }
-.ls-font-list { display: flex; flex-direction: column; flex: 1 1 auto; }
-.ls-font-list > .vl-font-picker { flex: 1 1 auto; }
-.ls-font-list .vl-font-picker__list { flex: 1 1 0; height: 0; min-height: 280px; max-height: none; }
 
 /* Placement around the UI kit's tool rail and standard controls. */
 .ls-editor .vl-panel--left > .vl-panel__header { padding: var(--space-3) var(--space-4) var(--space-4); gap: var(--space-3); }
@@ -189,12 +180,11 @@
 @media (min-width: 901px) {
   .ls-editor { grid-template-columns: minmax(340px, 25vw) minmax(0, 1fr) minmax(320px, 25vw); }
   .ls-editor .vl-panel--left > .vl-panel__scroll { overflow: hidden; }
-  /* The Font tab is a column as tall as the panel; the font block takes the slack. */
-  /* `height`, not `min-height`: the tab must be BOUNDED by the panel for the list to take the
-     slack and scroll; with a minimum only, the list grew to its content and the panel scrolled. */
-  .ls-font-panel { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
-  .ls-font-panel > .vl-section__body { flex: 1 1 auto; display: flex; flex-direction: column; }
-  .ls-font-panel .ls-font-block { flex: 1 1 auto; }
+  /* The Font tab is as tall as the panel; the font block takes the slack. `height`, not
+     `min-height`: the tab must be BOUNDED by the panel for the cards to take the slack and
+     scroll; with a minimum only, they grew to their content and the panel scrolled. */
+  .ls-font-panel { height: 100%; box-sizing: border-box; }
+  .ls-font-panel .ls-font-block { flex: 1 1 auto; min-height: 0; }
   .ls-font-panel .ls-font-block ~ * { flex: 0 0 auto; }
   .ls-editor .vl-panel--right > .vl-panel__scroll { overflow: hidden; }
   .ls-form--right { flex: 1; min-height: 0; overflow-y: auto; }

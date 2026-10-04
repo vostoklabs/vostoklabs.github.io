@@ -4,14 +4,15 @@ import { chooseFile } from '../host-assets';
 import { button } from './button';
 import { dialog } from './dialog';
 import { fontCards, type FontCardsHandle } from './font-cards';
-import { fontPicker, type FontPickerFont } from './font-picker';
+import { fontPicker, fontStyleChips, type FontPickerFont, type FontStyleChipsHandle } from './font-picker';
 import { uploadCta } from './sources';
 import { toast } from './toast';
 
 /*
   The whole font block a generator puts in its panel, as one component: the curated cards in
   the user's own text, "Browse all N fonts" opening the full library, and, when the app wants
-  it, "Import a font".
+  them, style chips over the cards and "Import a font". With the chips, "All" shows the curated
+  cards and a style shows every face in it, the curated ones first.
 
   The kit had the two halves (`fontCards`, `fontPicker`) and nothing that put them together,
   so each generator put them together itself. Four did, and by October 2026 they had drifted
@@ -65,6 +66,8 @@ export interface FontChooserOptions {
   /** Grow the card grid into the height the block is given, inside a `section({ fill: true })`,
    *  instead of the panel's usual short scrolling grid. For a panel that is only the font. */
   fill?: boolean;
+  /** Style chips (Clean, Comic, Script…) over the cards, the row the library has. Default off. */
+  styleChips?: boolean;
 }
 
 export type FontChooserHandle = HTMLElement & {
@@ -96,23 +99,61 @@ export function fontChooser(opts: FontChooserOptions): FontChooserHandle {
     className: `vl-font-chooser${opts.fill ? ' vl-font-chooser--fill' : ''}`,
   }) as unknown as FontChooserHandle;
 
+  /** The style chip pressed: "All" (the curated cards) or one category of the library. */
+  let style = 'All';
+
   let cards: FontCardsHandle;
   function buildCards(): FontCardsHandle {
     const lookup = byId();
+    const picks = curated.map((id) => lookup.get(id)).filter((f): f is FontPickerFont => !!f);
+    const all = style === 'All';
+    const shown = all
+      ? picks
+      : [
+          ...picks.filter((f) => f.category === style),
+          ...fonts
+            .filter((f) => f.category === style && !curated.includes(f.id))
+            .sort((a, b) => a.label.localeCompare(b.label)),
+        ];
     return fontCards({
-      fonts: curated.map((id) => lookup.get(id)).filter((f): f is FontPickerFont => !!f),
+      fonts: shown,
       value,
       sample,
       onChange: (id) => {
         value = id;
         opts.onChange(id);
       },
-      lookup: (id) => byId().get(id),
+      // Under "All" a face chosen from the library is pinned first, so the choice is always on
+      // screen. Under a style it is not: a Script face pinned over the Spooky ones reads as a bug.
+      ...(all ? { lookup: (id: string) => byId().get(id) } : {}),
       ...(supports ? { supports } : {}),
       ...(opts.caption ? { caption: opts.caption } : {}),
     });
   }
   cards = buildCards();
+
+  let chips: FontStyleChipsHandle;
+  function buildChips(): FontStyleChipsHandle {
+    const row = fontStyleChips(fonts, style, (next) => {
+      style = next;
+      const fresh = buildCards();
+      cards.replaceWith(fresh);
+      cards = fresh;
+    });
+    // Off, the row is never shown, so the style stays "All": the plain curated cards. A library
+    // with one style, or none, has nothing to filter.
+    row.hidden = !opts.styleChips || row.styles.length < 2;
+    return row;
+  }
+  chips = buildChips();
+
+  /** Back to "All" when the choice is a face the pressed style does not show. */
+  function showChoice(id: string): boolean {
+    if (style === 'All' || byId().get(id)?.category === style) return false;
+    style = 'All';
+    chips.setActive(style);
+    return true;
+  }
 
   const browse = button({
     label: `Browse all ${fonts.length} fonts`,
@@ -144,14 +185,27 @@ export function fontChooser(opts: FontChooserOptions): FontChooserHandle {
   /** The one way the value changes from inside: the cards follow, the app hears about it. */
   function choose(id: string, notify: boolean) {
     value = id;
-    cards.setValue(id);
+    if (showChoice(id)) rebuildCards();
+    else cards.setValue(id);
     if (notify) opts.onChange(id);
   }
 
-  function refresh() {
+  function rebuildCards() {
     const next = buildCards();
     cards.replaceWith(next);
     cards = next;
+  }
+
+  /** The library changed: its styles may have too (an import brings "Custom"). */
+  function refresh() {
+    const nextChips = buildChips();
+    if (style !== 'All' && !nextChips.styles.includes(style)) {
+      style = 'All';
+      nextChips.setActive(style);
+    }
+    chips.replaceWith(nextChips);
+    chips = nextChips;
+    rebuildCards();
     browse.setLabel(`Browse all ${fonts.length} fonts`);
   }
 
@@ -173,6 +227,8 @@ export function fontChooser(opts: FontChooserOptions): FontChooserHandle {
       // Select before rebuilding the cards. Rebuilt first, they pinned the PREVIOUS choice
       // (when it was not a curated face) above the font that was just imported.
       value = added[added.length - 1]!.id;
+      // The imported faces lead the curated cards, so that is where to show them.
+      style = 'All';
       refresh();
       opts.onChange(value);
       toast(added.length === 1 ? `Imported ${added[0]!.label}` : `Imported ${added.length} fonts`, { kind: 'ok' });
@@ -181,7 +237,7 @@ export function fontChooser(opts: FontChooserOptions): FontChooserHandle {
     }
   }
 
-  const parts: HTMLElement[] = [cards, browse];
+  const parts: HTMLElement[] = [chips, cards, browse];
   if (opts.onImport) {
     const accept = opts.importAccept ?? '.ttf,.otf,.woff,.zip';
     const importRow = uploadCta({
