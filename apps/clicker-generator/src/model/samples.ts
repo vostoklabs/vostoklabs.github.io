@@ -18,10 +18,10 @@ export interface ModelSample {
 
 export const MODEL_SAMPLES: ModelSample[] = [
   { id: 'pumpkin', label: 'Pumpkin', preset: { cutter: 'slice', slice: { heightMm: null, hideSeam: true } } },
-  { id: 'skull', label: 'Skull', preset: { cutter: 'slice', slice: { heightMm: 29, hideSeam: true } } },
+  { id: 'skull', label: 'Skull', preset: { cutter: 'slice', slice: { heightMm: 30, hideSeam: true } } },
   { id: 'ghost', label: 'Ghost', preset: { cutter: 'stand', stand: { shape: 'circle', marginMm: 2.5 } } },
   { id: 'duck', label: 'Duck', preset: { cutter: 'stand', stand: { shape: 'circle', marginMm: 2.5 } } },
-  { id: 'cupcake', label: 'Cupcake', preset: { cutter: 'slice', slice: { heightMm: 19, hideSeam: true } } },
+  { id: 'cupcake', label: 'Cupcake', preset: { cutter: 'slice', slice: { heightMm: 20, hideSeam: true } } },
 ];
 
 /** The one the mode opens on when nothing is loaded. */

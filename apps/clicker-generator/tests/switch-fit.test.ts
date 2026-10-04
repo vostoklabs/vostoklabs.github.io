@@ -120,7 +120,7 @@ function defaults(capWidthMm = 35): BuildParams {
     baseShape: 'outline', capWidthMm, topThickness: 1.5, imageDepth: 0.8,
     imageMargin: 1.2, borderWidth: 2.6, capProud: 4.0, hollowBase: false,
     designScale: 1, shapeSides: 6, shapeCornerPct: 0.22, shapeArmPct: 0.56,
-    tolerance: 0.4, stemFitPct: 0, socketFitPct: 0,
+    tolerance: 0.4, stemFitMm: 0, socketFitPct: 0,
     imageOffset: { x: 0, y: 0 }, colorBleed: 0.12, stepHeight: 0.6, travel: 4.0,
     floorThickness: 1.6, switches: [{ x: 0, y: 0, rotation: 0 }],
     keychain: { enabled: false, style: 'loop', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 },

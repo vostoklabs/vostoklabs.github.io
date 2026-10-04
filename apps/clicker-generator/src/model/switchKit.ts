@@ -14,6 +14,7 @@
 //     travel, so nothing can touch the switch anywhere in the press.
 //  3. The static piece carries the socket and the identity voids around it.
 import { getMarkSeed, hardcodedVoids, markVoids } from '../geometry/identityMark';
+import { applyStemFit } from '../geometry/stemFit';
 import { sphereBuried } from './section';
 
 type Wasm = any;
@@ -34,7 +35,8 @@ export interface SwitchKit {
   /** Pocket floor (negative) and footprint of the socket as authored. */
   socketBottom: number;
   socketDim: number;
-  /** Post bottom (the moving piece's lowest plane) and top (its pocket ceiling). */
+  /** Post bottom (the moving piece's lowest plane) and top, where the post really rests on the
+   *  switch at rest — on the slider, `seatPost` — not where the asset was drawn. */
   postBottom: number;
   postTop: number;
   /** The switch above the plate: flange, housing step, upper housing. */
@@ -111,6 +113,67 @@ const FALLBACK_BANDS: EnvelopeBand[] = [
   { z0: 2.6, z1: 6.2, half: 6.76 },
 ];
 
+/**
+ * Where the keycap post really rests on the switch, in S: the highest point of the switch under
+ * the post's bottom face, which is the top of the slider the cross stands on.
+ *
+ * Measured, because the post asset's own height is 1.95 mm too low. It was drawn with the stem's
+ * tip touching the top of its cross hole, but the hole (5.6 mm) is deeper than the MX cross
+ * (3.7 mm — Cherry's, and this mesh's), so a printed post stops on the slider first. Every moving
+ * piece therefore stood 1.95 mm higher than its build said: Ian's pumpkin, 2026-10-01, a Flush
+ * button that printed proud while pushed fully home.
+ *
+ * Rays straight down at the post's bottom ring — outside the cross's 2 mm arms, inside the post's
+ * edge — onto the seated display mesh; the post lands on the highest thing they meet.
+ */
+export function measurePostSeat(verts: Float32Array, tris: Uint32Array): number | null {
+  // Only triangles near the axis and above the plate can be under the ring.
+  const near: number[] = [];
+  for (let t = 0; t < tris.length; t += 3) {
+    let close = false;
+    let top = -Infinity;
+    for (let k = 0; k < 3; k++) {
+      const o = tris[t + k] * 3;
+      if (Math.abs(verts[o]) < 4.5 && Math.abs(verts[o + 1]) < 4.5) close = true;
+      if (verts[o + 2] > top) top = verts[o + 2];
+    }
+    if (close && top > 0) near.push(t);
+  }
+  let seat: number | null = null;
+  for (const r of [2.3, 2.6, 2.9]) {
+    for (let i = 0; i < 16; i++) {
+      const a = ((i + 0.5) / 16) * 2 * Math.PI;
+      const x = r * Math.cos(a);
+      const y = r * Math.sin(a);
+      for (const t of near) {
+        const ia = tris[t] * 3;
+        const ib = tris[t + 1] * 3;
+        const ic = tris[t + 2] * 3;
+        const d = (verts[ib + 1] - verts[ic + 1]) * (verts[ia] - verts[ic]) + (verts[ic] - verts[ib]) * (verts[ia + 1] - verts[ic + 1]);
+        if (Math.abs(d) < 1e-12) continue;
+        const l1 = ((verts[ib + 1] - verts[ic + 1]) * (x - verts[ic]) + (verts[ic] - verts[ib]) * (y - verts[ic + 1])) / d;
+        const l2 = ((verts[ic + 1] - verts[ia + 1]) * (x - verts[ic]) + (verts[ia] - verts[ic]) * (y - verts[ic + 1])) / d;
+        const l3 = 1 - l1 - l2;
+        if (l1 < 0 || l2 < 0 || l3 < 0) continue;
+        const z = l1 * verts[ia + 2] + l2 * verts[ib + 2] + l3 * verts[ic + 2];
+        if (seat === null || z > seat) seat = z;
+      }
+    }
+  }
+  return seat;
+}
+
+/** What `measurePostSeat` gave for the MX asset on 2026-10-01, used only if the display mesh is
+ *  unreadable. */
+export const FALLBACK_POST_SEAT = 6.3;
+
+/** The keycap post raised onto its real seat — a new solid, which the caller owns. Never lowered:
+ *  a post already clear of the slider stays where it was drawn. */
+export function seatPost(stem: Solid, seat: number): Solid {
+  const lift = Math.max(0, seat - stem.boundingBox().min[2]);
+  return stem.translate([0, 0, lift]);
+}
+
 export function makeSwitchKit(socket: Solid, stem: Solid, bands: EnvelopeBand[]): SwitchKit {
   const sbb = socket.boundingBox();
   const tbb = stem.boundingBox();
@@ -181,18 +244,17 @@ export function socketCutter(sc: Scope, kit: SwitchKit, fitPct: number): Solid {
   return sc.keep(kit.socket.scale([k, k, 1]));
 }
 
-/** The keycap post, in S, as authored: the stem fit reaches Model mode with the millimetre stem
- *  fit (geometry/stemFit.ts), which moves the cross hole itself. Until then `stemFitMm` is 0. */
-export function postSolid(_wasm: Wasm, sc: Scope, kit: SwitchKit, _stemFitMm: number): { solid: Solid; applied: boolean } {
-  return { solid: sc.keep(kit.stem.translate([0, 0, 0])), applied: true };
+/** The keycap post with the stem fit applied, in S. */
+export function postSolid(wasm: Wasm, sc: Scope, kit: SwitchKit, stemFitMm: number): { solid: Solid; applied: boolean } {
+  const fit = applyStemFit(wasm, kit.stem, stemFitMm);
+  return { solid: sc.keep(fit.solid), applied: fit.applied };
 }
 
 /**
  * The room the moving piece must leave the switch, at rest, in S: every band of the switch's
  * envelope grown by the clearance and swept UP by the travel (the piece moves down onto the
- * switch; relative to the piece, the switch moves up). Stops at the post's top, which is the
- * ceiling: the image clicker's cap underside sits exactly there and lands on the housing top
- * a hair before full travel, and that stop has printed fine for months.
+ * switch; relative to the piece, the switch moves up). Stops at the end of the travel, or at the
+ * post's top if that comes first — with the post on its real seat, the travel does.
  *
  * Starts `below` under the moving piece's lowest plane so the cut is clean, never coplanar.
  */

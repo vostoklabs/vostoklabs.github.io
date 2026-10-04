@@ -8,7 +8,7 @@ import { buildClicker } from '../geometry/buildClicker';
 import { buildBlocks, prepareBlockAssets, type BlockAssets, type KeycapAsset } from '../geometry/buildBlocks';
 import { parseModel } from '../model/parse';
 import { prepareModel } from '../model/prepare';
-import { makeSwitchKit, measureSwitchBands, type EnvelopeBand } from '../model/switchKit';
+import { FALLBACK_POST_SEAT, makeSwitchKit, measurePostSeat, measureSwitchBands, seatPost, type EnvelopeBand } from '../model/switchKit';
 import { buildModelClicker } from '../model/buildModel';
 import type { GeometryRequest, GeometryResponse } from '../types';
 
@@ -24,6 +24,9 @@ let keycapAsset: KeycapAsset | null = null;
 // uploaded model as one prepared solid — cached, so a rebuild never re-sends or re-repairs it.
 let switchBands: EnvelopeBand[] = [];
 let modelBase: any = null;
+// Model mode's keycap post, raised onto the slider it really rests on (switchKit
+// `measurePostSeat`). The image clicker keeps `stem` exactly as drawn.
+let modelStem: any = null;
 
 async function getModule(): Promise<Wasm> {
   if (!modulePromise) {
@@ -157,6 +160,8 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       }
       // Measured here, before the buffers are handed to the main thread below.
       switchBands = measureSwitchBands(v, sw.triVerts);
+      modelStem?.delete?.();
+      modelStem = seatPost(stem, measurePostSeat(v, sw.triVerts) ?? FALLBACK_POST_SEAT);
       const switchMesh = { vertProperties: v, triVerts: sw.triVerts, numProp: 3 as const };
       const switchInfo = `${(sw.triVerts.length / 3) | 0} tris, seated +${(-seatZ).toFixed(
         2,
@@ -223,7 +228,9 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
     if (msg.type === 'buildModel') {
       if (!socket || !stem) throw new Error('Assets not initialized');
       if (!modelBase) throw new Error('No model loaded');
-      const kit = makeSwitchKit(socket, stem, switchBands);
+      // Seated on the measured slider when the switch mesh loaded; on the measured number when not.
+      if (!modelStem) modelStem = seatPost(stem, FALLBACK_POST_SEAT);
+      const kit = makeSwitchKit(socket, modelStem, switchBands);
       const { parts, switchPlacements, warnings, meta } = buildModelClicker(wasm, kit, modelBase, msg.params);
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
@@ -240,7 +247,7 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
       // No switches to report: the strip has no sockets, only the posts under test.
-      post({ type: 'parts', parts, switchPlacements: [], warnings }, transfer);
+      post({ type: 'parts', parts, switchPlacements: [], warnings, requestId: msg.requestId }, transfer);
       return;
     }
   } catch (err) {

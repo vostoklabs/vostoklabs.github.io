@@ -3,9 +3,11 @@
 // This is what nearly every popular MX clicker is when it is made by hand — the Pokeball, the
 // Skull/Brain, the Cheese — so it is the default cutter.
 //
-// Pressed, the model is whole again: the top is LIFTED by the post's bottom height rather than
+// Pressed, the model is whole again: the top is LIFTED by the travel and a hair rather than
 // having a slab cut out of the model, so no part of the design is lost to the mechanism. At rest
-// the gap is that lift (4.35 mm); the press closes it to 0.35.
+// the gap is that lift (4.35 mm); the press closes it to 0.35. The top's lowest plane is the post's
+// bottom, which rests on the switch's slider, so the switch's plate sits under the cut by however
+// far the post's seat is above that lift (`drop`, 1.95 mm for MX).
 //
 // Hide the gap ("Hide the seam" until 2026-10-01) is the same cut routed through a
 // collar: the bottom keeps its own skin for COLLAR mm above the switch, and the top grows a pillar
@@ -17,7 +19,7 @@ import { extrude } from '@vostok/manifold';
 import type { ModelCutParams } from './types';
 import {
   HEAVY_TOP_GRAMS, MIN_WALL, SOCKET_FLOOR, SWITCH_CLEARANCE, buryIdentityVoidsPlan, gramsOf,
-  movingPocket, place, pocketNeedMm, postSolid, socketCutter, socketNeedMm,
+  movingPocket, place, pocketNeedMm, postSolid, socketCutter, socketNeedMm, switchBody,
   type Scope, type SwitchKit, type SwitchPose,
 } from './switchKit';
 import { commonSection, deepestPoint, overhangArea, sectionAt, squareAt } from './section';
@@ -33,35 +35,45 @@ export const COLLAR = 8;
 /** The collar's wall, mm. The model's own surface is its outside, so this is the thinnest it
  *  gets — 1.6 is the image clicker's floor and bezel minimum, for the same reason. */
 export const SKIN = 1.6;
+/** What a full press leaves of the gap, mm: the top floats the travel and this above the cut at
+ *  rest, so pressing it closes the gap to a hair rather than crushing the halves together. */
+const PRESS_GAP = 0.35;
 
 /** What a seam height implies: where the plate plane is, and — for a hidden seam — the collar's
  *  inside and the pillar that slides in it. */
 interface SliceGeometry {
+  /** The cut's plate: the seam itself, or the collar's foot for a hidden seam. */
   plate: number;
+  /** The switch's plate (its socket's top): `drop` under `plate`, where the post meets the top. */
+  switchPlate: number;
   /** Where the switch axis may go: the model has material round it at every height it needs. */
   region: Section;
   inner: Section | null;
   pillar: Section | null;
 }
 
-function sliceGeometry(sc: Scope, model: Solid, kit: SwitchKit, seam: number, hide: boolean, tol: number): SliceGeometry {
+function sliceGeometry(
+  sc: Scope, model: Solid, kit: SwitchKit, seam: number, hide: boolean, tol: number, drop: number,
+): SliceGeometry {
   const pocketTop = kit.postTop - kit.postBottom;
   const below = -kit.socketBottom + SOCKET_FLOOR;
   if (!hide) {
+    const sp = seam - drop;
     const region = commonSection(sc, model, [
-      seam - below + 0.05, seam - 0.05, seam + 0.05, seam + pocketTop - 0.05,
+      sp - below + 0.05, sp - 0.05, seam - 0.05, seam + 0.05, seam + pocketTop - 0.05,
     ]);
-    return { plate: seam, region, inner: null, pillar: null };
+    return { plate: seam, switchPlate: sp, region, inner: null, pillar: null };
   }
   const plate = seam - COLLAR;
+  const sp = plate - drop;
   // The collar's outside is the model's surface, which can lean in or out across the band; the
   // smallest section over it is what the wall is measured from, so it is never thinner than SKIN.
   const band = commonSection(sc, model, [plate + 0.05, plate + COLLAR / 2, seam - 0.05]);
   const inner = band.isEmpty() ? band : sc.keep(band.offset(-SKIN, 'Round', 2, 16));
   const pillar = inner.isEmpty() ? inner : sc.keep(inner.offset(-tol, 'Round', 2, 16));
-  const socketRegion = commonSection(sc, model, [plate - below + 0.05, plate - 0.05]);
+  const socketRegion = commonSection(sc, model, [sp - below + 0.05, sp - 0.05, plate - 0.05]);
   const region = pillar.isEmpty() ? pillar : sc.keep(pillar.intersect(socketRegion));
-  return { plate, region, inner, pillar };
+  return { plate, switchPlate: sp, region, inner, pillar };
 }
 
 /**
@@ -79,11 +91,17 @@ function misfit(
   const below = -kit.socketBottom + SOCKET_FLOOR;
   const sq = (side: number) => squareAt(wasm, sc, side, x, y, rotation);
   const socketSq = sq(socketNeedMm(kit, fitPct));
-  const socket = Math.max(
-    overhangArea(sc, socketSq, sectionAt(sc, model, g.plate - 0.05)),
-    overhangArea(sc, socketSq, sectionAt(sc, model, g.plate + kit.socketBottom / 2)),
-    overhangArea(sc, socketSq, sectionAt(sc, model, g.plate - below + 0.05)),
+  let socket = Math.max(
+    overhangArea(sc, socketSq, sectionAt(sc, model, g.switchPlate - 0.05)),
+    overhangArea(sc, socketSq, sectionAt(sc, model, g.switchPlate + kit.socketBottom / 2)),
+    overhangArea(sc, socketSq, sectionAt(sc, model, g.switchPlate - below + 0.05)),
   );
+  // With the switch's plate under the cut's, its flange is inside the bottom piece and needs a
+  // wall round it there too.
+  if (g.plate - g.switchPlate > 0.05) {
+    const flangeSide = 2 * (Math.max(...kit.bands.map((b) => b.half)) + SWITCH_CLEARANCE + MIN_WALL);
+    socket = Math.max(socket, overhangArea(sc, sq(flangeSide), sectionAt(sc, model, g.switchPlate + 0.05)));
+  }
   const widest = sq(pocketNeedMm(kit));
   let pocket: number;
   if (g.pillar) {
@@ -108,7 +126,7 @@ const MISFIT_OK = 2;
  *  loose above it); it is nearest 55 % of the height. Failing the first, the least-bad fit. */
 function autoSeam(
   wasm: Wasm, sc: Scope, model: Solid, kit: SwitchKit, H: number, lo: number, hi: number,
-  hide: boolean, tol: number, p: ModelCutParams,
+  hide: boolean, tol: number, p: ModelCutParams, drop: number,
 ): number {
   if (!(hi > lo)) return (lo + hi) / 2;
   const target = 0.55 * H;
@@ -118,7 +136,7 @@ function autoSeam(
   let best: Score | null = null;
   for (let f = 0.3; f <= 0.8001; f += 0.05) {
     const z = Math.min(hi, Math.max(lo, f * H));
-    const g = sliceGeometry(sc, model, kit, z, hide, tol);
+    const g = sliceGeometry(sc, model, kit, z, hide, tol, drop);
     const d = deepestPoint(sc, g.region, 9);
     if (!d) continue;
     const m = misfit(wasm, sc, model, kit, z, g, d.x, d.y, p.switchNudge.rotation, p.socketFitPct);
@@ -149,15 +167,18 @@ export function cutSlice(
   const warnings: string[] = [];
   const H = size[2];
   const tol = Math.max(0.1, p.tolerance);
-  const lift = kit.postBottom;
-  const pocketTop = kit.postTop - lift;
+  // The top floats the travel and a hair above the cut; its lowest plane is the post's bottom,
+  // which rests on the slider, so the switch's plate goes `drop` under the cut's plate to meet it.
+  const lift = Math.max(0, p.travel) + PRESS_GAP;
+  const drop = kit.postBottom - lift;
+  const pocketTop = kit.postTop - kit.postBottom;
   const below = -kit.socketBottom + SOCKET_FLOOR;
 
   // A seam the switch can physically have: the socket needs `below` under the plate, the pocket
   // needs `pocketTop` (+ a millimetre of roof) over the seam. A hidden seam also needs the collar
   // under it — but only the automatic search keeps to that: the slider spans every height a
   // plain cut fits at, and the gap is hidden wherever the collar fits too (below).
-  const range = (hide: boolean) => ({ lo: below + (hide ? COLLAR : 0), hi: H - pocketTop - 1 });
+  const range = (hide: boolean) => ({ lo: below + drop + (hide ? COLLAR : 0), hi: H - pocketTop - 1 });
   const { lo, hi } = range(false);
   if (lo > hi) {
     warnings.push(
@@ -178,11 +199,11 @@ export function cutSlice(
   let collarMemo: { z: number; ok: boolean; geo: SliceGeometry; spot: ReturnType<typeof deepestPoint> } | null = null;
   const collarAt = (z: number) => {
     if (collarMemo?.z === z) return collarMemo;
-    const geo = sliceGeometry(sc, model, kit, z, true, tol);
+    const geo = sliceGeometry(sc, model, kit, z, true, tol, drop);
     const spot = deepestPoint(sc, geo.region, 9);
-    let ok = z - COLLAR >= below && !!spot && spot.clearance >= pocketNeedMm(kit) / 2;
+    let ok = z - COLLAR - drop >= below && !!spot && spot.clearance >= pocketNeedMm(kit) / 2;
     if (ok && !fitsAt(z, geo, spot!)) {
-      const plain = sliceGeometry(sc, model, kit, z, false, tol);
+      const plain = sliceGeometry(sc, model, kit, z, false, tol, drop);
       const plainSpot = deepestPoint(sc, plain.region);
       if (plainSpot && fitsAt(z, plain, plainSpot)) ok = false;
     }
@@ -196,7 +217,7 @@ export function cutSlice(
     const r = range(hide);
     const key = JSON.stringify([p.rotation, p.sizeMm, p.flattenMm, hide, tol, p.socketFitPct, p.switchNudge.rotation]);
     const known = memo?.get(key);
-    const z = known ?? autoSeam(wasm, sc, model, kit, H, r.lo, r.hi, hide, tol, p);
+    const z = known ?? autoSeam(wasm, sc, model, kit, H, r.lo, r.hi, hide, tol, p, drop);
     if (known === undefined) memo?.set(key, z);
     return z;
   };
@@ -204,9 +225,17 @@ export function cutSlice(
   if (p.slice.heightMm !== null) {
     seam = Math.min(Math.max(lo, hi), Math.max(Math.min(lo, hi), p.slice.heightMm));
   } else if (p.slice.hideSeam && range(true).lo <= range(true).hi) {
-    // The best height for a hidden gap — unless the collar fits nowhere, when the best plain one.
+    // The best height for a hidden gap — unless the switch fits a collar nowhere, when the best
+    // plain one, if the switch fits that.
     seam = autoAt(true);
-    if (!collarAt(seam).ok) seam = autoAt(false);
+    const c = collarAt(seam);
+    if (!c.ok) seam = autoAt(false);
+    else if (!c.spot || !fitsAt(seam, c.geo, c.spot)) {
+      const plain = autoAt(false);
+      const pg = sliceGeometry(sc, model, kit, plain, false, tol, drop);
+      const ps = deepestPoint(sc, pg.region);
+      if (ps && fitsAt(plain, pg, ps)) seam = plain;
+    }
   } else {
     seam = autoAt(false);
   }
@@ -215,14 +244,14 @@ export function cutSlice(
   const canHideSeam = collar.ok;
   const hide = p.slice.hideSeam && canHideSeam;
   const hideSpot = collar.spot;
-  const g = hide ? collar.geo : sliceGeometry(sc, model, kit, seam, false, tol);
+  const g = hide ? collar.geo : sliceGeometry(sc, model, kit, seam, false, tol, drop);
 
   // The switch goes where the model is deepest round the cut, then wherever the user nudged it.
   const spot = (hide ? hideSpot : deepestPoint(sc, g.region)) ?? { x: 0, y: 0, clearance: 0 };
   const pose: SwitchPose = {
     x: spot.x + p.switchNudge.x,
     y: spot.y + p.switchNudge.y,
-    z: g.plate,
+    z: g.switchPlate,
     rotation: p.switchNudge.rotation,
   };
 
@@ -250,10 +279,13 @@ export function cutSlice(
     ).add(place(sc, post.solid, pose)),
   );
 
-  // ---- The bottom: socket and identity voids, one boolean ----
+  // ---- The bottom: socket, the switch's room above it, identity voids, one boolean ----
+  // The room matters because the switch's plate sits `drop` under the cut: its flange and the
+  // foot of its housing are inside the bottom piece.
   const socket = place(sc, socketCutter(sc, kit, p.socketFitPct), pose);
+  const room = place(sc, switchBody(wasm, sc, kit), pose);
   const marks = buryIdentityVoidsPlan(wasm, sc, bottomRaw, kit, p.socketFitPct, pose);
-  const bottom = sc.keep(bottomRaw.subtract(sc.keep(wasm.Manifold.union([socket, ...marks.voids]))));
+  const bottom = sc.keep(bottomRaw.subtract(sc.keep(wasm.Manifold.union([socket, room, ...marks.voids]))));
 
   // ---- Checks ----
   const m = misfit(wasm, sc, model, kit, seam, g, pose.x, pose.y, pose.rotation, p.socketFitPct);

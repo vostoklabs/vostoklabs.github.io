@@ -65,7 +65,7 @@ const regionsFor = (r: Ring): BuildRegion[] => [
 
 const base: BuildParams = {
   baseShape: 'square', capWidthMm: 35, topThickness: 1.5, imageDepth: 0.8, imageMargin: 2,
-  borderWidth: 2, capProud: 1.2, tolerance: 0.4, stemFitPct: 0, socketFitPct: 0,
+  borderWidth: 2, capProud: 1.2, tolerance: 0.4, stemFitMm: 0, socketFitPct: 0,
   imageOffset: { x: 0, y: 0 }, colorBleed: 0.05, stepHeight: 0.4, travel: 3.8,
   floorThickness: 1.2, switches: [{ x: 0, y: 0, rotation: 0 }],
   keychain: { enabled: false, style: 'loop', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 },

@@ -63,7 +63,7 @@ function measure(opts: { lineSpacing?: number; letterSpacing?: number; textScale
   const capWidthMm = SIZE_MM * (rs.sizeMul ?? 1) * (opts.textScale ?? 1);
   const params: BuildParams = {
     baseShape: 'outline', capWidthMm, topThickness: 1.5, imageDepth: 0.8, imageMargin: 2.5,
-    borderWidth: 3.5, capProud: 1.2, tolerance: 0.4, stemFitPct: 0, socketFitPct: 0,
+    borderWidth: 3.5, capProud: 1.2, tolerance: 0.4, stemFitMm: 0, socketFitPct: 0,
     imageOffset: { x: 0, y: 0 }, colorBleed: 0.12, stepHeight: 0.6, travel: 4.0,
     floorThickness: 1.6, switches: [{ x: 0, y: 0, rotation: 0 }],
     keychain: { enabled: false, style: 'loop', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 },

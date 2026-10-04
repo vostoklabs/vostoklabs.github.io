@@ -35,6 +35,8 @@ import { runWizard } from './ui/wizard';
 import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
 import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
 import { buildObjMtl, objToArrayBuffer } from './export/objExport';
+import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from './geometry/stemFit';
+import { FIT_TEST_FONT_ID, FIT_TEST_STEP_MM, fitTestLabel, fitTestLadder } from './geometry/fitStrip';
 import { parseSvg, type SvgOptions } from './image/logo';
 import { openSvgPreview } from './ui/svgPreview';
 import { allShapes, findShape, loadPackShapes } from './shapes/directory';
@@ -184,7 +186,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     drawnShapeId: null,
     builtBodyMm: null,
     tolerance: 0.4,
-    stemFitPct: 0,
+    stemFitMm: 0,
+    fitTestActive: false,
+    fitTestStepMm: FIT_TEST_STEP_MM,
     socketFitPct: 0,
     switches: [{ x: 0, y: 0, rotation: 0 }],
     activeSwitchIndex: 0,
@@ -384,7 +388,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *  Not for the fit test, which is ours alone. */
   function modelExportOpts(): { sourceModel?: string } {
     const s = store.get();
-    if (s.importMode !== 'model') return {};
+    if (s.importMode !== 'model' || s.fitTestActive) return {};
     return { sourceModel: modelMode.snapshot()?.name ?? 'an uploaded model' };
   }
 
@@ -477,7 +481,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
   function setShowSwitch(on: boolean) {
     store.set({ showSwitch: on });
-    viewer.showSwitch(on);
+    // The fit test has no switch to show; the setting applies again on the way back.
+    viewer.showSwitch(on && !store.get().fitTestActive);
   }
 
   const ui: ReturnType<typeof createUi> = createUi(sidebarLeft, sidebarRight, statusEl, {
@@ -570,38 +575,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ imageDepth: mm });
       debouncedRebuild();
     },
-    onFitTest: () => {
-      // Five settings either side of the current one. The numbers are debossed on the tiles,
-      // so the print answers "what do I type" without the user writing anything down.
-      // A FIXED sweep, not one centred on the current setting. Two reasons, both practical:
-      // a calibration strip should read in the absolute numbers you type into the control,
-      // and centring on a half-step turned the labels into '-3.5%' — five glyphs, which at
-      // this tile size deboss about 2 mm tall and cannot be read. Three characters always.
-      // The control's range is -5..+5, so this spans nearly all of it.
-      const steps = [-4, -2, 0, 2, 4];
-      let labels: { pct: number; rings: Ring[] }[];
-      try {
-        labels = steps.map((pct) => {
-          // parseLetter normalises to a unit box, which is exactly what the strip wants — it
-          // scales each label to a fixed millimetre size itself.
-          // WITH the per-cent sign: the tile has to say the same thing the control says, or
-          // the number on the print is a riddle. The control reads '+2.0%'; this reads '+2%'.
-          const rs = parseLetter(`${pct > 0 ? '+' : ''}${pct}%`, currentFontId, 6, false);
-          return { pct, rings: rs.regions.flatMap((r) => r.components.flatMap((c) => c.rings)) };
-        });
-      } catch {
-        // A font that cannot render digits is not a reason to withhold the test.
-        labels = steps.map((pct) => ({ pct, rings: [] }));
-      }
-      pendingFitStrip = true;
-      store.set({ building: true, status: 'Building the fit test…' });
-      const st = store.get();
-      worker.postMessage({
-        type: 'buildFitStrip',
-        labels,
-        // The same colour the real cap gets, so the strip prints in what they are looking at.
-        colorRgb: st.baseColorOverride ?? deriveFrameColor(st),
-      });
+    onFitTest: () => enterFitTest(),
+    onFitTestExit: () => exitFitTest(),
+    onFitTestStep: (mm) => {
+      store.set({ fitTestStepMm: mm });
+      showFitStrip();
     },
     onHollowBase: (on) => {
       store.set({ hollowBase: on });
@@ -677,10 +655,18 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ tolerance: Math.round(Math.max(0.1, Math.min(1.0, mm)) * 100) / 100 });
       debouncedRebuild();
     },
-    onStemFit: (pct) => {
-      // Cap stem ↔ switch stem: opens or closes the cross socket inside the cap's post.
-      store.set({ stemFitPct: Math.round(Math.max(-5, Math.min(5, pct)) * 10) / 10 });
-      debouncedRebuild();
+    onStemFit: (mm) => {
+      // Cap stem ↔ switch stem: opens or closes the cross hole in the cap's post.
+      const clamped = Math.max(STEM_FIT_MIN_MM, Math.min(STEM_FIT_MAX_MM, mm));
+      store.set({ stemFitMm: Math.round(Math.round(clamped / STEM_FIT_STEP_MM) * STEM_FIT_STEP_MM * 100) / 100 });
+      // While the fit test is showing, the tiles are what is on screen and they are centred on
+      // this number. The design catches up when the preview goes back to it.
+      if (store.get().fitTestActive) {
+        designStale = true;
+        debouncedFitStrip();
+      } else {
+        debouncedRebuild();
+      }
     },
     onSocketFit: (pct) => {
       // Body pocket ↔ switch body: how tightly the switch itself sits in the base.
@@ -793,14 +779,19 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       viewer.setSection(axis, pos);
     },
     onExport: async () => {
-      if (!latestParts.length) return;
+      // With the fit test showing, Export sends the tiles. Same paths as the design on purpose:
+      // the MakerLab route, the cover and the licence nudge all come with it.
+      const fitTest = store.get().fitTestActive;
+      const parts = fitTest ? fitStripParts : latestParts;
+      if (!parts.length) return;
+      const fileBase = fitTest ? 'clicker-stem-fit-test' : designFileBase();
       if (MAKERLAB && mlReady() && mlCan('export')) {
         // Embedded path: hand the host an OBJ (one `o` object per colour region) plus an MTL
         // carrying those colours.
         const status = (msg: string) => store.set({ status: msg });
         status('Sending to MakerLab…');
         try {
-          const { obj, mtl } = buildObjMtl(latestParts, 'clicker.mtl');
+          const { obj, mtl } = buildObjMtl(parts, 'clicker.mtl');
           // The same framed cover the downloaded 3MF gets. This used to be a bare
           // `canvas.toDataURL()` with no render in front of it — it survived only because the
           // renderer keeps its drawing buffer, and it handed MakerWorld the whole viewport:
@@ -810,18 +801,20 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           const result = await sdkExport({
             artifacts: [
               {
-                fileName: `${designFileBase()}.obj`,
+                fileName: `${fileBase}.obj`,
                 format: 'obj',
                 buffer: objToArrayBuffer(obj),
                 mtl,
                 coverImage,
-                description: 'Multi-color clicker, made with the Clicker Generator.',
+                description: fitTest
+                  ? 'Switch stem fit test tiles, made with the Clicker Generator.'
+                  : 'Multi-color clicker, made with the Clicker Generator.',
               },
             ],
           });
           if (result.success) {
             status('Exported to MakerLab ✓');
-            sdkToast({ message: 'Clicker exported', type: 'success' });
+            sdkToast({ message: fitTest ? 'Fit test exported' : 'Clicker exported', type: 'success' });
           } else {
             status(`Export failed: ${result.errorMessage ?? result.errorCode}`);
             sdkToast({ message: 'Export failed', type: 'error' });
@@ -834,9 +827,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // With a host the file goes to the host's own export path rather than the browser's
         // download bar.
         try {
-          const name = `${designFileBase()}.3mf`;
+          const name = `${fileBase}.3mf`;
           const { indexed } = await host.exportToLibrary(
-            { name, bytes: buildThreeMF(latestParts, { ...(await coverImages()), ...modelExportOpts() }) },
+            { name, bytes: buildThreeMF(parts, { ...(await coverImages()), ...modelExportOpts() }) },
             { designer: 'Clicker Generator' },
           );
           store.set({ status: indexed ? 'Exported to your library ✓' : `Exported as ${name} ✓` });
@@ -1211,7 +1204,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
        next save wrote the disc down. Both ids are short strings; the rings they point at stay
        out of the snapshot. */
     'packShapeToken', 'drawnShapeId',
-    'stemFitPct',
+    'stemFitMm',
     'socketFitPct',
     'switches', 'keychain',
     'modelCut',
@@ -1222,11 +1215,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let pendingHistoryReset = false;
   /** Set when the next build should re-frame the camera (new subject, not an edit). */
   let pendingReframe = true;
-  /* The fit strip is built by the same worker and comes back down the same `parts` message,
-     but it is a file to download rather than a design to look at. This flag is what tells the
-     handler which one arrived; it is cleared there whatever happens, so a failed strip cannot
-     leave the next real rebuild exporting itself. */
-  let pendingFitStrip = false;
   /* Set right before a sample/pack image goes into the wizard, by NAME — `onSample` only ever
      hands this file a loader function, never a label, so this is how the eventual settled
      status ("Sample: X…") learns what got picked. Consumed by the next 'parts' message (or
@@ -1308,6 +1296,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const tag = el?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) return;
     if (!(e.ctrlKey || e.metaKey)) return;
+    // Undo would rebuild a design nobody can see; the history buttons are locked too.
+    if (store.get().fitTestActive) return;
     const k = e.key.toLowerCase();
     if (k === 'z') {
       e.preventDefault();
@@ -1351,6 +1341,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---- Click a colored region on the 3D model to recolor it (live, no rebuild) ----
   viewer.onPartPick((index, clientX, clientY, shiftKey) => {
     const s = store.get();
+    // The meshes on screen are test tiles, and every index below means a part of the design.
+    if (s.fitTestActive) return;
+
+    // Model mode: a click recolours that piece. Its parts are named by role (button, base),
+    // not by colour region, so the palette machinery below has nothing to map them to.
+    if (s.importMode === 'model') {
+      if (index !== null) modelMode.pickPart(latestParts[index], clientX, clientY);
+      return;
+    }
 
     // Empty space clears the selection (all modes).
     if (index === null) {
@@ -1583,6 +1582,103 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     });
   }
 
+  /* ---- Stem fit test --------------------------------------------------------------------
+     A strip of test tiles shown in the preview in place of the design, and sent by the normal
+     Export button, the way the keycap generator's fit test works. It used to download a 3MF
+     the moment it was pressed, which inside MakerLab did nothing: the sandbox has no
+     downloads. Going through Export also gives it the MakerLab route, the cover and the
+     licence nudge the design gets.
+
+     The design is never touched. `latestParts` keeps it, the UI locks the controls that shape
+     it, and going back repaints it (rebuilding first if the stem fit changed meanwhile). */
+  let fitStripParts: ClickerPart[] = [];
+  let fitStripSeq = 0;
+  /** The stem fit changed while the tiles were showing, so the design has not been built with it. */
+  let designStale = false;
+  /** The switch placements the last design build reported, to put back with the design. */
+  let latestSwitchPlacements: SwitchPlacement[] = store.get().switches;
+  /** What the status line said about the design before the fit test replaced it. */
+  let statusBeforeFitTest = '';
+
+  function showFitStrip() {
+    const st = store.get();
+    if (!st.fitTestActive) return;
+    // Five tiles centred on the stepper, so after a first print a finer step tunes around the
+    // tile that fitted. The number is debossed on each, in the same form the stepper shows.
+    const values = fitTestLadder(st.stemFitMm, st.fitTestStepMm);
+    let labels: { fitMm: number; rings: Ring[] }[];
+    try {
+      labels = values.map((fitMm) => {
+        const rs = parseLetter(fitTestLabel(fitMm), FIT_TEST_FONT_ID, 6, false);
+        return { fitMm, rings: rs.regions.flatMap((r) => r.components.flatMap((c) => c.rings)) };
+      });
+    } catch {
+      // A label that will not render is not a reason to withhold the test.
+      labels = values.map((fitMm) => ({ fitMm, rings: [] }));
+    }
+    const requestId = `fit${++fitStripSeq}`;
+    store.set({ building: true, status: 'Building the fit test…' });
+    pendingBuilds.set(requestId, ({ parts, warnings }) => {
+      // A newer strip was asked for, or the preview already went back to the design.
+      if (requestId !== `fit${fitStripSeq}` || !store.get().fitTestActive) return;
+      fitStripParts = parts;
+      viewer.setParts(parts, false);
+      viewer.setView(store.get().view);
+      store.set({
+        building: false,
+        hasParts: parts.length > 0,
+        status: [
+          ...warnings,
+          `Fit test tiles ${values.map(fitTestLabel).join(', ')} mm. Export and print them, press each onto a switch, then set Switch stem fit to the number on the tile that fits.`,
+        ].join(' · '),
+      });
+    });
+    worker.postMessage({
+      type: 'buildFitStrip',
+      labels,
+      // The same colour the real cap gets, so the tiles print in what they are looking at.
+      colorRgb: st.baseColorOverride ?? deriveFrameColor(st),
+      requestId,
+    });
+  }
+  const debouncedFitStrip = debounce(showFitStrip, 130);
+
+  function enterFitTest() {
+    const st = store.get();
+    if (st.fitTestActive) return;
+    if (!assetsReady) {
+      store.set({ status: 'Waiting for switch assets…' });
+      return;
+    }
+    designStale = false;
+    statusBeforeFitTest = st.status;
+    store.set({ fitTestActive: true, selectedParts: [] });
+    viewer.clearHighlight();
+    // Pieces lie flat on the plate like the keycap's, so there is nothing for a switch to sit in.
+    viewer.showSwitch(false);
+    showFitStrip();
+  }
+
+  function exitFitTest() {
+    if (!store.get().fitTestActive) return;
+    fitStripSeq++; // a strip still in flight is no longer wanted
+    fitStripParts = [];
+    store.set({
+      fitTestActive: false,
+      building: false,
+      hasParts: latestParts.length > 0,
+      status: statusBeforeFitTest,
+    });
+    viewer.setParts(latestParts, false);
+    viewer.setView(store.get().view);
+    viewer.setSwitchPlacements(latestSwitchPlacements);
+    viewer.showSwitch(store.get().showSwitch);
+    if (designStale) {
+      designStale = false;
+      rebuild();
+    }
+  }
+
   worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
     const msg = e.data;
     switch (msg.type) {
@@ -1623,25 +1719,22 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           resolve?.({ parts: msg.parts, warnings: msg.warnings ?? [] });
           break;
         }
-        if (pendingFitStrip) {
-          pendingFitStrip = false;
-          store.set({
-            building: false,
-            status: msg.warnings?.[0] ?? 'Fit test exported.',
-          });
-          downloadThreeMF(msg.parts, 'clicker-fit-test.3mf');
-          break;
-        }
         latestParts = msg.parts;
+        latestSwitchPlacements = msg.switchPlacements ?? [];
         if (msg.modelMeta) modelMode.onParts(msg.modelMeta, msg.warnings ?? []);
-        // Re-frame the camera only when the SUBJECT changed (a new image, icon, SVG, or a
-        // different import mode). Editing what is already on screen — the text, the font,
-        // the legend size — must leave the view exactly where the user put it.
-        viewer.setParts(msg.parts, !pendingReframe);
-        pendingReframe = false;
-        viewer.setView(store.get().view);
-        // Seat one preview switch per (clamped) placement the geometry was built around.
-        viewer.setSwitchPlacements(msg.switchPlacements ?? []);
+        // A design build that was already in flight when the fit test opened. It is still the
+        // design, so keep it for when the preview goes back, but leave the tiles on screen.
+        const showingFitTest = store.get().fitTestActive;
+        if (!showingFitTest) {
+          // Re-frame the camera only when the SUBJECT changed (a new image, icon, SVG, or a
+          // different import mode). Editing what is already on screen — the text, the font,
+          // the legend size — must leave the view exactly where the user put it.
+          viewer.setParts(msg.parts, !pendingReframe);
+          pendingReframe = false;
+          viewer.setView(store.get().view);
+          // Seat one preview switch per (clamped) placement the geometry was built around.
+          viewer.setSwitchPlacements(latestSwitchPlacements);
+        }
 
         // Extrude heights are baked into the geometry now — do NOT translate the
         // meshes too, or the raised part would float a second step above the model.
@@ -1690,7 +1783,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           // sample or pack design — otherwise the status goes blank and the finished model on
           // screen reads as the user's own work, not a demo (audit #2). `pendingSampleLoadName`
           // is null for every ordinary edit, so this never fires outside that one moment.
-          status: notes.length
+          // A clean Model-mode build says what it made and that the switch fits it.
+          status: showingFitTest
+            ? store.get().status
+            : notes.length
             ? notes.join(' · ')
             : msg.modelMeta
               ? modelMode.cleanStatus(msg.modelMeta)
@@ -2135,7 +2231,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         ? ringsForState(s) ?? undefined
         : undefined,
       tolerance: s.tolerance,
-      stemFitPct: s.stemFitPct,
+      stemFitMm: s.stemFitMm,
       socketFitPct: s.socketFitPct,
       imageOffset: s.imageOffset,
       colorBleed: 0.12,
@@ -2163,6 +2259,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
 
   function rebuild(quiet = false) {
+    // Asking for a design build means wanting to see the design. The controls that could ask
+    // are locked while the fit test is showing; this catches the paths that are not controls
+    // (a file dropped on the window, a project opened). Cleared first, so going back does not
+    // queue a second build of its own.
+    if (store.get().fitTestActive) {
+      designStale = false;
+      exitFitTest();
+    }
     // Nothing to build yet, and SAYING so is the whole point of this branch.
     //
     // Every control in the sidebar is live from the moment the app opens, and every one of
@@ -2353,7 +2457,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           ? null
           : (ringsForState(s) && !s.packShapeToken ? ringsForState(s) : null),
         tolerance: s.tolerance,
-        stemFitPct: s.stemFitPct,
+        stemFitMm: s.stemFitMm,
         socketFitPct: s.socketFitPct,
         imageOffset: s.imageOffset,
         switches: s.switches,
@@ -2539,6 +2643,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   /** Applies a saved parameter blob to the live UI. Shared by both load paths. */
   async function applyProject(raw: unknown) {
     {
+      exitFitTest();
       store.set({ building: true, status: 'Loading project…' });
       const proj = raw as Record<string, any>;
       const set = proj.settings ?? {};
@@ -2586,11 +2691,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         packShapeToken: set.packShapeToken ?? null,
         drawnShapeId: null,
         tolerance: set.tolerance ?? store.get().tolerance,
-        // v3 projects stored `stemTolerance` in mm against the old scale-the-whole-post code,
-        // where even the clamp extreme moved the gripping slot ~0.15 mm. There is no honest
-        // conversion to the new percentage, and 0 (the asset as authored) is within one
-        // extrusion width of whatever they had — so old values are dropped rather than guessed.
-        stemFitPct: set.stemFitPct ?? 0,
+        // `stemFitPct` (saved until 2026-09-17) scaled the post, which widened the gripping
+        // arms by pct% of their 1.194 mm — so that IS the clearance it produced, and it converts
+        // exactly. Every value it could hold lands on 0 or one 0.05 mm step either side. v3's
+        // `stemTolerance` scaled the whole post in mm and is still dropped rather than guessed.
+        stemFitMm: typeof set.stemFitMm === 'number'
+          ? Math.max(STEM_FIT_MIN_MM, Math.min(STEM_FIT_MAX_MM, set.stemFitMm))
+          : Math.round((((set.stemFitPct ?? 0) * 0.01194) / STEM_FIT_STEP_MM)) * STEM_FIT_STEP_MM || 0,
         socketFitPct: set.socketFitPct ?? 0,
         // v3 stores `switches`; older (v2) projects carried scalar offsets — synthesize
         // a single-switch array from them for back-compat.
@@ -2754,6 +2861,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         setStatus: (msg) => store.set({ status: msg }),
         buildOne,
         showParts: (parts) => {
+          exitFitTest();
           latestParts = parts;
           viewer.setParts(parts, false);
           viewer.setView(store.get().view);

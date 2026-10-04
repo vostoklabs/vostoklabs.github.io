@@ -30,6 +30,14 @@ import type { ChangelogEntry } from '@vostok/ui-kit';
 */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-04',
+    changes: [
+      { kind: 'fixed', text: 'Switch stem fit now changes the print, in millimetres.' },
+      { kind: 'changed', text: 'The fit test opens in the preview before you export it.' },
+      { kind: 'added', text: 'Choose the step between fit test tiles.' },
+    ],
+  },
+  {
     date: '2026-10-01',
     changes: [
       { kind: 'added', text: 'Make a clicker from any 3D model: STL, 3MF or OBJ.' },

@@ -141,17 +141,16 @@ export interface BuildParams {
   borderWidth: number; // raised body border around the cap (the bezel wall)
   capProud: number; // how far the cap top sticks up above the body border at rest (≈ travel → flush when pressed)
   tolerance: number; // slip-fit gap between cap outer wall and body well wall ("switch socket" fit)
-  /** Cap stem fit, as a PERCENTAGE of the stem's cross socket: + opens the socket (easier
-   *  to press onto the switch), − tightens the grip. 0 = the asset exactly as authored.
+  /** Cap stem fit, mm of clearance added to the cross hole in the cap's post: + opens it
+   *  (easier to press onto the switch), − tightens the grip. Half goes on each wall. 0 = the
+   *  asset exactly as authored.
    *
-   *  Percent, not mm, because the thing being moved is the HOLE. The old mm control scaled
-   *  the whole stem solid by a factor derived from its 7.9 mm outer bbox, so the ~1.2 mm slot
-   *  that actually grips the switch moved about a seventh of the millimetres on the label —
-   *  one "+0.2 mm" press opened it 0.03 mm, under a single extrusion width. Every setting was
-   *  mechanically the same part, which is what "I tried all of them and it still doesn't fit"
-   *  meant. `stemFit` in buildClicker moves the hole and leaves the outer post alone, so a
-   *  percentage of the hole is the only unit that stays honest. */
-  stemFitPct: number;
+   *  It was a percentage until 2026-09-17, and before that a millimetre figure that scaled the
+   *  whole post. Both scaled, and a scale moves each wall by its distance from the centre: the
+   *  walls that grip sit 0.6 mm out, so ±5% moved them 0.03 mm, under what a printer resolves.
+   *  `applyStemFit` (geometry/stemFit.ts) offsets the hole's own contour, so the number on the
+   *  control is the number in the part. */
+  stemFitMm: number;
   /** Body switch-pocket fit, as a PERCENTAGE of the imported socket footprint: + opens the
    *  pocket (switch drops in more easily), − grips harder. 0 = the asset as authored.
    *
@@ -359,8 +358,11 @@ export type GeometryRequest =
        *  the number to deboss on it — text becomes outlines on the main thread, because the
        *  fonts live there. */
       type: 'buildFitStrip';
-      labels: { pct: number; rings: Ring[] }[];
+      labels: { fitMm: number; rings: Ring[] }[];
       colorRgb: RGB;
+      /** Echoed on the `parts` response, like a batch build's. The strip is requested while a
+       *  design build may still be in flight, so arrival order cannot say which is which. */
+      requestId?: string;
     }
   // Model mode (src/model/). The uploaded file — or a sample, which is a file too — is sent
   // once and cached in the worker as a solid; every `buildModel` after it is a transform of

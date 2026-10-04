@@ -19,6 +19,7 @@
 // Frame: Z = 0 is the switch plate top. socket cuts downward; stem rises to +Z.
 import type { BuildParams, BuildRegion, ClickerPart, EdgeSetting, EdgeStyle, PartGroup, Ring, RGB, SwitchPlacement } from '../types';
 import { getMarkSeed, markVoids, hardcodedVoids } from './identityMark';
+import { applyStemFit } from './stemFit';
 import {
   archRing, capsuleRing, crossRing, eggRing, heartRing, ngonRing, shieldRing,
   squircleRing, switchSpotOf, tagRing,
@@ -798,33 +799,14 @@ export function buildClicker(
     warnings.push('Switches were pulled together to fit the cap. Increase Size for more room.');
   }
 
-  // Stem fit: move the cross socket INSIDE the cap's keycap-mount post without moving the
-  // post itself.
-  //
-  // This used to scale the whole stem solid by a factor derived from its 7.9 mm outer bbox,
-  // which is wrong twice over: it dragged the outer post along with the hole, and it meant the
-  // ~1.2 mm slot that actually grips the switch moved about a seventh of the millimetres shown
-  // on the control. A "+0.2 mm" press opened the slot 0.03 mm — under one extrusion width, so
-  // every setting printed as the same part.
-  //
-  // Clipping fixes both. The stem is material (unioned into the cap at `base.add(st)`), so:
-  //
-  //   looser  (f > 1): the grown copy has a bigger hole — INTERSECT with the original to clip
-  //                    the outside back to the post as authored.
-  //   tighter (f < 1): the shrunk copy fills part of the hole — UNION with the original to keep
-  //                    the outer profile as authored.
-  //
-  // Either way the outer footprint is exactly `stem`, so `stemBB` — which drives the Z stack at
-  // `slabBottomZ` / `skirtBottomZ` — stays valid and the cap's rest height cannot move. Z is
-  // never scaled. The worker hands the stem to us XY-centred, so scaling about the origin
-  // scales about its own centre. Computed once and reused for every switch placement.
-  let stemSized: Solid = stem;
-  const stemFit = params.stemFitPct ?? 0;
-  if (Math.abs(stemFit) > 0.01) {
-    const f = 1 + stemFit / 100;
-    const scaled = track(stem.scale([f, f, 1]));
-    stemSized = track(f > 1 ? scaled.intersect(stem) : scaled.add(stem));
-  }
+  // Stem fit: open or close the cross hole in the cap's post by an exact clearance, leaving
+  // the outer post and its height alone — so `stemBB`, which drives the Z stack at
+  // `slabBottomZ` / `skirtBottomZ`, stays valid and the cap's rest height cannot move. Why it
+  // is an offset of the hole and not a scale of the post is written out in stemFit.ts.
+  // Computed once and reused for every switch placement.
+  const stemFit = applyStemFit(wasm, stem, params.stemFitMm ?? 0);
+  const stemSized: Solid = track(stemFit.solid);
+  if (!stemFit.applied) warnings.push('Switch stem fit could not be applied. The stem prints as designed.');
 
   // The cached socket/stem solids are owned by the worker — rotate/translate into
   // tracked copies rather than mutating or freeing them. Rotation spins the whole

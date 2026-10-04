@@ -156,9 +156,36 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
       set({ button: { ...b, sizeMm: Math.max(BUTTON_MIN[b.shape], v) } }, true);
     },
   });
+  // Flush or raised is the one look a button has, so it sits with Size rather than under More
+  // (Ian, 2026-10-01). `raiseMm` stays the only state — 0 is flush — so a saved project means the
+  // same thing as before; Raised remembers its amount for a flip back and forth.
+  let lastRaise = deps.initial.modelCut.button.raiseMm > 0 ? deps.initial.modelCut.button.raiseMm : 2;
+  const buttonTopTabs = segmentedControl<'flush' | 'raised'>({
+    label: 'Button top',
+    help: 'Flush sits level with the model. Raised sticks out, easy to feel.',
+    options: [
+      { value: 'flush', label: 'Flush' },
+      { value: 'raised', label: 'Raised' },
+    ],
+    value: deps.initial.modelCut.button.raiseMm > 0 ? 'raised' : 'flush',
+    onChange: (v) => set({ button: { ...cut().button, raiseMm: v === 'flush' ? 0 : lastRaise } }),
+  });
+  const raiseRow = sliderRow({
+    label: 'Sticks out by',
+    help: 'How far the button stands above the model at rest.',
+    min: 0.5, max: 4, step: 0.25, unit: 'mm',
+    value: lastRaise,
+    onInput: (v) => {
+      lastRaise = v;
+      set({ button: { ...cut().button, raiseMm: v } }, true);
+    },
+  });
+  const raiseWrap = el('div', { className: 'prow-stacked' }, [raiseRow]);
   const buttonKnob = el('div', {}, [
     el('p', { className: 'switch-pad-hint', text: 'Click the model where the button goes.' }),
     el('div', { className: 'prow-stacked' }, [buttonSizeRow]),
+    el('div', { className: 'field' }, [buttonTopTabs]),
+    raiseWrap,
   ]);
 
   // ---- Left: More, per result ----
@@ -199,13 +226,6 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
       set({ button: { ...b, shape: v, sizeMm: Math.max(BUTTON_MIN[v], b.sizeMm) } });
     },
   });
-  const raiseRow = sliderRow({
-    label: 'Raise',
-    help: 'How far the button stands out at rest. 0 is flush with the model.',
-    min: 0, max: 4, step: 0.25, unit: 'mm',
-    value: deps.initial.modelCut.button.raiseMm,
-    onInput: (v) => set({ button: { ...cut().button, raiseMm: v } }, true),
-  });
   const buttonNudge = (dx: number, dy: number) => {
     const b = cut().button;
     const at = state.modelMeta?.buttonAt ?? { x: 0, y: 0 };
@@ -220,7 +240,6 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
   });
   const buttonMore = el('div', {}, [
     el('div', { className: 'field' }, [buttonShapeTabs]),
-    el('div', { className: 'prow-stacked' }, [raiseRow]),
     el('p', { className: 'switch-pad-hint', text: 'Move or turn the button' }),
     buttonPad.root,
   ]);
@@ -397,7 +416,10 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
 
     buttonShapeTabs.setValue(c.button.shape);
     buttonSizeRow.setValue(c.button.sizeMm);
-    raiseRow.setValue(c.button.raiseMm);
+    const raised = c.button.raiseMm > 0;
+    buttonTopTabs.setValue(raised ? 'raised' : 'flush');
+    raiseWrap.hidden = !raised;
+    if (raised) raiseRow.setValue(c.button.raiseMm);
     buttonPad.setReadout(c.button.x === null ? 'On top' : 'Where you clicked');
 
     sizeRow.setValue(c.sizeMm);

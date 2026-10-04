@@ -127,9 +127,7 @@ export function createModelMode(deps: ModelModeDeps) {
   /** The parameters the worker cuts with: the mode's own settings plus the three fit controls
    *  it shares with every other mode (Body & fit), so "Switch stem fit" means one thing. */
   function params(s: UiState): ModelCutParams {
-    // `stemFitMm: 0`: the switch's stem prints as designed in this mode until the millimetre stem
-    // fit lands (geometry/stemFit.ts); the rail hides the stem fit row meanwhile.
-    return { ...s.modelCut, tolerance: s.tolerance, stemFitMm: 0, socketFitPct: s.socketFitPct, travel: 4.0 };
+    return { ...s.modelCut, tolerance: s.tolerance, stemFitMm: s.stemFitMm, socketFitPct: s.socketFitPct, travel: 4.0 };
   }
 
   /** Everything a card's picture depends on: the model, how it is sized and turned, the fits,
@@ -137,7 +135,7 @@ export function createModelMode(deps: ModelModeDeps) {
   function pictureKey(cutter: CutterKind, s: UiState): string {
     const c = s.modelCut;
     const own = cutter === 'slice' ? [c.slice, c.switchNudge] : cutter === 'stand' ? [c.stand] : [c.button, c.switchNudge.rotation];
-    return JSON.stringify([modelToken, c.sizeMm, c.rotation, c.flattenMm, c.colors, s.tolerance, s.socketFitPct, own]);
+    return JSON.stringify([modelToken, c.sizeMm, c.rotation, c.flattenMm, c.colors, s.tolerance, s.stemFitMm, s.socketFitPct, own]);
   }
 
   /** A new model: every card goes back to being made, and nothing built for the last one counts. */
@@ -296,7 +294,7 @@ export function createModelMode(deps: ModelModeDeps) {
     // parts there — which it does straight after this returns, in the same task.
     queueMicrotask(() => {
       const after = store.get();
-      if (after.importMode !== 'model' || after.modelCut.cutter !== cutter) return;
+      if (after.importMode !== 'model' || after.fitTestActive || after.modelCut.cutter !== cutter) return;
       const src = viewer.renderThumbnail(PICTURE_PX);
       if (src) {
         panel.setPicture(cutter, src);

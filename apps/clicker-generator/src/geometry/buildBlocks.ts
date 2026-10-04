@@ -15,6 +15,7 @@
 // the stem cross, the socket and the cap stay mutually aligned.
 import type { BuildParams, BuildRegion, ClickerPart, Ring, RGB, SwitchPlacement } from '../types';
 import { hardcodedVoids, getMarkSeed, markVoids } from './identityMark';
+import { applyStemFit } from './stemFit';
 
 type Wasm = any;
 type Solid = any;
@@ -234,7 +235,7 @@ export function prepareBlockAssets(wasm: Wasm, socket: Solid, raw: RawBlocks): B
 }
 
 /** Build the keycap shell (+ stem) once, centred on the switch axis. */
-function buildCapBlank(wasm: Wasm, keycap: KeycapAsset, stemFitPct: number): Solid {
+function buildCapBlank(wasm: Wasm, keycap: KeycapAsset, stemFitMm: number, warnings: string[]): Solid {
   const shell = meshToSolid(wasm, keycap.shell.positions, keycap.shell.indices);
   const [ccx, ccy] = keycap.meta.center;
   const centredShell = shell.translate([-ccx, -ccy, 0]);
@@ -242,22 +243,16 @@ function buildCapBlank(wasm: Wasm, keycap: KeycapAsset, stemFitPct: number): Sol
   if (!keycap.stem) return centredShell;
 
   const stemRaw = meshToSolid(wasm, keycap.stem.positions, keycap.stem.indices);
-  let stem = stemRaw.translate([-ccx, -ccy, 0]);
+  const authored = stemRaw.translate([-ccx, -ccy, 0]);
   stemRaw.delete();
-  // Same semantics as the flat clicker cap, including the clip that keeps the outer post
-  // still while the cross socket moves — the reason for it is written out at the stem fit in
-  // buildClicker. Z is untouched so the cap's rest height never moves.
-  if (Math.abs(stemFitPct) > 0.01) {
-    const f = 1 + stemFitPct / 100;
-    const scaled = stem.scale([f, f, 1]);
-    const clipped = f > 1 ? scaled.intersect(stem) : scaled.add(stem);
-    scaled.delete();
-    stem.delete();
-    stem = clipped;
-  }
-  const cap = centredShell.add(stem);
+  // The same exact offset of the cross hole as the flat clicker cap (stemFit.ts). The outer
+  // post and Z are untouched, so the cap's rest height never moves.
+  const fit = applyStemFit(wasm, authored, stemFitMm);
+  authored.delete();
+  if (!fit.applied) warnings.push('Switch stem fit could not be applied. The stem prints as designed.');
+  const cap = centredShell.add(fit.solid);
   centredShell.delete();
-  stem.delete();
+  fit.solid.delete();
   return cap;
 }
 
@@ -489,7 +484,7 @@ export function buildBlocks(
   });
 
   // ---------- Keycaps + debossed letters ----------
-  const capBlank = track(buildCapBlank(wasm, keycap, params.stemFitPct ?? 0));
+  const capBlank = track(buildCapBlank(wasm, keycap, params.stemFitMm ?? 0, warnings));
 
   // Seat the cap AT REST on the switch stem.
   //

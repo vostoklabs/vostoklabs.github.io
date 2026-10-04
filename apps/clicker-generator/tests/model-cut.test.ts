@@ -4,7 +4,9 @@
   What is asserted, and why each one:
 
    1. The switch envelope is measured off the display mesh, not typed — three bands, the flange
-      the widest. If the asset is re-cut this is what moves, so it is what is checked first.
+      the widest. If the asset is re-cut this is what moves, so it is what is checked first. And
+      the keycap post rests where the real switch holds it — on the slider, 1.95 mm above where
+      the post asset was drawn (Ian's pumpkin, 2026-10-01: a Flush button printed proud).
    2. Every reader lands the same solid: binary and ASCII STL, OBJ with quads and negative indices,
       and a 3MF whose part lives in a separate file behind a component transform, in centimetres
       (the Bambu production-extension layout). Inside-out files are turned, overlapping shells are
@@ -37,7 +39,7 @@ const { parse3MF } = await import('../src/geometry/threemfImport.ts');
 const { parseModel } = await import('../src/model/parse.ts');
 const { prepareModel } = await import('../src/model/prepare.ts');
 const { MODEL_SAMPLES } = await import('../src/model/samples.ts');
-const { makeSwitchKit, measureSwitchBands } = await import('../src/model/switchKit.ts');
+const { makeSwitchKit, measureSwitchBands, measurePostSeat, seatPost, switchBody, place, scope, FALLBACK_POST_SEAT } = await import('../src/model/switchKit.ts');
 const { buildModelClicker } = await import('../src/model/buildModel.ts');
 const { DEFAULT_MODEL_CUT } = await import('../src/model/types.ts');
 type ModelCutParams = import('../src/model/types.ts').ModelCutParams;
@@ -85,7 +87,8 @@ const sw = parse3MF(asset('switch/mx/mx-switch.3mf'));
   for (let i = 0; i < v.length; i += 3) v[i + 2] -= seatZ;
 }
 const bands = measureSwitchBands(sw.vertProperties, sw.triVerts);
-const kit = makeSwitchKit(socket, stem, bands);
+const seat = measurePostSeat(sw.vertProperties, sw.triVerts);
+const kit = makeSwitchKit(socket, seatPost(stem, seat ?? FALLBACK_POST_SEAT), bands);
 
 // 1. The envelope
 {
@@ -96,10 +99,14 @@ const kit = makeSwitchKit(socket, stem, bands);
     bands.length >= 2 && widest > 7.5 && widest < 8.2 && top > 5.5 && top < 7,
     bands.map((b) => `${b.z0.toFixed(1)}–${b.z1.toFixed(1)}:${(2 * b.half).toFixed(2)}`).join('  '),
   );
+  // Cherry: 4.0 mm travel, a 3.7 mm cross on a slider, the stem tip ~10.2 mm over the plate. The
+  // post's cross hole is 5.6 mm deep, so the post stops on the slider, not on the tip.
+  const drawn = stem.boundingBox().min[2];
   check(
-    'post measured',
-    Math.abs(kit.postBottom - 4.35) < 0.2 && Math.abs(kit.postTop - 9.99) < 0.2,
-    `post ${kit.postBottom.toFixed(2)} → ${kit.postTop.toFixed(2)}, socket to ${kit.socketBottom.toFixed(2)}`,
+    'post rests on the slider, not inside it',
+    seat !== null && seat > 6.0 && seat < 6.6 && Math.abs(kit.postBottom - seat) < 0.01
+      && Math.abs(kit.postTop - kit.postBottom - 5.64) < 0.1,
+    `slider top ${seat?.toFixed(2)} mm (the asset drew the post at ${drawn.toFixed(2)}), post ${kit.postBottom.toFixed(2)} → ${kit.postTop.toFixed(2)}, socket to ${kit.socketBottom.toFixed(2)}`,
   );
 }
 
@@ -288,7 +295,9 @@ for (const sample of ['ball', 'mushroom', 'cat'] as const) {
   // The round button sits lower than the square one (its outline reaches further down the
   // mushroom's dome), and its socket then reaches the thin stem — a true warning, not a bug.
   CASES.push({ sample, label: 'button round', params: { cutter: 'button' }, clean: sample !== 'mushroom' });
-  CASES.push({ sample, label: 'button square', params: { cutter: 'button', button: { shape: 'square', sizeMm: 22, raiseMm: 1, x: null, y: null } }, clean: true });
+  // On its real seat the switch sits 1.95 mm deeper than the post asset was drawn, and the
+  // mushroom's 60 mm cap is no longer deep enough for either button: a true warning again.
+  CASES.push({ sample, label: 'button square', params: { cutter: 'button', button: { shape: 'square', sizeMm: 22, raiseMm: 1, x: null, y: null } }, clean: sample !== 'mushroom' });
 }
 
 const TRAVEL_CHECK = 3.75; // the pocket ceiling lands on the housing top at ~3.79
@@ -328,6 +337,36 @@ for (const c of CASES) {
     const postArea = cs.intersect(ring).area();
     check(`${name}: prints upright on the post's plane`, Math.abs(plane - expect) < 0.02 && postArea > 4,
       `lowest ${plane.toFixed(2)} vs ${expect.toFixed(2)}, post area there ${postArea.toFixed(1)} mm²`);
+    // At rest, where the real switch holds it: a slice floats the travel and a hair over its cut,
+    // a stand's plate is proud of its rim by the travel, a flush button is level with the model.
+    const fbb = fix.boundingBox();
+    if (c.label === 'slice plain') {
+      const gap = plane - fbb.max[2];
+      check(`${name}: rests 4.35 mm over the cut (closes to 0.35 pressed)`, Math.abs(gap - 4.35) < 0.02, `gap ${gap.toFixed(2)} mm`);
+    }
+    if (c.params.cutter === 'stand') {
+      const capTop = solids.find((q) => q.part.name === 'top-base')!.solid.boundingBox().max[2];
+      const proud = capTop - fbb.max[2];
+      check(`${name}: plate proud by the travel, flush pressed`, Math.abs(proud - 4) < 0.02, `proud ${proud.toFixed(2)} mm`);
+    }
+    // Where the button is the model's highest point (not the cat, whose ears are).
+    if (c.label === 'button round' && c.sample !== 'cat') {
+      const top = bb.max[2];
+      const modelTop = out.meta.sizeMm[2] + out.meta.assemblyMinZ;
+      check(`${name}: flush with the model at rest`, Math.abs(top - modelTop) < 0.05, `button top ${top.toFixed(2)}, model top ${modelTop.toFixed(2)}`);
+    }
+    // The static pieces leave the switch its own room above the plate (a slice's bottom holds its
+    // flange now): the switch's envelope, without the clearance, meets nothing there.
+    {
+      const sc = scope();
+      const bare = { ...kit, bands: kit.bands.map((b: any) => ({ ...b, half: b.half - 0.39 })) };
+      const room = place(sc, switchBody(wasm, sc, bare), { x: at.x, y: at.y, z: at.z + 0.1, rotation: at.rotation });
+      const hit = room.intersect(fix);
+      const v = hit.volume();
+      hit.delete();
+      sc.free();
+      check(`${name}: the switch has its room`, v < 0.5, `${v.toFixed(3)} mm³ of base inside the switch`);
+    }
     // The base prints the way it stands, so it must stand on a face, not a point: a ball's
     // bottom half would otherwise need support to print and roll off the desk once it had.
     const fb = fix.boundingBox();

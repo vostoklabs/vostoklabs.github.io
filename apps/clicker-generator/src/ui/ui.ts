@@ -1,11 +1,11 @@
 import { BRAND } from '@vostok/brand';
 import {
   button,
-  type ButtonHandle,
-  buttonRow,
   colorChip,
   dialog,
   helpTip,
+  historyControls,
+  type HistoryControlsHandle,
   iconButton,
   modeBar,
   selectField,
@@ -19,6 +19,7 @@ import {
   qualityCallout,
   segmentedControl,
   type SegmentedRow,
+  setExportNote,
   setFieldOptions,
   panelCredit,
   sidebarFooter,
@@ -42,6 +43,8 @@ import { CHANGELOG } from '../changelog';
 import { entryForState, loadPackShapes } from '../shapes/directory';
 import { designUrl, inSeason, loadDesignImage, orderedDesignPacks } from '../packs';
 import { openShapePicker } from './shapePicker';
+import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from '../geometry/stemFit';
+import { FIT_TEST_STEP_OPTIONS } from '../geometry/fitStrip';
 import type { ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
 import { modelFormatOf } from '../model/parse';
 
@@ -101,8 +104,13 @@ export interface UiState {
   builtBodyMm: { w: number; h: number } | null;
   /** Top ↔ base slip-fit clearance, mm. Baseline 0.4 reads as a 0 offset in the UI. */
   tolerance: number;
-  /** Cap stem fit, % of the cross socket that grips the switch. 0 = the asset as authored. */
-  stemFitPct: number;
+  /** Cap stem fit, mm of clearance on the cross hole that grips the switch. 0 = as authored. */
+  stemFitMm: number;
+  /** The preview and Export show the printable stem fit test instead of the design. The
+   *  design itself is untouched; its controls are locked until this goes false again. */
+  fitTestActive: boolean;
+  /** Distance between neighbouring fit test tiles, mm. */
+  fitTestStepMm: number;
   /** Body switch-pocket fit, % of the socket footprint. 0 = the asset as authored. */
   socketFitPct: number;
   /** MX switch placements (1..3): each x/y offset (mm) + rotation (deg) from centre. */
@@ -228,12 +236,17 @@ export interface UiCallbacks {
   /** Open the 2-D shape editor — changing a shape, or drawing one. CHOOSING one is the
    *  picker's job (`onShapePick`), which is a drawer rather than a modal. */
   onEditShape(): void;
-  /** Export the printable stem fit test. */
+  /** Show the printable stem fit test in the preview, in place of the design. Called after
+   *  the user has confirmed it; Export then sends the test. */
   onFitTest(): void;
+  /** Back from the fit test to the design. */
+  onFitTestExit(): void;
+  /** Distance between fit test tiles, mm. */
+  onFitTestStep(mm: number): void;
   /** Top ↔ base slip fit, absolute mm (+ looser, − tighter). */
   onGapTolerance(mm: number): void;
-  /** Cap stem fit, absolute % of the cross socket (+ looser, − tighter grip). */
-  onStemFit(pct: number): void;
+  /** Cap stem fit, absolute mm of clearance on the cross hole (+ looser, − tighter grip). */
+  onStemFit(mm: number): void;
   /** Body switch-pocket fit, absolute % of the socket footprint (+ looser, − tighter). */
   onSocketFit(pct: number): void;
   /** Nudge the active switch by a step (mm). +dx = right, +dy = toward the design's top. */
@@ -441,9 +454,7 @@ export function createUi(
 
   /* Two toggles live on panels that float over the viewport rather than in a sidebar, so
      they are built further down but read by the sync pass at the bottom. */
-  let undoBtn: ButtonHandle;
-  let refreshBtn: ButtonHandle;
-  let redoBtn: ButtonHandle;
+  let history: HistoryControlsHandle;
   let editModes: ReturnType<typeof modeBar<EditMode>> | null = null;
   let separateLettersToggle: ValueRow<boolean> | null = null;
   let extrudeChamferToggle: ValueRow<boolean> | null = null;
@@ -591,8 +602,8 @@ export function createUi(
         <div class="prow-stacked"><div id="gapTolMount"></div></div>
         <div class="prow-stacked"><div id="stemFitMount"></div></div>
         <div class="prow-stacked"><div id="socketFitMount"></div></div>
-        <div class="prow-stacked">
-          <p class="switch-pad-hint">Print the test below, try each tile on a real switch, then type the number that fits the stem and pocket sliders above.</p>
+        <div class="prow-stacked" id="fitTestBlock">
+          <p class="switch-pad-hint">Print a strip of test tiles, press each one onto a real switch, then set Switch stem fit to the number on the tile that fits.</p>
           <div id="fitTestMount"></div>
         </div>
         </div>
@@ -836,14 +847,15 @@ export function createUi(
   });
 
   // --- History bindings ---
-  // Three, in one row. They used to be hand-built `<button class="secondary">` inside
-  // `.btn-row`, which is a TWO-column grid — so the third wrapped onto its own line and sat
-  // there looking like a mistake. `.vl-btn-row` is flex, so the count lives in the markup
-  // rather than in a CSS column template that has to be kept in step with it.
-  undoBtn = iconButton({ icon: ICONS.undo, label: 'Undo (Ctrl+Z)', emphasis: 'secondary', disabled: true, onClick: () => cb.onUndo() });
-  refreshBtn = iconButton({ icon: ICONS.rotateRight, label: 'Refresh to original', emphasis: 'secondary', disabled: true, onClick: () => cb.onRefresh() });
-  redoBtn = iconButton({ icon: ICONS.redo, label: 'Redo (Ctrl+Shift+Z)', emphasis: 'secondary', disabled: true, onClick: () => cb.onRedo() });
-  $('historyControls').append(buttonRow(undoBtn, refreshBtn, redoBtn));
+  // The row itself is `@vostok/ui-kit`'s now. It was built here first; the carabiner then
+  // needed the same three buttons and started deriving its own, which is the point at which a
+  // pattern belongs in the kit rather than in whichever app happened to grow it.
+  history = historyControls({
+    onUndo: () => cb.onUndo(),
+    onRedo: () => cb.onRedo(),
+    onRefresh: () => cb.onRefresh(),
+  });
+  $('historyControls').append(history);
 
   /** The host's picker if there is one, the hidden input if there is not. */
   async function pickOrBrowse(
@@ -1909,13 +1921,75 @@ export function createUi(
 
   // The answer to "what number do I type". Ghost, and under the fit controls rather than
   // beside Export, because it is a diagnostic you reach for once and then never again.
-  $('fitTestMount').append(button({
+  //
+  // It does not download anything. The strip replaces the design in the preview and Export
+  // sends it, the way the keycap generator's fit test works: MakerLab's sandbox has no
+  // downloads, so a button that saved a file straight away did nothing at all in the embed.
+  // Because the Export button then means something else, it asks first.
+  const fitTestOpenBtn = button({
     label: 'Print a fit test',
     emphasis: 'secondary',
     icon: ICONS.target,
     block: true,
-    onClick: () => cb.onFitTest(),
-  }));
+    onClick: () => {
+      dialog({
+        title: 'Print a fit test?',
+        content: 'Your clicker in the preview is swapped for a strip of five test tiles. While they are showing, Export sends the test tiles, not your clicker, and the other settings are locked. Your design is kept: press Back to my clicker to return to it.',
+        actions: [
+          { label: 'Cancel' },
+          { label: 'Show the fit test', primary: true, onClick: () => { cb.onFitTest(); } },
+        ],
+      });
+    },
+  });
+  const fitTestStepRow = segmentedControl({
+    label: 'Fit test step',
+    help: 'How far apart the tiles are. The middle tile is your current Switch stem fit. Print once at 0.10 mm, then again at 0.05 mm around the tile that fitted best.',
+    options: FIT_TEST_STEP_OPTIONS.map((mm) => ({ value: mm.toFixed(2), label: `${mm.toFixed(2)} mm` })),
+    value: initial.fitTestStepMm.toFixed(2),
+    onChange: (v) => cb.onFitTestStep(Number(v)),
+  });
+  const fitTestBackBtn = button({
+    label: 'Back to my clicker',
+    emphasis: 'secondary',
+    block: true,
+    onClick: () => cb.onFitTestExit(),
+  });
+  $('fitTestMount').append(fitTestOpenBtn, fitTestStepRow, fitTestBackBtn);
+
+  /* Everything that shapes the DESIGN is locked while the fit test is showing, so nothing can
+     change a model nobody can see. What stays live is what applies to the tiles too: the stem
+     fit, the fit test's own controls, the preview and view settings, and Export. `inert` is
+     what stops them; `.vl-control--disabled` only says so. `rebuild()` in mount.ts backs this
+     up: a design build that still gets requested takes the preview back to the design. */
+  const fitLockTargets = (): HTMLElement[] => {
+    const keepInBodyFit = new Set<Element | null | undefined>([
+      $('stemFitMount')?.closest('.prow-stacked'), $('fitTestBlock'),
+    ]);
+    const bodyFitRows = [...($('sectionBodyFit')?.querySelector('.vl-section__body')?.children ?? [])]
+      .filter((n) => !keepInBodyFit.has(n));
+    const otherSections = [...($('geometrySettingsContainer')?.children ?? [])]
+      .filter((n) => n.id !== 'sectionBodyFit');
+    return [
+      $('licenceCtaMount'), $('proMount'), $('blocksSection'), $('textSection'), $('baseStyleSection'),
+      ...otherSections, ...bodyFitRows,
+      $('historyControls')?.closest('.sidebar-sticky-footer'),
+      rightScrollWrap, editModes?.root, $('lettersToggle'),
+    ].filter((n): n is HTMLElement => n instanceof HTMLElement);
+  };
+  let fitLockOn = false;
+  function syncFitTest(active: boolean) {
+    fitTestOpenBtn.hidden = active;
+    fitTestStepRow.hidden = !active;
+    fitTestBackBtn.hidden = !active;
+    if (active === fitLockOn) return;
+    fitLockOn = active;
+    for (const node of fitLockTargets()) {
+      node.inert = active;
+      node.classList.toggle('vl-control--disabled', active);
+    }
+    setExportNote(rightFooter, active ? 'Exports the fit test tiles, not your clicker.' : '');
+  }
 
   /* --- The three fit controls ---------------------------------------------------------
      Every one of them reads 0 on a fresh design and 0 means the geometry that ships today,
@@ -1925,8 +1999,9 @@ export function createUi(
      moved the gripping slot by about a seventh of them — between them they produced both
      open fit complaints on the listing, from opposite directions.
 
-     The two stem/pocket controls are percentages because what they scale is a hole, and a
-     percentage of a hole is a number that stays true. See `stemFitPct` in types.ts. */
+     The pocket control is a percentage because what it scales is the whole cutter. The stem
+     control is millimetres of clearance on the cross hole, because that is exactly what it
+     moves. See `stemFitMm` in types.ts. */
   const pct = (v: number) => (v > 0.001 ? '+' : v < -0.001 ? '−' : '') + Math.abs(v).toFixed(1) + '%';
 
   const gapTolRow = stepperRow({
@@ -1941,9 +2016,9 @@ export function createUi(
 
   const stemFitRow = stepperRow({
     label: 'Switch stem fit (top part)',
-    help: 'How tightly the top part grips the stem of your MX switch. Press + if the top is hard to push on or the post splits, − for a firmer grip. 0 = as designed.',
-    min: -5, max: 5, step: 0.5, value: initial.stemFitPct,
-    format: pct,
+    help: 'How tightly the top part grips the stem of your MX switch. Press + if the top is hard to push on or the post splits, − for a firmer grip. Each step makes the cross hole 0.05 mm wider or narrower. 0 = as designed.',
+    min: STEM_FIT_MIN_MM, max: STEM_FIT_MAX_MM, step: STEM_FIT_STEP_MM, value: initial.stemFitMm,
+    format: (v) => fmtSignedMm(v, 2),
     onInput: (v) => cb.onStemFit(v),
   });
   $('stemFitMount').append(stemFitRow);
@@ -2536,7 +2611,9 @@ export function createUi(
     // Leaving both enabled is how the slider went on looking functional while doing nothing.
     widthRow.setDisabled(!!state.fixedSize);
     gapTolRow.setValue(state.tolerance);
-    stemFitRow.setValue(state.stemFitPct);
+    stemFitRow.setValue(state.stemFitMm);
+    fitTestStepRow.setValue(state.fitTestStepMm.toFixed(2));
+    syncFitTest(state.fitTestActive);
     socketFitRow.setValue(state.socketFitPct);
     const switchCountN = state.switches.length;
     const activeIdx = Math.min(state.activeSwitchIndex, switchCountN - 1);
@@ -2662,7 +2739,7 @@ export function createUi(
     /* What blocks mode genuinely has no use for.
 
        `socketFitMount` and `fitTestMount` came OFF this list on 2026-09-03. Both are about the
-       switch, and a block holds a switch exactly as the flat clicker does: `stemFitPct` already
+       switch, and a block holds a switch exactly as the flat clicker does: `stemFitMm` already
        drove the keycap's grip (and was never hidden), and `socketFitPct` now resizes the
        block's pocket too. Hiding them meant a switch that was tight in a block could not be
        fixed at all, and the printable fit test — whose whole job is answering "what number do
@@ -2707,13 +2784,6 @@ export function createUi(
     for (const id of ['sectionColors', 'sectionKeychain', 'previewViewSection']) {
       const el = document.getElementById(id);
       if (el) el.style.display = isModelMode ? 'none' : '';
-    }
-    // Model mode prints the switch's stem as designed for now — the stem fit reaches it when the
-    // millimetre stem fit lands — so the stem fit row and the fit test that tunes it would be
-    // controls that do nothing here. Neither is touched by any other mode's pass.
-    for (const mount of ['stemFitMount', 'fitTestMount']) {
-      const row = document.getElementById(mount)?.closest('.prow-stacked') as HTMLElement | null;
-      if (row) row.style.display = isModelMode ? 'none' : '';
     }
 
     shapeTypeTabs.setValue(treatAsOutline ? 'outline' : 'shape');
@@ -2786,9 +2856,7 @@ export function createUi(
     if (editModes) editModes.root.style.display = state.importMode === 'model' ? 'none' : '';
 
     // --- Undo / redo / refresh toolbar ---
-    undoBtn.setDisabled(!state.canUndo);
-    redoBtn.setDisabled(!state.canRedo);
-    refreshBtn.setDisabled(!state.canRefresh);
+    history.setState({ canUndo: state.canUndo, canRedo: state.canRedo, canRefresh: state.canRefresh });
 
     // --- Extrude tooltip ---
     const extrudeTooltipEl = document.getElementById('extrudeTooltip');

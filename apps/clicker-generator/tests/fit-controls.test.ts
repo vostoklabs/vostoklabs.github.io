@@ -25,7 +25,8 @@ import { join } from 'node:path';
 import Module from 'manifold-3d';
 import { parse3MF } from '../src/geometry/threemfImport.ts';
 import { buildClicker } from '../src/geometry/buildClicker.ts';
-import { buildFitStrip } from '../src/geometry/fitStrip.ts';
+import { buildFitStrip, fitTestLabel, fitTestLadder } from '../src/geometry/fitStrip.ts';
+import { applyStemFit } from '../src/geometry/stemFit.ts';
 import type { BuildParams, BuildRegion, Ring } from '../src/types.ts';
 
 // Anchored on the repo root rather than on import.meta.url, because the bundle that actually
@@ -61,7 +62,7 @@ const regions: BuildRegion[] = [
 
 const base: BuildParams = {
   baseShape: 'square', capWidthMm: 35, topThickness: 1.5, imageDepth: 0.8, imageMargin: 2,
-  borderWidth: 2, capProud: 1.2, tolerance: 0.4, stemFitPct: 0, socketFitPct: 0,
+  borderWidth: 2, capProud: 1.2, tolerance: 0.4, stemFitMm: 0, socketFitPct: 0,
   imageOffset: { x: 0, y: 0 }, colorBleed: 0.05, stepHeight: 0.4, travel: 3.8,
   floorThickness: 1.2, switches: [{ x: 0, y: 0, rotation: 0 }],
   keychain: { enabled: false, style: 'loop', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 },
@@ -113,25 +114,73 @@ check(
   `cap ${zero.top.vol.toFixed(2)} vs ${pocket.top.vol.toFixed(2)} mm³`,
 );
 
-// --- Cap stem: a bigger cross socket takes material out of the cap. The clip is the point:
-//     the post's outer footprint must not move, or the cap stops fitting its own well.
-const looser = measure({ ...base, stemFitPct: 5 });
-const tighter = measure({ ...base, stemFitPct: -5 });
+// --- Cap stem: a wider cross hole takes material out of the cap, and the post's outer
+//     footprint must not move, or the cap stops fitting its own well.
+const looser = measure({ ...base, stemFitMm: 0.2 });
+const tighter = measure({ ...base, stemFitMm: -0.2 });
 check(
-  'stem fit +5% opens the cross socket (cap loses material)',
+  'stem fit +0.20 mm opens the cross hole (cap loses material)',
   looser.top.vol < zero.top.vol - 0.01,
   `${zero.top.vol.toFixed(2)} -> ${looser.top.vol.toFixed(2)} mm³`,
 );
 check(
-  'stem fit -5% closes it (cap gains material)',
+  'stem fit -0.20 mm closes it (cap gains material)',
   tighter.top.vol > zero.top.vol + 0.01,
   `${zero.top.vol.toFixed(2)} -> ${tighter.top.vol.toFixed(2)} mm³`,
 );
 check(
-  'stem fit leaves the cap footprint alone (this is what the clip buys)',
+  'stem fit leaves the cap footprint alone',
   Math.abs(looser.top.maxX - zero.top.maxX) < 1e-3 && Math.abs(tighter.top.maxX - zero.top.maxX) < 1e-3,
   `maxX ${zero.top.maxX.toFixed(4)} / ${looser.top.maxX.toFixed(4)} / ${tighter.top.maxX.toFixed(4)}`,
 );
+
+// --- And the number on the control is the number in the part. Volume only says the hole
+//     moved; this says by how much. The old percentage scale passed every volume check above
+//     while moving each gripping wall 0.03 mm across its whole range, which is under what a
+//     printer resolves. Measured across the vertical arm of the cross (a line at y = 1.5 mm)
+//     and along the horizontal one (x = 0), at the bottom, middle and top of the post.
+function holeSpans(solid: any, z: number) {
+  const slice = solid.slice(z);
+  const gap = (rect: number[][], axis: 0 | 1) => {
+    const probe = new wasm.CrossSection([rect]);
+    const hit = slice.intersect(probe);
+    const segs = hit.toPolygons()
+      .map((p: number[][]) => [Math.min(...p.map((q) => q[axis])), Math.max(...p.map((q) => q[axis]))])
+      .sort((a: number[], b: number[]) => a[0] - b[0]);
+    probe.delete(); hit.delete();
+    return segs.length === 2 ? segs[1][0] - segs[0][1] : NaN;
+  };
+  const w = 0.005;
+  const out = {
+    armWidth: gap([[-6, 1.5 - w], [6, 1.5 - w], [6, 1.5 + w], [-6, 1.5 + w]], 0),
+    armLength: gap([[-w, -6], [w, -6], [w, 6], [-w, 6]], 1),
+  };
+  slice.delete();
+  return out;
+}
+{
+  const stemBB = stem.boundingBox();
+  const heights = [0.1, 0.5, 0.9].map((f) => stemBB.min[2] + f * (stemBB.max[2] - stemBB.min[2]));
+  const asAuthored = heights.map((z) => holeSpans(stem, z));
+  for (const fit of [-0.4, -0.05, 0.05, 0.1, 0.4]) {
+    const r = applyStemFit(wasm, stem, fit);
+    const spans = heights.map((z) => holeSpans(r.solid, z));
+    const worst = Math.max(...spans.flatMap((s, i) => [
+      Math.abs(s.armWidth - asAuthored[i].armWidth - fit),
+      Math.abs(s.armLength - asAuthored[i].armLength - fit),
+    ]));
+    const rb = r.solid.boundingBox();
+    const outerSame = [0, 1, 2].every((k) =>
+      Math.abs(rb.min[k] - stemBB.min[k]) < 1e-4 && Math.abs(rb.max[k] - stemBB.max[k]) < 1e-4);
+    check(
+      `stem fit ${fitTestLabel(fit)} mm moves the cross hole by exactly that, top to bottom`,
+      r.applied && worst < 0.002 && outerSame && r.solid.genus() === 1,
+      `arm ${asAuthored[1].armWidth.toFixed(3)} -> ${spans[1].armWidth.toFixed(3)} mm, `
+      + `worst error ${worst.toFixed(4)} mm, outer post ${outerSame ? 'unchanged' : 'MOVED'}`,
+    );
+    r.solid.delete();
+  }
+}
 
 // --- Top/base gap: the one control that was always wired correctly, kept honest.
 //
@@ -180,13 +229,15 @@ check(
 );
 
 
-// --- The printable fit test. Its whole job is to answer "what number do I type", so the tiles
-//     have to differ from one another: five identical tiles would be a confident-looking lie.
+// --- The printable fit test, the keycap generator's pieces: a flat tab, the stem standing up out
+//     of it with its socket open at the top, the number debossed in front. Its whole job is to
+//     answer "what number do I type", so the pieces have to differ from one another: five
+//     identical pieces would be a confident-looking lie.
 const strip = buildFitStrip(wasm, stem, {
-  labels: [-4, -2, 0, 2, 4].map((pct) => ({ pct, rings: [] })),
+  labels: fitTestLadder(0, 0.1).map((fitMm) => ({ fitMm, rings: [] })),
   colorRgb: [240, 240, 240],
 });
-const tileVols = strip.parts.map((p) => {
+const partStats = strip.parts.map((p) => {
   const v = p.vertProperties, t = p.triVerts, n = p.numProp;
   let vol = 0;
   for (let i = 0; i < t.length; i += 3) {
@@ -197,23 +248,73 @@ const tileVols = strip.parts.map((p) => {
       v[a + 2] * (v[b] * v[c + 1] - v[c] * v[b + 1])
     ) / 6;
   }
-  return vol;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < v.length; i += n) {
+    minX = Math.min(minX, v[i]); maxX = Math.max(maxX, v[i]);
+    minZ = Math.min(minZ, v[i + 2]); maxZ = Math.max(maxZ, v[i + 2]);
+  }
+  return { vol, minX, maxX, minZ, maxZ };
 });
+const tileVols = partStats.map((s) => s.vol);
 check(
-  'the fit strip has one tile per setting',
-  strip.parts.length === 5,
-  strip.parts.length + ' tiles: ' + strip.parts.map((p) => p.name).join(', '),
+  'the fit test has one piece per setting, each one body',
+  strip.parts.length === 5 && strip.warnings.length === 0,
+  strip.parts.length + ' parts: ' + strip.parts.map((p) => p.name).join(', ') + (strip.warnings.length ? ' | ' + strip.warnings.join(' | ') : ''),
 );
 check(
-  'each tile really is a different size, in order',
+  'each piece really is a different size, in order',
   tileVols.every((v, i) => i === 0 || v < tileVols[i - 1]),
   tileVols.map((v) => v.toFixed(1)).join(' > '),
 );
 check(
-  'tiles print in the cap group, so the plate flips them like a cap',
-  strip.parts.every((p) => p.group === 'top'),
-  strip.parts.map((p) => p.group).join(','),
+  'pieces are base parts of their own, so the plate seats them as built and never flips them',
+  strip.parts.every((p) => p.group === 'base' && p.kind === 'body') && new Set(strip.parts.map((p) => p.objectKey)).size === 5,
+  strip.parts.map((p) => `${p.group}/${p.kind}/${p.objectKey}`).join(','),
 );
+{
+  // Tab on Z 0, stem standing up to its own length above the tab minus the sink.
+  const sb = stem.boundingBox();
+  const wantTop = 2.0 - 0.2 + (sb.max[2] - sb.min[2]);
+  const flat = partStats.every((s) => Math.abs(s.minZ) < 1e-4 && Math.abs(s.maxZ - wantTop) < 1e-3);
+  check(
+    'every piece lies tab-down with the stem standing up',
+    flat,
+    partStats.map((s) => `z ${s.minZ.toFixed(3)}..${s.maxZ.toFixed(3)}`).join(', ') + ` (want 0..${wantTop.toFixed(3)})`,
+  );
+  const gaps = partStats.slice(1).map((s, i) => s.minX - partStats[i].maxX);
+  const centred = Math.abs(partStats[0].minX + partStats[4].maxX) < 1e-3;
+  check(
+    'pieces sit in one row, 3 mm apart, centred',
+    gaps.every((g) => Math.abs(g - 3) < 1e-3) && centred,
+    `gaps ${gaps.map((g) => g.toFixed(2)).join(', ')} mm, row ${partStats[0].minX.toFixed(2)}..${partStats[4].maxX.toFixed(2)}`,
+  );
+  // The socket opens UPWARD: a slice just under the top of the middle piece has the cross hole in
+  // it, and so does one just above the tab, so the hole runs the stem's whole length.
+  const mid = strip.parts[2];
+  const m = new wasm.Mesh({ numProp: mid.numProp, vertProperties: mid.vertProperties, triVerts: mid.triVerts });
+  m.merge();
+  const solid = wasm.Manifold.ofMesh(m);
+  const spansTop = holeSpans(solid.translate([-(partStats[2].minX + partStats[2].maxX) / 2, 0, 0]), wantTop - 0.3);
+  const spansLow = holeSpans(solid.translate([-(partStats[2].minX + partStats[2].maxX) / 2, 0, 0]), 2.5);
+  check(
+    'the socket opens at the top of the stem, as authored at 0.00',
+    Math.abs(spansTop.armWidth - 1.194) < 0.01 && Math.abs(spansLow.armWidth - 1.194) < 0.01,
+    `arm width ${spansTop.armWidth.toFixed(3)} mm at the top, ${spansLow.armWidth.toFixed(3)} mm near the tab`,
+  );
+}
+
+// The ladder: centred on the stepper, clamped at the ends, and labelled the way the stepper
+// reads, so the number on the tile that fitted is a number the control can be set to.
+const ladders: [number, number, string][] = [
+  [0, 0.1, '-0.20,-0.10,0.00,+0.10,+0.20'],
+  [0.1, 0.05, '0.00,+0.05,+0.10,+0.15,+0.20'],
+  [0.35, 0.1, '+0.15,+0.25,+0.35,+0.40'],
+  [-0.4, 0.2, '-0.40,-0.20,0.00'],
+];
+for (const [center, step, want] of ladders) {
+  const got = fitTestLadder(center, step).map(fitTestLabel).join(',');
+  check(`fit test ladder around ${fitTestLabel(center)} at ${step} mm`, got === want, got);
+}
 
 console.log(failures ? `\n${failures} FAILED` : '\nall fit controls move the geometry they name');
 

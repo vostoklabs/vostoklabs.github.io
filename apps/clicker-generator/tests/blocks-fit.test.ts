@@ -4,7 +4,7 @@
   Ian: "make sure that the updated tolerance controls we have for normal clicker are also
   working for blocks."
 
-  They were not. `stemFitPct` did work — it sizes the keycap's grip on the switch — and was
+  They were not. `stemFitMm` did work — it sizes the keycap's grip on the switch — and was
   visible. `socketFitPct` did nothing at all: the flat clicker's pocket is a subtraction, so
   scaling the cutter scales the pocket, but a block's pocket is authored into its shell and
   there was no cutter to scale. The control was also HIDDEN in blocks mode, which is why the
@@ -82,7 +82,7 @@ const regions: BuildRegion[] = [
 ];
 const base = {
   baseShape: 'square', capWidthMm: 35, topThickness: 1.5, imageDepth: 0.8, imageMargin: 2.5,
-  borderWidth: 3.5, capProud: 1.2, tolerance: 0.4, stemFitPct: 0, socketFitPct: 0,
+  borderWidth: 3.5, capProud: 1.2, tolerance: 0.4, stemFitMm: 0, socketFitPct: 0,
   imageOffset: { x: 0, y: 0 }, colorBleed: 0.05, stepHeight: 0.4, travel: 3.8,
   floorThickness: 1.2, switches: [{ x: 0, y: 0, rotation: 0 }],
   keychain: { enabled: false, style: 'loop', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 },
@@ -151,7 +151,7 @@ check(
 );
 
 // --- the keycap stem fit already worked here, and has to keep working.
-const stemLoose = run({ stemFitPct: 6 });
+const stemLoose = run({ stemFitMm: 0.2 });
 check(
   'the keycap stem fit still moves the cap and not the block',
   volOf(stemLoose.parts, isCap) < volOf(zero.parts, isCap) - 0.01
