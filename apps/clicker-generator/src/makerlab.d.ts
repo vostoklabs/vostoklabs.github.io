@@ -50,9 +50,9 @@ declare module 'virtual:pro-pack' {
   export interface ProDeps {
     /** Where the panel draws itself — an empty div the sidebar already lays out. */
     host: HTMLElement;
-    /** Where the licence call to action draws itself, at the top of the same sidebar, with
-     *  `host` directly under it. Separate from `host` so the shell decides the order: the
-     *  licence is the first thing in the panel and the tools it buys come next. */
+    /** Where the licence draws itself. The shell keeps it on top of the sidebar until the
+     *  licence is held, then moves it to the head of `host`'s category; the panel only draws
+     *  it, as a buy button or as the licence card. */
     ctaHost?: HTMLElement;
     /** Current design state. */
     getState(): {

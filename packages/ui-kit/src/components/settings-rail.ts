@@ -26,6 +26,12 @@ export interface SettingsRailItem {
   title?: string;
   /** The category's rows. */
   body: (Node | string)[];
+  /** Take the panel's whole height (`section({ fill: true })`): for a category whose content
+   *  scrolls itself, such as a `fontChooser({ fill: true })` card grid. */
+  fill?: boolean;
+  /** A hairline above this category's button: the start of a group set apart from the ones
+   *  before it. It goes when either side of it has nothing showing. */
+  divider?: boolean;
 }
 
 export interface SettingsRailOptions {
@@ -63,7 +69,7 @@ export function settingsRail(opts: SettingsRailOptions): SettingsRailHandle {
   const panels = el('div', { className: 'vl-settings-rail__panels' });
   const forced = new Map<string, boolean>();
   const entries = opts.items.map((item, i) => {
-    const panel = section({ title: item.title ?? item.label, body: item.body });
+    const panel = section({ title: item.title ?? item.label, body: item.body, ...(item.fill ? { fill: true } : {}) });
     panel.classList.add('vl-settings-rail__panel');
     panel.id = `vl-settings-${id}-${i}`;
     panel.hidden = true;
@@ -77,6 +83,7 @@ export function settingsRail(opts: SettingsRailOptions): SettingsRailHandle {
       label: item.label,
       title: item.title || item.label,
       icon: item.icon,
+      ...(item.divider ? { divider: true } : {}),
     })),
     value: null,
     onChange: (next) => open(next),
@@ -109,6 +116,12 @@ export function settingsRail(opts: SettingsRailOptions): SettingsRailHandle {
       const b = rail.button(e.item.id);
       if (b) b.hidden = !shown(e);
     }
+    // A hairline between two groups, with one of them empty, would be a line under nothing.
+    const kids = [...rail.root.children] as HTMLElement[];
+    const live = (n: HTMLElement) => n.classList.contains('vl-tool-rail__btn') && !n.hidden;
+    kids.forEach((k, i) => {
+      if (k.classList.contains('vl-tool-rail__rule')) k.hidden = !(kids.slice(0, i).some(live) && kids.slice(i + 1).some(live));
+    });
     const open_ = entries.find((e) => e.item.id === current);
     if (!open_ || !shown(open_)) open(current ?? '');
   }

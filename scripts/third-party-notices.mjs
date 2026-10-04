@@ -273,12 +273,82 @@ ${mit}
 `;
 }
 
+/** The kit's own symbol set, `packages/ui-kit/src/symbols/catalog.json`: Fluent Emoji (High
+ *  Contrast) and Tabler Icons (filled), both MIT, licence texts beside the data.
+ *
+ *  Every app depends on the kit, so the dependency cannot say who bundles the set; the source
+ *  can. An app carries this section when a file under its `src/` names a value the catalog
+ *  module exports. The names are read from that module, so an export added there is covered
+ *  the day it lands. The walk is the disk, not git: a build that includes a gitignored folder
+ *  bundles what that folder imports too, and a spare notice costs nothing. */
+const SYMBOLS_DIR = joinPath(ROOT, 'packages', 'ui-kit', 'src', 'symbols');
+
+function usesSymbolCatalog(appDir) {
+  const catalog = joinPath(SYMBOLS_DIR, 'catalog.ts');
+  if (!existsSync(catalog)) return false;
+  const names = [...readFileSync(catalog, 'utf8').matchAll(/^export (?:const|let|function) (\w+)/gm)].map((m) => m[1]);
+  if (!names.length) return false;
+  const named = new RegExp(`\\b(?:${names.join('|')})\\b`);
+  const walk = (dir) => {
+    if (!existsSync(dir)) return false;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules') continue;
+      const path = joinPath(dir, entry.name);
+      if (entry.isDirectory()) { if (walk(path)) return true; continue; }
+      if (/\.(?:[cm]?[jt]s|tsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts') && named.test(readFileSync(path, 'utf8'))) return true;
+    }
+    return false;
+  };
+  return walk(joinPath(appDir, 'src'));
+}
+
+/** A licence file, indented two spaces like the rest of this file. The Fluent copy is indented
+ *  upstream; its common indent comes off first, so the text reads as one block. */
+function indentedLicence(name) {
+  const file = joinPath(SYMBOLS_DIR, name);
+  if (!existsSync(file)) throw new Error(`packages/ui-kit/src/symbols/${name} is missing`);
+  const lines = readFileSync(file, 'utf8').split('\r\n').join('\n').replace(/^\n+|\s+$/g, '').split('\n');
+  const common = Math.min(...lines.filter((l) => l.trim()).map((l) => l.length - l.trimStart().length));
+  return lines.map((l) => `  ${l.slice(common)}`.trimEnd()).join('\n');
+}
+
+function symbolArtSection(number) {
+  return `
+
+${number}. SYMBOL ARTWORK
+${'-'.repeat(60)}
+
+  Monochrome symbols bundled as the symbol library's own set.
+
+  Fluent Emoji, High Contrast style
+  Copyright (c) Microsoft Corporation.
+  Licensed under the MIT License
+  https://github.com/microsoft/fluentui-emoji
+
+  Tabler Icons, filled set
+  Copyright (c) 2020-2026 Paweł Kuna
+  Licensed under the MIT License
+  https://github.com/tabler/tabler-icons
+
+  A symbol you place is traced into the file you export. The MIT licence attaches
+  to the software, not to a work made with it, so the file you download is yours
+  to use and to sell under this generator's own licence.
+
+${indentedLicence('fluent-emoji.LICENSE.txt')}
+
+${indentedLicence('tabler-icons.LICENSE.txt')}
+`;
+}
+
 export function noticesText(appName, pkg, appDir) {
   const bundlesFonts = !!pkg.dependencies?.['@vostok/fonts'];
   const bundlesPatterns = !!pkg.dependencies?.['@vostok/patterns'];
+  const bundlesSymbols = usesSymbolCatalog(appDir);
   const fonts = bundlesFonts ? fontLines() : [];
   const libs = libsFor(appDir, pkg);
   const patternSection = bundlesPatterns ? patternTilesSection(bundlesFonts ? 3 : 1) : '';
+  const symbolNumber = (bundlesFonts ? 2 : 0) + (bundlesPatterns ? 1 : 0) + 1;
+  const symbolSection = bundlesSymbols ? symbolArtSection(symbolNumber) : '';
   const fontSections = bundlesFonts
     ? `
 
@@ -297,7 +367,7 @@ ${ICON_NOTICE}
 
 `
     : '';
-  const libHeading = `${(bundlesFonts ? 2 : 0) + (bundlesPatterns ? 1 : 0) + 1}. RUNTIME LIBRARIES`;
+  const libHeading = `${symbolNumber + (bundlesSymbols ? 1 : 0)}. RUNTIME LIBRARIES`;
   return `THIRD-PARTY NOTICES
 ${'='.repeat(60)}
 
@@ -310,7 +380,7 @@ licences it is used under. It ships with every distribution of the app.
 Nothing here restricts what you may do with a file you EXPORT from this
 generator — see the application's own licence for that.
 
-${fontSections}${patternSection}
+${fontSections}${patternSection}${symbolSection}
 
 ${libHeading}
 ${'-'.repeat(60)}

@@ -1,6 +1,6 @@
 # Bundled fonts
 
-All 241 fonts in this folder are from [Google Fonts](https://fonts.google.com). Each is
+All 251 fonts in this folder are from [Google Fonts](https://fonts.google.com). Each is
 licensed under the **SIL Open Font License 1.1** ([`OFL.txt`](OFL.txt)) or the
 **Apache License 2.0** (https://www.apache.org/licenses/LICENSE-2.0), as stated on its
 Google Fonts specimen page linked below. Both licenses permit embedding and bundling in
@@ -24,6 +24,7 @@ redistributed on its own — they ship only as part of this generator.
 | Arvo | Slab | https://fonts.google.com/specimen/Arvo |
 | Audiowide | Tech | https://fonts.google.com/specimen/Audiowide |
 | Bad Script | Script | https://fonts.google.com/specimen/Bad+Script |
+| Bagel Fat One | Comic | https://fonts.google.com/specimen/Bagel+Fat+One |
 | Bakbak One | Display | https://fonts.google.com/specimen/Bakbak+One |
 | Baloo 2 | Comic | https://fonts.google.com/specimen/Baloo+2 |
 | Bangers | Comic | https://fonts.google.com/specimen/Bangers |
@@ -47,6 +48,7 @@ redistributed on its own — they ship only as part of this generator.
 | Cedarville Cursive | Handwriting | https://fonts.google.com/specimen/Cedarville+Cursive |
 | Chakra Petch | Tech | https://fonts.google.com/specimen/Chakra+Petch |
 | Changa One | Display | https://fonts.google.com/specimen/Changa+One |
+| Cherry Bomb One | Comic | https://fonts.google.com/specimen/Cherry+Bomb+One |
 | Chewy | Comic | https://fonts.google.com/specimen/Chewy |
 | Chicle | Comic | https://fonts.google.com/specimen/Chicle |
 | Chonburi | Display | https://fonts.google.com/specimen/Chonburi |
@@ -54,6 +56,7 @@ redistributed on its own — they ship only as part of this generator.
 | Cinzel Decorative | Serif | https://fonts.google.com/specimen/Cinzel+Decorative |
 | Comfortaa | Comic | https://fonts.google.com/specimen/Comfortaa |
 | Comic Neue | Comic | https://fonts.google.com/specimen/Comic+Neue |
+| Comic Relief | Comic | https://fonts.google.com/specimen/Comic+Relief |
 | Coming Soon | Handwriting | https://fonts.google.com/specimen/Coming+Soon |
 | Concert One | Comic | https://fonts.google.com/specimen/Concert+One |
 | Cookie | Script | https://fonts.google.com/specimen/Cookie |
@@ -66,6 +69,7 @@ redistributed on its own — they ship only as part of this generator.
 | Dancing Script | Script | https://fonts.google.com/specimen/Dancing+Script |
 | Days One | Display | https://fonts.google.com/specimen/Days+One |
 | Dela Gothic One | Display | https://fonts.google.com/specimen/Dela+Gothic+One |
+| Dela Gothic One JP | Display | https://fonts.google.com/specimen/Dela+Gothic+One |
 | Delius Swash Caps | Comic | https://fonts.google.com/specimen/Delius+Swash+Caps |
 | DM Mono | Mono | https://fonts.google.com/specimen/DM+Mono |
 | Do Hyeon | Clean | https://fonts.google.com/specimen/Do+Hyeon |
@@ -86,9 +90,11 @@ redistributed on its own — they ship only as part of this generator.
 | Frijole | Spooky | https://fonts.google.com/specimen/Frijole |
 | Fugaz One | Display | https://fonts.google.com/specimen/Fugaz+One |
 | Gaegu | Handwriting | https://fonts.google.com/specimen/Gaegu |
+| Gasoek One | Display | https://fonts.google.com/specimen/Gasoek+One |
 | Gelasio | Serif | https://fonts.google.com/specimen/Gelasio |
 | Gloria Hallelujah | Handwriting | https://fonts.google.com/specimen/Gloria+Hallelujah |
 | Gochi Hand | Handwriting | https://fonts.google.com/specimen/Gochi+Hand |
+| Gothic A1 | Clean | https://fonts.google.com/specimen/Gothic+A1 |
 | Grand Hotel | Script | https://fonts.google.com/specimen/Grand+Hotel |
 | Grandstander | Comic | https://fonts.google.com/specimen/Grandstander |
 | Gravitas One | Display | https://fonts.google.com/specimen/Gravitas+One |
@@ -129,6 +135,7 @@ redistributed on its own — they ship only as part of this generator.
 | Lobster Two | Script | https://fonts.google.com/specimen/Lobster+Two |
 | Lora | Serif | https://fonts.google.com/specimen/Lora |
 | Luckiest Guy | Comic | https://fonts.google.com/specimen/Luckiest+Guy |
+| M PLUS 1p | Clean | https://fonts.google.com/specimen/M+PLUS+1p |
 | Major Mono Display | Mono | https://fonts.google.com/specimen/Major+Mono+Display |
 | Mali | Comic | https://fonts.google.com/specimen/Mali |
 | Manrope | Clean | https://fonts.google.com/specimen/Manrope |
@@ -148,6 +155,7 @@ redistributed on its own — they ship only as part of this generator.
 | Norican | Script | https://fonts.google.com/specimen/Norican |
 | Nosifer | Spooky | https://fonts.google.com/specimen/Nosifer |
 | Nothing You Could Do | Handwriting | https://fonts.google.com/specimen/Nothing+You+Could+Do |
+| Noto Sans SC | Clean | https://fonts.google.com/specimen/Noto+Sans+SC |
 | Nova Mono | Mono | https://fonts.google.com/specimen/Nova+Mono |
 | Nova Square | Tech | https://fonts.google.com/specimen/Nova+Square |
 | Nunito | Clean | https://fonts.google.com/specimen/Nunito |
@@ -195,6 +203,7 @@ redistributed on its own — they ship only as part of this generator.
 | Rubik Glitch | Spooky | https://fonts.google.com/specimen/Rubik+Glitch |
 | Rubik Mono One | Tech | https://fonts.google.com/specimen/Rubik+Mono+One |
 | Rubik Moonrocks | Spooky | https://fonts.google.com/specimen/Rubik+Moonrocks |
+| Rubik One | Display | https://fonts.google.com/specimen/Rubik+One |
 | Rubik Puddles | Spooky | https://fonts.google.com/specimen/Rubik+Puddles |
 | Rubik Spray Paint | Spooky | https://fonts.google.com/specimen/Rubik+Spray+Paint |
 | Rubik Storm | Spooky | https://fonts.google.com/specimen/Rubik+Storm |
@@ -248,8 +257,33 @@ redistributed on its own — they ship only as part of this generator.
 | Xanh Mono | Mono | https://fonts.google.com/specimen/Xanh+Mono |
 | Yellowtail | Script | https://fonts.google.com/specimen/Yellowtail |
 | Yeseva One | Serif | https://fonts.google.com/specimen/Yeseva+One |
+| ZCOOL KuaiLe | Comic | https://fonts.google.com/specimen/ZCOOL+KuaiLe |
 | Zen Dots | Tech | https://fonts.google.com/specimen/Zen+Dots |
 | Zilla Slab | Slab | https://fonts.google.com/specimen/Zilla+Slab |
+
+## Cut to size
+
+These files are cut down from the originals in the google/fonts repository, which the OFL
+permits (a cut is a Modified Version): only the characters below are kept, along with the
+Latin, Greek and Cyrillic each file has, hinting is removed, and a variable font is fixed at
+one weight. Each keeps its copyright and licence entries in its name table, and none is named
+with a Reserved Font Name.
+
+| Font | Kept | Original (google/fonts) |
+| --- | --- | --- |
+| Black Han Sans | the 2,350 Hangul syllables of KS X 1001 | `ofl/blackhansans/BlackHanSans-Regular.ttf` |
+| Do Hyeon | the 2,350 Hangul syllables of KS X 1001 | `ofl/dohyeon/DoHyeon-Regular.ttf` |
+| Jua | the 2,350 Hangul syllables of KS X 1001 | `ofl/jua/Jua-Regular.ttf` |
+| Gaegu | the 2,350 Hangul syllables of KS X 1001 | `ofl/gaegu/Gaegu-Regular.ttf` |
+| Bagel Fat One | the 2,350 Hangul syllables of KS X 1001 | `ofl/bagelfatone/BagelFatOne-Regular.ttf` |
+| Gasoek One | the 2,350 Hangul syllables of KS X 1001 | `ofl/gasoekone/GasoekOne-Regular.ttf` |
+| Gothic A1 | the 2,350 Hangul syllables of KS X 1001; hiragana and katakana; Cyrillic; Greek | `ofl/gothica1/GothicA1-Black.ttf` |
+| DotGothic16 | kana and the 2,965 kanji of JIS X 0208 level 1; Cyrillic | `ofl/dotgothic16/DotGothic16-Regular.ttf` |
+| Dela Gothic One JP | kana and the 2,965 kanji of JIS X 0208 level 1; Cyrillic; Greek | `ofl/delagothicone/DelaGothicOne-Regular.ttf` |
+| M PLUS 1p | kana and the 2,965 kanji of JIS X 0208 level 1; Cyrillic; Greek | `ofl/mplus1p/MPLUS1p-Black.ttf` |
+| Cherry Bomb One | hiragana and katakana | `ofl/cherrybombone/CherryBombOne-Regular.ttf` |
+| ZCOOL KuaiLe | the 3,755 hanzi of GB2312 level 1 | `ofl/zcoolkuaile/ZCOOLKuaiLe-Regular.ttf` |
+| Noto Sans SC | the 3,755 hanzi of GB2312 level 1; fixed at wght 900 | `ofl/notosanssc/NotoSansSC[wght].ttf` |
 
 ## Icon fallback
 

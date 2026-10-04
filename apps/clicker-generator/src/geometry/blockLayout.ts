@@ -5,6 +5,7 @@
 // grid in reading order — a letter, a symbol, a key with nothing printed on it, or no key at all —
 // plus the grid's width. Pure, so it is tested without a browser (tests/block-layout.test.ts).
 import type { BlockOrientation, BlockSlot, BlockStyle, BlockTexture } from '../types';
+import { lookOf, lookRings, type SymbolLook } from '../image/symbolRings';
 
 export type BlockLayout = 'row' | 'column' | 'grid' | 'wasd' | 'arrows' | 'custom';
 
@@ -18,10 +19,13 @@ export function isSymbolChar(ch: string): boolean {
 }
 
 /** What a symbol character prints: a Lucide icon by name, or rings already traced (a library
- *  symbol, or an SVG of your own), normalised like `parseSvg`'s: centred, longest side 1. */
-export type BlockSymbol =
+ *  symbol, or an SVG of your own), normalised like `parseSvg`'s: centred, longest side 1.
+ *  Text mode keeps its symbols the same way. `pair` links the two copies "Both sides" puts at
+ *  either end of a line, so an edit to one is an edit to both. */
+export type BlockSymbol = (
   | { kind: 'lucide'; name: string; label?: string }
-  | { kind: 'rings'; label: string; rings: [number, number][][] };
+  | { kind: 'rings'; label: string; rings: [number, number][][] }
+) & Partial<SymbolLook> & { pair?: string };
 
 /** Which cells of a rows × cols grid have a key, row by row. */
 export interface BlockGrid {
@@ -94,7 +98,7 @@ function slotFor(ch: string | undefined, symbols: Readonly<Record<string, BlockS
   if (isSymbolChar(ch)) {
     const sym = symbols[ch];
     if (!sym) return { kind: 'blank' };
-    return sym.kind === 'lucide' ? { kind: 'icon', name: sym.name } : { kind: 'symbol', char: ch };
+    return sym.kind === 'lucide' ? { kind: 'icon', name: sym.name, look: lookOf(sym) } : { kind: 'symbol', char: ch };
   }
   return { kind: 'char', ch };
 }
@@ -330,11 +334,61 @@ export function blockBuildParams(s: BlockState & { blockStyle: BlockStyle; block
   };
 }
 
-/** The traced symbols' rings, by character, for `parseBlockChain`. */
-export function tracedSymbols(symbols: Readonly<Record<string, BlockSymbol>>): Record<string, { rings: [number, number][][] }> {
-  const out: Record<string, { rings: [number, number][][] }> = {};
-  for (const [ch, sym] of Object.entries(symbols)) if (sym.kind === 'rings') out[ch] = { rings: sym.rings };
+/** The traced symbols, by character, for `parseBlockChain`: their rings turned and mirrored
+ *  as their inspector says, and the size and offset the build applies on the cap. */
+export function tracedSymbols(
+  symbols: Readonly<Record<string, BlockSymbol>>,
+): Record<string, { rings: [number, number][][]; legend: { scale: number; dx: number; dy: number } }> {
+  const out: Record<string, { rings: [number, number][][]; legend: { scale: number; dx: number; dy: number } }> = {};
+  for (const [ch, sym] of Object.entries(symbols)) {
+    if (sym.kind !== 'rings') continue;
+    const look = lookOf(sym);
+    out[ch] = { rings: lookRings(sym.rings, look), legend: { scale: look.scale, dx: look.dx, dy: look.dy } };
+  }
   return out;
+}
+
+/** The symbols a line of Text mode carries, for `parseLetter`: their rings and their look. */
+export function lineSymbols(
+  symbols: Readonly<Record<string, BlockSymbol>>,
+): Record<string, { rings: [number, number][][]; look: SymbolLook }> {
+  const out: Record<string, { rings: [number, number][][]; look: SymbolLook }> = {};
+  for (const [ch, sym] of Object.entries(symbols)) if (sym.kind === 'rings') out[ch] = { rings: sym.rings, look: lookOf(sym) };
+  return out;
+}
+
+/** The symbols the lines still hold: one whose character was typed away goes. The same map
+ *  back when none did, so a keystroke with no symbol in it changes nothing in the store. */
+export function pruneSymbols(
+  symbols: Readonly<Record<string, BlockSymbol>>,
+  lines: readonly string[],
+): Record<string, BlockSymbol> {
+  const text = lines.join('');
+  const keep = Object.keys(symbols).filter((ch) => text.includes(ch));
+  if (keep.length === Object.keys(symbols).length) return symbols as Record<string, BlockSymbol>;
+  return Object.fromEntries(keep.map((ch) => [ch, symbols[ch]!]));
+}
+
+/** A saved map of symbols, checked: a character that is not a symbol, or an entry that is not
+ *  a Lucide name or a list of rings, is left out. Undefined when there is no map at all. */
+export function loadedSymbols(raw: unknown): Record<string, BlockSymbol> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const syms: Record<string, BlockSymbol> = {};
+  for (const [ch, v] of Object.entries(raw as Record<string, any>)) {
+    if (!isSymbolChar(ch) || !v || typeof v !== 'object') continue;
+    const look = lookOf(v);
+    const pair = typeof v.pair === 'string' && isSymbolChar(v.pair) ? { pair: v.pair as string } : {};
+    if (v.kind === 'lucide' && typeof v.name === 'string') {
+      syms[ch] = { kind: 'lucide', name: v.name, ...(typeof v.label === 'string' ? { label: v.label } : {}), ...look, ...pair };
+    } else if (
+      v.kind === 'rings' && typeof v.label === 'string' && Array.isArray(v.rings)
+      && v.rings.every((r: unknown) => Array.isArray(r)
+        && r.every((pt: unknown) => Array.isArray(pt) && pt.length === 2 && pt.every(Number.isFinite)))
+    ) {
+      syms[ch] = { kind: 'rings', label: v.label, rings: v.rings, ...look, ...pair };
+    }
+  }
+  return syms;
 }
 
 const LAYOUTS: readonly BlockLayout[] = ['row', 'column', 'grid', 'wasd', 'arrows', 'custom'];
@@ -365,22 +419,8 @@ export function loadedBlocks(set: Record<string, unknown>): LoadedBlocks {
   if (Array.isArray(set.blockLines) && set.blockLines.every((v) => typeof v === 'string')) {
     out.blockLines = set.blockLines as string[];
   }
-  if (set.blockSymbols && typeof set.blockSymbols === 'object' && !Array.isArray(set.blockSymbols)) {
-    const syms: Record<string, BlockSymbol> = {};
-    for (const [ch, v] of Object.entries(set.blockSymbols as Record<string, any>)) {
-      if (!isSymbolChar(ch) || !v || typeof v !== 'object') continue;
-      if (v.kind === 'lucide' && typeof v.name === 'string') {
-        syms[ch] = { kind: 'lucide', name: v.name, ...(typeof v.label === 'string' ? { label: v.label } : {}) };
-      } else if (
-        v.kind === 'rings' && typeof v.label === 'string' && Array.isArray(v.rings)
-        && v.rings.every((r: unknown) => Array.isArray(r)
-          && r.every((pt: unknown) => Array.isArray(pt) && pt.length === 2 && pt.every(Number.isFinite)))
-      ) {
-        syms[ch] = { kind: 'rings', label: v.label, rings: v.rings };
-      }
-    }
-    out.blockSymbols = syms;
-  }
+  const syms = loadedSymbols(set.blockSymbols);
+  if (syms) out.blockSymbols = syms;
   if (STYLES.includes(set.blockStyle as BlockStyle)) out.blockStyle = set.blockStyle as BlockStyle;
   if (TEXTURES.includes(set.blockTexture as BlockTexture)) out.blockTexture = set.blockTexture as BlockTexture;
   const scale = num(set.legendScale);

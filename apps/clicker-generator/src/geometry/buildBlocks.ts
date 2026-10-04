@@ -453,10 +453,16 @@ export function buildBlocks(
       const gcx = (b.minX + b.maxX) / 2;
       const gcy = (b.minY + b.maxY) / 2;
 
+      // A symbol's own size and offset ride on top of the size every legend shares, so one
+      // big symbol never shrinks the letters next to it.
+      const own = region.legend;
+      const k = legendScale * (own?.scale ?? 1);
+      const ox = (own?.dx ?? 0) * maxLegend;
+      const oy = (own?.dy ?? 0) * maxLegend;
       const polys: Ring[] = [];
       for (const ring of region.rings) {
         if (ring.length < 3) continue;
-        const scaled: Ring = ring.map(([x, y]) => [(x - gcx) * legendScale, (y - gcy) * legendScale]);
+        const scaled: Ring = ring.map(([x, y]) => [(x - gcx) * k + ox, (y - gcy) * k + oy]);
         if (ringArea(scaled) > 0.0005) polys.push(scaled);
       }
 

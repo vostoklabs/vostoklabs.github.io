@@ -19,6 +19,7 @@
 
 import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
+import '@vostok/fonts/fonts.css';
 import '@vostok/plates/plates.css';
 import {
   topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks,
@@ -45,10 +46,10 @@ import { allShapes, findShape, loadPackShapes } from './shapes/directory';
 // Paid features. Resolves to a no-op stub outside the MakerWorld build — see vite.config.ts.
 import { mountProFeatures, type ProPanel } from 'virtual:pro-pack';
 import { SAMPLES, SVG_SAMPLES } from './image/sample';
-import { parseLetter, parseBlockChain, importFontFile } from './image/letter';
+import { currentFontIdOf, ensureFont, parseLetter, parseBlockChain, importFontFile } from './image/letter';
 import {
-  arrangeBlocks, blockBuildParams, changeLayout, gridFor, isSymbolChar, loadedBlocks, presetText, resizeCells,
-  toggleKey, tracedSymbols,
+  arrangeBlocks, blockBuildParams, changeLayout, gridFor, isSymbolChar, lineSymbols, loadedBlocks, loadedSymbols,
+  presetText, pruneSymbols, resizeCells, toggleKey, tracedSymbols,
 } from './geometry/blockLayout';
 import { LUCIDE_ICONS, buildSvg } from './image/lucideIcons';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the host
@@ -233,6 +234,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     blockCells: null,
     blockLines: ['Name'],
     blockSymbols: {},
+    textSymbols: {},
     blockStyle: 'walls',
     blockTexture: 'smooth',
     legendScale: 1,
@@ -331,6 +333,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let currentImageName = '';
   let currentText = 'Custom\nText';
   let currentFontId = 'helvetiker-regular';
+  /** The latest font pick, so a slow load cannot overwrite a newer choice. */
+  let fontPick = 0;
   let isInitialLoad = true;
 
   /* The name a downloaded file gets.
@@ -357,7 +361,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     let label = '';
     switch (s.importMode) {
       case 'text':
-        label = currentText;
+        label = Array.from(currentText).filter((ch) => !isSymbolChar(ch)).join('');
         break;
       case 'blocks':
         // What is printed on the keys, symbols left out (they have no name worth a file).
@@ -962,7 +966,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     },
     onTextChange: (text) => {
       currentText = text;
+      store.set({ textSymbols: pruneSymbols(store.get().textSymbols, text.split('\n')) });
       debouncedReprocess(); // live rebuild as you type
+    },
+    onTextSymbols: (next) => {
+      store.set({ textSymbols: next });
+      debouncedReprocess();
+    },
+    onBlockSymbols: (next) => {
+      store.set({ blockSymbols: next });
+      debouncedReprocess();
     },
     // Spacing moves the outlines, so the word is re-traced; boldness is applied in the
     // worker where the mm scale is known, so it only needs a rebuild.
@@ -1011,7 +1024,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       const lines = [...store.get().blockLines];
       while (lines.length <= row) lines.push('');
       lines[row] = text;
-      store.set({ blockLines: lines });
+      store.set({ blockLines: lines, blockSymbols: pruneSymbols(store.get().blockSymbols, lines) });
       debouncedReprocess();
     },
     onBlockStyle: (style) => {
@@ -1065,21 +1078,25 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       debouncedRebuild();
     },
     onFontSelect: (fontId) => {
+      // A shared face is fetched the first time it is picked; the trace waits for it, and a
+      // second pick made while the first is still loading wins.
       currentFontId = fontId;
-      reprocess();
+      const pick = ++fontPick;
+      void ensureFont(fontId).then((ok) => {
+        if (pick !== fontPick) return;
+        if (!ok) {
+          store.set({ status: 'That font could not be loaded. Pick another one.' });
+          return;
+        }
+        reprocess();
+      });
     },
-    onImportFont: async (file) => {
-      try {
-        store.set({ building: true, status: 'Importing font…' });
-        void rememberFile(host, 'font', file);
-        const font = await importFontFile(file);
-        ui.addFontOption(font);
-        currentFontId = font.id;
-        reprocess(); // build immediately with the newly imported font
-      } catch (err) {
-        store.set({ building: false, status: 'Could not import font: ' + String(err) });
-      }
+    importFont: async (file) => {
+      // The font block selects what came in and says so; picking it (onFontSelect) builds.
+      void rememberFile(host, 'font', file);
+      return importFontFile(file);
     },
+    host,
     onThemeChange: (theme) => {
       applyTheme(theme === 'light' ? 'light' : 'dark');
       viewer.setTheme(theme);
@@ -1191,9 +1208,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
     },
     stage: container.querySelector<HTMLElement>('#viewport')!,
-    setView: setViewMode,
-    setShowSwitch,
-    setSectionOn,
     rebuildSoon: (live) => (live ? debouncedQuietRebuild() : debouncedRebuild()),
     reframeNext: () => { pendingReframe = true; },
     resetHistoryNext: () => { pendingHistoryReset = true; },
@@ -2151,7 +2165,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         regionSet = parseLetter(currentText, currentFontId, 15, s.separateLetters, {
           lineSpacing: s.lineSpacing,
           letterSpacing: s.letterSpacing,
-        });
+        }, lineSymbols(s.textSymbols));
         store.set({ textSizeMul: regionSet.sizeMul ?? 1 });
       } catch (e: any) {
         store.set({ building: false, status: 'Error: ' + e.message });
@@ -2480,6 +2494,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         removeBg: s.removeBg,
         importMode: s.importMode,
         currentText,
+        textSymbols: s.textSymbols,
         currentFontId,
         currentSvgText,
         currentSvgOptions,
@@ -2670,7 +2685,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       const set = proj.settings ?? {};
 
       currentText = set.currentText ?? 'Custom\nText';
-      currentFontId = set.currentFontId ?? 'helvetiker-regular';
+      // The clicker's own copies of the shared faces were saved as `bundled-<slug>`.
+      currentFontId = currentFontIdOf(set.currentFontId ?? 'helvetiker-regular');
+      if (!(await ensureFont(currentFontId))) currentFontId = 'helvetiker-regular';
+      ui.setFont(currentFontId);
       currentSvgText = set.currentSvgText ?? '';
       // Without this a project whose SVG needed "fill the outlines" reloads as hairlines.
       currentSvgOptions = set.currentSvgOptions ?? {};
@@ -2751,7 +2769,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         keychainSlideMm: set.keychainSlideMm ?? 0,
         // Blocks: a project from before blocks were saved opens on the defaults.
         ...loadedBlocks(set),
+        // Text mode's symbols; a project from before them has none.
+        textSymbols: loadedSymbols(set.textSymbols) ?? {},
       });
+      ui.setText(currentText);
 
       // Model mode: the cut settings, then the model they were made on. Nothing below this
       // (the picture, the pack shapes, the palette) belongs to a model, so it returns here.

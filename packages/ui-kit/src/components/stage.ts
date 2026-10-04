@@ -5,7 +5,8 @@
 // relative`), so new overlays don't collide with the ones already there:
 //
 //   top-left      `.vl-stage__label`     "Live 3D Preview" — or `stageTools()`, which
-//                                        takes the slot over (hide the label then)
+//                                        takes the slot over (hide the label then); its
+//                                        rows (`stageRow()`) hold a `previewBar()` and the like
 //   top-centre    `modeBar()`            what a click on the model does
 //   on the model  `stageHandle()`        a grip placed by the viewer, off any slot
 //   top-right     the build-plate picker (@vostok/plates)
@@ -114,6 +115,108 @@ export function modeBar<T extends string = string>(opts: ModeBarOptions<T>): Mod
  */
 export function stageTools(nodes: HTMLElement[]): HTMLElement {
   return el('div', { className: 'vl-stage__tools' }, nodes);
+}
+
+/** One line of `stageTools()`: several rows stack, each starting at the left edge. */
+export function stageRow(nodes: HTMLElement[]): HTMLElement {
+  return el('div', { className: 'vl-stage__row' }, nodes);
+}
+
+// ------------------------------------------------------------- preview bar --
+
+export interface PreviewBarToggle {
+  id: string;
+  label: string;
+  pressed: boolean;
+  /** The tooltip: what the switch shows, in one sentence. */
+  title?: string;
+  onToggle(on: boolean): void;
+}
+
+export interface PreviewBarOptions<T extends string = string> {
+  /** A choice of how the preview is arranged — Assembled / Exploded — drawn as a filled pill. */
+  modes?: { options: ModeOption<T>[]; value: T; onChange(value: T): void; label?: string };
+  /** On/off switches after a divider, each a dot and its name; the dot fills when on. */
+  toggles?: PreviewBarToggle[];
+  /** Anything else after a divider, such as a bare slider. */
+  extra?: HTMLElement[];
+  /** The group's accessible name. */
+  label?: string;
+}
+
+export interface PreviewBar<T extends string = string> {
+  root: HTMLElement;
+  /** Reflect a mode set elsewhere. Fires nothing. */
+  setValue(value: T): void;
+  /** Reflect a switch set elsewhere. Fires nothing. */
+  setPressed(id: string, on: boolean): void;
+}
+
+/**
+ * How the preview is shown, as one bar on the stage: the arrangement as a pill pair, then the
+ * preview-only switches. Deliberately unlike `modeBar()`: that one says what a CLICK on the model
+ * does, this one only changes what you see, and the two sit together on the stage.
+ */
+export function previewBar<T extends string = string>(opts: PreviewBarOptions<T>): PreviewBar<T> {
+  const attrs: Record<string, string> = { role: 'toolbar' };
+  if (opts.label) attrs['aria-label'] = opts.label;
+  const root = el('div', { className: 'vl-preview-bar', attrs });
+  const modeButtons = new Map<T, HTMLButtonElement>();
+  const toggleButtons = new Map<string, HTMLButtonElement>();
+  const rule = () => el('span', { className: 'vl-preview-bar__rule', attrs: { 'aria-hidden': 'true' } });
+
+  const setValue = (value: T) => {
+    for (const [v, b] of modeButtons) {
+      b.classList.toggle('is-active', v === value);
+      b.setAttribute('aria-pressed', String(v === value));
+    }
+  };
+
+  if (opts.modes) {
+    const modes = opts.modes;
+    const groupAttrs: Record<string, string> = { role: 'group' };
+    if (modes.label) groupAttrs['aria-label'] = modes.label;
+    const group = el('div', { className: 'vl-preview-bar__modes', attrs: groupAttrs });
+    for (const m of modes.options) {
+      const b = el('button', {
+        className: 'vl-preview-bar__btn',
+        attrs: { type: 'button', 'aria-pressed': 'false' },
+        on: { click: () => { setValue(m.value); modes.onChange(m.value); } },
+      }) as HTMLButtonElement;
+      if (m.icon) b.append(svgEl(m.icon));
+      b.append(document.createTextNode(m.label));
+      modeButtons.set(m.value, b);
+      group.append(b);
+    }
+    root.append(group);
+    setValue(modes.value);
+  }
+
+  for (const t of opts.toggles ?? []) {
+    if (root.childNodes.length && !toggleButtons.size) root.append(rule());
+    const btnAttrs: Record<string, string> = { type: 'button', 'aria-pressed': String(t.pressed) };
+    if (t.title) btnAttrs.title = t.title;
+    const b = el('button', { className: 'vl-preview-bar__btn vl-preview-bar__toggle', attrs: btnAttrs }) as HTMLButtonElement;
+    b.addEventListener('click', () => {
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(on));
+      t.onToggle(on);
+    });
+    b.append(el('span', { className: 'vl-preview-bar__dot', attrs: { 'aria-hidden': 'true' } }), document.createTextNode(t.label));
+    toggleButtons.set(t.id, b);
+    root.append(b);
+  }
+
+  if (opts.extra && opts.extra.length) {
+    if (root.childNodes.length) root.append(rule());
+    root.append(...opts.extra);
+  }
+
+  return {
+    root,
+    setValue,
+    setPressed: (id, on) => toggleButtons.get(id)?.setAttribute('aria-pressed', String(on)),
+  };
 }
 
 // ----------------------------------------------------------- stage handle --

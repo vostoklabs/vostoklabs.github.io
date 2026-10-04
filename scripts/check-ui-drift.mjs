@@ -177,7 +177,7 @@ void HISTORY_OF_TOTALS;
 */
 const BUDGET = {
   'bubble-pop-generator': { button: 1, html: 2, restyle: 17 },
-  'clicker-generator': { button: 10, input: 8, html: 20, restyle: 7 },
+  'clicker-generator': { button: 6, input: 5, html: 17, restyle: 7 },
   foldbox: { html: 1, restyle: 8 },
   'house-number': { restyle: 5 },
   hub: { html: 2, restyle: 10 },
@@ -195,7 +195,6 @@ const BUDGET = {
 */
 const KNOWN_UNRESOLVED_TOKENS = new Set([
   '--swatch', // packages/ui-kit/src/components.css — set inline by the filament row at runtime
-  '--hover', // clicker + name-keychain stylesheets
 ]);
 
 const KNOWN_ORPHAN_CLASSES = new Set([

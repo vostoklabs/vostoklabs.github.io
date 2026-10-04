@@ -1,4 +1,4 @@
-import { el } from '../dom';
+import { el, uid } from '../dom';
 import { chip } from './elements';
 import { textField } from './elements';
 
@@ -19,7 +19,13 @@ export interface FontPickerFont {
   /** CSS font-family to render the sample in, e.g. `fontFamilyFor(f.id)`. */
   family: string;
   category?: string;
+  /** The alphabets the face writes: 'Latin', 'Cyrillic', 'Korean'... When the fonts name two or
+   *  more between them, the picker adds an Alphabet filter under the categories. */
+  scripts?: string[];
 }
+
+/** The order the Alphabet chips come in. An alphabet not listed here follows them, A to Z. */
+const SCRIPT_ORDER = ['Latin', 'Cyrillic', 'Greek', 'Korean', 'Japanese', 'Chinese'];
 
 export interface FontPickerOptions {
   /** All of them — the full library, not just a curated shortlist. */
@@ -62,6 +68,7 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
   let sample = opts.sample || 'Aa';
   let query = '';
   let activeCat = 'All';
+  let activeScript = 'All';
   let shown = CHUNK;
 
   const categories = Array.from(
@@ -98,6 +105,28 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
   addCatChip('All', 'All');
   for (const c of categories) addCatChip(c, c);
 
+  // Alphabet: a second row of the same chips, labelled, since a bare second row would read as
+  // more categories. It narrows the list together with the category and the search.
+  const named = new Set(opts.fonts.flatMap((f) => f.scripts ?? []));
+  const scripts = [...SCRIPT_ORDER.filter((s) => named.has(s)), ...[...named].filter((s) => !SCRIPT_ORDER.includes(s)).sort()];
+  const scriptLabel = el('span', { className: 'vl-font-picker__row-label', text: 'Alphabet', attrs: { id: uid('vl-font-alphabet') } });
+  const scriptRow = el('div', { className: 'vl-font-picker__cats', attrs: { role: 'group', 'aria-labelledby': scriptLabel.id } }, [scriptLabel]);
+  const scriptChips = new Map<string, ReturnType<typeof chip>>();
+  for (const s of ['All', ...scripts]) {
+    const c = chip({
+      label: s,
+      pressed: s === activeScript,
+      onToggle: () => {
+        activeScript = s;
+        shown = CHUNK;
+        for (const [sid, sc] of scriptChips) sc.setPressed(sid === activeScript);
+        paint({ keepScroll: false });
+      },
+    });
+    scriptChips.set(s, c);
+    scriptRow.append(c);
+  }
+
   const cards = opts.layout === 'cards';
   const list = el('div', {
     className: `vl-font-picker__list${cards ? ' vl-font-picker__list--cards' : ''}`,
@@ -121,6 +150,7 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
     const q = query.trim().toLowerCase();
     const filtered = opts.fonts.filter((f) => {
       if (activeCat !== 'All' && f.category !== activeCat) return false;
+      if (activeScript !== 'All' && !f.scripts?.includes(activeScript)) return false;
       if (!q) return true;
       return f.label.toLowerCase().includes(q) || f.id.toLowerCase().includes(q);
     });
@@ -213,7 +243,11 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
     const order = computeOrder();
     list.replaceChildren();
     if (order.length === 0) {
-      list.append(el('p', { className: 'vl-font-picker__empty', text: `No font matches “${query.trim()}”.` }));
+      // With no search, it is the category and the alphabet together that came up empty.
+      const empty = !query.trim() && activeScript !== 'All'
+        ? `No ${activeCat === 'All' ? '' : `${activeCat} `}font covers ${activeScript}.`
+        : `No font matches “${query.trim()}”.`;
+      list.append(el('p', { className: 'vl-font-picker__empty', text: empty }));
       list.scrollTop = 0;
       setupObserver();
       return;
@@ -221,7 +255,7 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
     const page = order.slice(0, shown);
     // Headings only make sense over the unfiltered list — once a search or category has
     // narrowed things down, "Popular" vs "All fonts" no longer means anything.
-    const showHeadings = !query.trim() && activeCat === 'All' && (opts.featured?.length ?? 0) > 0;
+    const showHeadings = !query.trim() && activeCat === 'All' && activeScript === 'All' && (opts.featured?.length ?? 0) > 0;
     const featuredSet = new Set(opts.featured ?? []);
     let printedPopular = false;
     let printedAll = false;
@@ -272,7 +306,12 @@ export function fontPicker(opts: FontPickerOptions): FontPickerHandle {
     if (notify) opts.onChange(id);
   }
 
-  const root = el('div', { className: 'vl-font-picker' }, [search, catRow, list]) as unknown as FontPickerHandle;
+  const root = el('div', { className: 'vl-font-picker' }, [
+    search,
+    catRow,
+    ...(scripts.length > 1 ? [scriptRow] : []),
+    list,
+  ]) as unknown as FontPickerHandle;
   root.setValue = setValue;
   root.setSample = (text: string) => {
     // Update in place, never repaint: a caller updates this on every keystroke of the user's

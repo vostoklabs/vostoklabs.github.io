@@ -15,6 +15,7 @@
 @font-face { font-family: VL-arvo; src: url('./fonts/arvo.ttf'); font-display: swap; }
 @font-face { font-family: VL-audiowide; src: url('./fonts/audiowide.ttf'); font-display: swap; }
 @font-face { font-family: VL-bad-script; src: url('./fonts/bad-script.ttf'); font-display: swap; }
+@font-face { font-family: VL-bagel-fat-one; src: url('./fonts/bagel-fat-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-bakbak-one; src: url('./fonts/bakbak-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-baloo-2; src: url('./fonts/baloo-2.ttf'); font-display: swap; }
 @font-face { font-family: VL-bangers; src: url('./fonts/bangers.ttf'); font-display: swap; }
@@ -38,6 +39,7 @@
 @font-face { font-family: VL-cedarville-cursive; src: url('./fonts/cedarville-cursive.ttf'); font-display: swap; }
 @font-face { font-family: VL-chakra-petch; src: url('./fonts/chakra-petch.ttf'); font-display: swap; }
 @font-face { font-family: VL-changa-one; src: url('./fonts/changa-one.ttf'); font-display: swap; }
+@font-face { font-family: VL-cherry-bomb-one; src: url('./fonts/cherry-bomb-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-chewy; src: url('./fonts/chewy.ttf'); font-display: swap; }
 @font-face { font-family: VL-chicle; src: url('./fonts/chicle.ttf'); font-display: swap; }
 @font-face { font-family: VL-chonburi; src: url('./fonts/chonburi.ttf'); font-display: swap; }
@@ -45,6 +47,7 @@
 @font-face { font-family: VL-cinzel-decorative; src: url('./fonts/cinzel-decorative.ttf'); font-display: swap; }
 @font-face { font-family: VL-comfortaa; src: url('./fonts/comfortaa.ttf'); font-display: swap; }
 @font-face { font-family: VL-comic-neue; src: url('./fonts/comic-neue.ttf'); font-display: swap; }
+@font-face { font-family: VL-comic-relief; src: url('./fonts/comic-relief.ttf'); font-display: swap; }
 @font-face { font-family: VL-coming-soon; src: url('./fonts/coming-soon.ttf'); font-display: swap; }
 @font-face { font-family: VL-concert-one; src: url('./fonts/concert-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-cookie; src: url('./fonts/cookie.ttf'); font-display: swap; }
@@ -57,6 +60,7 @@
 @font-face { font-family: VL-dancing-script; src: url('./fonts/dancing-script.ttf'); font-display: swap; }
 @font-face { font-family: VL-days-one; src: url('./fonts/days-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-dela-gothic-one; src: url('./fonts/dela-gothic-one.ttf'); font-display: swap; }
+@font-face { font-family: VL-dela-gothic-one-jp; src: url('./fonts/dela-gothic-one-jp.ttf'); font-display: swap; }
 @font-face { font-family: VL-delius-swash-caps; src: url('./fonts/delius-swash-caps.ttf'); font-display: swap; }
 @font-face { font-family: VL-dm-mono; src: url('./fonts/dm-mono.ttf'); font-display: swap; }
 @font-face { font-family: VL-do-hyeon; src: url('./fonts/do-hyeon.ttf'); font-display: swap; }
@@ -77,9 +81,11 @@
 @font-face { font-family: VL-frijole; src: url('./fonts/frijole.ttf'); font-display: swap; }
 @font-face { font-family: VL-fugaz-one; src: url('./fonts/fugaz-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-gaegu; src: url('./fonts/gaegu.ttf'); font-display: swap; }
+@font-face { font-family: VL-gasoek-one; src: url('./fonts/gasoek-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-gelasio; src: url('./fonts/gelasio.ttf'); font-display: swap; }
 @font-face { font-family: VL-gloria-hallelujah; src: url('./fonts/gloria-hallelujah.ttf'); font-display: swap; }
 @font-face { font-family: VL-gochi-hand; src: url('./fonts/gochi-hand.ttf'); font-display: swap; }
+@font-face { font-family: VL-gothic-a1; src: url('./fonts/gothic-a1.ttf'); font-display: swap; }
 @font-face { font-family: VL-grand-hotel; src: url('./fonts/grand-hotel.ttf'); font-display: swap; }
 @font-face { font-family: VL-grandstander; src: url('./fonts/grandstander.ttf'); font-display: swap; }
 @font-face { font-family: VL-gravitas-one; src: url('./fonts/gravitas-one.ttf'); font-display: swap; }
@@ -120,6 +126,7 @@
 @font-face { font-family: VL-lobster-two; src: url('./fonts/lobster-two.ttf'); font-display: swap; }
 @font-face { font-family: VL-lora; src: url('./fonts/lora.ttf'); font-display: swap; }
 @font-face { font-family: VL-luckiest-guy; src: url('./fonts/luckiest-guy.ttf'); font-display: swap; }
+@font-face { font-family: VL-m-plus-1p; src: url('./fonts/m-plus-1p.ttf'); font-display: swap; }
 @font-face { font-family: VL-major-mono-display; src: url('./fonts/major-mono-display.ttf'); font-display: swap; }
 @font-face { font-family: VL-mali; src: url('./fonts/mali.ttf'); font-display: swap; }
 @font-face { font-family: VL-manrope; src: url('./fonts/manrope.ttf'); font-display: swap; }
@@ -139,6 +146,7 @@
 @font-face { font-family: VL-norican; src: url('./fonts/norican.ttf'); font-display: swap; }
 @font-face { font-family: VL-nosifer; src: url('./fonts/nosifer.ttf'); font-display: swap; }
 @font-face { font-family: VL-nothing-you-could-do; src: url('./fonts/nothing-you-could-do.ttf'); font-display: swap; }
+@font-face { font-family: VL-noto-sans-sc; src: url('./fonts/noto-sans-sc.ttf'); font-display: swap; }
 @font-face { font-family: VL-nova-mono; src: url('./fonts/nova-mono.ttf'); font-display: swap; }
 @font-face { font-family: VL-nova-square; src: url('./fonts/nova-square.ttf'); font-display: swap; }
 @font-face { font-family: VL-nunito; src: url('./fonts/nunito.ttf'); font-display: swap; }
@@ -186,6 +194,7 @@
 @font-face { font-family: VL-rubik-glitch; src: url('./fonts/rubik-glitch.ttf'); font-display: swap; }
 @font-face { font-family: VL-rubik-mono-one; src: url('./fonts/rubik-mono-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-rubik-moonrocks; src: url('./fonts/rubik-moonrocks.ttf'); font-display: swap; }
+@font-face { font-family: VL-rubik-one; src: url('./fonts/rubik-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-rubik-puddles; src: url('./fonts/rubik-puddles.ttf'); font-display: swap; }
 @font-face { font-family: VL-rubik-spray-paint; src: url('./fonts/rubik-spray-paint.ttf'); font-display: swap; }
 @font-face { font-family: VL-rubik-storm; src: url('./fonts/rubik-storm.ttf'); font-display: swap; }
@@ -239,5 +248,6 @@
 @font-face { font-family: VL-xanh-mono; src: url('./fonts/xanh-mono.ttf'); font-display: swap; }
 @font-face { font-family: VL-yellowtail; src: url('./fonts/yellowtail.ttf'); font-display: swap; }
 @font-face { font-family: VL-yeseva-one; src: url('./fonts/yeseva-one.ttf'); font-display: swap; }
+@font-face { font-family: VL-zcool-kuaile; src: url('./fonts/zcool-kuaile.ttf'); font-display: swap; }
 @font-face { font-family: VL-zen-dots; src: url('./fonts/zen-dots.ttf'); font-display: swap; }
 @font-face { font-family: VL-zilla-slab; src: url('./fonts/zilla-slab.ttf'); font-display: swap; }

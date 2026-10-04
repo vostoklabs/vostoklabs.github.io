@@ -16,7 +16,8 @@
       && node apps/clicker-generator/.block-layout-test.mjs
 */
 import {
-  arrangeBlocks, arrangementOf, blockBuildParams, changeLayout, gridFor, keysPerRow, loadedBlocks,
+  arrangeBlocks, arrangementOf, blockBuildParams, changeLayout, gridFor, keysPerRow, lineSymbols, loadedBlocks,
+  loadedSymbols, pruneSymbols,
   presetText, resizeCells, toggleKey, type BlockState,
 } from '../src/geometry/blockLayout.ts';
 
@@ -143,6 +144,24 @@ const state = (over: Partial<BlockState>): BlockState => ({
       && !('blockStyle' in bad) && !('legendScale' in bad) && Object.keys(bad.blockSymbols ?? {}).length === 0,
     JSON.stringify(bad));
   check('a project from before blocks were saved sets nothing', Object.keys(loadedBlocks({ importMode: 'image' })).length === 0, '{}');
+}
+
+// --- symbols in the text: what the lines still hold, and what a project brings back ----------------
+{
+  const [a, b] = [0xf0010, 0xf0011].map((cp) => String.fromCodePoint(cp)) as [string, string];
+  const ring: [number, number][][] = [[[0, 0], [1, 0], [0, 1]]];
+  const map = { [a]: { kind: 'rings' as const, label: 'Heart', rings: ring }, [b]: { kind: 'rings' as const, label: 'Star', rings: ring, pair: a } };
+  check('a symbol still in a line is kept, and the map is the same object when nothing went',
+    pruneSymbols(map, ['x' + a, b]) === map, 'same map');
+  const pruned = pruneSymbols(map, ['x' + a]);
+  check('a symbol typed out of every line is dropped', Object.keys(pruned).join() === a, JSON.stringify(Object.keys(pruned)));
+  const loaded = loadedSymbols({ [a]: { kind: 'rings', label: 'Heart', rings: ring, scale: 9, pair: b }, x: { kind: 'rings', label: 'x', rings: ring } }) ?? {};
+  check('a saved symbol comes back with its look held in range and its twin link',
+    loaded[a]?.scale === 2 && loaded[a]?.pair === b && !('x' in loaded), JSON.stringify(loaded));
+  check('no map at all is not an empty one', loadedSymbols(undefined) === undefined && loadedSymbols([]) === undefined, 'undefined');
+  const forText = lineSymbols({ ...map, [String.fromCodePoint(0xf0001)]: { kind: 'lucide', name: 'arrow-up' } });
+  check('Text mode gets every traced symbol with a full look, and no Lucide names',
+    Object.keys(forText).length === 2 && forText[a]!.look.scale === 1 && forText[a]!.look.flip === false, JSON.stringify(Object.keys(forText)));
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nblock layouts hold');

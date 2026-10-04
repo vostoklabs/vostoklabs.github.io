@@ -185,6 +185,11 @@ export {
   stepper,
   stageStatus,
   stageTools,
+  stageRow,
+  previewBar,
+  type PreviewBar,
+  type PreviewBarOptions,
+  type PreviewBarToggle,
   stageHandle,
   type StageHandle,
   type StageHandleOptions,
@@ -303,3 +308,13 @@ export {
 } from './components/settings-rail';
 // A grid of keys as they will sit; a tap adds or removes one (the clicker's block layouts).
 export { keyMap, type KeyMapOptions, type KeyMapHandle } from './components/key-map';
+// Symbols in text, the way Laser Studio puts them there: a field whose symbols sit inline as
+// tokens, the inspector a token opens, the Symbols & icons library, and its MIT artwork.
+export { symbolTextField, type SymbolTextFieldOptions, type SymbolTextFieldHandle } from './components/symbol-text-field';
+export { symbolInspector, type SymbolInspectorOptions, type SymbolInspectorHandle } from './components/symbol-inspector';
+export { openSymbolLibrary, type SymbolLibraryEntry, type SymbolLibraryOptions, type SymbolLibraryHandle } from './components/symbol-library';
+export { SYMBOL_CATALOG, POPULAR_SYMBOL_IDS, type CatalogSymbol } from './symbols/catalog';
+export {
+  SYMBOL_FIRST, SYMBOL_LAST, isSymbolChar, hasSymbol, codePointCount, nextSymbolChar, placeSymbol, shiftSymbol,
+  type SymbolPlacement, type SymbolTransform,
+} from './symbols/rules';

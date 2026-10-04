@@ -362,6 +362,10 @@
 .vl-tabs--cards .vl-tab:last-child:nth-child(even) { grid-column: 1 / -1; justify-content: center; }
 /* A card the caller asked to span the row (`SegmentedOption.wide`): a label too long for half. */
 .vl-tabs--cards .vl-tab--wide { grid-column: 1 / -1; justify-content: center; }
+/* `stacked: true` — the icon over its name, centred, for a grid of short names. Every card
+   keeps its own cell: the odd-count span above is for rows of wide cards. */
+.vl-tabs--stacked .vl-tab { flex-direction: column; justify-content: center; text-align: center; gap: 4px; padding: 10px 6px; }
+.vl-tabs--stacked .vl-tab:last-child:nth-child(even) { grid-column: auto; }
 
 /* `variant: 'pictures'` — a choice between results: a picture of what each option gets you,
    its name, one line. The card keeps its own face when chosen and the sliding indicator

@@ -251,6 +251,7 @@
 .vl-tool-rail__label { display: block; text-align: center; }
 .vl-tool-rail__gap { flex: 1 1 auto; }
 .vl-tool-rail__rule { display: block; height: 1px; margin: 6px 8px; background: var(--line); }
+.vl-tool-rail__rule[hidden] { display: none; }
 
 /* ------------------------------------------------------------ settings rail -- */
 
@@ -261,6 +262,18 @@
 .vl-settings-rail__panels { min-width: 0; min-height: 0; overflow-y: auto; padding: var(--space-4); scrollbar-width: thin; }
 .vl-settings-rail__panels > .vl-section { border-top: 0; padding-top: 0; }
 .vl-settings-rail__panels .vl-section__body { gap: 18px; }
+/* A `fill` category is open: it takes the panel's height and scrolls inside itself. */
+.vl-settings-rail__panels:has(> .vl-section--fill:not([hidden])) { display: flex; flex-direction: column; overflow-y: hidden; }
+/* Font cards in a category: two a row in the rail's panel (below), where the panel's usual
+   118 px floor would allow one. */
+.vl-settings-rail__panels .vl-font-grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); }
+/* The rail's 77 px of icons come out of the left panel, so a left panel holding one is that much
+   wider than the usual: Laser Studio's editor columns, the layout the rail was built for. */
+@media (min-width: 901px) {
+  .vl-app:has(> .vl-panel--left .vl-settings-rail) {
+    grid-template-columns: minmax(352px, 25vw) minmax(0, 1fr) minmax(320px, 24.2vw);
+  }
+}
 
 /* -------------------------------------------------------------------- canvas -- */
 

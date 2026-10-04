@@ -10,7 +10,8 @@
 // the file for next time (a desktop host's project assets) stays with the app.
 import { unzipSync } from 'fflate';
 import { FONTS, type FontChoice } from './registry';
-import { fontFamilyFor, isFontSupported, parseFont, registerCustomFont } from './index';
+import { coverageOf } from './coverage';
+import { fontFamilyFor, fontScripts, isFontSupported, parseFont, registerCustomFont } from './index';
 
 /** A font file's own name for itself, when it has one. */
 function familyName(parsed: unknown): string | undefined {
@@ -54,14 +55,15 @@ export async function importFontBuffer(fileName: string, buffer: ArrayBuffer): P
     await face.load();
     document.fonts.add(face);
   }
+  const cmap: Record<number, number> = parsed?.tables?.cmap?.glyphIndexMap ?? {};
   const choice: FontChoice = {
     id,
     label: familyName(parsed) ?? base,
     category: 'Custom',
     curated: true,
-    // A font file says nothing reliable about its coverage here, so it is not flagged as
-    // missing anything; the geometry shows the truth.
-    subsets: ['latin', 'latin-ext', 'cyrillic', 'greek'],
+    // Measured the way the bundled faces are, so the alphabet filter lists it truthfully. The
+    // missing-glyph check reads the cmap itself, letter by letter (`isFontSupported`).
+    subsets: coverageOf((cp) => !!cmap[cp]),
   };
   FONTS.unshift(choice);
   return choice;
@@ -104,9 +106,9 @@ export async function importFontFiles(file: File): Promise<ImportedFonts> {
   return result;
 }
 
-/** A font as the kit's pickers take it. */
-export function toPickerFont(f: FontChoice): { id: string; label: string; family: string; category: string } {
-  return { id: f.id, label: f.label, family: fontFamilyFor(f.id), category: f.category };
+/** A font as the kit's pickers take it, with the alphabets it writes for their Alphabet filter. */
+export function toPickerFont(f: FontChoice): { id: string; label: string; family: string; category: string; scripts: string[] } {
+  return { id: f.id, label: f.label, family: fontFamilyFor(f.id), category: f.category, scripts: fontScripts(f) };
 }
 
 /** Whether the font with this id has every character in `text`. An unknown id is not flagged. */

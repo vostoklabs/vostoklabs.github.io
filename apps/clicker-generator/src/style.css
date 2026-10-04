@@ -89,20 +89,25 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
    classes and the styling comes from @vostok/ui-kit. */
 .label { display: block; font-family: var(--font-display); font-size: 14px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 14px; font-weight: 600; }
 
-/* The left panel, laid out like Laser Studio's editor: the title and the preview's switches stay
-   put at the top (they apply to whatever is open below them), the settings rail takes the rest
-   of the height with each category scrolling on its own, and undo/redo sits at the foot. */
+/* The left panel, laid out like Laser Studio's editor: the title stays put at the top, the
+   settings rail takes the rest of the height with each category scrolling on its own, and
+   undo/redo sits at the foot. */
 #sidebar-left .cg-left { display: flex; flex-direction: column; padding: 0; }
 .cg-left-top { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) var(--space-4) var(--space-3); border-bottom: 1px solid var(--line); }
-.cg-view { display: flex; flex-direction: column; gap: 8px; }
+/* The licence mount is empty outside MakerLab: no gap for it under the title. */
+.cg-left-top > :empty { display: none; }
 .cg-rail { flex: 1 1 auto; min-height: 0; }
 .cg-rail-rows { display: flex; flex-direction: column; gap: 18px; }
 /* Blocks: Rows over Columns (a stepper needs the panel's width); the right panel's lines of keys. */
 .cg-grid-size { display: flex; flex-direction: column; gap: 12px; }
 .cg-block-lines { display: flex; flex-direction: column; gap: 12px; }
+/* Text and Blocks: the heading, with Add symbol at its far end. */
+.cg-lines-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 #sidebar-left .cg-left-foot { position: static; margin: 0; padding: var(--space-3) var(--space-4); }
 @media (min-width: 901px) {
-  #sidebar-left .cg-left { overflow: hidden; }
+  /* `clip`, not `hidden`: hidden still scrolls when anything inside is focused or scrolled into
+     view, which slid the rail's top out of sight. */
+  #sidebar-left .cg-left { overflow: clip; }
 }
 
 /* Grid alignments for controls — stacked layout */
@@ -691,147 +696,6 @@ body.tutorial-active.focus-center #viewport {
   border-color: var(--accent);
 }
 
-/* ---------- Letter-block chain editor ---------- */
-.block-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
-  padding: 6px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  min-height: 46px;
-}
-.block-chip {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
-  user-select: none;
-}
-/* Grid mode: the chips lay out as the arrangement itself, so emptying a cell visibly
-   cuts that hole out of the shape (this is how a WASD block set is authored). */
-.block-chips.is-grid {
-  display: grid;
-  justify-content: center;
-  gap: 4px;
-}
-.block-chip { cursor: pointer; }
-.block-chip:hover { border-color: var(--accent); }
-.block-chip.is-empty {
-  background: transparent;
-  border-style: dashed;
-  color: var(--muted);
-}
-.block-chip.block-add {
-  border-style: dashed;
-  color: var(--muted);
-  font-weight: 400;
-  cursor: pointer;
-}
-.block-chip.is-icon { padding: 5px; }
-
-/* Per-block editor popover (reuses the sidebar colour-popover chrome). */
-.slot-editor {
-  display: grid;
-  gap: 6px;
-  width: 168px;
-  padding: 10px;
-}
-.slot-editor-label { font-size: 12px; color: var(--muted); }
-.slot-editor-input {
-  width: 100%;
-  text-align: center;
-  font-size: 18px;
-  padding: 6px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-}
-.slot-editor button { font-size: 13px; padding: 7px 8px; }
-.block-chip img { width: 100%; height: 100%; object-fit: contain; filter: invert(1); opacity: 0.85; }
-.block-chip-x {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  width: 15px;
-  height: 15px;
-  line-height: 13px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-  opacity: 0;
-  transition:
-    opacity var(--dur-hover) var(--ease-standard);
-}
-.block-chip:hover .block-chip-x,
-.block-chip-x:focus-visible { opacity: 1; }
-.block-chip-x:hover { color: var(--text); border-color: var(--accent); }
-/* Hairline "+" between chips: the insertion points for symbols. */
-.block-gap {
-  width: 12px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.35;
-  transition:
-    opacity var(--dur-hover) var(--ease-standard),
-    color var(--dur-hover) var(--ease-standard);
-}
-.block-gap:hover { opacity: 1; color: var(--accent); }
-
-/* The symbol picker is a kit dialog() now — `.symbol-modal`'s width and its `.wz-body`
-   override are gone with the hand-rolled `.wz-overlay`/`.wz-modal` it used to sit in.
-   `color` is restated because `.vl-dialog > div` (the kit's generic content styling, meant
-   for prose) sets it to `--muted`, which is wrong for an interactive search box and a grid
-   of buttons that carry their own colour. */
-.symbol-picker-body { color: var(--text); }
-.symbol-search {
-  width: 100%;
-  margin-bottom: 12px;
-}
-.symbol-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
-  gap: 8px;
-  max-height: 52vh;
-  overflow-y: auto;
-}
-
-/* Custom upload wrappers */
-.upload {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 14px;
-  color: var(--accent);
-  cursor: pointer;
-  margin-top: 5px;
-}
-.upload input {
-  display: none;
-}
-.field .upload {
-  margin-top: 0;
-}
 .upload-cta {
   display: flex;
   align-items: center;
@@ -1167,65 +1031,6 @@ body.tutorial-active.focus-center #viewport {
   flex-direction: column;
   gap: 8px;
 }
-
-/* Custom Font Grid */
-.font-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-  max-height: 250px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-.font-grid-btn {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  color: var(--text);
-  padding: 12px 6px;
-  border-radius: 6px;
-  cursor: pointer;
-  text-align: center;
-  font-size: 16px;
-  line-height: normal;
-  min-height: 44px;
-  transition:
-    all var(--dur-press) var(--ease-standard);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.font-grid-btn:hover {
-  background: var(--hover);
-  border-color: var(--muted);
-}
-.font-grid-btn.active {
-  background: var(--accent);
-  color: var(--accent-text);
-  border-color: var(--accent);
-}/* ===== Separate-letters toggle (text mode, floating under the mode bar) ===== */
-.letters-toggle {
-  position: absolute;
-  top: 62px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 8px 7px 14px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--panel) 82%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--line);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-  white-space: nowrap;
-  pointer-events: auto;
-}
-.letters-toggle[hidden] { display: none; }
 
 /* ===== Extrude Gizmo Tooltip ===== */
 .extrude-tooltip {

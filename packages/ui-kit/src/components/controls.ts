@@ -658,6 +658,12 @@ export interface SegmentedOptions<T extends string = string> {
    * `columns` says otherwise.
    */
   variant?: 'tabs' | 'cards' | 'pictures' | 'tiles';
+  /**
+   * Only with `variant: 'cards'`: each card's icon over its name, centred — for a grid of short
+   * names three or more to a row (the clicker's import sources), where an icon beside the name
+   * would squeeze the name out.
+   */
+  stacked?: boolean;
 }
 
 /** What `segmentedControl` returns: a `ValueRow` plus per-option visibility. */
@@ -698,7 +704,7 @@ export function segmentedControl<T extends string = string>(
   // every column at its own min-content width — so a four-option control in a 333 px sidebar
   // could not shrink and simply ran off the panel with the last option clipped in half.
   const root = el('div', {
-    className: `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : pictures ? ' vl-tabs--pictures' : ''}${tiles ? ' vl-tabs--tiles' : ''}`,
+    className: `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : pictures ? ' vl-tabs--pictures' : ''}${tiles ? ' vl-tabs--tiles' : ''}${opts.variant === 'cards' && opts.stacked ? ' vl-tabs--stacked' : ''}`,
     attrs: { role: 'radiogroup', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr))` },
   });
 

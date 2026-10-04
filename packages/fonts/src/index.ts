@@ -18,6 +18,9 @@ export { ICONS, ICON_CATEGORIES, searchIcons, iconById, iconByChar, type IconCho
 export { POPULAR_IDS, POPULAR, QUICK_PICKS, SYMBOL_GROUPS, searchGroup, type SymbolGroup } from './symbolGroups';
 
 import { FONTS, type FontChoice } from './registry';
+import { requirementOf, SCRIPTS } from './coverage';
+// What a face covers and what a string needs, measured on the same character sets.
+export { UNCOVERED } from './coverage';
 
 /** CSS font-family prefix for the @font-face rules in `@vostok/fonts/fonts.css`.
  *  Used for HTML previews only — the 3D geometry comes from opentype. */
@@ -90,25 +93,48 @@ export async function getFont(fontId: string): Promise<any> {
 /** Fonts shown as instant cards; the rest live behind "Browse all fonts". */
 export const curatedFonts = (): FontChoice[] => FONTS.filter((f) => f.curated);
 
-/** Which Google-font subsets a string needs, so we can warn before the glyphs
- *  come out as empty boxes. */
+/**
+ * What a string needs from a font, so a face that would draw "?" or an empty box is flagged
+ * before it does. One entry per kind of character the text holds, each a name a face lists in
+ * `subsets` (`cyrillic`, `korean`, `kana`, `japanese`...), or two joined by `|` when either will
+ * do: a Han character in both the Japanese and the Chinese set needs
+ * `japanese|chinese-simplified`. `UNCOVERED` stands for a character no bundled face has: a CJK
+ * one past the common set the files are cut to, or Hangul typed as separate jamo. Basic Latin,
+ * Latin-1 and punctuation need nothing.
+ */
 export function getRequiredSubsets(text: string): string[] {
-  const subsets = new Set<string>();
+  const needs = new Set<string>();
   for (const char of text) {
-    const code = char.charCodeAt(0);
-    if ((code >= 0x0400 && code <= 0x04ff) || (code >= 0x0500 && code <= 0x052f)) subsets.add('cyrillic');
-    else if (code >= 0x0370 && code <= 0x03ff) subsets.add('greek');
-    else if (code >= 0x0100 && code <= 0x024f) subsets.add('latin-ext');
+    const need = requirementOf(char.codePointAt(0)!);
+    if (need) needs.add(need);
   }
-  return Array.from(subsets);
+  return Array.from(needs);
 }
 
-/** Whether `font` covers every character in `text`. */
+/** Every letter and digit of `text` is in this parsed font's cmap. */
+function cmapCovers(parsed: any, text: string): boolean {
+  const map: Record<number, number> | undefined = parsed?.tables?.cmap?.glyphIndexMap;
+  if (!map) return true;
+  for (const char of text) {
+    if (/[\p{L}\p{N}]/u.test(char) && !map[char.codePointAt(0)!]) return false;
+  }
+  return true;
+}
+
+/** Whether `font` has every character in `text`. A bundled face answers from the coverage its
+ *  file was measured to have; a font the user imported, from its own cmap, letter by letter. */
 export function isFontSupported(font: FontChoice, text: string): boolean {
+  const imported = customFonts.get(font.id);
+  if (imported) return cmapCovers(imported, text);
   if (!font.subsets) return true;
-  return getRequiredSubsets(text).every(
-    (req) => font.subsets.includes(req) || font.subsets.includes(`${req}-ext`),
-  );
+  return getRequiredSubsets(text).every((need) => need.split('|').some((name) => font.subsets.includes(name)));
+}
+
+/** The alphabets `font` writes, for a person to filter by: any of 'Latin', 'Cyrillic', 'Greek',
+ *  'Korean', 'Japanese', 'Chinese', always in that order. A face with kana and no kanji counts
+ *  as Japanese; a kanji typed in it is still flagged. */
+export function fontScripts(font: FontChoice): string[] {
+  return SCRIPTS.filter(([, names]) => names.some((name) => font.subsets?.includes(name))).map(([script]) => script);
 }
 
 /** The icon fallback font, used when a glyph is missing from the chosen face. */

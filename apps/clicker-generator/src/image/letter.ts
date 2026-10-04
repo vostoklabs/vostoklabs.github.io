@@ -1,133 +1,161 @@
 import * as THREE from 'three';
 import { FontLoader, Font } from 'three/examples/jsm/loaders/FontLoader.js';
-import { TTFLoader } from 'three/examples/jsm/loaders/TTFLoader.js';
 // Vendored rather than imported from `three/examples/fonts/`: three stopped shipping that
 // folder after 0.171, so the old imports break on any newer version. See typefaces/README.md.
 import helvetikerRegular from '../typefaces/helvetiker_regular.typeface.json';
 import helvetikerBold from '../typefaces/helvetiker_bold.typeface.json';
+import { FONTS, getFont, importFontFiles, pathCommandsToPolygons } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg } from './lucideIcons';
 import { parseSvg } from './logo';
-import type { BlockSlot, RegionSet, Ring, RGB } from '../types';
+import type { BlockSlot, LegendLook, RegionSet, Ring, RGB } from '../types';
+import { lookRings, normaliseRings, type SymbolLook } from './symbolRings';
+
+/*
+  Where the letters' outlines come from.
+
+  Every face in the shared set (`@vostok/fonts`, the one all the generators that put type on a
+  model use) is read with opentype the first time it is picked. The two "Standard" faces are the
+  three.js typefaces the clicker has always had — its default text and the fit test's labels —
+  and are loaded from the start. Both kinds answer the same three questions through `GlyphFont`,
+  so the layout below never needs to know which it has.
+*/
 
 const fontLoader = new FontLoader();
-const ttfLoader = new TTFLoader();
 
+/** One loaded face: whether it has a character, the character's outline at `size` (Y-up, pen
+ *  at 0, outer rings and holes together — the build fills them NonZero), and its advance. */
+interface GlyphFont {
+  has(ch: string): boolean;
+  rings(ch: string, size: number): Ring[];
+  advance(ch: string, size: number): number;
+}
+
+function typefaceGlyphs(font: Font): GlyphFont {
+  const data = font.data as { resolution: number; glyphs: Record<string, { ha: number }> };
+  return {
+    has: (ch) => !!data.glyphs[ch],
+    rings: (ch, size) => {
+      const out: Ring[] = [];
+      for (const shape of font.generateShapes(ch, size)) {
+        const extracted = shape.extractPoints(16);
+        for (const pts of [extracted.shape, ...extracted.holes]) {
+          if (pts.length >= 3) out.push(pts.map((p) => [p.x, p.y] as [number, number]));
+        }
+      }
+      return out;
+    },
+    advance: (ch, size) => ((data.glyphs[ch] ?? data.glyphs['?'])?.ha ?? 0) * (size / data.resolution),
+  };
+}
+
+function opentypeGlyphs(font: any): GlyphFont {
+  // A character the face does not have draws as its "?", the way the typefaces always did, so
+  // a missing letter shows on the model instead of leaving a silent gap.
+  const glyphOf = (ch: string) => {
+    const g = font.charToGlyph(ch);
+    return g && g.index !== 0 ? g : font.charToGlyph('?');
+  };
+  const scale = (size: number) => size / (font.unitsPerEm || 1000);
+  return {
+    has: (ch) => font.charToGlyphIndex(ch) > 0,
+    rings: (ch, size) => {
+      const g = glyphOf(ch);
+      if (!g || g.index === 0) return [];
+      return (pathCommandsToPolygons(g.getPath(0, 0, size).commands) as Ring[]).filter((r) => r.length >= 3);
+    },
+    advance: (ch, size) => (glyphOf(ch)?.advanceWidth ?? 0) * scale(size),
+  };
+}
+
+/** A face as the font picker lists it. */
 export interface FontOption {
   id: string;
   name: string;
-  font: Font;
-  imported?: boolean;
+  category?: string;
 }
 
-export const FONT_OPTIONS: FontOption[] = [];
-
-const BUILT_IN_FONTS: [string, string, any][] = [
-  ['helvetiker-regular', 'Standard', helvetikerRegular],
-  ['helvetiker-bold', 'Standard Bold', helvetikerBold],
+/** The Standard faces: always loaded, never fetched. */
+export const STANDARD_FONTS: FontOption[] = [
+  { id: 'helvetiker-regular', name: 'Standard', category: 'Clean' },
+  { id: 'helvetiker-bold', name: 'Standard Bold', category: 'Clean' },
 ];
 
-for (const [id, name, data] of BUILT_IN_FONTS) {
-  FONT_OPTIONS.push({ id, name, font: fontLoader.parse(data) });
+/** Every face on offer: the Standard pair, then the shared set — which an import adds to, so this
+ *  is read fresh rather than copied. */
+export function fontOptions(): FontOption[] {
+  return [...STANDARD_FONTS, ...FONTS.map((f) => ({ id: f.id, name: f.label, category: f.category }))];
 }
 
-const BUNDLED_TTF = [
-  ['bebas-neue', 'Bebas Neue'],
-  ['anton', 'Anton'],
-  ['oswald', 'Oswald'],
-  ['titillium-web', 'Titillium Web'],
-  ['rajdhani', 'Rajdhani'],
-  ['chakra-petch', 'Chakra Petch'],
-  ['orbitron', 'Orbitron'],
-  ['audiowide', 'Audiowide'],
-  ['michroma', 'Michroma'],
-  ['russo-one', 'Russo One'],
-  ['righteous', 'Righteous'],
-  ['bungee', 'Bungee'],
-  ['share-tech-mono', 'Share Tech Mono'],
-  ['vt323', 'VT323'],
-  ['press-start-2p', 'Press Start 2P'],
-  ['arvo', 'Arvo'],
-  ['lobster', 'Lobster'],
-  ['pacifico', 'Pacifico'],
-  ['bangers', 'Bangers'],
-  ['creepster', 'Creepster'],
-  ['permanent-marker', 'Permanent Marker'],
-  ['sigmar-one', 'Sigmar One'],
-  ['luckiest-guy', 'Luckiest Guy'],
-  ['bungee-shade', 'Bungee Shade'],
-  ['dancing-script', 'Dancing Script'],
-  ['amatic-sc', 'Amatic SC'],
-  ['playfair-display', 'Playfair Display'],
-  ['kalam', 'Kalam']
-];
+const loaded = new Map<string, GlyphFont>([
+  ['helvetiker-regular', typefaceGlyphs(fontLoader.parse(helvetikerRegular))],
+  ['helvetiker-bold', typefaceGlyphs(fontLoader.parse(helvetikerBold))],
+]);
 
-let bundledLoaded = false;
-export async function loadBundledFonts(onLoaded?: (option: FontOption) => void) {
-  if (bundledLoaded) return;
-  bundledLoaded = true;
-  const baseUrl = import.meta.env.BASE_URL || '/';
+/**
+ * The id a saved font is known by now. The clicker shipped its own copies of 28 of the shared
+ * faces as `bundled-<slug>`; the shared set has every one of them as `<slug>`.
+ */
+export function currentFontIdOf(id: string): string {
+  return id.startsWith('bundled-') ? id.slice('bundled-'.length) : id;
+}
 
-  // Inject @font-face rules so we can preview the fonts in the UI
-  const fontFaceStyles = BUNDLED_TTF.map(([slug]) => `
-    @font-face {
-      font-family: '${slug}';
-      src: url('${baseUrl}fonts/${slug}.ttf') format('truetype');
-    }
-  `).join('\n');
-  const styleEl = document.createElement('style');
-  styleEl.textContent = fontFaceStyles;
-  document.head.appendChild(styleEl);
-
-  for (const [slug, name] of BUNDLED_TTF) {
-    try {
-      const buf = await fetch(`${baseUrl}fonts/${slug}.ttf`).then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.arrayBuffer();
-      });
-      const parsedTTF = ttfLoader.parse(buf);
-      const font = fontLoader.parse(parsedTTF);
-      const option = { id: `bundled-${slug}`, name, font };
-      FONT_OPTIONS.push(option);
-      onLoaded?.(option);
-    } catch (e: any) {
-      console.warn(`Could not load font "${name}":`, e.message);
-    }
+/** Load a face so `parseLetter` can draw with it. False when it cannot be had (a font that was
+ *  imported in another session and not brought back, say). */
+export async function ensureFont(id: string): Promise<boolean> {
+  if (loaded.has(id)) return true;
+  try {
+    loaded.set(id, opentypeGlyphs(await getFont(id)));
+    return true;
+  } catch (err) {
+    console.warn(`Could not load font "${id}":`, (err as Error).message);
+    return false;
   }
 }
 
-function uniqueFontId(base: string): string {
-  const slug = base
-    .replace(/\.[^.]+$/g, '')
-    .replace(/[^a-z0-9]+/gi, '-')
-    .replace(/^-|-$/g, '')
-    .toLowerCase() || 'imported-font';
-  let id = `imported-${slug}`;
-  let suffix = 2;
-  while (FONT_OPTIONS.some((font) => font.id === id)) {
-    id = `imported-${slug}-${suffix}`;
-    suffix++;
+export function isFontLoaded(id: string): boolean {
+  return loaded.has(id);
+}
+
+/** The face to draw with: the one asked for once it has loaded, Standard until then. */
+function glyphFont(id: string): GlyphFont {
+  return loaded.get(id) ?? loaded.get('helvetiker-regular')!;
+}
+
+/** Does the loaded face have every letter and digit of `text`? Unloaded faces are not judged. */
+export function fontHasText(id: string, text: string): boolean {
+  const f = loaded.get(id);
+  if (!f) return true;
+  for (const ch of text) if (/[\p{L}\p{N}]/u.test(ch) && !f.has(ch)) return false;
+  return true;
+}
+
+/**
+ * A font the user brings: a .ttf, .otf, .woff or a .zip of them, through the shared importer
+ * (stable ids, so a saved project finds it again), or a three.js typeface .json, which only this
+ * engine reads.
+ */
+export async function importFontFile(file: File): Promise<{ fonts: FontOption[]; failed: string[] }> {
+  if (/\.json$/i.test(file.name)) {
+    const data = JSON.parse(await file.text());
+    const name = data.familyName || data.original_font_information?.fullName?.en || file.name.replace(/\.[^.]+$/, '');
+    const id = `typeface-${name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+    loaded.set(id, typefaceGlyphs(fontLoader.parse(data)));
+    const option = { id, name, category: 'Custom' };
+    if (!STANDARD_FONTS.some((f) => f.id === id)) STANDARD_FONTS.push(option);
+    return { fonts: [option], failed: [] };
   }
-  return id;
+  const result = await importFontFiles(file);
+  const fonts: FontOption[] = [];
+  for (const f of result.fonts) {
+    if (await ensureFont(f.id)) fonts.push({ id: f.id, name: f.label, category: f.category });
+    else result.failed.push(f.label);
+  }
+  return { fonts, failed: result.failed };
 }
 
-function fontNameFromData(data: any, fallback: string): string {
-  return data.familyName || data.original_font_information?.fullName?.en || fallback;
-}
-
-export async function importFontFile(file: File): Promise<FontOption> {
-  const isJson = /\.json$/i.test(file.name);
-  const data = isJson
-    ? JSON.parse(await file.text())
-    : ttfLoader.parse(await file.arrayBuffer());
-  const option = {
-    id: uniqueFontId(file.name),
-    name: fontNameFromData(data, file.name.replace(/\.[^.]+$/g, '')),
-    font: fontLoader.parse(data),
-    imported: true,
-  };
-  FONT_OPTIONS.push(option);
-  return option;
-}
+/** How tall a symbol stands in a line of text by default, as a fraction of the font size: about
+ *  a capital letter's height, so a heart next to a name reads as one more letter. */
+const SYMBOL_HEIGHT = 0.7;
 
 /** Text-mode typography. Every field defaults to the value that reproduces the old layout. */
 export interface TextTypography {
@@ -149,10 +177,12 @@ export function parseLetter(
   maxLen = 30,
   separate = false,
   typo: TextTypography = {},
+  /** Symbols in the text, by their private-use character: their rings (any frame) and look. */
+  symbols: Readonly<Record<string, { rings: Ring[]; look: SymbolLook }>> = {},
 ): RegionSet {
   if (!text.trim()) throw new Error('Type a letter first.');
 
-  const option = FONT_OPTIONS.find((font) => font.id === fontId) || FONT_OPTIONS[0];
+  const font = glyphFont(fontId);
 
   const layout = (t: TextTypography) => {
     const SIZE = 100;
@@ -185,21 +215,39 @@ export function parseLetter(
       let penX = 0;
       for (const ch of value) {
         const glyphRings: Ring[] = [];
-        for (const shape of option.font.generateShapes(ch, SIZE)) {
-          const extracted = shape.extractPoints(16);
-          for (const pts of [extracted.shape, ...extracted.holes]) {
-            if (pts.length < 3) continue;
-            const ring: Ring = [];
-            for (const p of pts) {
-              const x = p.x + penX;
-              lineBox.expandByPoint(new THREE.Vector2(x, p.y));
-              ring.push([x, p.y]);
+        const sym = symbols[ch];
+        if (sym) {
+          // A symbol stands in the line like a capital letter: as tall as one by default,
+          // centred on the capitals' middle, as wide as its own drawing. Its inspector's size
+          // and offset are fractions of that height.
+          const S = SIZE * SYMBOL_HEIGHT * sym.look.scale;
+          const rings = lookRings(normaliseRings(sym.rings), sym.look).map((r) => r.map(([x, y]) => [x * S, y * S] as [number, number]));
+          let minX = Infinity, maxX = -Infinity;
+          for (const r of rings) for (const [x] of r) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+          if (rings.length && Number.isFinite(minX)) {
+            const ox = penX - minX + sym.look.dx * S;
+            const oy = SIZE * SYMBOL_HEIGHT * 0.5 + sym.look.dy * S;
+            for (const r of rings) {
+              const ring: Ring = r.map(([x, y]) => [x + ox, y + oy] as [number, number]);
+              for (const [x, y] of ring) lineBox.expandByPoint(new THREE.Vector2(x, y));
+              glyphRings.push(ring);
             }
-            glyphRings.push(ring);
+            lineGlyphs.push(glyphRings);
+            penX += maxX - minX + SIZE * 0.08 + tracking;
           }
+          continue;
+        }
+        for (const pts of font.rings(ch, SIZE)) {
+          const ring: Ring = [];
+          for (const [px, py] of pts) {
+            const x = px + penX;
+            lineBox.expandByPoint(new THREE.Vector2(x, py));
+            ring.push([x, py]);
+          }
+          glyphRings.push(ring);
         }
         if (glyphRings.length) lineGlyphs.push(glyphRings);
-        penX += glyphAdvance(option.font, ch, SIZE) + tracking;
+        penX += font.advance(ch, SIZE) + tracking;
       }
 
       if (lineGlyphs.length === 0) continue;
@@ -268,26 +316,6 @@ export function parseLetter(
 // Letter blocks
 // ---------------------------------------------------------------------------
 
-/** Horizontal advance of one character at `size`, the way three's FontLoader lays it out. */
-function glyphAdvance(font: Font, ch: string, size: number): number {
-  const data = font.data as { resolution: number; glyphs: Record<string, { ha: number }> };
-  const glyph = data.glyphs[ch] || data.glyphs['?'];
-  return (glyph?.ha ?? 0) * (size / data.resolution);
-}
-
-/** Rings of one glyph, in the font's own units (Y-up), positioned as the font laid it. */
-function glyphRings(font: Font, ch: string): Ring[] {
-  const rings: Ring[] = [];
-  for (const shape of font.generateShapes(ch, 100)) {
-    const extracted = shape.extractPoints(16);
-    if (extracted.shape.length >= 3) rings.push(extracted.shape.map((p) => [p.x, p.y] as [number, number]));
-    for (const hole of extracted.holes) {
-      if (hole.length >= 3) rings.push(hole.map((p) => [p.x, p.y] as [number, number]));
-    }
-  }
-  return rings;
-}
-
 function bboxOf(rings: Ring[]) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const r of rings) for (const [x, y] of r) {
@@ -312,15 +340,16 @@ function bboxOf(rings: Ring[]) {
 export function parseBlockChain(
   slots: BlockSlot[],
   fontId: string,
-  /** Rings of the traced symbols, by the private-use character a `symbol` slot names. */
-  symbols: Readonly<Record<string, { rings: Ring[] }>> = {},
+  /** Rings of the traced symbols, by the private-use character a `symbol` slot names, with
+   *  the size and offset their inspector set. */
+  symbols: Readonly<Record<string, { rings: Ring[]; legend?: LegendLook }>> = {},
 ): RegionSet {
-  const option = FONT_OPTIONS.find((font) => font.id === fontId) || FONT_OPTIONS[0];
+  const font = glyphFont(fontId);
   const ICON_FILL = 0.9; // icons read bigger than letters at equal height
 
   // Every slot produces a region, INCLUDING empties and glyphs the font can't draw: the
   // builder positions cells by index, so a hole has to keep its place in the grid.
-  const raw: { rings: Ring[]; icon: boolean }[] = [];
+  const raw: { rings: Ring[]; icon: boolean; legend?: LegendLook }[] = [];
   for (const slot of slots) {
     if (slot.kind === 'empty' || slot.kind === 'blank') {
       // A blank key still has a cap; it just has nothing printed on it. Which cells are keys
@@ -328,7 +357,12 @@ export function parseBlockChain(
       raw.push({ rings: [], icon: false });
     } else if (slot.kind === 'symbol') {
       // Traced already, centred, longest side 1 — the same frame `parseSvg` hands back.
-      raw.push({ rings: symbols[slot.char]?.rings.map((r) => r.map(([x, y]) => [x, y] as [number, number])) ?? [], icon: true });
+      const sym = symbols[slot.char];
+      raw.push({
+        rings: sym?.rings.map((r) => r.map(([x, y]) => [x, y] as [number, number])) ?? [],
+        icon: true,
+        ...(sym?.legend ? { legend: sym.legend } : {}),
+      });
     } else if (slot.kind === 'icon') {
       const info = LUCIDE_ICONS.find((ic) => ic.name === slot.name);
       let rings: Ring[] = [];
@@ -338,9 +372,14 @@ export function parseBlockChain(
       } catch {
         rings = [];
       }
-      raw.push({ rings, icon: true });
+      const look = slot.look;
+      raw.push({
+        rings: look ? lookRings(rings, look) : rings,
+        icon: true,
+        ...(look ? { legend: { scale: look.scale, dx: look.dx, dy: look.dy } } : {}),
+      });
     } else {
-      raw.push({ rings: glyphRings(option.font, slot.ch), icon: false });
+      raw.push({ rings: font.rings(slot.ch, 100), icon: false });
     }
   }
   if (!slots.some((s) => s.kind !== 'empty')) throw new Error('Add a key first.');
@@ -360,7 +399,7 @@ export function parseBlockChain(
   const regions = raw.map((r) => {
     const k = r.icon ? ICON_FILL : 1 / charMax;
     const rings = r.rings.map((ring) => ring.map(([x, y]) => [x * k, y * k] as [number, number]));
-    return { quantRgb: BLACK, components: [{ rings, coverage: 1.0 }], coverage: 1.0 };
+    return { quantRgb: BLACK, components: [{ rings, coverage: 1.0 }], coverage: 1.0, ...(r.legend ? { legend: r.legend } : {}) };
   });
 
   return { regions, outline: regions.flatMap((r) => r.components[0].rings), aspect: 1 };

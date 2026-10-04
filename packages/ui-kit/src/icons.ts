@@ -139,6 +139,8 @@ export const ICONS = {
   pattern: stroke('<path d="M7.5 4.5 11.4 6.75v4.5L7.5 13.5 3.6 11.25v-4.5z"/><path d="M16.5 4.5l3.9 2.25v4.5L16.5 13.5l-3.9-2.25v-4.5z"/><path d="M12 12.3l3.9 2.25v4.5L12 21.3l-3.9-2.25v-4.5z"/>', 18),
   // A heart — a shape something is cut inside.
   heart: stroke('<path d="M12 20 4.6 12.6a4.2 4.2 0 0 1 7.4-5.4 4.2 4.2 0 0 1 7.4 5.4z"/>', 18),
+  // A drop of ink: colours, the filaments a model prints in.
+  droplet: stroke('<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>', 18),
 } as const;
 
 /** Parse a raw SVG string into an element. */

@@ -13,6 +13,45 @@
   gap: 6px;
 }
 
+/* The style and Alphabet chips: quiet pills, the chosen one outlined in the accent rather than
+   filled, so two rows of filters do not outshout the fonts under them. Scoped to the picker:
+   `chip()` everywhere else keeps the kit's filled look. The pressed rules are restated at the
+   pressed + hover specificity, or the kit chip's filled hover would paint over them. */
+.vl-font-picker__cats .vl-chip {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 13.5px;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
+}
+.vl-font-picker__cats .vl-chip:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--text);
+}
+.vl-font-picker__cats .vl-chip[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--panel-2);
+  color: var(--text);
+}
+.vl-font-picker__cats .vl-chip[aria-pressed='true']:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--panel-2);
+  color: var(--text);
+}
+.vl-font-picker__cats .vl-chip:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* "Alphabet", leading the second chip row: without it the row reads as more categories. */
+.vl-font-picker__row-label {
+  align-self: center;
+  margin-right: var(--space-1);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
 .vl-font-picker__list {
   display: flex;
   flex-direction: column;

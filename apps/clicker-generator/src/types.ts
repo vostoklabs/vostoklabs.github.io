@@ -25,9 +25,18 @@ export type Ring = [number, number][];
 
 /** Normalized 2D geometry: silhouette fits within a unit box (longest side = 1),
  *  centered on origin, Y-up. Worker scales by capWidthMm. */
+/** A placed symbol's own size and offset on its keycap, applied after the size every legend in
+ *  the set shares (so one big symbol does not shrink the letters): `scale` multiplies it, and
+ *  `dx`/`dy` move it by that fraction of the legend's size, +y up. */
+export interface LegendLook {
+  scale: number;
+  dx: number;
+  dy: number;
+}
+
 export interface RegionSet {
-  /** One entry per palette color actually used. */
-  regions: { quantRgb: RGB; components: { rings: Ring[]; coverage: number }[]; coverage: number }[];
+  /** One entry per palette color actually used. `legend` is set on a letter block's symbol. */
+  regions: { quantRgb: RGB; components: { rings: Ring[]; coverage: number }[]; coverage: number; legend?: LegendLook }[];
   /** Union silhouette of all foreground pixels. */
   outline: Ring[];
   /** Aspect (width/height) of the source silhouette, for reference. */
@@ -276,7 +285,7 @@ export interface BuildParams {
  *  the grid so shapes like WASD are possible. */
 export type BlockSlot =
   | { kind: 'char'; ch: string }
-  | { kind: 'icon'; name: string }
+  | { kind: 'icon'; name: string; look?: { scale: number; dx: number; dy: number; rotation: number; flip: boolean } }
   | { kind: 'symbol'; char: string }
   | { kind: 'blank' }
   | { kind: 'empty' };
@@ -331,6 +340,8 @@ export interface BuildRegion {
   coverage: number; // fraction of foreground — drives carve priority (small detail wins)
   rings: Ring[];
   partName: string;
+  /** Letter blocks: this legend's own size and offset (a symbol's inspector). */
+  legend?: LegendLook;
 }
 
 // ---- Worker messages ----

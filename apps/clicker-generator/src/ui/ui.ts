@@ -9,7 +9,6 @@ import {
   iconButton,
   modeBar,
   selectField,
-  textareaField,
   thumbTile,
   toggleSwitch,
   type ValueRow,
@@ -28,10 +27,17 @@ import {
   sliderRow,
   stepperRow,
   makeCollapsible,
+  previewBar,
+  type PreviewBar,
+  slider,
+  stageRow,
+  stageTools,
+  fontChooser,
+  type FontChooserHandle,
+  type FontPickerFont,
+  type DesktopHost,
   keyMap,
   settingsRail,
-  textField,
-  type TextFieldHandle,
   toast,
 } from '@vostok/ui-kit';
 import { MAKERLAB, SELLER_PACK, isUnlocked } from 'virtual:makerlab';
@@ -40,8 +46,8 @@ import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
 import { SAMPLES } from '../image/sample';
 import type { RgbaImage } from '../image/decode';
-import type { FontOption } from '../image/letter';
-import { FONT_OPTIONS, loadBundledFonts } from '../image/letter';
+import { fontHasText, STANDARD_FONTS } from '../image/letter';
+import { FONTS, curatedFonts, fontSupportsText, getRequiredSubsets, toPickerFont } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from '../image/lucideIcons';
 import { CHANGELOG } from '../changelog';
 import { entryForState, loadPackShapes } from '../shapes/directory';
@@ -53,22 +59,30 @@ import type { ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
 import { modelFormatOf } from '../model/parse';
 import { arrangeBlocks, GRID_MAX, isLineLayout, keysPerRow, type BlockArrangement, type BlockLayout, type BlockSymbol } from '../geometry/blockLayout';
 import { assetUrl } from '../assets';
+import { lookOf, lookRings } from '../image/symbolRings';
+import { lucideImg, ringsSvg } from './symbols';
+import { symbolLines, type LineSpec } from './symbolLines';
 
 /** Fallback swatch for the keycap row before the build derives a contrasting frame. */
 const DEFAULT_CAP_RGB: RGB = [240, 240, 240];
 
 /** The left panel's categories, in rail order. Which ones a mode shows: `RAIL_FOR_MODE`. */
-type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'body' | 'fit' | 'switch' | 'keychain';
+type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'body' | 'colors' | 'switch' | 'keychain' | 'fit' | 'seller';
+
+/** The licence and the seller tools: a category of their own, set apart at the end of the rail
+ *  in every mode. Only the MakerWorld build has anything to put in it. */
+const SELLER: RailId[] = MAKERLAB ? ['seller'] : [];
 
 /** The categories each source has, and the one it opens on — the knob that makes the clicker
- *  that kind of clicker, never the font (Laser Studio's rule). */
+ *  that kind of clicker, never the font (Laser Studio's rule). The design comes first and Fit,
+ *  which is about your printer and your switches rather than the design, comes last. */
 const RAIL_FOR_MODE: Record<UiState['importMode'], { show: RailId[]; first: RailId }> = {
-  image: { show: ['shape', 'body', 'fit', 'switch', 'keychain'], first: 'shape' },
-  svg: { show: ['shape', 'body', 'fit', 'switch', 'keychain'], first: 'shape' },
-  icon: { show: ['shape', 'body', 'fit', 'switch', 'keychain'], first: 'shape' },
-  text: { show: ['shape', 'font', 'lettering', 'body', 'fit', 'switch', 'keychain'], first: 'shape' },
-  blocks: { show: ['layout', 'font', 'lettering', 'body', 'fit', 'keychain'], first: 'layout' },
-  model: { show: ['cut', 'model', 'body', 'fit'], first: 'cut' },
+  image: { show: ['shape', 'body', 'colors', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
+  svg: { show: ['shape', 'body', 'colors', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
+  icon: { show: ['shape', 'body', 'colors', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
+  text: { show: ['shape', 'font', 'lettering', 'body', 'colors', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
+  blocks: { show: ['layout', 'font', 'lettering', 'body', 'colors', 'keychain', 'fit', ...SELLER], first: 'layout' },
+  model: { show: ['cut', 'model', 'colors', 'fit', ...SELLER], first: 'cut' },
 };
 
 /**
@@ -238,6 +252,8 @@ export interface UiState {
   blockLines: string[];
   /** The symbols those lines use, by their private-use character. */
   blockSymbols: Record<string, BlockSymbol>;
+  /** Text mode's symbols, kept the same way: the text itself is the mount's `currentText`. */
+  textSymbols: Record<string, BlockSymbol>;
   /** A wall between every key, or one open frame round them all. */
   blockStyle: BlockStyle;
   /** The outside of the block body. */
@@ -380,7 +396,12 @@ export interface UiCallbacks {
   onSelectIcon(svgText: string, name: string): void;
   onTextChange(text: string): void;
   onFontSelect(fontId: string): void;
-  onImportFont(file: File): void;
+  /** Read a font the person brought: the faces it held, and the names of any that would not
+   *  load. Throws when the file is not a font. */
+  importFont(file: File): Promise<{ fonts: { id: string }[]; failed: string[] }>;
+  /** The desktop host, when there is one, handed to the kit's font block: its import opens the
+   *  host's own file picker. Nothing here calls it. */
+  host?: DesktopHost;
   onThemeChange(theme: string): void;
   onEditMode(mode: EditMode): void;
   onEdgeStyle(target: string, style: EdgeStyle): void;
@@ -405,9 +426,12 @@ export interface UiCallbacks {
   onBlockCell(index: number): void;
   /** The text of one row of keys changed. */
   onBlockLine(row: number, text: string): void;
+  /** A symbol went in or out of the rows, or one was resized, moved, turned or swapped. */
+  onBlockSymbols(next: Record<string, BlockSymbol>): void;
+  /** The same for Text mode's lines. */
+  onTextSymbols(next: Record<string, BlockSymbol>): void;
   onBlockStyle(style: BlockStyle): void;
   onBlockTexture(texture: BlockTexture): void;
-  /** The blocks text box changed — retype the letter chips, keep the symbols. */
   onLegendScale(v: number): void;
   onLegendBold(mm: number): void;
   /** Keycap colour (shared by every cap in the chain). */
@@ -513,7 +537,7 @@ export function createUi(
      they are built further down but read by the sync pass at the bottom. */
   let history: HistoryControlsHandle;
   let editModes: ReturnType<typeof modeBar<EditMode>> | null = null;
-  let separateLettersToggle: ValueRow<boolean> | null = null;
+  let lettersBar: PreviewBar | null = null;
   let extrudeChamferToggle: ValueRow<boolean> | null = null;
   let extrudeLevelRow: ValueRow<number> | null = null;
   /** What the Level stepper last reported, so its absolute readout can be turned back into
@@ -562,31 +586,24 @@ export function createUi(
     storageKey: 'clicker-quality-callout',
   });
 
-  // Populate Left Sidebar. Laser Studio's layout: the title and the preview's switches stay put
-  // at the top — they apply whatever is open below them — the settings sit behind a rail, one
-  // category at a time, and undo/redo is at the foot.
+  // Populate Left Sidebar. Laser Studio's layout: the title stays put at the top, the settings
+  // sit behind a rail, one category at a time, and undo/redo is at the foot.
   //
   // `#licenceCtaMount` and `#proMount` are anchors and nothing else: in the MakerWorld build
   // mount.ts fills them, and in every other build they stay empty divs. The explanation lives
   // here rather than as an HTML comment inside the string, because a comment in a template
   // literal survives minification verbatim and ships in the public bundle's DOM.
   //
-  // The licence comes first and the seller tools directly under it.
+  // Until the licence is bought, "Unlock lifetime commercial licence" is pinned above the rail,
+  // where it is always seen. Once it is held, it moves into the Seller/License category (a
+  // category of its own, set apart at the end of the rail in every mode) as the licence card,
+  // above the tools it unlocks. `update()` moves it.
   const leftScroll = document.createElement('div');
   leftScroll.className = 'vl-panel__scroll cg-left';
   leftScroll.innerHTML = `
-    <div class="cg-left-top">
-    <div id="licenceCtaMount"></div>
-    <div id="proMount"></div>
-    <div id="previewViewSection" class="cg-view">
-      <div id="viewTabsMount"></div>
-      <div id="showSwitchMount"></div>
-      <div id="sectionToggleMount"></div>
-      <div id="sectionOpts" hidden>
-        <div class="prow-stacked"><div id="sectionAxisMount"></div></div>
-        <div class="prow-stacked"><div id="sectionPosMount"></div></div>
-      </div>
-    </div>
+    <div class="cg-left-top"><div id="licenceCtaMount"></div></div>
+    <div data-rail="seller"><div id="proMount"></div>
+      <p class="vl-hint" id="sellerModelNote" hidden>The maker’s mark goes on clickers made from an image, an SVG, an icon, text or blocks.</p>
     </div>
     <div data-rail="layout">
       <div id="blockLayoutMount"></div>
@@ -623,15 +640,7 @@ export function createUi(
     </div>
     <div data-rail="model"><div id="modelBodyMount"></div>
     </div>
-    <div data-rail="font">
-      <div class="field" id="fontField">
-        <div id="fontGrid" class="font-grid"></div>
-        <label class="upload">
-          + Import font
-          <input id="fontUpload" type="file" accept=".ttf,.otf,.json,font/ttf,font/otf,application/json" />
-        </label>
-      </div>
-    </div>
+    <div data-rail="font"></div>
     <div data-rail="lettering">
       <div class="prow-stacked" id="legendSizeRow"><div id="legendSizeMount"></div></div>
       <div class="prow-stacked" id="legendBoldRow"><div id="legendBoldMount"></div></div>
@@ -646,6 +655,8 @@ export function createUi(
       <div class="prow-stacked"><div id="imgdepthMount"></div></div>
       <div class="prow-stacked"><div id="capProudMount"></div></div>
       <div class="prow-stacked"><div id="hollowMount"></div></div>
+    </div>
+    <div data-rail="colors">
       <div class="field" id="colorCountField">
         <div id="ccountMount"></div>
         <p class="vl-hint">Most AMS units hold 4 filaments; more colors means manual swaps.</p>
@@ -715,18 +726,22 @@ export function createUi(
      tab. Which categories a mode has at all is decided in `update()` (RAIL_FOR_MODE).
      The rows are written once, above, inside `data-rail` holders, and moved into the rail
      here; the holders go. */
-  const RAIL_ITEMS: { id: RailId; label: string; icon: string; title?: string }[] = [
-    { id: 'layout', label: 'Layout', icon: ICONS.grid },
+  const RAIL_ITEMS: { id: RailId; label: string; icon: string; title?: string; fill?: boolean; divider?: boolean }[] = [
+    // No heading: the first row is "Layout", with its help, as Cut's is "How it clicks".
+    { id: 'layout', label: 'Layout', icon: ICONS.grid, title: '' },
     { id: 'shape', label: 'Shape', icon: ICONS.maximize, title: 'Shape & size' },
     // No heading: the cut's own first row is "How it clicks", with its help.
     { id: 'cut', label: 'Cut', icon: ICONS.layers, title: '' },
     { id: 'model', label: 'Model', icon: ICONS.box },
-    { id: 'font', label: 'Font', icon: ICONS.text },
+    { id: 'font', label: 'Font', icon: ICONS.text, fill: true },
     { id: 'lettering', label: 'Lettering', icon: ICONS.sliders },
-    { id: 'body', label: 'Body', icon: ICONS.pattern, title: 'Body & colours' },
-    { id: 'fit', label: 'Fit', icon: ICONS.ruler },
+    { id: 'body', label: 'Body', icon: ICONS.pattern },
+    { id: 'colors', label: 'Colors', icon: ICONS.droplet },
     { id: 'switch', label: 'Switch', icon: ICONS.target },
     { id: 'keychain', label: 'Keychain', icon: ICONS.link },
+    { id: 'fit', label: 'Fit', icon: ICONS.ruler },
+    // Set apart by a hairline: selling, not the design. The label may break after the slash.
+    { id: 'seller', label: 'Seller/\u200bLicense', title: 'Seller / License', icon: ICONS.license, divider: true },
   ];
   const settings = settingsRail({
     label: 'Clicker settings',
@@ -750,6 +765,21 @@ export function createUi(
   if (!MAKERLAB) {
     leftTop.prepend(headerEl);
   }
+  /** The licence: on top until it is bought, then the first thing in Seller/License. */
+  function placeLicence() {
+    // Not `$`: this first runs before that helper is declared further down.
+    const cta = leftScroll.querySelector<HTMLElement>('#licenceCtaMount')!;
+    const tools = leftScroll.querySelector<HTMLElement>('#proMount')!;
+    if (MAKERLAB && isUnlocked(SELLER_PACK)) {
+      if (cta.nextElementSibling !== tools) tools.before(cta);
+    } else if (cta.parentElement !== leftTop) {
+      leftTop.append(cta);
+    }
+    // The embedded build has no title here (the host shows the name), so once the licence has
+    // moved down nothing is left above the rail.
+    leftTop.hidden = !leftTop.children.length;
+  }
+  placeLicence();
   // The print-quality pointer belongs with printing: it heads the Fit category rather than
   // the panel, where four lines of it pushed the rail off the screen.
   if (qualityEl) settings.panel('fit')?.querySelector('.vl-section__body')?.prepend(qualityEl);
@@ -823,10 +853,23 @@ export function createUi(
 
       <!-- Text / Blocks Panel (shared: both modes are driven by text + a font) -->
       <div id="letterPanel" class="mode-panel" hidden>
-        <div id="textOnlyField"></div>
+        <div class="field" id="textLinesField">
+          <div class="cg-lines-head">
+            <label>Text ${tip('Up to three lines. Add symbol puts an icon where the cursor is; click it in the text to size, move or swap it.')}</label>
+            <div id="textAddSymbolMount"></div>
+          </div>
+          <div id="textLinesMount"></div>
+          <div id="textAddLineMount"></div>
+          <div id="textInspectorMount"></div>
+        </div>
 
         <div class="field" id="blockLinesField" hidden>
-          <div id="blockLinesMount" class="cg-block-lines"></div>
+          <div class="cg-lines-head">
+            <label>Text ${tip('One character per key; in a grid a space leaves a key blank. Add symbol puts an icon on the key at the cursor; click it to size, move or swap it.')}</label>
+            <div id="blockAddSymbolMount"></div>
+          </div>
+          <div id="blockLinesMount"></div>
+          <div id="blockInspectorMount"></div>
         </div>
         ${MAKERLAB ? '' : `<p class="hint-text" id="blocksKeycapLink" hidden>
           Want more keycap options, like profiles, sizes, or your own SVG or photo on the
@@ -959,7 +1002,7 @@ export function createUi(
     } else if (f.name.endsWith('.svg')) {
       cb.onSvgUpload(f);
     } else if (f.name.endsWith('.ttf') || f.name.endsWith('.otf') || f.name.endsWith('.json')) {
-      cb.onImportFont(f);
+      void importDroppedFont(f);
     } else if (f.type.startsWith('image/')) {
       cb.onUpload(f);
     } else {
@@ -1229,16 +1272,51 @@ export function createUi(
   // Initialize Lucide Gallery
   rebuildGallery();
 
-  // --- Text Panel Setup ---
-  const letterTextRow = textareaField({
-    label: 'Custom Text',
-    value: 'Custom\nText',
-    rows: 2,
-    maxLength: 30,
-    compact: true,
-    onInput: (v) => cb.onTextChange(v),
+  // --- Text: a field per line, up to three, each holding symbols as well as letters ---
+  const MAX_TEXT_LINES = 3;
+  /** What `parseLetter` keeps of a line. */
+  const TEXT_LINE_MAX = 15;
+  let textLines = ['Custom', 'Text'];
+  const textUi = symbolLines({
+    placement: true,
+    onSymbols: (next) => cb.onTextSymbols(next),
+    onLine: (i, text) => {
+      textLines[i] = text;
+      cb.onTextChange(textLines.join('\n'));
+    },
   });
-  $('textOnlyField').append(letterTextRow);
+  $('textAddSymbolMount').append(textUi.addButton);
+  $('textLinesMount').append(textUi.lines);
+  $('textInspectorMount').append(textUi.inspector);
+  const addLineBtn = button({
+    label: 'Add a line',
+    icon: ICONS.plus,
+    emphasis: 'ghost',
+    onClick: () => {
+      textLines.push('');
+      renderTextLines();
+      textUi.focus(textLines.length - 1);
+    },
+  });
+  $('textAddLineMount').append(addLineBtn);
+  function renderTextLines() {
+    const specs: LineSpec[] = textLines.map((_, i) => ({
+      label: `Line ${i + 1}`,
+      maxLength: TEXT_LINE_MAX,
+      ...(i > 0
+        ? {
+            onRemove: () => {
+              textLines.splice(i, 1);
+              renderTextLines();
+              cb.onTextChange(textLines.join('\n'));
+            },
+          }
+        : {}),
+    }));
+    textUi.setLines(specs, textLines);
+    addLineBtn.hidden = textLines.length >= MAX_TEXT_LINES;
+  }
+  renderTextLines();
 
   const textScaleRow = sliderRow({
     label: 'Text size',
@@ -1268,22 +1346,77 @@ export function createUi(
     onInput: (v) => cb.onLineSpacing(v),
   });
   $('lineSpacingMount').append(lineSpacingRow);
-  const fontGrid = $('fontGrid');
-  const fontUpload = $<HTMLInputElement>('fontUpload');
-  let selectedFontBtn: HTMLElement | null = null;
-
-  fontUpload.parentElement?.addEventListener('click', (e) => {
-    if (!cb.pickFile) return;
-    e.preventDefault();
-    void pickOrBrowse('font', ['ttf', 'otf', 'json'], () => {}).then((f) => {
-      if (f) cb.onImportFont(f);
+  /* --- Font: the kit's font block, as the name keychain has it. A grid of cards, every face
+     drawn in your own text; "Browse all" for the whole library, with its style and Alphabet
+     chips; the import under them. When the text is not Latin, the cards are the faces that
+     write it. */
+  const STANDARD_FAMILY = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+  const isStandard = (id: string) => STANDARD_FONTS.some((f) => f.id === id);
+  let fontSample = 'Custom Text';
+  /** What the text needs that Latin does not cover. The cards follow it. */
+  let fontNeeds = '';
+  const allFonts = (): FontPickerFont[] => [
+    ...STANDARD_FONTS.map((f) => ({ id: f.id, label: f.name, family: STANDARD_FAMILY, category: f.category ?? 'Clean', scripts: ['Latin'] })),
+    ...FONTS.map(toPickerFont),
+  ];
+  const fontWrites = (f: FontPickerFont, text: string) => (isStandard(f.id) ? fontHasText(f.id, text) : fontSupportsText(f.id, text));
+  const cardsFor = (): string[] =>
+    fontNeeds
+      ? allFonts().filter((f) => fontWrites(f, fontSample)).map((f) => f.id)
+      : [...STANDARD_FONTS.map((f) => f.id), ...curatedFonts().map((f) => f.id)];
+  function makeFontBlock(value: string): FontChooserHandle {
+    return fontChooser({
+      fonts: allFonts(),
+      curated: cardsFor(),
+      value,
+      sample: fontSample,
+      featuredLabel: fontNeeds ? 'Works with your text' : 'Popular',
+      supports: fontWrites,
+      fill: true,
+      importAccept: '.ttf,.otf,.woff,.zip,.json',
+      ...(cb.host ? { host: cb.host } : {}),
+      onChange: (id) => cb.onFontSelect(id),
+      onImport: async (file) => {
+        const { fonts, failed } = await cb.importFont(file);
+        const all = allFonts();
+        return { fonts: fonts.map((x) => all.find((f) => f.id === x.id)).filter((f): f is FontPickerFont => !!f), failed };
+      },
     });
-  });
-  fontUpload.addEventListener('change', () => {
-    const f = fontUpload.files?.[0];
-    if (f) cb.onImportFont(f);
-    fontUpload.value = '';
-  });
+  }
+  let fontBlock = makeFontBlock('helvetiker-regular');
+  settings.panel('font')?.querySelector('.vl-section__body')?.append(fontBlock);
+  settings.refresh();
+  function rebuildFontBlock() {
+    const next = makeFontBlock(fontBlock.getValue());
+    fontBlock.replaceWith(next);
+    fontBlock = next;
+  }
+  /** The text the cards draw: the words, without the symbols (no font has those). */
+  function setFontSample(text: string) {
+    const sample = Array.from(text).filter((ch) => (ch.codePointAt(0) ?? 0) < 0xf0000).join('').replace(/\s+/g, ' ').trim() || 'Aa';
+    if (sample === fontSample) return;
+    fontSample = sample;
+    const needs = getRequiredSubsets(sample).filter((n) => n !== 'latin-ext').sort().join(',');
+    if (needs !== fontNeeds) {
+      fontNeeds = needs;
+      rebuildFontBlock();
+    } else {
+      fontBlock.setSample(sample);
+    }
+  }
+  /** A font file dropped anywhere on the page: imported the way the block's own import does it. */
+  async function importDroppedFont(file: File) {
+    try {
+      const { fonts, failed } = await cb.importFont(file);
+      if (failed.length) toast(`Could not read ${failed.join(', ')}.`, { kind: 'warn' });
+      const last = fonts[fonts.length - 1];
+      if (!last) return;
+      fontBlock.setFonts(allFonts(), cardsFor());
+      fontBlock.setValue(last.id, true);
+    } catch (err) {
+      toast(`Could not read ${file.name}: ${(err as Error).message}`, { kind: 'error' });
+    }
+  }
 
   // --- Letter blocks: the arrangement, the walls, the texture, and the lines of keys -------
   /* Layout: the arrangement as pictures, the grid's size for Grid and Custom, and a map of the
@@ -1354,47 +1487,56 @@ export function createUi(
   });
   $('blockTextureMount').append(blockTextureCtl);
 
-  /* The right panel: what is printed on the keys. A row or a column is one line, as long as
-     you like; a grid has a line per row of keys. Rebuilt only when the rows change shape, so
-     typing never loses the caret. */
-  let lineFields: TextFieldHandle[] = [];
+  /* The right panel: what is printed on the keys. A row or a column is one line of up to 24
+     keys; a grid has a line per row of keys, as long as the row. Rebuilt only when the rows
+     change shape, so typing never loses the caret. */
+  const BLOCK_LINE_MAX = 24;
+  /** The row of keys each field writes: a grid row with no keys gets no field. */
+  let rowOfField: number[] = [];
   let lineShape = '';
+  const blockUi = symbolLines({
+    placement: false,
+    onSymbols: (next) => cb.onBlockSymbols(next),
+    onLine: (i, text) => cb.onBlockLine(rowOfField[i] ?? i, text),
+  });
+  $('blockAddSymbolMount').append(blockUi.addButton);
+  $('blockLinesMount').append(blockUi.lines);
+  $('blockInspectorMount').append(blockUi.inspector);
+  const keysHint = (n: number) => `${n} ${n === 1 ? 'key' : 'keys'}`;
   function renderBlockLines(state: UiState, arr: BlockArrangement) {
     const lineLayout = isLineLayout(state.blockLayout);
     const counts = lineLayout ? [0] : keysPerRow(arr.grid);
     const rows = counts.map((keys, r) => ({ r, keys })).filter((x) => lineLayout || x.keys > 0);
-    const shape = lineLayout ? 'line' : counts.join(',');
+    const shape = lineLayout ? state.blockLayout : counts.join(',');
+    const values = rows.map(({ r }) => state.blockLines[r] ?? '');
     if (shape !== lineShape) {
       lineShape = shape;
-      lineFields = rows.map(({ r, keys }) => {
-        const field = textField({
-          label: lineLayout ? 'Text' : `Row ${r + 1} · ${keys} ${keys === 1 ? 'key' : 'keys'}`,
-          value: state.blockLines[r] ?? '',
-          onInput: (v) => cb.onBlockLine(r, v),
-        });
-        field.dataset.row = String(r);
-        return field;
-      });
-      $('blockLinesMount').replaceChildren(...lineFields);
-    }
-    for (const f of lineFields) {
-      if (document.activeElement !== f.field) f.setValue(state.blockLines[Number(f.dataset.row)] ?? '');
+      rowOfField = rows.map(({ r }) => r);
+      blockUi.setLines(
+        rows.map(({ r, keys }) => ({
+          label: lineLayout ? (state.blockLayout === 'row' ? 'Row' : 'Column') : `Row ${r + 1}`,
+          maxLength: lineLayout ? BLOCK_LINE_MAX : keys,
+          overwrite: !lineLayout,
+          hint: keysHint(lineLayout ? arr.slots.length : keys),
+        })),
+        values,
+      );
+    } else {
+      blockUi.setValues(values);
+      // A row or a column grows a key per character, so its count follows the typing.
+      if (lineLayout) blockUi.setHint(0, keysHint(arr.slots.length));
     }
   }
 
-  /** What each cell of the key map shows: the letter, a picture of the symbol, or nothing. */
+  /** What each cell of the key map shows: the letter, a drawing of the symbol, or nothing. */
   function keyLegends(state: UiState, arr: BlockArrangement): (string | Element | null)[] {
     return arr.slots.map((slot) => {
       if (slot.kind === 'char') return slot.ch;
-      if (slot.kind === 'icon') {
-        const info = LUCIDE_ICONS.find((ic) => ic.name === slot.name);
-        if (!info) return null;
-        const img = document.createElement('img');
-        img.src = svgDataUrl(buildSvg(info.node));
-        img.alt = '';
-        return img;
+      if (slot.kind === 'icon') return lucideImg(slot.name);
+      if (slot.kind === 'symbol') {
+        const sym = state.blockSymbols[slot.char];
+        return sym?.kind === 'rings' ? ringsSvg(lookRings(sym.rings, lookOf(sym)), 22) : null;
       }
-      if (slot.kind === 'symbol') return state.blockSymbols[slot.char]?.label?.slice(0, 1) ?? null;
       return null;
     });
   }
@@ -1465,24 +1607,6 @@ export function createUi(
   });
   $('legendBoldMount').append(legendBoldRow);
 
-  function addFontOption(font: FontOption) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'font-grid-btn';
-    btn.textContent = font.name;
-    btn.style.fontFamily = `"${font.id.replace('bundled-', '')}", "${font.name}", sans-serif`;
-    
-    btn.addEventListener('click', () => {
-      if (selectedFontBtn) selectedFontBtn.classList.remove('active');
-      btn.classList.add('active');
-      selectedFontBtn = btn;
-      cb.onFontSelect(font.id);
-    });
-    fontGrid.appendChild(btn);
-  }
-
-  FONT_OPTIONS.forEach(addFontOption);
-  loadBundledFonts(addFontOption);
 
 
   // --- Add loading overlay to viewport dynamically ---
@@ -1527,23 +1651,32 @@ export function createUi(
       onChange: (m) => cb.onEditMode(m),
     });
     editModes.root.id = 'editModeBar';
-    viewport.appendChild(editModes.root);
 
-    // --- Separate-letters toggle (text mode, Color + Extrude) ---
-    // Off: the whole word is one element (select/recolor/extrude all letters together).
-    // On: each letter is its own part, so you can pick and color letters individually.
-    // (Blocks mode always separates, so the toggle stays hidden there.)
-    const lettersToggle = document.createElement('div');
-    lettersToggle.id = 'lettersToggle';
-    lettersToggle.className = 'letters-toggle';
-    lettersToggle.setAttribute('hidden', '');
-    separateLettersToggle = toggleSwitch({
-      label: 'Separate letters',
-      checked: initial.separateLetters,
-      onChange: (v) => cb.onSeparateLetters(v),
+    /* The stage's top-left: how the preview is shown (the bar, filled in below), then what a
+       click on the model does with Separate letters beside it, then Cut it open's own settings
+       while it is on. One `stageTools()` with a row each, so they stack instead of colliding. */
+    const viewRow = stageRow([]);
+    viewRow.id = 'stageViewRow';
+    lettersBar = previewBar({
+      label: 'Letters',
+      toggles: [{
+        id: 'letters',
+        label: 'Separate letters',
+        pressed: initial.separateLetters,
+        title: 'Each letter becomes its own part, so you can pick and colour letters one at a time.',
+        onToggle: (v) => cb.onSeparateLetters(v),
+      }],
     });
-    lettersToggle.append(separateLettersToggle);
-    viewport.appendChild(lettersToggle);
+    lettersBar.root.id = 'lettersToggle';
+    lettersBar.root.hidden = true;
+    const clickRow = stageRow([editModes.root, lettersBar.root]);
+    const cutRow = stageRow([]);
+    cutRow.id = 'stageCutRow';
+    cutRow.hidden = true;
+    viewport.appendChild(stageTools([viewRow, clickRow, cutRow]));
+    // The tools take the label's slot.
+    viewport.querySelector<HTMLElement>('.vl-stage__label')?.setAttribute('hidden', '');
+
 
     // --- Extrude Panel ---
     // Docked over the right sidebar's scroll area (`rightScrollWrap`, built alongside
@@ -1660,16 +1793,15 @@ export function createUi(
   // rule and not a per-card class here.
   const importTabsCtl = segmentedControl<UiState['importMode']>({
     variant: 'cards',
-    columns: 2,
+    stacked: true,
+    columns: 3,
     options: [
       { value: 'image', label: 'Image', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' },
       { value: 'svg', label: 'SVG', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>' },
       { value: 'icon', label: 'Icon', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>' },
       { value: 'text', label: 'Text', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>' },
-      // Both of the last two span a row: five format cards used to leave Blocks alone at the
-      // foot (the odd-count rule spanned it), and "Cut out of 3D model" is too long for half.
-      { value: 'blocks', label: 'Blocks', wide: true, icon: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="6.5" height="10" rx="1.4"/><rect x="8.75" y="7" width="6.5" height="10" rx="1.4"/><rect x="15.5" y="7" width="6.5" height="10" rx="1.4"/></svg>' },
-      { value: 'model', label: 'Cut out of 3D model', wide: true, icon: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v10"/></svg>' },
+      { value: 'blocks', label: 'Blocks', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="6.5" height="10" rx="1.4"/><rect x="8.75" y="7" width="6.5" height="10" rx="1.4"/><rect x="15.5" y="7" width="6.5" height="10" rx="1.4"/></svg>' },
+      { value: 'model', label: '3D model', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v10"/></svg>' },
     ],
     value: initial.importMode,
     onChange: (v) => cb.onImportMode(v),
@@ -1683,7 +1815,7 @@ export function createUi(
   // generator whose option list itself changes) is what `update()` reaches for below to inject
   // and remove the synthetic "N Colors (Limited)" entry.
   const ccountField = selectField({
-    label: 'Colors',
+    label: 'Number of colors',
     help: 'How many distinct filament colors the image is split into. Each color becomes a separate part in the export.',
     options: COLOR_COUNT_OPTIONS,
     value: String(initial.colorCount),
@@ -1842,7 +1974,7 @@ export function createUi(
   $('topthickMount').append(topthickRow);
 
   const imgdepthRow = sliderRow({
-    label: 'Image depth', help: 'How far the colored image is raised into the top surface, in mm.',
+    label: 'Image depth', help: 'How far the colored design is raised into the top surface, in mm.',
     min: 0.2, max: 3, step: 0.1, value: initial.imageDepth,
     format: (v) => `${v.toFixed(1)} mm`,
     onInput: (v) => cb.onImageDepth(v),
@@ -1927,7 +2059,7 @@ export function createUi(
     const rows = [...settings.querySelectorAll('.vl-settings-rail__panel > .vl-section__body > *')]
       .filter((n) => !keep.has(n));
     return [
-      $('licenceCtaMount'), $('proMount'), ...rows,
+      ...new Set([$('licenceCtaMount'), ...rows]),
       $('historyControls')?.closest('.sidebar-sticky-footer'),
       rightScrollWrap, editModes?.root, $('lettersToggle'),
     ].filter((n): n is HTMLElement => n instanceof HTMLElement);
@@ -2058,7 +2190,7 @@ export function createUi(
   $('switchResetAll').addEventListener('click', () => cb.onSwitchResetAll());
 
   const keychainToggle = toggleSwitch({
-    label: 'Keychain',
+    label: 'Keyring loop',
     help: 'Adds a keyring attachment to the body so you can clip the clicker to a keychain.',
     checked: initial.keychain.enabled,
     onChange: (v) => cb.onKeychainToggle(v),
@@ -2159,64 +2291,71 @@ export function createUi(
     makeCollapsible(d);
   }
 
-  // --- View tabs ---
-  const viewTabs = segmentedControl<ViewMode>({
-    options: [
-      { value: 'assembled', label: 'Assembled' },
-      { value: 'exploded', label: 'Exploded' },
+  // --- How the preview is shown: one bar on the stage, the same in every mode ---
+  // The arrangement as a pill pair, then the two preview-only switches as dots. Their
+  // explanations are tooltips: the bar has no room for a "?".
+  const viewTabs = previewBar<ViewMode>({
+    label: 'Preview',
+    modes: {
+      options: [
+        { value: 'assembled', label: 'Assembled' },
+        { value: 'exploded', label: 'Exploded' },
+      ],
+      value: initial.view,
+      onChange: (v) => cb.onView(v),
+    },
+    toggles: [
+      {
+        id: 'switch',
+        label: 'Show MX switch',
+        pressed: initial.showSwitch,
+        title: 'Shows a reference MX switch in the preview so you can check the fit. It is not part of the exported model.',
+        onToggle: (v) => cb.onShowSwitch(v),
+      },
+      {
+        id: 'cut',
+        label: 'Cut it open',
+        pressed: initial.sectionOn,
+        title: 'Slices the preview so you can see the switch sitting inside the body. Preview only: it never changes the exported file.',
+        onToggle: (v) => cb.onSectionEnabled(v),
+      },
     ],
-    value: initial.view,
-    onChange: (v) => cb.onView(v),
   });
-  $('viewTabsMount').append(viewTabs);
+  document.getElementById('stageViewRow')?.append(viewTabs.root);
 
-  /* The cut through the model.
-     It is a switch of its own rather than a third view tab. As a tab it competed with
-     Assembled/Exploded — two unrelated questions ("how is it arranged" and "do I want to see
-     inside") sharing one control, so looking inside cost you the arrangement. Now either view
-     can be cut.
-     Axis and position are viewport state, so they are deliberately absent from HISTORY_FIELDS
-     and from a saved project, exactly like `view` and `showSwitch`: what a project reproduces
-     is a model, not a camera. */
-  const sectionToggle = toggleSwitch({
-    label: 'Cut it open',
-    help: 'Slices the preview so you can see the switch sitting inside the body. Preview only — it never changes the model or the exported file.',
-    checked: initial.sectionOn,
-    onChange: (v) => cb.onSectionEnabled(v),
-  });
-  $('sectionToggleMount').append(sectionToggle);
-
-  const sectionAxisCtl = segmentedControl<SectionAxis>({
-    label: 'Cut along',
-    options: [
-      { value: 'x', label: 'X' },
-      { value: 'y', label: 'Y' },
-      { value: 'z', label: 'Z' },
-    ],
-    value: initial.sectionAxis,
-    onChange: (v) => cb.onSection(v, sectionPosRow.getValue() / 100),
-  });
-  $('sectionAxisMount').append(sectionAxisCtl);
-
-  const sectionPosRow = sliderRow({
-    label: 'Cut position',
-    help: 'Slides the cut through the model so you can see the switch sitting inside the body before you print it. The cut is preview only and is never exported.',
+  /* The cut through the model: the bar's Cut it open, and its own settings on the row under
+     it while it is on — which way the cut runs and how far along. A switch of its own rather
+     than a third view, so either arrangement can be cut. Axis and position are viewport state,
+     deliberately absent from HISTORY_FIELDS and from a saved project, like `view` and
+     `showSwitch`: what a project reproduces is a model, not a camera. */
+  let cutAxis: SectionAxis = initial.sectionAxis;
+  const cutPos = slider({
     min: -100,
     max: 100,
     step: 2,
     value: Math.round(initial.sectionPos * 100),
-    unit: '%',
-    onInput: (v) => cb.onSection(sectionAxisCtl.getValue(), v / 100),
+    ariaLabel: 'Cut position',
+    onInput: (v) => cb.onSection(cutAxis, v / 100),
   });
-  $('sectionPosMount').append(sectionPosRow);
-
-  const showSwitchToggle = toggleSwitch({
-    label: 'Show MX switch',
-    help: 'Shows a reference MX switch in the preview so you can check the fit. It is not part of the exported model.',
-    checked: initial.showSwitch,
-    onChange: (v) => cb.onShowSwitch(v),
+  cutPos.title = 'Slides the cut through the model. Preview only.';
+  const cutBar = previewBar<SectionAxis>({
+    label: 'Cut',
+    modes: {
+      label: 'Cut along',
+      options: [
+        { value: 'x', label: 'X' },
+        { value: 'y', label: 'Y' },
+        { value: 'z', label: 'Z' },
+      ],
+      value: initial.sectionAxis,
+      onChange: (v) => {
+        cutAxis = v;
+        cb.onSection(v, Number(cutPos.value) / 100);
+      },
+    },
+    extra: [cutPos],
   });
-  $('showSwitchMount').append(showSwitchToggle);
+  document.getElementById('stageCutRow')?.append(cutBar.root);
 
   // --- Export and Utility actions ---
   // Export / Save / Load / Help / theme now live in the shared ui-kit sidebar
@@ -2519,6 +2658,8 @@ export function createUi(
     latestState = state;
     statusSpinner.style.display = state.building ? '' : 'none';
     statusText.data = (state.building ? ' ' : '') + state.status;
+    // Nothing to say: no empty pill on the stage.
+    statusEl.hidden = !state.building && !state.status;
     markLoadedSample(state.loadedSampleId);
 
     // Limited mode can land on a count outside the fixed 2-12 list (a pack's own colour
@@ -2547,6 +2688,8 @@ export function createUi(
     widthRow.setValue(state.capWidthMm);
     topthickRow.setValue(state.topThickness);
     imgdepthRow.setValue(state.imageDepth);
+    // What the colored part IS in this mode: an image, a drawing or the letters.
+    imgdepthRow.setBounds(0.2, 3, state.importMode === 'text' ? 'Letter depth' : state.importMode === 'image' ? 'Image depth' : 'Design depth');
     capProudRow.setValue(RIM_SPAN - state.capProud);
     hollowToggle.setValue(state.hollowBase);
     lastBuiltBody = state.builtBodyMm;
@@ -2606,7 +2749,7 @@ export function createUi(
     keychainSizeRow.setValue(kc.holeDiameterMm);
     removeBgToggle.setValue(state.removeBg);
     removeBgSvgToggle.setValue(state.removeBg);
-    showSwitchToggle.setValue(state.showSwitch);
+    viewTabs.setPressed('switch', state.showSwitch);
 
     // Update Import Mode tabs and panels
     importTabsCtl.setValue(state.importMode);
@@ -2618,7 +2761,9 @@ export function createUi(
     // Text and Blocks share one panel — both are "type something, pick a font".
     $('letterPanel').hidden = state.importMode !== 'text' && !isBlockMode;
     $('blockLinesField').hidden = !isBlockMode;
-    $('textOnlyField').hidden = isBlockMode;
+    $('textLinesField').hidden = isBlockMode;
+    textUi.setSymbols(state.textSymbols);
+    blockUi.setSymbols(state.blockSymbols);
     // Lettering holds both modes' rows; each shows only in its own.
     for (const id of ['legendSizeRow', 'legendBoldRow']) $(id).hidden = !isBlockMode;
     for (const id of ['textScaleRow', 'textBoldRow', 'letterSpacingRow', 'lineSpacingRow']) {
@@ -2633,6 +2778,9 @@ export function createUi(
     const keycapLink = document.getElementById('blocksKeycapLink');
     if (keycapLink) keycapLink.hidden = !isBlockMode;
     $('blockTextureMount').hidden = !isBlockMode;
+    // The font list draws what will be printed: the blocks' keys, or Text mode's words.
+    if (isBlockMode) setFontSample(state.blockLines.join(' '));
+    else if (state.importMode === 'text') setFontSample(textLines.join(' '));
     if (isBlockMode) {
       const arr = arrangeBlocks(state.blockLayout, state.blockGridRows, state.blockGridCols,
         state.blockCells, state.blockLines, state.blockSymbols);
@@ -2734,10 +2882,13 @@ export function createUi(
     for (const mount of ['topthickMount', 'imgdepthMount', 'capProudMount', 'hollowMount']) {
       hideForModel(document.getElementById(mount)?.closest('.prow-stacked') as HTMLElement | null);
     }
-    // …and the preview switches, which model mode floats on the stage instead.
-    $('previewViewSection').style.display = isModelMode ? 'none' : '';
     // Body: the image clicker's palette, or model mode's own colours.
     $('palette').hidden = isModelMode;
+    // A model clicker is built by its own path, which has no maker's mark: its Seller/License
+    // category says so instead of offering a mark that would not print.
+    $('proMount').hidden = isModelMode;
+    $('sellerModelNote').hidden = !isModelMode;
+    placeLicence();
     $('modelColoursMount').hidden = !isModelMode;
 
     // The rail: the categories this source has, and the one it opens on when you arrive. A
@@ -2774,10 +2925,12 @@ export function createUi(
     // comparison was false for every tab and it stripped `.active` off all of them — the
     // label kept `--muted` grey while the indicator pill painted accent behind it, 1.03:1.
     viewTabs.setValue(state.view);
-    sectionToggle.setValue(state.sectionOn);
-    $('sectionOpts').hidden = !state.sectionOn;
-    sectionAxisCtl.setValue(state.sectionAxis);
-    sectionPosRow.setValue(Math.round(state.sectionPos * 100));
+    viewTabs.setPressed('cut', state.sectionOn);
+    const cutRowEl = document.getElementById('stageCutRow');
+    if (cutRowEl) cutRowEl.hidden = !state.sectionOn;
+    cutAxis = state.sectionAxis;
+    cutBar.setValue(state.sectionAxis);
+    cutPos.setValue(Math.round(state.sectionPos * 100));
 
     // The export button lives in the ui-kit sidebar footer now; guard in case it
     // isn't present. cb.onExport() also no-ops when there are no parts.
@@ -2833,7 +2986,7 @@ export function createUi(
       const showLetters = state.importMode === 'text'
         && (state.editMode === 'color' || state.editMode === 'extrude');
       lettersToggleEl.toggleAttribute('hidden', !showLetters);
-      separateLettersToggle?.setValue(state.separateLetters);
+      lettersBar?.setPressed('letters', state.separateLetters);
     }
 
     // --- Extrude panel ---
@@ -2959,15 +3112,17 @@ export function createUi(
         try { fn(); } catch { /* one failure must not strand the rest */ }
       }
       cleanups.length = 0;
-      for (const sel of ['.slot-editor', '.vl-overlay', '.vl-license-toast']) {
+      for (const sel of ['.vl-overlay', '.vl-license-toast']) {
         document.querySelectorAll(sel).forEach((n) => n.remove());
       }
     },
-    addFontOption: (font: FontOption) => { 
-      addFontOption(font); 
-      // Click the newly added font to select it
-      const lastBtn = fontGrid.lastElementChild as HTMLElement;
-      if (lastBtn) lastBtn.click();
-    } 
+    /** A font chosen elsewhere: a loaded project. */
+    setFont: (id: string) => fontBlock.setValue(id),
+    /** Text mode's text set elsewhere: a loaded project. */
+    setText: (text: string) => {
+      textLines = text.split('\n').slice(0, MAX_TEXT_LINES);
+      if (!textLines.length) textLines = [''];
+      renderTextLines();
+    },
   };
 }

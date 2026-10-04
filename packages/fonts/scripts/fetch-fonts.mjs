@@ -1,13 +1,20 @@
-// Downloads a curated, print-friendly set of Google Fonts (Latin-subset TTF) into
-// apps/name-keychain/src/fonts/, then regenerates the font registry + @font-face CSS.
-// Idempotent: skips fonts already present. Re-runnable.
-import { writeFile, readFile, readdir, access } from 'node:fs/promises';
-import { existsSync, statSync } from 'node:fs';
+// Downloads a curated, print-friendly set of Google Fonts into src/fonts/, cuts the large CJK
+// and variable faces down to what a model needs (see UPSTREAM), then regenerates the font
+// registry, the @font-face CSS and fonts/CREDITS.md from the files on disk.
+//
+// Idempotent: a face already on disk, and already cut, costs no network. Each face's `subsets`
+// is read from its own cmap with src/coverage.ts, the same sets `isFontSupported` checks text
+// against. Needs Node 22.18 or later, which loads that file as TypeScript.
+import { writeFile, readFile, readdir, access, mkdir } from 'node:fs/promises';
+import { existsSync, statSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { coverageOf, coverageTests } from '../src/coverage.ts';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FONTS_DIR = path.join(APP, 'src', 'fonts');
+const opentype = createRequire(import.meta.url)('opentype.js');
 
 // slug: [Label, Category, curated?]  — curated=true shows as an instant front card.
 // Categories used by the modal filter: Display, Comic, Script, Handwriting,
@@ -286,9 +293,58 @@ const MAP = {
   'tomorrow': ['Tomorrow', 'Tech'],
   'khand': ['Khand', 'Tech'],
   'saira-condensed': ['Saira Condensed', 'Tech'],
+
+  // ----- other alphabets: Korean, Japanese, Chinese, Cyrillic. Fetched from google/fonts
+  // and, where large, cut to size: see UPSTREAM. -----
+  'bagel-fat-one': ['Bagel Fat One', 'Comic'],
+  'gasoek-one': ['Gasoek One', 'Display'],
+  'gothic-a1': ['Gothic A1', 'Clean'],
+  'rubik-one': ['Rubik One', 'Display'],
+  'comic-relief': ['Comic Relief', 'Comic'],
+  'dela-gothic-one-jp': ['Dela Gothic One JP', 'Display'],
+  'm-plus-1p': ['M PLUS 1p', 'Clean'],
+  'cherry-bomb-one': ['Cherry Bomb One', 'Comic'],
+  'zcool-kuaile': ['ZCOOL KuaiLe', 'Comic'],
+  'noto-sans-sc': ['Noto Sans SC', 'Clean'],
 };
 
-/** What a NEW face is fetched with.
+/** Faces taken from the google/fonts repository instead of the font API, which serves Latin
+ *  builds and does not carry every family. The directory a file sits in there IS its licence
+ *  (`ofl/` is OFL-1.1, `apache/` Apache-2.0); nothing from anywhere else is accepted.
+ *
+ *  `for` is what the face is here for: the cut keeps it, and the run refuses a file that does
+ *  not cover it. `cut` subsets the file to the characters below, without hinting (the
+ *  geometry reads outlines, and hinting was most of a CJK file's bytes). Each CJK face is cut
+ *  to its script's common set: KS X 1001 Hangul, JIS level 1 kanji, GB2312 level 1 hanzi. That
+ *  also drops the Kangxi radical code points that share a glyph with common kanji (日 月 一),
+ *  which a loader keying each glyph by its lowest code point loses the kanji to. `pin` fixes
+ *  the axes of a variable file, whose default instance is often Thin, and renames it to match.
+ *
+ *  Pinned to one commit, so a re-run cuts the same bytes. To take upstream changes, move the
+ *  commit and delete the affected .ttf files. To re-cut after changing the recipe, delete the
+ *  .ttf files it affects. */
+const GOOGLE_FONTS = 'https://raw.githubusercontent.com/google/fonts/9710da1eacb3be272583c3224dcb70f9da6eadbb';
+const UPSTREAM = {
+  'black-han-sans': { file: 'ofl/blackhansans/BlackHanSans-Regular.ttf', cut: true, for: ['korean'] },
+  'do-hyeon': { file: 'ofl/dohyeon/DoHyeon-Regular.ttf', cut: true, for: ['korean'] },
+  'jua': { file: 'ofl/jua/Jua-Regular.ttf', cut: true, for: ['korean'] },
+  'gaegu': { file: 'ofl/gaegu/Gaegu-Regular.ttf', cut: true, for: ['korean'] },
+  'bagel-fat-one': { file: 'ofl/bagelfatone/BagelFatOne-Regular.ttf', cut: true, for: ['korean'] },
+  'gasoek-one': { file: 'ofl/gasoekone/GasoekOne-Regular.ttf', cut: true, for: ['korean'] },
+  'gothic-a1': { file: 'ofl/gothica1/GothicA1-Black.ttf', cut: true, for: ['korean', 'kana', 'cyrillic', 'greek'] },
+  'dotgothic16': { file: 'ofl/dotgothic16/DotGothic16-Regular.ttf', cut: true, for: ['japanese', 'cyrillic'] },
+  // A face of its own, with `family` for its credits link: `dela-gothic-one` stays the 43 KB
+  // Latin build from the API that the shipped generators use and budget their bundles by.
+  'dela-gothic-one-jp': { file: 'ofl/delagothicone/DelaGothicOne-Regular.ttf', family: 'Dela Gothic One', cut: true, for: ['japanese', 'cyrillic', 'greek'] },
+  'm-plus-1p': { file: 'ofl/mplus1p/MPLUS1p-Black.ttf', cut: true, for: ['japanese', 'cyrillic', 'greek'] },
+  'cherry-bomb-one': { file: 'ofl/cherrybombone/CherryBombOne-Regular.ttf', cut: true, for: ['kana'] },
+  'zcool-kuaile': { file: 'ofl/zcoolkuaile/ZCOOLKuaiLe-Regular.ttf', cut: true, for: ['chinese-simplified'] },
+  'noto-sans-sc': { file: 'ofl/notosanssc/NotoSansSC[wght].ttf', cut: true, pin: { wght: 900 }, for: ['chinese-simplified'] },
+  'rubik-one': { file: 'ofl/rubikone/RubikOne-Regular.ttf', for: ['cyrillic'] },
+  'comic-relief': { file: 'ofl/comicrelief/ComicRelief-Bold.ttf', for: ['cyrillic', 'greek'] },
+};
+
+/** What a NEW face is fetched from the font API with.
  *
  *  The API serves a handful of prebuilt subset combinations rather than cutting one
  *  to order, and anything beyond latin-ext lands you in the "everything" build: Dela
@@ -296,11 +352,9 @@ const MAP = {
  *  cyrillic — because that build carries its Japanese too. The decorative Rubiks were
  *  each dragging in Hebrew the same way.
  *
- *  So the 90 faces added on 2026-09-18 are latin display faces and are fetched, and
- *  REPORTED, as exactly that: `isFontSupported` will not offer them for a Cyrillic or
- *  Greek name, which is the truth about the file rather than a promise it cannot keep.
- *  The 152 older faces are untouched — many of them do carry Cyrillic, and a face
- *  already on disk keeps reporting the subsets that file really contains. */
+ *  So a face from the API is a Latin face. One wanted for another alphabet comes from
+ *  UPSTREAM instead and is cut to what that alphabet needs. Either way the registry
+ *  reports what the file holds, read from its cmap, never what the API says the family has. */
 const USEFUL_SUBSETS = ['latin', 'latin-ext'];
 
 async function fetchTtfUrl(slug) {
@@ -318,24 +372,234 @@ async function fetchTtfUrl(slug) {
   const variants = j.variants || [];
   const reg = variants.find((v) => v.id === 'regular') || variants.find((v) => v.id === '400') || variants[0];
   if (!reg || !reg.ttf) throw new Error('no ttf variant');
-  return { url: reg.ttf, subsets: useful, fullSubsets: all };
+  return reg.ttf;
 }
 
+/** A face from the API, fetched only when it is not on disk. */
 async function download(slug) {
   const dest = path.join(FONTS_DIR, `${slug}.ttf`);
-  let cachedSubsets = ['latin'];
+  if (existsSync(dest)) return { slug, status: 'exists' };
   try {
-    const { url, subsets, fullSubsets } = await fetchTtfUrl(slug);
-    cachedSubsets = subsets;
-    // An existing file was fetched under whatever policy was in force then, so it
-    // reports what it actually holds — not what we would ask for today.
-    if (existsSync(dest)) return { slug, status: 'exists', subsets: fullSubsets };
-    const r = await fetch(url);
+    const r = await fetch(await fetchTtfUrl(slug));
     if (!r.ok) throw new Error(`ttf HTTP ${r.status}`);
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.length < 1000) throw new Error(`too small (${buf.length}b)`);
     await writeFile(dest, buf);
-    return { slug, status: 'ok', bytes: buf.length, subsets };
+    return { slug, status: 'ok', note: kb(buf.length) };
+  } catch (e) {
+    return { slug, status: 'FAIL', error: e.message };
+  }
+}
+
+// ---------------------------------------------------------------- cutting to size
+
+const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+const kb = (bytes) => `${Math.round(bytes / 1024).toLocaleString('en')} KB`;
+const TESTS = coverageTests();
+
+/** Kept in every cut face that has them: Latin with its extensions and Vietnamese, Greek,
+ *  Cyrillic, and everyday punctuation. A CJK face is not here for its Latin, but that is a
+ *  few hundred glyphs against thousands, and a Latin name set in it has to keep working. */
+const ALPHABETS = [
+  ...range(0x20, 0x7e), ...range(0xa0, 0x24f), ...range(0x1e00, 0x1eff),
+  ...range(0x384, 0x3ce), ...range(0x400, 0x52f),
+  ...range(0x2010, 0x2027), 0x2030, 0x2032, 0x2033, 0x2039, 0x203a, 0x20ac, 0x2116, 0x2122,
+];
+/** CJK punctuation, and the full-width forms a Japanese or Chinese keyboard types. */
+const CJK_PUNCTUATION = [...range(0x3000, 0x303f), ...range(0xff01, 0xff5e)];
+const KANA_BLOCK = [...range(0x3041, 0x3096), ...range(0x3099, 0x30ff)];
+/** What each coverage name a face is here `for` adds to its cut. */
+const LINES = {
+  korean: [...TESTS.korean, ...range(0x3131, 0x318e)],
+  kana: [...KANA_BLOCK, ...CJK_PUNCTUATION],
+  japanese: [...TESTS.japanese, ...KANA_BLOCK, ...CJK_PUNCTUATION],
+  'chinese-simplified': [...TESTS['chinese-simplified'], ...CJK_PUNCTUATION],
+};
+const cutText = (spec) => new Set([...ALPHABETS, ...spec.for.flatMap((name) => LINES[name] ?? [])]);
+/** How CREDITS.md words what a cut keeps. */
+const KEPT = {
+  korean: 'the 2,350 Hangul syllables of KS X 1001',
+  kana: 'hiragana and katakana',
+  japanese: 'kana and the 2,965 kanji of JIS X 0208 level 1',
+  'chinese-simplified': 'the 3,755 hanzi of GB2312 level 1',
+  cyrillic: 'Cyrillic',
+  greek: 'Greek',
+};
+
+/** The table directory of a TrueType file, by tag. */
+function tablesOf(buf) {
+  const out = {};
+  for (let i = 0, n = buf.readUInt16BE(4); i < n; i++) {
+    const r = 12 + i * 16;
+    out[buf.toString('latin1', r, r + 4)] = { offset: buf.readUInt32BE(r + 8), length: buf.readUInt32BE(r + 12) };
+  }
+  return out;
+}
+
+const parse = (buf) => opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+/** The code points a file maps to a real glyph. */
+function codePointsOf(font) {
+  const map = font.tables.cmap.glyphIndexMap;
+  return Object.keys(map).map(Number).filter((cp) => map[cp] > 0);
+}
+const nameOf = (font, key) => font.names[key]?.en ?? '';
+
+/** What is wrong with `buf` as the file UPSTREAM describes for `spec`, or null when it is that
+ *  file: covering everything it is here for and, for a cut face, holding nothing past the cut,
+ *  without hinting, static, and not named with a Reserved Font Name its licence declares. */
+function problemWith(buf, spec) {
+  const font = parse(buf);
+  const cps = codePointsOf(font);
+  const has = new Set(cps);
+  const lacks = spec.for.filter((name) => !TESTS[name].every((cp) => has.has(cp)));
+  if (lacks.length) return `lacks ${lacks.join(', ')}`;
+  if (!spec.cut) return null;
+  const text = cutText(spec);
+  if (cps.some((cp) => !text.has(cp))) return 'holds characters past the cut';
+  const tables = tablesOf(buf);
+  if (tables.fpgm || tables.prep || tables['cvt ']) return 'is hinted';
+  if (tables.fvar) return 'is variable';
+  // A cut is a Modified Version under the OFL, which may not carry a Reserved Font Name.
+  const reserved = nameOf(font, 'copyright').match(/Reserved Font Names?\s*:?\s*['"“]([^'"”]+)['"”]/i)?.[1];
+  const names = ['fontFamily', 'fullName', 'postScriptName', 'preferredFamily'].map((k) => nameOf(font, k));
+  if (reserved && names.some((n) => n.includes(reserved))) return `is named with the Reserved Font Name "${reserved}"`;
+  return null;
+}
+
+const CACHE = path.join(APP, 'node_modules', '.cache', 'google-fonts', GOOGLE_FONTS.split('/').pop());
+
+/** The original file from google/fonts, downloaded once into node_modules/.cache. */
+async function fetchUpstream(file) {
+  if (!/^(ofl|apache)\//.test(file)) throw new Error(`${file}: only ofl/ and apache/ are cleared for bundling`);
+  const cached = path.join(CACHE, file.replace(/\//g, '__'));
+  if (existsSync(cached)) return readFileSync(cached);
+  const r = await fetch(`${GOOGLE_FONTS}/${file.split('/').map(encodeURIComponent).join('/')}`);
+  if (!r.ok) throw new Error(`${file}: HTTP ${r.status}`);
+  const buf = Buffer.from(await r.arrayBuffer());
+  await mkdir(CACHE, { recursive: true });
+  await writeFile(cached, buf);
+  return buf;
+}
+
+const WEIGHT_NAMES = { 100: 'Thin', 200: 'ExtraLight', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold', 900: 'Black' };
+
+/** A TrueType checksum: the sum of the big-endian uint32s, over a 4-byte-padded buffer. */
+function checksum(buf) {
+  let sum = 0;
+  for (let i = 0; i < buf.length; i += 4) sum = (sum + buf.readUInt32BE(i)) >>> 0;
+  return sum;
+}
+
+/** `buf` with some tables replaced; every other byte kept, offsets and checksums redone. */
+function withTables(buf, replace) {
+  const n = buf.readUInt16BE(4);
+  const head = Buffer.alloc(12 + n * 16);
+  buf.copy(head, 0, 0, 12);
+  const parts = [];
+  let offset = head.length;
+  let headAt = -1;
+  for (let i = 0; i < n; i++) {
+    const r = 12 + i * 16;
+    const tag = buf.toString('latin1', r, r + 4);
+    let data = replace[tag] ?? buf.subarray(buf.readUInt32BE(r + 8), buf.readUInt32BE(r + 8) + buf.readUInt32BE(r + 12));
+    if (tag === 'head') {
+      // checkSumAdjustment is zero while the checksums are taken, then set over the whole file.
+      data = Buffer.from(data);
+      data.writeUInt32BE(0, 8);
+      headAt = offset;
+    }
+    const padded = Buffer.alloc((data.length + 3) & ~3);
+    data.copy(padded);
+    head.write(tag, r, 'latin1');
+    head.writeUInt32BE(checksum(padded), r + 4);
+    head.writeUInt32BE(offset, r + 8);
+    head.writeUInt32BE(data.length, r + 12);
+    parts.push(padded);
+    offset += padded.length;
+  }
+  const out = Buffer.concat([head, ...parts]);
+  out.writeUInt32BE((0xb1b0afba - checksum(out)) >>> 0, headAt + 8);
+  return out;
+}
+
+/** Renames a pinned face to the weight it was pinned at. Pinning keeps the default instance's
+ *  names, so Noto Sans SC fixed at 900 still called itself "Noto Sans SC Thin". The style word
+ *  is replaced in the family, style, unique, full, PostScript and typographic names. */
+function renameStyle(buf, to) {
+  const font = parse(buf);
+  const from = nameOf(font, 'preferredSubfamily') || nameOf(font, 'fontSubfamily');
+  if (!from || from === to) return buf;
+  const word = new RegExp(`\\b${from}\\b`, 'g');
+  const { offset, length } = tablesOf(buf).name;
+  const name = buf.subarray(offset, offset + length);
+  if (name.readUInt16BE(0) !== 0) throw new Error('name table format 1: not handled');
+  const count = name.readUInt16BE(2);
+  const storage = name.readUInt16BE(4);
+  const records = [];
+  for (let i = 0; i < count; i++) {
+    const r = 6 + i * 12;
+    const at = storage + name.readUInt16BE(r + 10);
+    let str = name.subarray(at, at + name.readUInt16BE(r + 8));
+    if ([1, 2, 3, 4, 6, 16, 17].includes(name.readUInt16BE(r + 6))) {
+      const wide = name.readUInt16BE(r) !== 1; // platform 1 is Macintosh, single-byte
+      const text = wide ? Buffer.from(str).swap16().toString('utf16le') : str.toString('latin1');
+      const renamed = text.replace(word, to);
+      if (renamed !== text) str = wide ? Buffer.from(renamed, 'utf16le').swap16() : Buffer.from(renamed, 'latin1');
+    }
+    records.push({ header: name.subarray(r, r + 8), str });
+  }
+  const table = Buffer.alloc(6 + count * 12);
+  table.writeUInt16BE(0, 0);
+  table.writeUInt16BE(count, 2);
+  table.writeUInt16BE(6 + count * 12, 4);
+  let at = 0;
+  records.forEach(({ header, str }, i) => {
+    header.copy(table, 6 + i * 12);
+    table.writeUInt16BE(str.length, 6 + i * 12 + 8);
+    table.writeUInt16BE(at, 6 + i * 12 + 10);
+    at += str.length;
+  });
+  return withTables(buf, { name: Buffer.concat([table, ...records.map((x) => x.str)]) });
+}
+
+let subsetFont;
+/** The file UPSTREAM describes: the original, or the original cut, pinned and renamed. */
+async function makeFace(spec) {
+  const source = await fetchUpstream(spec.file);
+  if (!spec.cut) return source;
+  subsetFont ??= (await import('subset-font')).default;
+  const cut = await subsetFont(source, Array.from(cutText(spec), (cp) => String.fromCodePoint(cp)).join(''), {
+    targetFormat: 'sfnt',
+    noHinting: true,
+    // The kerning, for the opentype layout; nothing else in GSUB/GPOS is read.
+    keepFeatures: ['kern'],
+    // On top of harfbuzz's default 0-6: trademark, manufacturer, designer, licence and licence
+    // URL, so the copyright and the licence stay inside the file, and the typographic names.
+    preserveNameIds: [7, 8, 9, 13, 14, 16, 17],
+    ...(spec.pin ? { variationAxes: spec.pin } : {}),
+  });
+  return spec.pin?.wght ? renameStyle(Buffer.from(cut), WEIGHT_NAMES[spec.pin.wght]) : Buffer.from(cut);
+}
+
+/** A face from UPSTREAM: made again only when the file on disk is missing or not the one the
+ *  recipe makes, and written only once it passes. */
+async function upstream(slug) {
+  const spec = UPSTREAM[slug];
+  const dest = path.join(FONTS_DIR, `${slug}.ttf`);
+  const before = existsSync(dest) ? readFileSync(dest) : null;
+  let why = 'not on disk';
+  try {
+    if (before) why = problemWith(before, spec);
+  } catch {
+    why = 'unreadable';
+  }
+  if (!why) return { slug, status: 'exists' };
+  try {
+    const buf = await makeFace(spec);
+    const still = problemWith(buf, spec);
+    if (still) throw new Error(`the new file ${still}`);
+    await writeFile(dest, buf);
+    return { slug, status: 'ok', note: `${why}: ${before ? kb(before.length) : 'none'} -> ${kb(buf.length)}` };
   } catch (e) {
     return { slug, status: 'FAIL', error: e.message };
   }
@@ -355,23 +619,22 @@ async function pool(items, worker, concurrency = 6) {
 }
 
 const slugs = Object.keys(MAP);
-console.log(`Downloading ${slugs.length} fonts (skipping existing)...`);
-const results = await pool(slugs, download, 6);
+console.log(`Checking ${slugs.length} fonts (fetching only what is missing)...`);
+// One at a time from UPSTREAM: a cut holds a whole CJK file in memory, twice.
+const results = await pool(slugs.filter((s) => !UPSTREAM[s]), download, 6);
+for (const slug of slugs.filter((s) => UPSTREAM[s])) results.push(await upstream(slug));
 
 const ok = results.filter((r) => r.status === 'ok');
 const exists = results.filter((r) => r.status === 'exists');
 const failed = results.filter((r) => r.status === 'FAIL');
-console.log(`\nDownloaded: ${ok.length} new, ${exists.length} already present, ${failed.length} failed.`);
-if (failed.length) console.log('FAILED:', failed.map((f) => `${f.slug} (${f.error})`).join(', '));
+console.log(`\nFetched: ${ok.length} new, ${exists.length} already present, ${failed.length} failed.`);
+for (const r of ok) console.log(`  ${r.slug}: ${r.note}`);
+if (failed.length) {
+  console.log('FAILED:', failed.map((f) => `${f.slug} (${f.error})`).join(', '));
+  process.exitCode = 1;
+}
 
 // Fallback is now handled manually (icon-fallback.ttf)
-
-// Map subsets back to MAP for all successful results
-for (const r of results) {
-  if (r.status === 'ok' || r.status === 'exists') {
-    if (MAP[r.slug]) MAP[r.slug][3] = r.subsets;
-  }
-}
 
 // Regenerate registry + CSS from files actually present.
 const files = (await readdir(FONTS_DIR)).filter((f) => f.endsWith('.ttf') && f !== 'icon-fallback.ttf');
@@ -383,22 +646,27 @@ const present = new Set(files.map((f) => f.replace('.ttf', '')));
  *  Before this it shipped a hand-written list of eight. With the size on the record it can say
  *  "every face under 120 KB" in one line and keep up with the library on its own. */
 const bytesOf = (slug) => statSync(path.join(FONTS_DIR, `${slug}.ttf`)).size;
+/** What the file covers, from its own cmap: the coverage names in src/coverage.ts. */
+const subsetsOf = (slug) => {
+  const has = new Set(codePointsOf(parse(readFileSync(path.join(FONTS_DIR, `${slug}.ttf`)))));
+  return coverageOf((cp) => has.has(cp));
+};
 
 const rows = Object.entries(MAP)
   .filter(([slug]) => present.has(slug))
-  .map(([slug, [label, category, curated, subsets]]) => ({ id: slug, label, category, curated: !!curated, subsets: subsets || ['latin'], bytes: bytesOf(slug) }));
+  .map(([slug, [label, category, curated]]) => ({ id: slug, label, category, curated: !!curated, subsets: subsetsOf(slug), bytes: bytesOf(slug) }));
 
 // Any ttf on disk not in MAP: include with a guessed label + 'Display'.
 for (const slug of present) {
   if (!MAP[slug]) {
     const label = slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    rows.push({ id: slug, label, category: 'Display', curated: false, subsets: ['latin'], bytes: bytesOf(slug) });
+    rows.push({ id: slug, label, category: 'Display', curated: false, subsets: subsetsOf(slug), bytes: bytesOf(slug) });
   }
 }
 rows.sort((a, b) => a.label.localeCompare(b.label));
 
 const ts = `// AUTO-GENERATED by scripts/fetch-fonts.mjs — do not edit by hand.
-export interface FontChoice { id: string; label: string; category: string; curated: boolean; subsets: string[]; /** TTF size on disk, bytes. Absent for a face injected at RUNTIME — the keychain and the pen topper both let someone drop their own font in, and that one never came from this registry. */ bytes?: number; }
+export interface FontChoice { id: string; label: string; category: string; curated: boolean; /** What the file covers, read from its cmap: names from coverage.ts (Google Fonts' subset names, and \`kana\`). */ subsets: string[]; /** TTF size on disk, bytes. Absent for a face injected at RUNTIME — the keychain and the pen topper both let someone drop their own font in, and that one never came from this registry. */ bytes?: number; }
 export const FONTS: FontChoice[] = ${JSON.stringify(rows, null, 2)};
 `;
 await writeFile(path.join(APP, 'src', 'registry.ts'), ts);
@@ -426,7 +694,22 @@ redistributed on its own — they ship only as part of this generator.
 
 | Font | Category | Google Fonts page (license) |
 | --- | --- | --- |
-${rows.map((r) => `| ${r.label} | ${r.category} | ${specimen(r.label)} |`).join('\n')}
+${rows.map((r) => `| ${r.label} | ${r.category} | ${specimen(UPSTREAM[r.id]?.family ?? r.label)} |`).join('\n')}
+
+## Cut to size
+
+These files are cut down from the originals in the google/fonts repository, which the OFL
+permits (a cut is a Modified Version): only the characters below are kept, along with the
+Latin, Greek and Cyrillic each file has, hinting is removed, and a variable font is fixed at
+one weight. Each keeps its copyright and licence entries in its name table, and none is named
+with a Reserved Font Name.
+
+| Font | Kept | Original (google/fonts) |
+| --- | --- | --- |
+${Object.entries(UPSTREAM)
+  .filter(([slug, spec]) => spec.cut && present.has(slug))
+  .map(([slug, spec]) => `| ${MAP[slug][0]} | ${[...spec.for.map((n) => KEPT[n] ?? n), ...(spec.pin ? [`fixed at ${Object.entries(spec.pin).map(([a, v]) => `${a} ${v}`).join(', ')}`] : [])].join('; ')} | \`${spec.file}\` |`)
+  .join('\n')}
 
 ## Icon fallback
 

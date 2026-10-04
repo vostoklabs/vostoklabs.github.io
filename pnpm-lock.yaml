@@ -66,6 +66,9 @@ importers:
       '@vostok/export':
         specifier: workspace:*
         version: link:../../packages/export
+      '@vostok/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
       '@vostok/manifold':
         specifier: workspace:*
         version: link:../../packages/manifold

@@ -10,8 +10,8 @@
 // background — the same worker, a correlated request, never the viewport — whenever what they
 // would show has changed. A fresh upload tries Split first and, if the switch does not fit that
 // way, moves itself to Button, then to Stand, which always works.
-import { chip, modeBar, stageHandle, stageTools } from '@vostok/ui-kit';
-import { FILAMENTS, type ClickerPart, type GeometryRequest, type RGB, type ViewMode } from '../types';
+import { stageHandle } from '@vostok/ui-kit';
+import { FILAMENTS, type ClickerPart, type GeometryRequest, type RGB } from '../types';
 import type { UiState } from './ui';
 import type { CutterOverlay, Viewer } from '../viewer/viewer';
 import { createModelPanel, type ModelPanel } from './modelPanel';
@@ -33,12 +33,9 @@ export interface ModelModeDeps {
   /** A build that answers the caller instead of the viewport: a result card's picture. */
   buildDetached(params: ModelCutParams): Promise<{ parts: ClickerPart[]; warnings: string[] }>;
   viewer: Viewer;
-  /** The stage (`.vl-stage`): the view's switches and the cut's grip float on it. */
+  /** The stage (`.vl-stage`): the cut's grip floats on it. The preview's switches are the bar
+   *  under the title, the same in every mode. */
   stage: HTMLElement;
-  /** The preview's own settings, shared with every other mode's controls for them. */
-  setView(mode: ViewMode): void;
-  setShowSwitch(on: boolean): void;
-  setSectionOn(on: boolean): void;
   /** mount.ts's own debounced rebuild; `live` for a slider still moving. */
   rebuildSoon(live: boolean): void;
   /** The next build is a new subject: frame the camera on it. */
@@ -91,7 +88,6 @@ export function createModelMode(deps: ModelModeDeps) {
   let lastOverlayKey = '';
   let lastPickMode: 'part' | 'surface' | '' = '';
   let wasActive: boolean | null = null;
-  let lastView: ViewMode | null = null;
 
   const panel: ModelPanel = createModelPanel({
     initial: store.get(),
@@ -105,24 +101,10 @@ export function createModelMode(deps: ModelModeDeps) {
     },
   });
 
-  // ---- The stage: the view's switches (top-left) and the cut's grip (on the model) ----
-  const s0 = store.get();
-  const viewBar = modeBar<ViewMode>({
-    modes: [
-      { value: 'assembled', label: 'Together' },
-      { value: 'exploded', label: 'Apart' },
-    ],
-    value: s0.view,
-    onChange: (v) => deps.setView(v),
-  });
-  const switchChip = chip({ label: 'Show switch', pressed: s0.showSwitch, onToggle: (on) => deps.setShowSwitch(on) });
-  const insideChip = chip({ label: 'See inside', pressed: s0.sectionOn, onToggle: (on) => deps.setSectionOn(on) });
-  const tools = stageTools([viewBar.root, switchChip, insideChip]);
-  tools.hidden = true;
+  // ---- The stage: the cut's grip, on the model ----
   const grip = stageHandle({ label: '', title: 'Drag to move the cut', onStep: (d) => stepHeight(d) });
-  deps.stage.append(tools, grip);
+  deps.stage.append(grip);
   viewer.setPlaneHandle(grip);
-  const stageLabel = deps.stage.querySelector<HTMLElement>('.vl-stage__label');
 
   /** The parameters the worker cuts with: the mode's own settings plus the three fit controls
    *  it shares with every other mode (Body & fit), so "Switch stem fit" means one thing. */
@@ -380,8 +362,6 @@ export function createModelMode(deps: ModelModeDeps) {
     // one place every one of them passes through.
     if (active !== wasActive) {
       viewer.setExplodeGap(active ? EXPLODE_GAP : null);
-      tools.hidden = !active;
-      if (stageLabel) stageLabel.hidden = active;
       wasActive = active;
     }
     const mode = active && s.modelCut.cutter === 'button' ? 'surface' : 'part';
@@ -395,15 +375,7 @@ export function createModelMode(deps: ModelModeDeps) {
       viewer.setCutterOverlay(overlay);
       lastOverlayKey = key;
     }
-    if (active) {
-      if (s.view !== lastView) {
-        viewBar.setValue(s.view);
-        lastView = s.view;
-      }
-      switchChip.setPressed(s.showSwitch);
-      insideChip.setPressed(s.sectionOn);
-      if (overlay?.kind === 'plane') grip.setLabel(`${mm(overlay.z)} mm`);
-    }
+    if (active && overlay?.kind === 'plane') grip.setLabel(`${mm(overlay.z)} mm`);
     panel.update(s, loaded?.sample ?? null);
   }
 

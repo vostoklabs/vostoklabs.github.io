@@ -121,3 +121,267 @@
 }
 
 .vl-sym--drawer .vl-sym__more { flex: 0 0 auto; }
+
+/* ==========================================================================
+   Symbols inside text — see components/symbol-text-field.ts, symbol-inspector.ts
+   and symbol-library.ts.
+   ========================================================================== */
+
+/* --- The field ------------------------------------------------------------ */
+
+/* The field, and beside it an optional control (its own "Add symbol" button), bottom-aligned
+   so the button sits level with the box rather than with the label above it. */
+.vl-symbol-field {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.vl-symbol-field > .vl-field { flex: 1 1 auto; min-width: 0; }
+.vl-symbol-field > :not(.vl-field) { flex: 0 0 auto; }
+
+/* The label on the left, one row with the field. */
+.vl-symbol-field--inline > .vl-field {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+}
+.vl-symbol-field--inline > .vl-field > label {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The box carries the field's border, so the plain input and the token editor swap inside it
+   without the outline moving. Same paint as a kit text input, hover and focus included. */
+.vl-symbol-field__box {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-field);
+  cursor: text;
+  transition:
+    border-color var(--dur-hover) var(--ease-standard),
+    background-color var(--dur-hover) var(--ease-standard);
+}
+.vl-symbol-field__box:hover { border-color: var(--accent); }
+.vl-symbol-field__box:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
+.vl-symbol-field__box--dragging { border-style: dashed; border-color: var(--accent); }
+
+/* The kit input, unpainted: the box above draws its border, ground and ring. */
+.vl-field .vl-symbol-field__box > input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+.vl-field .vl-symbol-field__box > input:focus-visible { box-shadow: none; }
+
+/* The token editor, on the input's own padding and line, so the text does not shift by a pixel
+   when one swaps for the other; both follow density. */
+.vl-symbol-field__rich {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: var(--field-pad-y) var(--field-pad-x);
+  font: inherit;
+  font-size: var(--field-fs);
+  color: var(--text);
+  /* Spaces kept as typed: a collapsing editor writes a trailing space as U+00A0. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+  cursor: text;
+}
+
+/* The hint: quiet, at the right edge, and not in the way of a click. */
+.vl-symbol-field__hint {
+  flex: 0 0 auto;
+  padding: 0 var(--field-pad-x) 0 var(--space-1);
+  color: var(--muted);
+  font-size: var(--label-fs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* One symbol in the line. Sized in em from the field's own text, so it keeps its proportion in
+   compact density too: 27 px around a 24 px drawing at the comfortable size. Centred on the
+   x-height, a token is taller than the line and reaches below it, so its vertical margins are
+   negative: it overhangs into the padding instead of making the field taller than a plain
+   one. */
+.vl-symbol-field__token {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 1.55em;
+  height: 1.55em;
+  margin: -0.5em 2px;
+  vertical-align: middle;
+  border-radius: var(--radius-chip);
+  color: var(--text);
+  cursor: grab;
+}
+.vl-symbol-field__token > :not(.vl-symbol-field__marker) {
+  flex: none;
+  width: 1.375em;
+  height: 1.375em;
+  pointer-events: none;
+}
+.vl-symbol-field__token:hover,
+.vl-symbol-field__token[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  outline: 1px solid var(--accent);
+}
+.vl-symbol-field__token:active { cursor: grabbing; }
+.vl-symbol-field__token:focus-visible { outline: 1px solid var(--accent); box-shadow: var(--ring); }
+
+/* The symbol's own character: in the text, so the caret counts it, and never seen. */
+.vl-symbol-field__marker {
+  width: 0;
+  overflow: hidden;
+  font-size: 0;
+}
+
+/* A symbol the app could not draw: still there, still removable. */
+.vl-symbol-field__token > .vl-symbol-field__missing {
+  box-sizing: border-box;
+  width: 0.9em;
+  height: 0.9em;
+  border: 1px dashed currentColor;
+  border-radius: var(--radius-s);
+  opacity: 0.6;
+}
+
+/* --- The inspector -------------------------------------------------------- */
+
+.vl-symbol-inspector {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.vl-symbol-inspector > summary {
+  padding: 12px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.vl-symbol-inspector > summary:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-m);
+}
+.vl-symbol-inspector__body {
+  display: grid;
+  gap: 14px;
+  padding: 0 12px 12px;
+}
+.vl-symbol-inspector__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.vl-symbol-inspector__reorder { display: inline-flex; gap: 4px; }
+/* Readout and Flip on the left, the pad on the right. */
+.vl-symbol-inspector__transform {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.vl-symbol-inspector__readout {
+  margin: 0 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- The library ---------------------------------------------------------- */
+
+.vl-symbol-library {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.vl-symbol-library__search {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 12px;
+}
+.vl-symbol-library__body {
+  display: grid;
+  grid-template-columns: 155px minmax(0, 1fr);
+  height: min(470px, 55vh);
+}
+.vl-symbol-library__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  padding-right: 10px;
+  border-right: 1px solid var(--line);
+}
+/* The kit's thin scrollbar, the shared look for a scrolling column. */
+.vl-symbol-library__nav,
+.vl-symbol-library__results {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.vl-symbol-library__nav > .vl-btn { justify-content: flex-start; text-align: left; }
+.vl-symbol-library__nav > .vl-btn[aria-pressed='true'] { color: var(--accent); background: var(--panel-2); }
+.vl-symbol-library__results {
+  min-width: 0;
+  overflow-y: auto;
+  padding-left: 18px;
+}
+.vl-symbol-library__count { margin: 0 0 12px; }
+.vl-symbol-library__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 8px;
+}
+.vl-symbol-library__tile {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 8px;
+  color: var(--text);
+}
+.vl-symbol-library__tile > * {
+  width: 100%;
+  height: 100%;
+  max-width: 44px;
+  max-height: 44px;
+}
+
+/* Opened from an anchor on a wide screen: a dropdown under the button, with the page left in
+   view. The overlay stays (it is what makes the library modal) but paints nothing and lets
+   presses through to the outside-press check. */
+.vl-overlay.vl-symbol-library--dropdown {
+  background: transparent;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+.vl-symbol-library--dropdown > .vl-dialog {
+  position: fixed;
+  box-sizing: border-box;
+  max-height: calc(100dvh - 24px);
+  padding: 18px;
+  pointer-events: auto;
+}
+.vl-symbol-library--dropdown .vl-symbol-library__body {
+  grid-template-columns: 130px minmax(0, 1fr);
+  height: min(340px, 40vh);
+}
+.vl-symbol-library--dropdown .vl-symbol-library__grid {
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+}
+
+@media (max-width: 760px) {
+  .vl-symbol-library__search { grid-template-columns: 1fr; }
+  .vl-symbol-library__body { grid-template-columns: 110px minmax(0, 1fr); }
+  .vl-symbol-library__results { padding-left: 10px; }
+  .vl-symbol-library__grid { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 4px; }
+}

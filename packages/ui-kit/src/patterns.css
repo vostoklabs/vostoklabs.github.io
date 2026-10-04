@@ -556,6 +556,63 @@ details.vl-section--collapsible[open] > summary {
   max-width: calc(100% - 300px);
 }
 .vl-stage__tools .vl-mode-bar { position: static; transform: none; }
+/* stageRow(): stacked rows in the top-left slot, each starting at the left edge. */
+.vl-stage__row { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+/* ---------------------------------------------------- stage overlay: preview bar */
+/* previewBar(): how the preview is shown. A squarer, flatter face than the mode bar on purpose:
+   that one decides what a click does, this one only what you see. */
+.vl-preview-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+.vl-preview-bar__modes { display: flex; gap: 2px; }
+.vl-preview-bar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
+}
+.vl-preview-bar__btn svg { width: 15px; height: 15px; flex: none; }
+.vl-preview-bar__btn:hover { color: var(--text); }
+.vl-preview-bar__btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.vl-preview-bar__btn.is-active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.vl-preview-bar__toggle[aria-pressed='true'] { color: var(--text); }
+.vl-preview-bar__dot {
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  transition:
+    background var(--dur-hover) var(--ease-standard),
+    border-color var(--dur-hover) var(--ease-standard);
+}
+.vl-preview-bar__toggle[aria-pressed='true'] .vl-preview-bar__dot { background: var(--accent-2); border-color: var(--accent-2); }
+.vl-preview-bar__rule { width: 1px; margin: 3px 4px; background: var(--line); }
+/* A bare slider riding in the bar: as wide as a short label, centred on the row. */
+.vl-preview-bar > .vl-slider { align-self: center; width: 120px; margin: 0 8px; }
 .vl-stage__tools .vl-chip {
   gap: 7px;
   padding: 8px 12px;
