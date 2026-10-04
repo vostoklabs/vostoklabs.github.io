@@ -7,7 +7,7 @@
 //    a leak at all). Measured by walking the allocator (packages/laser/tests/heap-probe.mjs).
 //
 // Run: node packages/manifold/tests/manifold.test.mjs   (esbuild bundles the TS source)
-// tests/ is gitignored, like every test folder here that is not the clicker's or the keycap's.
+// Part of `pnpm test`, so CI runs it.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -25,7 +25,9 @@ writeFileSync(entry, `export * from '${root}/src/index.ts';\n`);
 execFileSync('npx', ['esbuild', `"${entry}"`, '--bundle', '--format=esm', '--platform=node', `"--outfile=${tmp}/bundle.mjs"`, '--log-level=error'], { shell: true, stdio: 'inherit' });
 const M = await import(`file://${tmp}/bundle.mjs`);
 
-const MANIFOLD_NPM = `${root}/../../node_modules/.pnpm/manifold-3d@3.5.1_@gltf-tra_7e18b27e6eb4de4a62c630784cb5a8ef/node_modules/manifold-3d/manifold.js`;
+// The npm build, through the link pnpm makes for @vostok/laser, which depends on it. Never the
+// store folder by name: its name carries a hash that differs from one install to the next.
+const MANIFOLD_NPM = `${root}/../laser/node_modules/manifold-3d/manifold.js`;
 const BUILDS = [
   ['npm', MANIFOLD_NPM],
   ['no-eval', `${root}/../manifold-noeval/manifold.js`],
