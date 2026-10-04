@@ -1,4 +1,5 @@
 import type { LineBox } from '@vostok/fonts/textLayout';
+import type { CutRing } from '@vostok/export';
 
 export interface BuildParams {
   name: string;
@@ -59,7 +60,20 @@ export interface PartMesh {
   colorRgb: [number, number, number];
 }
 
+/**
+ * The keychain flattened: the 2D profiles the 3D parts are extruded from, which is what the
+ * laser SVG draws. Each shape is one island, its outer ring and its holes.
+ */
+export interface Outline {
+  /** Plate silhouette, keyring hole taken out. */
+  plate: CutRing[][];
+  /** The halo band; empty unless the 3-colour scheme is on. */
+  halo: CutRing[][];
+  /** The letters, keyring hole taken out. */
+  text: CutRing[][];
+}
+
 export type GeometryResponse =
   | { type: 'ready' }
-  | { type: 'parts'; parts: PartMesh[]; warnings: string[] }
+  | { type: 'parts'; parts: PartMesh[]; outline: Outline; warnings: string[] }
   | { type: 'error'; message: string };

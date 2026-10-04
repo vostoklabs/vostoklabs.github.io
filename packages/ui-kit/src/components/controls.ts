@@ -619,12 +619,13 @@ export interface SegmentedOption<T extends string = string> {
    */
   wide?: boolean;
   /**
-   * Only with `variant: 'pictures'`: the option's picture, as an image URL (a data URI from a
-   * render is fine). Leave it out while the picture is still being made, and hand it over with
-   * `setOptionImage` when it lands: the slot pulses meanwhile instead of standing empty.
+   * Only with `variant: 'pictures'` or `'tiles'`: the option's picture, as an image URL (a data
+   * URI from a render is fine). Leave it out while the picture is still being made, and hand it
+   * over with `setOptionImage` when it lands: the slot pulses meanwhile instead of standing empty.
    */
   image?: string;
-  /** Only with `variant: 'pictures'`: one line under the label, saying what the option gets you. */
+  /** Only with `variant: 'pictures'` or `'tiles'`: one line under the label, saying what the
+   *  option gets you. */
   description?: string;
 }
 
@@ -650,8 +651,13 @@ export interface SegmentedOptions<T extends string = string> {
    * IS the explanation (the clicker's Split / Stand / Button, each shown cut from the user's own
    * model). One column unless `columns` says otherwise; the selection is a ring round the card,
    * because an accent fill behind a picture drowns it.
+   *
+   * `'tiles'`: the same picture cards in a grid, each picture ABOVE its name — for a choice whose
+   * look is the whole difference (Laser Box's box styles, its joints), where a row per option
+   * would spend the panel on descriptions the pictures already give. Two columns unless
+   * `columns` says otherwise.
    */
-  variant?: 'tabs' | 'cards' | 'pictures';
+  variant?: 'tabs' | 'cards' | 'pictures' | 'tiles';
 }
 
 /** What `segmentedControl` returns: a `ValueRow` plus per-option visibility. */
@@ -665,8 +671,8 @@ export type SegmentedRow<T extends string = string> = ValueRow<T> & {
    * child leaves a dead column and the sliding indicator lands on empty space.
    */
   setOptionVisible(value: T, visible: boolean): void;
-  /** `variant: 'pictures'` only: swap one option's picture, or pass null to show it is being
-   *  made again. */
+  /** `variant: 'pictures'` and `'tiles'` only: swap one option's picture, or pass null to show
+   *  it is being made again. */
   setOptionImage(value: T, src: string | null): void;
 };
 
@@ -684,13 +690,15 @@ export type SegmentedRow<T extends string = string> = ValueRow<T> & {
 export function segmentedControl<T extends string = string>(
   opts: SegmentedOptions<T>,
 ): SegmentedRow<T> {
-  const pictures = opts.variant === 'pictures';
-  const cols = opts.columns ?? (pictures ? 1 : opts.options.length);
+  // Tiles are picture cards laid out differently, so everything pictures do, they do.
+  const tiles = opts.variant === 'tiles';
+  const pictures = opts.variant === 'pictures' || tiles;
+  const cols = opts.columns ?? (tiles ? 2 : pictures ? 1 : opts.options.length);
   // `minmax(0, 1fr)`, not `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, and that `auto` floors
   // every column at its own min-content width — so a four-option control in a 333 px sidebar
   // could not shrink and simply ran off the panel with the last option clipped in half.
   const root = el('div', {
-    className: `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : pictures ? ' vl-tabs--pictures' : ''}`,
+    className: `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : pictures ? ' vl-tabs--pictures' : ''}${tiles ? ' vl-tabs--tiles' : ''}`,
     attrs: { role: 'radiogroup', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr))` },
   });
 

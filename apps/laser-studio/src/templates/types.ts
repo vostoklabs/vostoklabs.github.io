@@ -165,6 +165,17 @@ export function coerceValues(t: TemplateDef, raw: unknown): Values {
     const old = raw as Record<string, unknown>;
     if (!('smallSymbol' in old) && old.smallHearts === false) out.smallSymbol = '';
   }
+  if (t.id === 'snowflake-gift-tag') {
+    // The tag stood up on 2026-10-03: the 90 × 35 swing tag with the flake on its end became an
+    // upright tag with the flake through its bottom edge. A project saved from the swing tag —
+    // wider than tall — opens at the new size with its name, font, snowflake and lettering; the
+    // name's size and nudge were set for the old layout and start over.
+    const old = raw as Record<string, unknown>;
+    if (typeof old.width === 'number' && typeof old.height === 'number' && old.width > old.height) {
+      const fresh = defaultsOf(t);
+      for (const k of ['width', 'height', 'size', 'offsetX', 'offsetY']) out[k] = fresh[k]!;
+    }
+  }
   // The shared Ring control lost its Hole on 2026-09-28: every ring is a loop tab now, and a
   // design that used to default to the hole rests its tab INSIDE the part, where the hole was
   // (`ringRest`, keyring.ts). A project saved before that carries no `ringRest`, so its ring is

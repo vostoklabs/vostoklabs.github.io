@@ -418,6 +418,22 @@
 }
 .vl-tabs--pictures .vl-tab__desc { font-size: var(--fs-compact); line-height: 1.3; color: var(--muted); }
 
+/* `variant: 'tiles'` — the picture cards in a grid, each picture ABOVE its name: a choice whose
+   look is the whole difference (Laser Box's box styles), where a row per option would spend the
+   panel on descriptions the pictures already give. Pictures fill their box (`cover`): a tile's
+   picture is a photo of the thing, framed, not a cut-out sitting on the theme's ground. */
+.vl-tabs--tiles .vl-tab {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  padding: 6px 6px 8px;
+  text-align: center;
+}
+.vl-tabs--tiles .vl-tab__picture { width: 100%; aspect-ratio: 6 / 5; }
+.vl-tabs--tiles .vl-tab__picture img { object-fit: cover; }
+.vl-tabs--tiles .vl-tab__text { align-items: center; }
+.vl-tabs--tiles .vl-tab__label { font-size: var(--fs-medium); }
+
 /* ---------- Toggle switch (iOS style, green when on) ---------- */
 .vl-switch-row {
   display: flex;

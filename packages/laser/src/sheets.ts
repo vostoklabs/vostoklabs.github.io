@@ -1,4 +1,7 @@
-// Sheet presets — the machine beds and blank sizes people actually own — and materials.
+// Sheet presets — Bambu Lab machine beds and the blank sizes people actually own — and materials.
+//
+// Machines are Bambu Lab's only — never another maker's, and no material brand either (Ian,
+// 2026-10-03): a competitor's bed in this list advertises it.
 //
 // A preset is a starting point, never a lock: picking one fills the width and height fields
 // and the user can type over them. Sizes are the WORK AREA, not the enclosure.
@@ -13,20 +16,8 @@ export interface SheetPreset {
 export const SHEET_PRESETS: SheetPreset[] = [
   { id: 'h2d-10w', name: 'Bambu Lab H2D · 10 W laser', widthMm: 310, heightMm: 270, group: 'Machines' },
   { id: 'h2d-40w', name: 'Bambu Lab H2D · 40 W laser', widthMm: 310, heightMm: 250, group: 'Machines' },
-  { id: 'xtool-d1pro', name: 'xTool D1 Pro', widthMm: 430, heightMm: 400, group: 'Machines' },
-  { id: 'xtool-s1', name: 'xTool S1', widthMm: 498, heightMm: 319, group: 'Machines' },
-  { id: 'xtool-p2', name: 'xTool P2', widthMm: 600, heightMm: 308, group: 'Machines' },
-  { id: 'xtool-m1', name: 'xTool M1', widthMm: 385, heightMm: 300, group: 'Machines' },
-  { id: 'glowforge', name: 'Glowforge Basic / Plus / Pro', widthMm: 495, heightMm: 279, group: 'Machines' },
-  { id: 'glowforge-aura', name: 'Glowforge Aura', widthMm: 305, heightMm: 305, group: 'Machines' },
-  { id: 'falcon2', name: 'Creality Falcon2', widthMm: 400, heightMm: 415, group: 'Machines' },
-  { id: 'ortur-lm3', name: 'Ortur Laser Master 3', widthMm: 400, heightMm: 400, group: 'Machines' },
-  { id: 'atomstack-a5', name: 'Atomstack A5 Pro', widthMm: 410, heightMm: 400, group: 'Machines' },
-  { id: 'longer-ray5', name: 'Longer Ray5', widthMm: 400, heightMm: 400, group: 'Machines' },
-  { id: 'k40', name: 'K40', widthMm: 300, heightMm: 200, group: 'Machines' },
-  { id: 'omtech-60', name: 'OMTech 60 W CO₂', widthMm: 700, heightMm: 500, group: 'Machines' },
   { id: 'sheet-12x12', name: '12 × 12 in sheet', widthMm: 305, heightMm: 305, group: 'Sheets & blanks' },
-  { id: 'sheet-12x20', name: '12 × 20 in sheet (Proofgrade)', widthMm: 508, heightMm: 305, group: 'Sheets & blanks' },
+  { id: 'sheet-12x20', name: '12 × 20 in sheet', widthMm: 508, heightMm: 305, group: 'Sheets & blanks' },
   { id: 'sheet-a4', name: 'A4', widthMm: 297, heightMm: 210, group: 'Sheets & blanks' },
   { id: 'sheet-a3', name: 'A3', widthMm: 420, heightMm: 297, group: 'Sheets & blanks' },
   { id: 'sheet-300x200', name: '300 × 200 mm', widthMm: 300, heightMm: 200, group: 'Sheets & blanks' },

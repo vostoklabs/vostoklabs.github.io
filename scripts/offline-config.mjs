@@ -38,6 +38,9 @@ export const OFFLINE_OVERRIDES = {
     format: 'iife',
     rollupOptions: {
       output: {
+        // An iife cannot be split, so a dynamic import inside the worker (Laser Box loads the
+        // pattern library lazily) has to be folded into worker.js, as the page's own are.
+        inlineDynamicImports: true,
         entryFileNames: 'worker.js',
         chunkFileNames: 'worker-[name].js',
         assetFileNames: 'worker-[name][extname]',

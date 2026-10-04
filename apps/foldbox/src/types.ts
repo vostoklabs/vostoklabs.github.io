@@ -61,7 +61,10 @@ export interface Panel {
    *  already reproduces "walls up, then dust flaps, then tuck last" on every style. */
   order?: number;
   /** Stop short of `foldAngle` by this much at t=1, so a flap that lands on top of
-   *  another does not z-fight. The last flap of a real box never quite reaches 90. */
+   *  another does not z-fight. The last flap of a real box never quite reaches 90.
+   *  Negative rests the panel PAST the fold instead: which side "short" lands on is
+   *  the unfolded side, and for a base panel on a standing box that is under the
+   *  table, so the inner base panels use a negative value. */
   undershoot?: number;
   /** Overshoot past `foldAngle` mid-flight, so a dust flap visibly tucks under the
    *  panel closing over it. Radians. */
@@ -110,7 +113,8 @@ export interface Panel {
     flip?: boolean;
     /** Extra rotation about the hinge axis as the box assembles, in radians. A tube
      *  has no base panel — its root is one of the walls — so without this the finished
-     *  box stands on its front face. This rotates the whole subtree upright. */
+     *  box stands on its front face. This rotates the whole subtree upright, in a stage
+     *  of its own after every flap has folded, pivoting about the panel's bottom edge. */
     tilt?: number;
   };
 }
@@ -122,6 +126,28 @@ export interface Slit {
   op: Op;
   /** Open polyline. */
   points: Poly;
+}
+
+/** A logo, before it is placed: closed rings and open lines in a UNIT box — centred on
+ *  the origin, longest side exactly 1, Y-up. Produced by the UI from text or an SVG
+ *  (`ui/artwork.ts`), consumed by `placeMarks`, which scales it onto a face. Keeping it
+ *  unitless here is what lets the solver stay synchronous: fonts load asynchronously,
+ *  and the net never waits on one. */
+export interface Artwork {
+  /** Closed rings. Outer rings CCW, holes CW, decided by nesting — see `normalizeArtwork`. */
+  rings: Poly[];
+  /** Open polylines: an SVG's stroke-only paths. Engraved and drawn, never printed. */
+  lines: Poly[];
+}
+
+/** A logo placed on one panel, in net coordinates. The one thing on a dieline that is
+ *  neither cut nor folded: it is engraved by a laser, drawn by a pen, and printed as a
+ *  second colour. */
+export interface Mark {
+  panelId: string;
+  /** Closed rings, outer CCW and holes CW, so the printable inlay can be built from them. */
+  rings: Poly[];
+  lines: Poly[];
 }
 
 /** What a builder returns. */
@@ -183,6 +209,35 @@ export interface Net {
   bbox: [number, number, number, number];
   /** Total path length by operation, mm — drives the time and cost readout. */
   lengthByOp: Record<Op, number>;
+  /** Folds that are NOT in the fold tree, and so have no `Crease`.
+   *
+   *  The tree holds one hinge per panel, to its parent — N panels, N-1 creases. But a panel
+   *  can touch a SECOND neighbour, and where it does there is a real fold with nothing in
+   *  `creases` to represent it. The webbed corner does exactly that by construction: a web
+   *  triangle hinges to its twin on the diagonal (that is its tree edge) and also meets the
+   *  wall it folds against (that is this). 100 mm of it on a webbed tray, 130 mm on the
+   *  hinged lid, and all of it was missing from the dieline — a fold line the user has to
+   *  make by eye, on the one corner in the catalogue that is hard to fold.
+   *
+   *  `printable.ts` never had this bug, because it grooves by geometry rather than by the
+   *  tree (see `sharedEdges`), which is also where the rule is written down: if an edge has
+   *  a panel on the other side of it, it folds.
+   *
+   *  Kept apart from `creases` rather than merged into it, because a Crease is what the
+   *  fold RIG hinges on — it is keyed by panel, and a second entry for one panel would
+   *  silently replace that panel's hinge. */
+  webFolds: { a: Pt; b: Pt }[];
+  /** The logo, if one fitted. Empty from `buildNet`; `solve` places it. */
+  marks: Mark[];
+  /** Which face of the sheet the marks are on.
+   *
+   *  'top' is the face that is up in the file, which is where a laser engraves and a
+   *  pen draws. 'bottom' is the first printed layer: a printed sheet folds INTO its
+   *  grooves, so its top face ends up inside the box and the underside is the outside,
+   *  which is the only face a logo can be on. Marks on the bottom are stored MIRRORED,
+   *  so the dieline still shows the file as it is and the logo reads correctly from
+   *  below. */
+  markFace: 'top' | 'bottom';
 }
 
 // ───────────────────────────── materials & machines ─────────────────────────────
@@ -218,8 +273,21 @@ export interface Machine {
   name: string;
   /** Work area, mm. */
   areaMm: [number, number];
-  /** How this machine makes a fold line. */
+  /** Cuts with a BEAM rather than a blade or a pen.
+   *
+   *  Not cosmetic: it decides the words the fold control uses (Bambu Suite calls a laser's
+   *  two options Laser Cut and Laser Line), which fold modes a machine is even offered, and
+   *  the shortest dash it can make — a beam has no swivel arc to turn through. */
+  laser: boolean;
+  /** How this machine makes a fold line, i.e. what the control opens on. */
   foldMode: FoldMode;
+  /** Every fold mode this machine can actually do, in the order the control lists them.
+   *
+   *  A list rather than "all four", for the reason `hangModes` is a list: a mode a machine
+   *  cannot do is worse than a missing one — it looks like a setting, it silently does
+   *  something else, and it goes on doing it in every saved preset made while it was there.
+   *  A blade cannot score. A laser has no pen. Nothing can draw with a scoring wheel. */
+  foldModes: FoldMode[];
   /** Beam or blade width, mm. Every path is offset by half of it. A drag knife is
    *  effectively zero; a 40 W diode at 0.14 x 0.2 mm spot is ~0.17. */
   kerfMm: number;
@@ -251,15 +319,66 @@ export interface Machine {
 export type FoldMode = 'score' | 'perf' | 'draw' | 'none';
 
 export const MACHINES: Machine[] = [
+  // The two answers to "I have a laser" and "I have a cutter", for everyone whose machine
+  // is not in the list below — and for anyone who does not want the app deciding things
+  // about their hardware. The work area is deliberately not a constraint here: the SHEET
+  // is, and it has its own control, so a generic profile that also guessed an area would
+  // be a second hidden limit with nothing behind it.
+  //
+  // They still export a `.lac`. That file is the only one that NAMES an operation, so it
+  // is worth having whatever the machine is, and it needs a `machine_settings_name` —
+  // see `LAC_MACHINE` for why carrying a specific Bambu name in a generic profile is
+  // sound rather than a lie.
+  {
+    id: 'laser',
+    name: 'Any laser cutter',
+    // Big enough not to constrain the sheet list; the sheet is the real limit.
+    areaMm: [1200, 1200],
+    laser: true,
+    // A dashed cut, because that is what a laser user actually cuts. Both ways work and
+    // the control offers both, but the perforation is the one that has been through card
+    // on a real machine and come out nice, and it does not depend on the material the way
+    // a low-power score does.
+    foldMode: 'perf',
+    foldModes: ['perf', 'score', 'none'],
+    kerfMm: 0.15,
+    maxCaliperMm: 0,
+    mirror: false,
+    format: 'svg',
+    // Layers and colours kept, which is every front-end except Bambu Suite — and a Suite
+    // user opens the .lac, which says the operation outright. A blanket dash here would
+    // take away the whole fold layer from a LightBurn or Glowforge user.
+    svgFold: 'solid',
+    note: 'Colour and layer are the operation: CUT red, fold blue. Assign them in your own software. Folds are a dashed cut by default — change it to a light score if your machine does that well. A .lac is in the zip too, for Bambu Suite.',
+  },
+  {
+    id: 'blade',
+    name: 'Any cutting machine',
+    areaMm: [1200, 1200],
+    laser: false,
+    foldMode: 'perf',
+    // No score: a drag knife has no scoring tool, and the machines that do have one are
+    // listed by name below with their own entry.
+    foldModes: ['perf', 'draw', 'none'],
+    kerfMm: 0,
+    maxCaliperMm: 0,
+    mirror: false,
+    format: 'svg',
+    svgFold: 'solid',
+    note: 'Colour and layer are the operation: CUT red, fold blue. Perforated folds work on any blade; a pen line needs a pen holder. A .lac is in the zip too, for Bambu Suite.',
+  },
   {
     id: 'h2d-blade',
     name: 'Bambu H2D (blade + pen)',
     areaMm: [300, 285],
+    laser: false,
     // Perforate, not draw. A pen line means the fold objects arrive in Suite as Drawing
     // lines and it tries to PEN-PLOT them — reported from a real cut, where they had to be
     // deleted by hand — and it costs a pen swap the machine stops for. A dashed Basic Cut
     // is one tool, one pass, and it folds faster.
     foldMode: 'perf',
+    // No score: Suite has no crease operation at all, so there is nothing to offer.
+    foldModes: ['perf', 'draw', 'none'],
     kerfMm: 0,
     maxCaliperMm: 0.5,
     mirror: false,
@@ -271,97 +390,51 @@ export const MACHINES: Machine[] = [
     id: 'h2d-laser',
     name: 'Bambu H2D (40 W laser)',
     areaMm: [310, 250],
-    foldMode: 'score',
+    laser: true,
+    // A dashed Laser Cut. Cut on cardstock on a real H2D and it came out nice — and it is
+    // a real cut on every material, where a Laser Line is a fraction of cut power (18% on
+    // kraft, much nearer the edge on 250 g cardstock) and so depends on the stock. The
+    // control offers the Laser Line as well; this is only which one it opens on.
+    foldMode: 'perf',
+    foldModes: ['perf', 'score', 'none'],
     kerfMm: 0.17,
     maxCaliperMm: 0,
     mirror: false,
     format: 'svg',
     svgFold: 'dashed',
-    note: 'Laser cut outline + low-power Laser line folds, one plate, no tool change. Laser-scoring paper is controlled charring: expect a brown line down every fold. Bambu forbid leaving paper jobs unattended.',
+    note: 'One plate, one process, no tool change. Folds are a dashed Laser Cut by default — a real cut on any material, and what has actually been through cardstock here. Switch them to Laser Line for a solid low-power score instead: tidier, but on paper a score is controlled charring, so expect a brown line down every fold. Bambu forbid leaving paper jobs unattended.',
   },
   {
     id: 'h2d-laser10',
     name: 'Bambu H2D (10 W laser)',
     areaMm: [310, 270],
-    foldMode: 'score',
+    laser: true,
+    foldMode: 'perf',
+    foldModes: ['perf', 'score', 'none'],
     kerfMm: 0.07,
     maxCaliperMm: 0,
     mirror: false,
     format: 'svg',
     svgFold: 'dashed',
-    note: 'Smaller spot than the 40 W, so a finer kerf and a tidier score, but slower on anything above 250 gsm.',
-  },
-  {
-    id: 'cricut-maker',
-    name: 'Cricut Maker (12 × 12 mat)',
-    areaMm: [292, 292],
-    foldMode: 'score',
-    kerfMm: 0,
-    maxCaliperMm: 2.4,
-    mirror: true,
-    format: 'svg',
-    svgFold: 'solid',
-    note: 'Scoring Wheel scores properly, but 100 lb+ cardstock needs the Double wheel. Import, set the blue layer to Score, then ATTACH. Without Attach the folds lose registration.',
-  },
-  {
-    id: 'cricut-explore',
-    name: 'Cricut Explore (12 × 12 mat)',
-    areaMm: [292, 292],
-    foldMode: 'perf',
-    kerfMm: 0,
-    maxCaliperMm: 1,
-    mirror: true,
-    format: 'svg',
-    svgFold: 'solid',
-    note: 'No scoring wheel on this machine: the Scoring Stylus is light-duty only, so perforated folds are the reliable default here.',
-  },
-  {
-    id: 'cricut-long',
-    name: 'Cricut (12 × 24 mat)',
-    areaMm: [292, 596],
-    foldMode: 'score',
-    kerfMm: 0,
-    maxCaliperMm: 2.4,
-    mirror: true,
-    format: 'svg',
-    svgFold: 'solid',
-    note: 'The long mat is the only way to get a box much past 70 mm on a Cricut.',
-  },
-  {
-    id: 'silhouette',
-    name: 'Silhouette Cameo',
-    areaMm: [292, 292],
-    foldMode: 'perf',
-    kerfMm: 0,
-    maxCaliperMm: 2,
-    mirror: false,
-    format: 'dxf',
-    svgFold: 'solid',
-    note: 'The free edition of Silhouette Studio cannot open SVG at all, so use the DXF, and re-set the size after import because DXF import drops it.',
-  },
-  {
-    id: 'glowforge',
-    name: 'Glowforge',
-    areaMm: [279, 495],
-    foldMode: 'score',
-    kerfMm: 0.15,
-    maxCaliperMm: 0,
-    mirror: false,
-    format: 'svg',
-    svgFold: 'solid',
-    note: 'Colour maps to operation directly. Give every path a stroke and no fill, or a fill becomes an engrave.',
+    note: 'Smaller spot than the 40 W, so a finer kerf and tidier dashes, but slower on anything above 250 gsm. Folds are a dashed Laser Cut by default; Laser Line gives a solid score instead.',
   },
   {
     id: 'print',
-    name: 'Print & cut by hand',
-    areaMm: [210, 297],
+    name: 'Plain SVG',
+    // Not A4, though this option used to be "print it on A4 and cut by hand". Under a
+    // name that promises a plain file, a work area is a second hidden limit with
+    // nothing behind it — the same reason the two generic profiles above carry none.
+    // The SHEET is the limit, and it has its own control.
+    areaMm: [1200, 1200],
+    laser: false,
     foldMode: 'draw',
+    foldModes: ['draw', 'perf', 'none'],
     kerfMm: 0,
     maxCaliperMm: 0,
     mirror: false,
     format: 'svg',
     svgFold: 'solid',
-    note: 'Fold lines print as light dashes. Score them with a bone folder or an empty ballpoint against a ruler before folding.',
+    note: 'A plain SVG with nothing machine-specific in it: colour and layer are the operation, CUT red and fold blue, and the logo on its own layer. Print it and cut by hand, or open it in whatever software you use. Score the fold lines with a bone folder or an empty ballpoint against a ruler before folding.',
   },
 ];
 
@@ -381,15 +454,15 @@ export interface Sheet {
 }
 
 /** Sheet presets. The trap worth knowing: A4 PORTRAIT (297 tall) fits neither the
- *  H2D blade area (285) nor a Cricut 12x12 mat (292.1), and US 12x12 cardstock
+ *  H2D blade area (285) nor a 12 x 12 in cutting mat (292.1), and US 12x12 cardstock
  *  (304.8) fits no H2D process at all. */
 export const SHEETS: Sheet[] = [
   { id: 'a4-land', name: 'A4 landscape (297 × 210)', widthMm: 297, heightMm: 210 , kind: 'sheet' },
   { id: 'a4', name: 'A4 portrait (210 × 297)', widthMm: 210, heightMm: 297 , kind: 'sheet' },
   { id: 'letter', name: 'US Letter (279 × 216)', widthMm: 279.4, heightMm: 215.9 , kind: 'sheet' },
   { id: 'sq12', name: '12 × 12 in cardstock (305 × 305)', widthMm: 304.8, heightMm: 304.8 , kind: 'sheet' },
-  { id: 'mat12', name: 'Cricut 12 × 12 mat (292 × 292)', widthMm: 292.1, heightMm: 292.1 , kind: 'sheet' },
-  { id: 'mat24', name: 'Cricut 12 × 24 mat (292 × 597)', widthMm: 292.1, heightMm: 596.9 , kind: 'sheet' },
+  { id: 'mat12', name: 'Cutting mat 12 × 12 in (292 × 292)', widthMm: 292.1, heightMm: 292.1 , kind: 'sheet' },
+  { id: 'mat24', name: 'Cutting mat 12 × 24 in (292 × 597)', widthMm: 292.1, heightMm: 596.9 , kind: 'sheet' },
   { id: 'a3', name: 'A3 (420 × 297)', widthMm: 420, heightMm: 297 , kind: 'sheet' },
   { id: 'sra3', name: 'SRA3 (450 × 320)', widthMm: 450, heightMm: 320 , kind: 'sheet' },
   // Build plates, for the printed sheet. Same mechanism as a sheet of card — the
@@ -423,6 +496,8 @@ export type StyleId =
   | 'tray-webbed'
   | 'tray-lid'
   | 'flap-cover'
+  // Group B, basic shape 15 — the single-wall tray, locked at the corners by a claw
+  | 'cake-box'
   // Group A — one glued lap
   | 'tuck-top'
   | 'snap-lock'
@@ -476,6 +551,7 @@ export type Units = 'mm' | 'in';
  *  is built for — so it is one control at the top rather than a machine dropdown
  *  next to an unrelated "print it flat" drawer. */
 export type MakeMode = 'cut' | 'print';
+export type LogoKind = 'none' | 'text' | 'svg';
 
 export interface BoxParams {
   style: StyleId;
@@ -527,12 +603,34 @@ export interface BoxParams {
    *  from this one angle: the rise is (W/2)·tan, the roof panel in the flat net is
    *  (W/2)/cos long, and the fold is its complement. 30 is what the trade draws. */
   roofPitchDeg: number;
-  /** Mailer only: cut a hand hole through both plies of each rolled end. */
-  handHoles: boolean;
   /** Mailers only: hang a wing on each short edge of the lid, folding down inside the
    *  rolled ends. ECMA cover 53 rather than 50 — and the lid has to NEST inside the rim
    *  to carry them, so turning this on changes the lid's own size. */
   lidWings: boolean;
+
+  // ── logo ──
+  /** What goes on the box: nothing, a line of text, or an SVG the user dropped in. The
+   *  artwork itself is resolved by the UI (fonts load, SVGs parse) and handed to `solve`
+   *  as an `Artwork`; these fields are the recipe, so a saved project can rebuild it. */
+  logo: LogoKind;
+  logoText: string;
+  /** A face from `@vostok/fonts` — one of the handful this app bundles. */
+  logoFont: string;
+  /** The SVG source, verbatim, so a project file carries its own logo. */
+  logoSvg: string;
+  /** What the import window decided for each path in that SVG, by path index. Carried in
+   *  the project because re-tracing with defaults would quietly undo the choices — a
+   *  backdrop switched off would come back the next time the file was opened. */
+  logoSvgModes: Record<string, 'fill' | 'outline' | 'off'>;
+  /** Which panel it goes on. Empty means the style's own front face; validated against
+   *  `logoFaces`, like the window, so a face carried over from another style falls back
+   *  rather than landing on a panel that is not there. */
+  logoFace: string;
+  /** Fraction of the face's clear area the logo may fill, 0..1. */
+  logoScale: number;
+  /** Quarter turns on the face, so a lid whose "up" runs sideways in the net can still
+   *  read the right way on the box. */
+  logoRotation: 0 | 90 | 180 | 270;
 
   stockId: string;
   /** MEASURED caliper, mm. Not the number on the packet. */
@@ -577,7 +675,7 @@ export const DEFAULT_PARAMS: BoxParams = {
   // 90 x 60 x 25 is a small shipper, and it is the largest round size whose MAILER
   // blank still fits A4 landscape — 198 x 196 against the 287 x 200 usable area.
   // Boxes eat a lot of paper: a mailer's blank is roughly L+4H by 2W+2H+2t, so an A4
-  // sheet or a Cricut mat tops out near a 40 mm cube in this style. Defaulting past
+  // sheet or a 12 in cutting mat tops out near a 40 mm cube in this style. Defaulting past
   // that means opening the app on an error, which is how the incumbents do it.
   lengthMm: 90,
   widthMm: 60,
@@ -591,7 +689,6 @@ export const DEFAULT_PARAMS: BoxParams = {
   glueTabMm: 12,
   thumbNotch: true,
   handle: true,
-  handHoles: false,
   lidWings: false,
   window: false,
   windowFace: '',
@@ -607,6 +704,14 @@ export const DEFAULT_PARAMS: BoxParams = {
   hangHole: 'euro',
   handleHeightMm: 45,
   roofPitchDeg: 30,
+  logo: 'none',
+  logoText: '',
+  logoFont: 'anton',
+  logoSvg: '',
+  logoSvgModes: {},
+  logoFace: '',
+  logoScale: 0.5,
+  logoRotation: 0,
   stockId: 'card300',
   caliperMm: 0.38,
   grainAlongLength: true,
@@ -616,9 +721,11 @@ export const DEFAULT_PARAMS: BoxParams = {
   layerHeightMm: 0.2,
   sheetLayers: 2,
   hingeLayers: 1,
-  // Derived, so the flaps follow the sheet exactly as they always have. It is a knob for
-  // the people who want a tighter flap, not a new default.
-  flapLayers: 0,
+  // The full sheet, not the derived "one clearance under the gap". Ian, 2026-09-17: a
+  // flap a layer thinner than the wall slides in but never grips, and a printed box that
+  // opens itself is worse than one you push home. `sandwichThicknessMm` still caps a flap
+  // at the sheet, so 2 here means "as thick as the sheet" on the default 2-layer sheet.
+  flapLayers: 2,
   hingeWidthMm: 1.2,
   machineId: 'h2d-blade',
   sheetId: 'a4-land',
@@ -654,6 +761,11 @@ export interface SolveResult {
   netSizeMm: [number, number];
   /** True when the net does not fit the chosen sheet in either orientation. */
   overflow: boolean;
+  /** What the sheet actually gives you, mm: its size less the margin the fit is
+   *  measured against. Carried on the result rather than re-derived in the UI —
+   *  a second copy of that subtraction is a second copy that can disagree with the
+   *  one the overflow test used. */
+  usableMm: [number, number];
   /** Rotate the net 90 degrees to fit. */
   rotated: boolean;
   /** The largest cube this sheet could hold in the current style — the readout that

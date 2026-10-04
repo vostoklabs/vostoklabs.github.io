@@ -49,8 +49,9 @@
  * `stemClearance.test.mjs` for the integration recipe).
  */
 import * as THREE from 'three';
+import { csOf, ringsOf, extrude } from '@vostok/manifold';
 
-const MITER_LIMIT = 4;              // generous headroom above Clipper2's min (2) for a 90° corner
+const MITER_LIMIT = 4;             // generous headroom above Clipper2's min (2) for a 90° corner
 const NESTED_MARGIN_MM = 0.02;      // a contour must sit this far inside another to count as its hole
 const PROBE_COUNT = 5;              // Z-samples used to detect stem kind + whether grip is Z-constant
 const BAND_CONST_EPS_MM = 0.01;     // grip bbox W/H must agree within this to skip per-band slicing
@@ -232,7 +233,7 @@ function splitComponents(positions, indices) {
 
 function slicePolys(man, z) {
   const cs = man.slice(z);
-  const polys = cs.toPolygons();
+  const polys = ringsOf(cs);
   cs.delete();
   return polys;
 }
@@ -352,7 +353,7 @@ function processStem(api, mesh, tolMM) {
       // clearance means a SMALLER peg, i.e. the mirror sign of the socket case).
       const delta2D = kind === 'socket' ? tolMM / 2 : -tolMM / 2;
 
-      const baseCSraw = new api.CrossSection([contour], 'Positive');
+      const baseCSraw = csOf(api, [contour], 'Positive');
       const baseCS = baseCSraw.simplify(CONTOUR_SIMPLIFY_EPS_MM);
       baseCSraw.delete();
       const offsetCSraw = baseCS.offset(delta2D, 'Miter', MITER_LIMIT);
@@ -395,7 +396,7 @@ function processStem(api, mesh, tolMM) {
       }
       const h = z1 - z0;
       if (!(h > 1e-6)) { ring.delete(); skippedRings++; continue; }
-      const prismRaw = api.Manifold.extrude(ring, h); const prism = prismRaw.translate([0, 0, z0]); prismRaw.delete(); // the untranslated extrude is its own handle
+      const prismRaw = extrude(api, ring, h); const prism = prismRaw.translate([0, 0, z0]); prismRaw.delete(); // the untranslated extrude is its own handle
       ring.delete();
 
       const next = addingMaterial ? man.add(prism) : man.subtract(prism);

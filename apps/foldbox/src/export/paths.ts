@@ -34,6 +34,25 @@ export interface DashSpec {
   gapMm: number;
 }
 
+/** What a writer can say for itself.
+ *
+ *  Only the `.lac` sets `native`, and it is the only file here that can NAME an
+ *  operation. Two things follow, and both of them used to be applied to it wrongly:
+ *
+ *   · no TRANSPORT dash. A fold arrives whole, on the pen or the laser score, because
+ *     the file states the process outright. Nothing has to be inferred from its shape.
+ *   · no HEM COLLAPSE. That drops one crease of each double-ply pair, and it exists
+ *     solely because perforating both would sever the 2t strip between them. A line
+ *     that is not cut takes nothing out, so a `.lac` on a laser score was losing a
+ *     fold line per hem for no reason at all — and the diagnostic told the user the
+ *     opposite, that choosing Laser score would get both lines marked.
+ *
+ *  A real PERFORATION is still dashed in a `.lac`: the user asked for a dashed cut, and
+ *  on the blade Suite's own `dash` property applies it at make time. */
+export interface PathOpts {
+  native?: boolean;
+}
+
 export interface Path {
   op: Op;
   points: Poly;
@@ -129,11 +148,21 @@ function hemPartner(a: Crease, b: Crease, limitMm: number): boolean {
 }
 
 /** Every path in the file, in cut order. */
-export function collectPaths(result: SolveResult): Path[] {
+export function collectPaths(result: SolveResult, opts: PathOpts = {}): Path[] {
   const { net, params } = result;
   const holes: Path[] = [];
   const outers: Path[] = [];
   const inner: Path[] = [];
+
+  // The logo. First of all, before anything is cut: engraving and drawing want the
+  // sheet whole and flat under the head, and they move nothing. Closed rings and open
+  // lines alike are ENGRAVE, which the `.lac` puts on the laser's line engrave or the
+  // blade's pen, and the SVG and DXF on their own layer.
+  const marks: Path[] = [];
+  for (const m of net.marks) {
+    for (const r of m.rings) marks.push({ op: 'engrave', points: r, closed: true });
+    for (const l of m.lines) marks.push({ op: 'engrave', points: l, closed: false });
+  }
 
   for (const ring of net.cutRings) {
     (signedArea(ring) < 0 ? holes : outers).push({ op: 'cut', points: ring, closed: true });
@@ -164,7 +193,7 @@ export function collectPaths(result: SolveResult): Path[] {
     // perforation without the print-only build's dieline going dashed underneath it.
     const cutting = params.makeMode === 'cut';
     const perf = cutting && params.foldMode === 'perf';
-    const transport = cutting && machineById(params.machineId).svgFold === 'dashed';
+    const transport = !opts.native && cutting && machineById(params.machineId).svgFold === 'dashed';
     const dashed = perf || transport;
 
     // A hem's two creases get ONE perforation between them, never two. The inner ply
@@ -192,13 +221,20 @@ export function collectPaths(result: SolveResult): Path[] {
       }
     }
 
-    for (const c of net.creases) {
-      if (dropped.has(c)) continue;
+    // The fold tree, then the folds that are not in it — a webbed corner's contact with
+    // the wall it folds against. Both go through the SAME dash treatment: a fold that
+    // arrives solid on a shape-blind importer is a cut through the box, and it makes no
+    // difference to Suite whether our data structure called it a crease.
+    const folds: { a: Pt; b: Pt }[] = [
+      ...net.creases.filter((c) => !dropped.has(c)),
+      ...net.webFolds,
+    ];
+    for (const f of folds) {
       inner.push({
         op: perf ? 'perf' : 'crease',
-        points: [c.a, c.b],
+        points: [f.a, f.b],
         closed: false,
-        ...(dashed ? { dash: foldDashSpec(params, dist(c.a, c.b)) } : {}),
+        ...(dashed ? { dash: foldDashSpec(params, dist(f.a, f.b)) } : {}),
       });
     }
   }
@@ -213,6 +249,6 @@ export function collectPaths(result: SolveResult): Path[] {
     outers.push({ op: l.op, points: l.outline, closed: true });
   }
 
-  // Holes and interior features first, perimeters last. Rule 2.
-  return [...holes, ...inner, ...outers];
+  // Marks, then holes and interior features, perimeters last. Rule 2.
+  return [...marks, ...holes, ...inner, ...outers];
 }

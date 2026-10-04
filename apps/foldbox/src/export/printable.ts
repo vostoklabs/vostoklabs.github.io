@@ -26,7 +26,7 @@
 import { buildStl, buildThreeMF, downloadFile, type ExportPart, type RGB } from '@vostok/export';
 import { BRAND } from '@vostok/brand';
 import type { Net, Panel, Poly, Pt } from '../types';
-import { EPS, at, bboxOf, cross, len, signedArea, sub } from '../geometry/poly';
+import { EPS, at, bboxOf, cross, len, pointInRing, signedArea, sub } from '../geometry/poly';
 import {
   effectiveHingeWidthMm,
   hingeThicknessMm,
@@ -57,6 +57,8 @@ export {
 const SLIT_WIDTH_MM = 0.6;
 
 const CARD: RGB = [232, 226, 214];
+/** The logo's filament. A second slot, so it is a colour change and not paint. */
+const INK: RGB = [34, 34, 38];
 
 // ──────────────────────────────── tessellation ────────────────────────────────
 
@@ -266,14 +268,15 @@ class MeshBuf {
     }
   }
 
-  toPart(name: string, group: string): ExportPart | null {
+  toPart(name: string, group: string, color: RGB = CARD, extruder?: number): ExportPart | null {
     if (!this.idx.length) return null;
     return {
       name,
       positions: new Float32Array(this.pos),
       indices: new Uint32Array(this.idx),
-      color: CARD,
+      color,
       group,
+      ...(extruder ? { extruder } : {}),
     };
   }
 }
@@ -290,19 +293,6 @@ function onSeg(p: Pt, a: Pt, b: Pt, tol: number): boolean {
   if (Math.abs(cross(ab, sub(p, a))) / L > tol) return false;
   const t = ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / (L * L);
   return t > -tol / L && t < 1 + tol / L;
-}
-
-function pointInRing(p: Pt, ring: Poly): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i] as Pt;
-    const b = ring[j] as Pt;
-    if (a[1] > p[1] !== b[1] > p[1]) {
-      const x = ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0];
-      if (p[0] < x) inside = !inside;
-    }
-  }
-  return inside;
 }
 
 /** Move each edge inward by its own distance and re-intersect the neighbours.
@@ -392,7 +382,7 @@ function sharedEdges(panel: Panel, all: Panel[]): { a: Pt; b: Pt }[] {
  *  simply jams. Tuck flaps and webbed corners identify themselves; everything else is
  *  marked at the point it is built, because roles do not separate them — a mailer's
  *  inner ply and its corner ears are both `flap` and only one of them is a wall. */
-function tucksInside(panel: Panel): boolean {
+export function tucksInside(panel: Panel): boolean {
   return panel.role === 'tuck' || panel.web !== undefined || panel.thin === true;
 }
 
@@ -543,6 +533,8 @@ export interface PrintableStats {
   mountains: number;
   /** Panels too narrow to keep any full-thickness material at all. */
   allHinge: number;
+  /** Closed rings of logo inlaid into the first layer. 0 when there is no logo. */
+  logoRings: number;
 }
 
 /** The one printable-geometry function. `buildPrintable` -> parts, and every caller
@@ -561,11 +553,69 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
 
   const blank = shells([...net.cutRings, ...slots]);
 
+  // The logo, as an INLAY in the first layer rather than a bump on top of it.
+  //
+  // No CSG, and none needed: `tessellate` is an even-odd y-sweep, so handing it the
+  // blank's rings AND the logo's rings in one set gives material wherever the nesting
+  // depth is even — the sheet, minus the letter, plus the letter's own counters. The
+  // walls come out of the sweep's unpaired edges, so the cavity is walled for free and
+  // the ink part drops into it: two shells meeting on vertical faces, which is what the
+  // base and the slab already do. A bump would have been simpler and wrong; it would
+  // sit proud of the box and catch on everything.
+  //
+  // First layer only, and only on the BOTTOM face. A printed sheet folds into its
+  // grooves, so its underside is the outside of the finished box — and its underside is
+  // the first layer, printed against the plate, which is also the best surface in the
+  // part. `solve` puts the marks on that face (mirrored, so they read from outside) for
+  // any printed net; a cut net's marks are on the up-face, where an inlay would be both
+  // on the wrong side of the sheet and in the middle of the hinge.
+  const inlayRings = net.markFace === 'bottom' ? net.marks.flatMap((m) => m.rings) : [];
+  const top = grooved ? hinge : sheet;
+  const inlayTop = Math.min(o.layerHeightMm, top);
+  const inlaid = inlayRings.length > 0 && inlayTop > 1e-6;
+
   const base = new MeshBuf();
+  // Above the inlay, when there is one. Its OWN part: two prisms in one buffer would
+  // meet on a face and stop being a closed shell, which is the same reason the chamfer's
+  // steps are separate parts.
+  const above = new MeshBuf();
   // With no groove the blank is one plain prism and the file is a single closed
   // shell — the safest thing to hand a slicer, so it stays the shape of the output
   // whenever the hinge is not actually thinner.
-  for (const s of blank) base.prism(s.outer, s.holes, 0, grooved ? hinge : sheet);
+  for (const s of blank) {
+    // Only the piece the logo is ON gets the cavity. A blank can be two pieces — a tray
+    // and its lid — and handing the logo's rings to the other one puts edges OUTSIDE its
+    // outer boundary, which the even-odd sweep reads as more material: the tray came back
+    // with overlapping trapezoids and an open surface, and the lid's cavity was never cut.
+    const mine = inlaid ? inlayRings.filter((r) => r[0] !== undefined && pointInRing(r[0], s.outer)) : [];
+    if (!mine.length) {
+      base.prism(s.outer, s.holes, 0, top);
+    } else if (inlayTop < top - 1e-6) {
+      base.prism(s.outer, [...s.holes, ...mine], 0, inlayTop);
+      above.prism(s.outer, s.holes, inlayTop, top);
+    } else {
+      // The whole lower band IS the first layer: one prism, with the logo cut out of it.
+      base.prism(s.outer, [...s.holes, ...mine], 0, top);
+    }
+  }
+
+  // The ink: one prism per outer ring, with the counters that lie inside it as holes.
+  const ink = new MeshBuf();
+  if (inlaid) {
+    const outers = inlayRings.filter((r) => signedArea(r) > 0);
+    const holes = inlayRings.filter((r) => signedArea(r) <= 0);
+    for (const outer of outers) {
+      ink.prism(
+        outer,
+        holes.filter((h) => {
+          const probe = h[0];
+          return probe !== undefined && pointInRing(probe, outer);
+        }),
+        0,
+        inlayTop,
+      );
+    }
+  }
 
   // One buffer per step of the chamfer, and each becomes its own part. Two steps in
   // the SAME buffer would meet on a face and stop being a closed shell; in separate
@@ -620,7 +670,11 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
 
   const parts = [
     base.toPart(grooved ? 'sheet + hinges' : 'sheet', 'blank'),
+    above.toPart('sheet above the logo', 'blank'),
     ...steps.map((m, i) => m.toPart(steps.length === 1 ? 'panels' : `panels ${i + 1}`, 'blank')),
+    // Slot 2. Same object as the blank, so it stays in its cavity however the plate is
+    // arranged, and a slicer that ignores the colour still prints a correct sheet.
+    ink.toPart('logo', 'blank', INK, 2),
     inserts.toPart('inserts', 'inserts'),
   ].filter((p): p is ExportPart => p !== null);
 
@@ -634,6 +688,7 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
       triangles: parts.reduce((n, p) => n + p.indices.length / 3, 0),
       mountains: net.creases.filter((c) => c.dir === 'mountain').length,
       allHinge,
+      logoRings: inlaid ? inlayRings.length : 0,
     },
   };
 }

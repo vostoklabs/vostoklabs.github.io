@@ -3,13 +3,15 @@
 // arms growing out of it, each with V branches at 60° and a small ornament on the end. It reads as
 // lace because almost all of it is air: every line is as thin as the wood allows and no thicker.
 //
-// It is built for a tag it is laid on, and that is why it comes in two halves. `islands` is the
+// It is built for a tag it is laid on, and that is why it comes in pieces. `islands` is the
 // wood — the hub, a solid polygon round the windows; the spines, branches and ornaments; and a
-// small fillet in every inside corner — and `windows` is what is cut through it. The tag is
-// unioned with the wood and the windows are cut through both: where the flake lies on the tag its
-// arms vanish into the tag and only the star of windows shows, cut through plain wood; where it
-// hangs off, its whole silhouette does. Photographed, that is the product: a ring of dark windows
-// in the tag and the branches breaking out past its edge.
+// small fillet in every inside corner — and `windows` is what is cut through it. The same wood
+// comes split, `hubWood` and one `arms[k]` per arm, and every arm comes a second time as a
+// CUT-OUT (`cutouts[k]`): the arm as the hole a stencil cuts, its ends round and its corners
+// soft, its spine starting a web clear of the windows. The gift tag
+// (snowflake-gift-tag.ts) crosses its bottom edge through the flake's centre: above
+// the edge the arms are cut out of the tag, below it they hang off as wood, and the hub's
+// windows go through both — the photo's flake turning from a hole into a silhouette at the edge.
 //
 // THE DRAWING. Every design is a line drawing in one arm's frame (spine along +Y), turned k·60°,
 // and every branch comes as a mirrored pair, so it is D6-symmetric by construction. The hub is a
@@ -65,6 +67,15 @@ export interface Flake {
   islands: Shapes;
   /** The windows, cut through the wood and through whatever the flake lies on. */
   windows: Shapes;
+  /** The hub's wood alone: the solid round the windows (the berry's is seven discs). */
+  hubWood: Shapes;
+  /** Each arm's wood, no fillets, `k` = 0…5 counter-clockwise from the one pointing up (arm k
+   *  points 90° + k·60°). `joins` over the hub and the arms a design keeps rounds their corners. */
+  arms: Shapes[];
+  /** Each arm as a cut-out, the same `k`: the hole a stencil cuts for it, its own joins filled.
+   *  Strokes end round, every convex corner is rounded to `JOIN` (cut out, those are the wood's
+   *  inside corners), and the spine starts a web clear of every window. */
+  cutouts: Shapes[];
   /** Centre to arm tip, mm. */
   reach: number;
   /** How far from the centre any window reaches, mm — what shows of the flake inside a tag. */
@@ -115,6 +126,53 @@ function stroke(a: Pt, b: Pt, w: number): Ring {
   const h = w / 2;
   return ccw([add(a, n, h), add(a, n, -h), add(b, n, -h), add(b, n, h)]);
 }
+
+/** The same stroke as a cut-out: its far end round, the cap inside the square end's footprint so
+ *  the branch is no longer — or square, `end` false, where a tip buries it — and with `start`, its
+ *  start round too, the cap's back point on `a`. */
+function capsule(a: Pt, b: Pt, w: number, start = false, end = true): Ring {
+  const d = unit(sub(b, a));
+  const n: Pt = [-d[1], d[0]];
+  const h = w / 2;
+  const back: Pt = [-d[0], -d[1]], right: Pt = [-n[0], -n[1]];
+  const out: Pt[] = [];
+  // Two quarter arcs, never one half: `arc` goes the short way, and half a circle has none.
+  if (start) {
+    const s = add(a, d, h);
+    out.push(...arc(s, h, angleOf(n), angleOf(back)), ...arc(s, h, angleOf(back), angleOf(right)).slice(1));
+  } else {
+    out.push(add(a, n, h), add(a, n, -h));
+  }
+  if (end) {
+    const e = add(b, d, -h);
+    out.push(...arc(e, h, angleOf(right), angleOf(d)), ...arc(e, h, angleOf(d), angleOf(n)).slice(1));
+  } else {
+    out.push(add(b, n, -h), add(b, n, h));
+  }
+  return out;
+}
+
+/** The ring with every convex corner rounded to `r` (less where an edge is too short to hold it).
+ *  Cut out, a tip's points are the inside corners of the wood round it; its concave corners
+ *  (an arrow's notch) are the wood's own points and stay. */
+function soft(ring: Ring, r = JOIN): Ring {
+  const P = ccw(ring);
+  const n = P.length;
+  return P.flatMap((p, i) => {
+    const a = P[(i + n - 1) % n]!, b = P[(i + 1) % n]!;
+    const e0 = unit(sub(p, a)), e1 = unit(sub(b, p));
+    if (cross(e0, e1) <= 1e-9) return [p];
+    const half = (Math.PI - Math.acos(Math.max(-1, Math.min(1, dot(e0, e1))))) / 2;
+    const t = Math.min(r / Math.tan(half), 0.45 * Math.min(len(sub(p, a)), len(sub(b, p))));
+    const rr = t * Math.tan(half);
+    const T1 = add(p, e0, -t), T2 = add(p, e1, t);
+    const o = add(T1, [-e0[1], e0[0]], rr);
+    return arc(o, rr, angleOf(sub(T1, o)), angleOf(sub(T2, o)));
+  });
+}
+
+/** A branch, drawn as wood or as a cut-out as the context asks. */
+const line = (c: Ctx, a: Pt, b: Pt, w: number): Ring => (c.cut ? capsule(a, b, w) : stroke(a, b, w));
 
 /** A kite along direction `d` (unit), widest at `c`: `front` ahead, `back` behind, `hw` either
  *  side. front = back is a diamond. */
@@ -198,8 +256,11 @@ function grow(pts: Pt[], h: number, r = JOIN): Ring {
  * A laser cuts a sharp inside corner, but it is where a branch snaps and where char collects,
  * and the photo's joins are soft. With `base`, only its crossings with `rings` — the tag's edge
  * where the arms run into it. Every ring is taken as the wood it bounds (orientation ignored).
+ * `straight` is for rings that are CUT OUT: there a fillet only softens a point of the wood
+ * between two slots, so it fits itself to the straight run at the crossing and is left out where
+ * there is none — laid on round a slot's soft corner it would leave a kink in the cut.
  */
-export function joins(rings: Ring[], r = JOIN, base?: Ring): Ring[] {
+export function joins(rings: Ring[], r = JOIN, base?: Ring, straight = false): Ring[] {
   const all = (base ? [base, ...rings] : rings).map(ccw);
   const box = all.map((q) => q.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]));
   const hit = (k: number, [x, y]: Pt) => x > box[k]![0] && x < box[k]![2] && y > box[k]![1] && y < box[k]![3];
@@ -221,7 +282,7 @@ export function joins(rings: Ring[], r = JOIN, base?: Ring): Ring[] {
         for (let e = 0; e < L.length; e++) {
           for (const { p, t } of cuts(L[e]!, L[(e + 1) % L.length]!, ball)) {
             if (covered(p, i, j)) continue;
-            const f = ballFillet(p, L, e, t, K, ball, r);
+            const f = ballFillet(p, L, e, t, K, ball, r, straight);
             if (f) out.push(f);
           }
         }
@@ -237,7 +298,7 @@ export function joins(rings: Ring[], r = JOIN, base?: Ring): Ring[] {
           if (t <= 1e-9 || t >= 1 - 1e-9 || u <= 1e-9 || u >= 1 - 1e-9) continue;
           const p = add(a0, da, t);
           if (covered(p, i, j)) continue;
-          const f = fillet(p, A, a, t, B, b, u, r);
+          const f = fillet(p, A, a, t, B, b, u, r, straight);
           if (f) out.push(f);
         }
       }
@@ -250,14 +311,15 @@ export function joins(rings: Ring[], r = JOIN, base?: Ring): Ring[] {
  *  `u`), both CCW: the corner between the two edges' runs OUT of the other ring is the air, and
  *  the fillet fills its point — smaller where an edge runs out before it fits. It reaches a hair
  *  into the wood either side so the union welds it. */
-function fillet(p: Pt, A: Ring, a: number, t: number, B: Ring, b: number, u: number, r: number): Ring | null {
+function fillet(p: Pt, A: Ring, a: number, t: number, B: Ring, b: number, u: number, r: number, straight = false): Ring | null {
   const ua = unit(sub(A[(a + 1) % A.length]!, A[a]!)), ub = unit(sub(B[(b + 1) % B.length]!, B[b]!));
   const out = cross(ub, ua) < 0;
   const u1: Pt = out ? ua : [-ua[0], -ua[1]], u2: Pt = out ? [-ub[0], -ub[1]] : ub;
-  const room = Math.min(run(A, a, t, out), run(B, b, u, !out));
+  const room = Math.min(run(A, a, t, out, straight), run(B, b, u, !out, straight));
   const theta = Math.acos(Math.max(-1, Math.min(1, dot(u1, u2))));
   if (theta > rad(175) || theta < rad(2)) return null;
   const rr = Math.min(r, 0.9 * room * Math.tan(theta / 2));
+  if (straight && rr < 0.05) return null;
   const s = rr / Math.tan(theta / 2);
   const bis = unit(add(u1, u2));
   const o = add(p, bis, rr / Math.sin(theta / 2));
@@ -270,15 +332,16 @@ function fillet(p: Pt, A: Ring, a: number, t: number, B: Ring, b: number, u: num
 
 /** How far a ring's edge runs on from the point `t` along its edge `i` — forward, or back —
  *  carrying on round later edges while they bend less than 20° from it in all: a ball's many
- *  short chords are one smooth edge to a fillet, a branch's square end is not. */
-function run(ring: Ring, i: number, t: number, forward: boolean): number {
+ *  short chords are one smooth edge to a fillet, a branch's square end is not. `straight`: only
+ *  while they bend under 1°, the straight run itself. */
+function run(ring: Ring, i: number, t: number, forward: boolean, straight = false): number {
   const n = ring.length;
   const edge = (k: number) => sub(ring[(k + 1) % n]!, ring[k]!);
   const d0 = unit(edge(i));
   let total = (forward ? 1 - t : t) * len(edge(i));
   for (let s = 1; s < n && total < 3; s++) {
     const e = edge(((forward ? i + s : i - s) % n + n) % n);
-    if (dot(unit(e), d0) < Math.cos(rad(20))) break;
+    if (dot(unit(e), d0) < Math.cos(rad(straight ? 1 : 20))) break;
     total += len(e);
   }
   return total;
@@ -325,12 +388,12 @@ function onRing(K: Ring, c: Pt, q: Pt): Pt {
 /** The fillet where edge `e` of the CCW ring `L` (at `t` along it) runs into the ball `k` (drawn
  *  as the ring `K`): the circle of radius `r` touching the edge's line from outside `L` and the
  *  ball from outside it. */
-function ballFillet(p: Pt, L: Ring, e: number, t: number, K: Ring, k: Circle, r: number): Ring | null {
+function ballFillet(p: Pt, L: Ring, e: number, t: number, K: Ring, k: Circle, r: number, straight = false): Ring | null {
   const ua = unit(sub(L[(e + 1) % L.length]!, L[e]!));
   const fwd = dot(ua, sub(p, k.c)) > 0;
   const u1: Pt = fwd ? ua : [-ua[0], -ua[1]];
   const air: Pt = [ua[1], -ua[0]];
-  const room = run(L, e, t, fwd);
+  const room = run(L, e, t, fwd, straight);
   for (let rr = r; rr >= 0.05; rr *= 0.8) {
     const w = sub(add(p, air, rr), k.c);
     const b = dot(w, u1), q = b * b - (dot(w, w) - (k.r + rr) ** 2);
@@ -357,6 +420,8 @@ interface Ctx {
   ws: number;
   wb: number;
   web: number;
+  /** Drawing an arm as a cut-out: round ends, soft corners. */
+  cut?: boolean;
 }
 
 /** A hub: the centre line of its outline all the way round (or its wood ready drawn, `solid`),
@@ -452,7 +517,7 @@ function vee(c: Ctx, s: number, L: number, o: { w?: number; deg?: number; end?: 
   for (const side of [1, -1]) {
     const a: Pt = [0, s * c.R];
     const b = add(a, dir(side * (o.deg ?? 60)), L * c.R);
-    out.push(stroke(a, b, o.w ?? c.wb));
+    out.push(line(c, a, b, o.w ?? c.wb));
     if (o.end) out.push(o.end(b));
   }
   return out;
@@ -468,7 +533,7 @@ function branched(c: Ctx, s: number, L: number, f: number, l: number): Ring[] {
     const a: Pt = [0, s * c.R];
     const d = dir(side * 60);
     const m = add(a, d, f * L * c.R);
-    out.push(stroke(a, add(a, d, L * c.R), c.web), stroke(m, add(m, dir(0), l * c.R), c.wb));
+    out.push(line(c, a, add(a, d, L * c.R), c.web), line(c, m, add(m, dir(0), l * c.R), c.wb));
   }
   return out;
 }
@@ -480,15 +545,22 @@ interface Tip {
   at: number;
 }
 
+/** A tip's polygon as the context draws it: as wood, sharp; as a cut-out, its points soft. */
+const tipRing = (c: Ctx, ring: Ring): Ring => (c.cut ? soft(ring) : ring);
+
 /** A small diamond, `hl` each way along the arm and `hw` either side of it. */
 function diamondTip(c: Ctx, hl: number, hw: number): Tip {
   const at = c.R - hl * c.R;
-  return { rings: [kite([0, at], [0, 1], hl * c.R, hl * c.R, Math.max(hw * c.R, c.ws / 2 + 0.45))], at };
+  return { rings: [tipRing(c, kite([0, at], [0, 1], hl * c.R, hl * c.R, Math.max(hw * c.R, c.ws / 2 + 0.45)))], at };
 }
 
 /** The spine drawn out to a point over its last `L` — a spear, nothing wider than the spine. */
 function pointTip(c: Ctx, L: number): Tip {
   const at = c.R - L * c.R;
+  // Cut out, the spear's base corners would round off where it meets the spine's end and leave a
+  // step in the slot; drawn a spine's width down into the spine, only its point is exposed — and
+  // the spine stops half a width short, inside it, so its square corners never touch the edge.
+  if (c.cut) return { rings: [soft([[-c.ws / 2, at - c.ws], [c.ws / 2, at - c.ws], [c.ws / 2, at], [0, c.R], [-c.ws / 2, at]])], at: at - c.ws / 2 };
   return { rings: [ccw([[-c.ws / 2, at], [c.ws / 2, at], [0, c.R]])], at };
 }
 
@@ -497,7 +569,7 @@ function pointTip(c: Ctx, L: number): Tip {
 function blockTip(c: Ctx, a: number): Tip {
   const s = Math.max(a * c.R, c.ws + 0.8);
   const far = Math.sqrt(c.R ** 2 - (s / 2) ** 2);
-  return { rings: [ccw([[-s / 2, far - s], [s / 2, far - s], [s / 2, far], [-s / 2, far]])], at: far - s / 2 };
+  return { rings: [tipRing(c, ccw([[-s / 2, far - s], [s / 2, far - s], [s / 2, far], [-s / 2, far]]))], at: far - s / 2 };
 }
 
 /** An arrowhead, `L` long and `hw` either side, its back notched so the barbs read. */
@@ -506,7 +578,7 @@ function arrowTip(c: Ctx, L: number, hw: number): Tip {
   // The barbs stand clear of the spine by more than the 1 mm of air a pocket under them needs.
   const l = L * R, w = Math.max(hw * R, c.ws / 2 + 1.2);
   const notch = R - 0.75 * l;
-  return { rings: [ccw([[0, R], [-w, R - l], [0, notch], [w, R - l]])], at: notch + 0.3 };
+  return { rings: [tipRing(c, ccw([[0, R], [-w, R - l], [0, notch], [w, R - l]]))], at: notch + 0.3 };
 }
 
 /** A ball, `r` in radius — never so small it does not read as a ball on its stem. */
@@ -549,37 +621,77 @@ const DESIGNS: Record<FlakeId, (c: Ctx) => Design> = {
 
 // ------------------------------------------------------------------ the flake --
 
-/** Design `id` at `diameter` mm, drawn: its wood (no fillets yet) and its windows. */
-function drawn(id: string, diameter: number) {
+/** Design `id` at `diameter` mm, drawn: its hub, its six arms (no fillets yet) and its windows.
+ *  With `cut`, the arms are drawn as cut-outs. */
+function drawn(id: string, diameter: number, cut = false) {
   const R = diameter / 2;
-  const c: Ctx = { R, ws: WIDTHS.spine, wb: WIDTHS.branch, web: WIDTHS.web };
+  const c: Ctx = { R, ws: WIDTHS.spine, wb: WIDTHS.branch, web: WIDTHS.web, cut };
   const d = DESIGNS[flakeId(id)](c);
   const hub = d.hub.solid ?? [grow(d.hub.outline!, c.web / 2)];
-  const arm = [stroke([0, d.hub.from * R], [0, d.tip.at], c.ws), ...d.tip.rings, ...d.arm];
-  const wood: Ring[] = [];
   const windows: Ring[] = [...(d.hub.centre ?? [])];
-  for (let k = 0; k < 6; k++) {
-    const t = (r: Ring) => r.map((p) => turn(p, (k * Math.PI) / 3));
-    wood.push(...arm.map(t));
-    windows.push(...d.hub.cells.map(t));
-  }
-  return { R, hub, wood, windows };
+  for (let k = 0; k < 6; k++) windows.push(...d.hub.cells.map((r) => r.map((p) => turn(p, (k * Math.PI) / 3))));
+  // As wood the spine grows out of the hub; cut out, it starts where a web of wood is left
+  // between it and every window, that end round. Its far end stays square, buried in the tip as
+  // the wood's is: a round one would show between the tip's back edges as a bulge.
+  const spine = cut
+    ? capsule([0, clearStart(windows, d.hub.from * R, d.tip.at, c)], [0, d.tip.at], c.ws, true, false)
+    : stroke([0, d.hub.from * R], [0, d.tip.at], c.ws);
+  const arm = [spine, ...d.tip.rings, ...d.arm];
+  const arms = [0, 1, 2, 3, 4, 5].map((k) => arm.map((r) => r.map((p) => turn(p, (k * Math.PI) / 3))));
+  return { R, hub, arms, wood: arms.flat(), windows };
+}
+
+/** The distance from the segment `a`–`b` to the ring's outline (0 where they cross). */
+function segRingGap(a: Pt, b: Pt, ring: Ring): number {
+  const toSeg = (p: Pt, q: Pt, r: Pt) => {
+    const d = sub(r, q);
+    const t = Math.max(0, Math.min(1, dot(sub(p, q), d) / (dot(d, d) || 1)));
+    return len(sub(p, add(q, d, t)));
+  };
+  return ring.reduce((m, q, i) => {
+    const r = ring[(i + 1) % ring.length]!;
+    const s1 = cross(sub(b, a), sub(q, a)), s2 = cross(sub(b, a), sub(r, a));
+    const s3 = cross(sub(r, q), sub(a, q)), s4 = cross(sub(r, q), sub(b, q));
+    if (s1 > 0 !== s2 > 0 && s3 > 0 !== s4 > 0) return 0;
+    return Math.min(m, toSeg(a, q, r), toSeg(b, q, r), toSeg(q, a, b), toSeg(r, a, b));
+  }, Infinity);
+}
+
+/** The lowest station from `from` (mm up the arm) at which a cut-out spine running to `at` leaves
+ *  at least a web of wood between itself and every window — halved down to a micron. */
+function clearStart(windows: Ring[], from: number, at: number, c: Ctx): number {
+  const ok = (y: number) => windows.every((w) => segRingGap([0, y + c.ws / 2], [0, at - c.ws / 2], w) >= c.web + c.ws / 2 - 1e-6);
+  if (ok(from)) return from;
+  let lo = from, hi = at - c.ws;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (ok(m)) hi = m; else lo = m; }
+  return hi;
 }
 
 const far = (r: Ring) => r.reduce((m, p) => Math.max(m, Math.hypot(p[0], p[1])), 0);
 
-/** Design `id` at `diameter` mm across its arm tips, centred on the origin, one arm up. */
-export function snowflake(id: string, diameter: number): Flake {
-  const { hub, wood, windows } = drawn(id, diameter);
+/**
+ * Design `id` at `diameter` mm across its arm tips, centred on the origin, one arm up — drawn at
+ * `drawnAt` mm in the widths above and scaled to `diameter`. Drawn at its own size it is lace; drawn
+ * smaller and scaled up it is the same design in bolder lines, every gap, window and corner grown
+ * in proportion, so whatever held where it was drawn holds bigger.
+ */
+export function snowflake(id: string, diameter: number, drawnAt = diameter): Flake {
+  const { hub, arms, wood, windows } = drawn(id, drawnAt);
+  const cut = drawn(id, drawnAt, true).arms;
   const all = [...hub, ...wood];
+  const k = diameter / drawnAt;
+  const islands = (rings: Ring[]): Shapes => rings.map((r) => [k === 1 ? r : r.map(([x, y]): Pt => [x * k, y * k])]);
   return {
-    islands: [...all, ...joins(all)].map((r) => [r]),
-    windows: windows.map((r) => [r]),
-    reach: all.reduce((m, r) => Math.max(m, far(r)), 0),
-    hub: windows.reduce((m, r) => Math.max(m, far(r)), 0),
-    spine: WIDTHS.spine,
-    branch: WIDTHS.branch,
-    web: WIDTHS.web,
+    islands: islands([...all, ...joins(all)]),
+    windows: islands(windows),
+    hubWood: islands(hub),
+    arms: arms.map(islands),
+    cutouts: cut.map((rings) => islands([...rings, ...joins(rings, JOIN, undefined, true)])),
+    reach: k * all.reduce((m, r) => Math.max(m, far(r)), 0),
+    hub: k * windows.reduce((m, r) => Math.max(m, far(r)), 0),
+    spine: k * WIDTHS.spine,
+    branch: k * WIDTHS.branch,
+    web: k * WIDTHS.web,
   };
 }
 

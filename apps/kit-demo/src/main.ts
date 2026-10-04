@@ -3,6 +3,8 @@ import {
   el,
   toast,
   dialog,
+  splitDialog,
+  section,
   licenseNudge,
   openCommercialModal,
   openLicenseModal,
@@ -38,6 +40,11 @@ import {
   checkbox,
   textareaField,
   openMenu,
+  searchField,
+  sideNav,
+  galleryCard,
+  galleryGrid,
+  fontCards,
   ICONS,
   UI_KIT_VERSION,
 } from '@vostok/ui-kit';
@@ -463,6 +470,56 @@ app.append(
   ),
 );
 
+/* ---------- Catalogue ---------- */
+/* The pieces of a browsable catalogue (Laser Studio's gallery is the first): a live search, a
+   rail of sections with counts, and the compact card. */
+const demoThumb = () => skeleton({ width: '100%', height: '100%' });
+app.append(
+  group('Catalogue'),
+  entry(
+    'searchField()',
+    'Search',
+    'A live filter: magnifier, input, and a clear cross only while there is something to clear; ' +
+      'Escape clears too. No visible label — the placeholder says what can be found.',
+    panel(
+      searchField({ label: 'Search designs', placeholder: 'Search 44 designs — keychain, wedding, QR', onInput: () => {} }),
+    ),
+  ),
+  entry(
+    'sideNav()',
+    'Section rail',
+    'Sections with their counts, a hairline, then shortcuts. Items are list rows; a count of 0 ' +
+      'is muted rather than removed. Below 760 px it becomes one scrolling row of chips.',
+    panel(
+      sideNav({
+        label: 'Categories',
+        value: 'all',
+        sections: [
+          { id: 'cats', items: [{ id: 'all', label: 'All', count: 44 }, { id: 'keychain', label: 'Keychains & charms', count: 11 }, { id: 'tag', label: 'Tags', count: 0 }] },
+          { id: 'recent', title: 'Recently opened', items: [{ id: 'bag-charm', label: 'Bag charm' }], selectable: false },
+        ],
+        onSelect: (id) => toast(id),
+      }),
+    ),
+  ),
+  entry(
+    'galleryCard({ compact: true })',
+    'Compact card',
+    'For a gallery of dozens: the picture is the tile, name and one line beneath, each held to ' +
+      'one line with the full blurb as the tooltip. Pair with galleryGrid({ dense: true }).',
+    panel(
+      galleryGrid({
+        minPx: 150,
+        dense: true,
+        cards: [
+          galleryCard({ name: 'Name keychain', blurb: 'A name with an outline that follows the letters.', thumb: demoThumb(), compact: true, onClick: () => toast('Name keychain') }),
+          galleryCard({ name: 'Bag charm', blurb: 'A monogram, a name or a symbol on a small shape.', thumb: demoThumb(), compact: true, onClick: () => toast('Bag charm') }),
+        ],
+      }),
+    ),
+  ),
+);
+
 /* ---------- Overlays ---------- */
 app.append(
   group('Overlays'),
@@ -490,6 +547,50 @@ app.append(
             actions: [
               { label: 'Keep editing' },
               { label: 'Discard', primary: true, onClick: () => toast('Discarded', { kind: 'warn' }) },
+            ],
+          }),
+      }),
+    ),
+  ),
+  entry(
+    'splitDialog()',
+    'Split dialog',
+    'The two-pane modal: a working surface on the left, its controls on the right, and a footer ' +
+      'that shares the action bar. The stage keeps its own overflow and the control column scrolls ' +
+      'independently, so a long list of settings never scrolls the thing it is settings for off the ' +
+      'screen. Below 900px the panes stack, stage first. openSvgImport() is built on it; so is the ' +
+      'laser keychain’s picture wizard.',
+    row(
+      button({
+        label: 'Open split dialog',
+        onClick: () =>
+          splitDialog({
+            title: 'Prepare picture',
+            stage: emptyState({
+              title: 'The stage pane',
+              body: 'A canvas, a preview, a pair of pictures — whatever the window exists to show.',
+              icon: ICONS.image,
+            }),
+            controls: section({
+              title: 'PICTURE',
+              body: [
+              segmentedControl({
+                label: 'Mode',
+                options: [
+                  { value: 'photo', label: 'Photo' },
+                  { value: 'lineart', label: 'Line art' },
+                ],
+                value: 'photo',
+              }),
+              sliderRow({ label: 'Brightness', min: -100, max: 100, value: 0 }),
+              sliderRow({ label: 'Contrast', min: -100, max: 100, value: 0 }),
+              toggleSwitch({ label: 'Invert', help: 'For dark material where the burn goes lighter.' }),
+              ],
+            }),
+            footer: el('span', { className: 'vl-hint', text: 'The footer sits left of the actions.' }),
+            actions: [
+              { label: 'Cancel' },
+              { label: 'Confirm', primary: true, onClick: () => toast('Confirmed', { kind: 'ok' }) },
             ],
           }),
       }),
@@ -570,6 +671,26 @@ app.append(
 const fakeParams = { size: 42, style: 'rounded', text: 'VOSTOK' };
 app.append(
   group('Sharing & export'),
+  entry(
+    'fontCards()',
+    'Font cards',
+    'The curated font grid: the user\'s own word set in each face, two to a row, the chosen one ' +
+      'outlined. The short list that sits in a panel; "Browse all" opens fontPicker() for the rest. ' +
+      'The name keychain hand-rolled this as .nk-font-card; the classes moved into the kit, the function did not — until now.',
+    el('div', { className: 'kit-sidebar-frame' }, [
+      fontCards({
+        fonts: [
+          { id: 'serif', label: 'Serif', family: 'Georgia, serif' },
+          { id: 'sans', label: 'Sans', family: 'system-ui, sans-serif' },
+          { id: 'mono', label: 'Mono', family: 'ui-monospace, monospace' },
+          { id: 'cursive', label: 'Cursive', family: 'cursive' },
+        ],
+        value: 'sans',
+        sample: 'Name',
+        onChange: (id) => toast(`Font: ${id}`),
+      }),
+    ]),
+  ),
   entry(
     'presetShareButton() · offlineDownloadButton()',
     'Share & offline',

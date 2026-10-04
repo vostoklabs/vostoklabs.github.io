@@ -3,20 +3,26 @@
 // file, so there is no class of bug that can hide between the preview and the export.
 
 import { el } from '@vostok/ui-kit';
-import type { Pt, SolveResult } from '../types';
+import type { Op, Pt, SolveResult } from '../types';
 import { OP_COLOR, collectPaths, explodeDashes } from '../export/paths';
 import { sheetById } from '../geometry/solve';
 import { bboxOf } from '../geometry/poly';
 
 export interface FlatView {
   root: HTMLElement;
-  render(result: SolveResult, opts: { showLabels: boolean; showSheet: boolean }): void;
+  /** Returns the operations this drawing contains, so the legend is built from what is on
+   *  screen rather than from a second guess at it. A legend that lists a colour the file
+   *  does not use, or leaves one out, is the same class of bug as a preview that disagrees
+   *  with the export — and it was both: three fixed chips with the colours written out by
+   *  hand, no chip for the logo, and "Film" listed on every box whether or not one had a
+   *  window. */
+  render(result: SolveResult, opts: { showLabels: boolean; showSheet: boolean }): Set<Op>;
 }
 
 export function createFlatView(): FlatView {
   const root = el('div', { className: 'fb-flat' });
 
-  function render(result: SolveResult, opts: { showLabels: boolean; showSheet: boolean }): void {
+  function render(result: SolveResult, opts: { showLabels: boolean; showSheet: boolean }): Set<Op> {
     const { net, params } = result;
     const sheet = sheetById(params.sheetId);
     // Dashes become real geometry here for the same reason they do in the file: the
@@ -68,8 +74,32 @@ export function createFlatView(): FlatView {
       );
     }
 
+    // The logo, as one filled shape per mark rather than a stroke per ring, so a
+    // letter's counter reads as a hole and not as a second disc. Above the panel wash,
+    // under the cut and fold lines. Drawn in the theme's ink rather than the file's
+    // ENGRAVE black, which disappears on a dark stage. A printed sheet's marks are on
+    // the UNDERSIDE and stored mirrored: the dieline is the file, so they are shown
+    // where the file has them, just fainter — they are not on the face you are seeing.
+    const under = net.markFace === 'bottom';
+    for (const m of net.marks) {
+      if (m.rings.length) {
+        out.push(
+          `<path d="${m.rings.map((r) => d(r, true)).join(' ')}" fill-rule="evenodd" ` +
+            `class="fb-flat__mark${under ? ' fb-flat__mark--under' : ''}"/>`,
+        );
+      }
+      for (const l of m.lines) {
+        if (l.length < 2) continue;
+        out.push(
+          `<path d="${d(l, false)}" class="fb-flat__mark-line${under ? ' fb-flat__mark--under' : ''}"/>`,
+        );
+      }
+    }
+
     for (const path of paths) {
       if (path.points.length < 2) continue;
+      // The marks are drawn above, filled. The same rings arrive here as ENGRAVE paths.
+      if (path.op === 'engrave') continue;
       const colour = OP_COLOR[path.op];
       const w = path.op === 'cut' ? 0.9 : 0.7;
       out.push(
@@ -105,6 +135,8 @@ export function createFlatView(): FlatView {
       `role="img" aria-label="Flat dieline, ${result.netSizeMm[0].toFixed(0)} by ${result.netSizeMm[1].toFixed(0)} millimetres">` +
       out.join('') +
       '</svg>';
+
+    return new Set(paths.filter((p) => p.points.length >= 2).map((p) => p.op));
   }
 
   return { root, render };
@@ -170,6 +202,15 @@ export function styleIcon(id: string): string {
         `<path d="M6 32V20h36v12z"/><path d="M6 20l5-5h26l5 5"/>` +
           `<path d="M8 15l4-11h24l4 11"/><path d="M12 4l-4 11" ${dash}/>` +
           `<line x1="12" y1="15" x2="12" y2="32" ${dash}/>`,
+      );
+    // A shallow single-wall tray with the lid standing up off the back, and the two
+    // claw slits in the wall — which is the one feature that tells this apart from the
+    // hinged lid above it at icon size.
+    case 'cake-box':
+      return s(
+        `<path d="M6 32V22h36v10z"/><path d="M6 22l5-4h26l5 4"/>` +
+          `<path d="M11 18l3-10h20l3 10"/><line x1="14" y1="8" x2="34" y2="8" ${dash}/>` +
+          `<line x1="11" y1="27" x2="16" y2="27"/><line x1="32" y1="27" x2="37" y2="27"/>`,
       );
     case 'sleeve':
       return s(

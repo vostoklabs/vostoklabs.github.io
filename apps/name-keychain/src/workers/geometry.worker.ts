@@ -33,7 +33,7 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
     }
 
     if (msg.type === 'build') {
-      const { parts, warnings } = buildKeychain(wasm, msg.textContours, msg.params);
+      const { parts, outline, warnings } = buildKeychain(wasm, msg.textContours, msg.params);
 
       // Collect transferables (Float32Array and Uint32Array buffers)
       const transfer: Transferable[] = [];
@@ -41,7 +41,7 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
         transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
       }
 
-      post({ type: 'parts', parts, warnings }, transfer);
+      post({ type: 'parts', parts, outline, warnings }, transfer);
       return;
     }
   } catch (err) {

@@ -9,13 +9,14 @@
 // the clamps are the interesting part.
 
 import type { BoxParams, HangHole, HangTab, LoosePart, Panel, Poly, Pt, Slit, StyleParts } from '../types';
-import { arcPoints, bboxOf, rect, roundCorners, roundedRect, stadium, translate } from './poly';
+import { bboxOf, rect, roundCorners, roundedRect, stadium, translate } from './poly';
 import { slotFit } from './fit';
 import { machineById } from './solve';
 import {
   HALF,
   HANG_EDGE_MM,
   clamp,
+  clawTray,
   closure,
   dustDepth,
   dustFlap,
@@ -119,8 +120,6 @@ export interface StyleMeta {
     glue?: boolean;
     /** A handle whose height is worth a slider. */
     handle?: boolean;
-    /** Hand holes cut through a wall, on or off. */
-    handHoles?: boolean;
     /** A sloped roof, so the pitch is worth a slider. */
     roof?: boolean;
     divider?: boolean;
@@ -174,7 +173,7 @@ const tubeFaces = (prefix: string): { id: string; label: string }[] => [
  *  put the window and the artwork on the face that faces out. The two long walls are
  *  offered as well; on a shallow box `applyWindow` will report that they are too small
  *  rather than refusing. The rolled ends are not: an aperture there has to register
- *  through two plies, which is the hand hole's job and a different piece of geometry. */
+ *  through two plies, and nothing in a mailer cuts one. */
 const MAILER_FACES = [
   { id: 'ml-lid', label: 'Lid (top)' },
   { id: 'ml-base', label: 'Base (bottom): the face out when it hangs' },
@@ -226,6 +225,35 @@ const MAILER_FLAPS_X61: EcmaRef = {
   reads: `${MAILER_X61.reads} · X32 "tuck in closure with locking lugs"`,
 };
 
+/** The cake box, with wings and without.
+ *
+ *  Both halves of the code are drawn at the plate (p.37), which makes this the best
+ *  anchored Group B entry in the app: basic shape 15 is the unglued tray with four
+ *  SINGLE walls, 06 is the claw lock, and 53 is the three-winged cover with open
+ *  corners. The one thing the plate does not do is dimension the claw, and ECMA says
+ *  so itself (p.4) — so that part is ours and the note says which part.
+ *
+ *  The wings are not decoration: three of them is a 53 and one of them is a 50, so a
+ *  box that quietly dropped its wings while still reporting 53 would be exactly the
+ *  false provenance claim the style table exists to prevent. */
+const CAKE_53: EcmaRef = {
+  code: 'B15.06.00.53',
+  reads:
+    'unglued tray with 4 SINGLE walls · locking flaps system with CLAW LOCK · no dust flaps · 3-winged flap cover with OPEN corners',
+  basis: 'catalogue',
+  page: 37,
+  note:
+    'The tray and the cover are both drawn at this code. What the plate does not dimension is the claw itself — ECMA’s own p.4 covers that: "some details … are not specified or shown". So the prong, its barb, the height the slit sits at and the length it is cut to are ours, derived in caliper: the prong stops 2t + relief clear of the folded floor, the slit is the prong’s width plus one slot fit, and the barb is a 45 degree step wider than the slit, so the prong has to be fed in tip first and cannot be pulled straight back. Under about 10 mm of wall there is no room for a hook worth the name; the corner then closes without catching and the assembly sheet says so rather than drawing a notch too shallow to hold.',
+};
+const CAKE_50: EcmaRef = {
+  code: 'B15.06.00.50',
+  reads:
+    'unglued tray with 4 single walls · claw lock · no dust flaps · tuck-in flap cover, one flap rather than three',
+  basis: 'constructed',
+  note:
+    'What the same tray reports when the box is too shallow or too narrow to carry a side wing: a wing under 8 mm braces nothing, so it is not drawn, and a cover with one flap instead of three is ECMA cover 50 rather than 53. Taken from the Group B matrix (p.34) rather than from a plate; the tray half is still the catalogued B15.06. Note that it also changes the LID: without wings to bring down inside the end walls, the deck caps OVER them instead of nesting in the rim.',
+};
+
 export const STYLES: StyleMeta[] = [
   {
     id: 'mailer',
@@ -251,7 +279,7 @@ export const STYLES: StyleMeta[] = [
     // No `tuck` — the tuck is full-depth by construction and reads nothing from the
     // tuck sliders. Showing them here is what "the settings make no sense" means:
     // three controls that move and change nothing.
-    uses: { handHoles: true, window: true, hangTab: true, hangEnd: true, lidWings: true },
+    uses: { window: true, hangTab: true, hangEnd: true, lidWings: true },
   },
   {
     id: 'mailer-flaps',
@@ -275,7 +303,7 @@ export const STYLES: StyleMeta[] = [
     outerPieces: 1,
     hangModes: MAILER_HANG,
     windowFaces: MAILER_FACES,
-    uses: { handHoles: true, window: true, hangTab: true, hangEnd: true, lidWings: true },
+    uses: { window: true, hangTab: true, hangEnd: true, lidWings: true },
   },
   {
     id: 'tray',
@@ -347,6 +375,24 @@ export const STYLES: StyleMeta[] = [
     },
     outerPieces: 1,
     uses: { lid: true, window: true },
+  },
+  {
+    id: 'cake-box',
+    name: 'Cake box',
+    short: 'Cake box',
+    blurb:
+      'The pastry-shop box. Four single walls that claw-lock at the corners, and a lid hinged off the back that tucks in at the front and wings down inside both ends.',
+    glueFree: true,
+    ecma: CAKE_53,
+    variants: [{ when: (p) => cakeWingDepth(p) === 0, ecma: CAKE_50 }],
+    outerPieces: 1,
+    windowFaces: [
+      { id: 'cb-lid-lid', label: 'Lid (top)' },
+      { id: 'cb-front', label: 'Front wall' },
+    ],
+    // No hand hole: feature 4 is for the tube cartons, and a grip torn through a
+    // single ply of card is a grip that tears through a single ply of card.
+    uses: { tuck: true, window: true },
   },
   {
     id: 'tuck-top',
@@ -897,6 +943,138 @@ function buildFlapCover(p: BoxParams): StyleParts {
   };
 }
 
+// ─────────────────────────── cake box (B15.06.00.53) ───────────────────────────
+
+/** A wing under this holds nothing: it is board you cut, fold and then watch the lid
+ *  lift at the ends anyway. */
+const MIN_WING_MM = 8;
+
+/** How deep the cover's two side wings hang, or 0 when there is no room for one worth
+ *  having.
+ *
+ *  A function of the box rather than a number inside the builder, because the ECMA
+ *  VARIANT reads it too: three wings is cover 53 and one is cover 50, and the code
+ *  reported has to follow the box that was actually built. Depth is the shorter of
+ *  what the wall can hold and what the lid's own depth allows — a wing longer than the
+ *  box is deep cannot come down inside it at all. */
+function cakeWingDepth(p: BoxParams): number {
+  const { W, H } = insideDims(p);
+  const d = Math.min(H * 0.6, W * 0.4);
+  return d >= MIN_WING_MM ? d : 0;
+}
+
+/** The bakery box: `clawTray` with ECMA cover system 53 hinged onto it.
+ *
+ *  Why it is here at all: everything else glue-free in this app is a double-walled
+ *  roll-end structure, and a cake box is not. It is the cheap single-wall tray — four
+ *  plain walls held square by a claw at each corner — with a lid hinged off the back
+ *  that tucks into the front and wings down inside the two ends. Half the board of a
+ *  mailer for the same inside size, which is the entire reason a bakery uses it.
+ *
+ *  The tray is in `primitives.ts` with its relatives; what is here is the cover, and
+ *  the one decision in it worth spelling out is how wide the deck is. */
+function buildCakeBox(p: BoxParams): StyleParts {
+  const { L, W, H } = insideDims(p);
+  const t = p.caliperMm;
+  const g = relief(t);
+  // ONE ply goes through the claw's slit — the prong, and nothing else ever will.
+  // Handing this two would cut the slit at twice the fit and the barb would pull
+  // straight back through it.
+  const fit = slotFit(p, machineById(p.machineId), t);
+
+  const x0 = H + 2;
+  const y0 = H + 2;
+  const tray = clawTray({ prefix: 'cb-', labelPrefix: '', L, W, H, t, x: x0, y: y0, fit });
+  const { BL, BW, wallH } = tray;
+
+  // ── cover 53: a deck, a tuck at the front, a wing at each end ──
+  //
+  // The wings decide the deck's size, and it is the mailer's lesson one style later: a
+  // wing hinges on the deck's own SHORT edge, so that edge has to land INSIDE the end
+  // wall for the wing to come down against it. Hinge it on an overhanging edge and the
+  // wing lands outside the box, clamping it rather than bracing it, which is the one
+  // thing the second and third wing are for.
+  //
+  // Inside by how much: a wall and a claw, which is exactly `layerStep(t)`, plus the
+  // slot fit the wing itself needs to pass. With no wings there is nothing to nest and
+  // the deck caps OVER the walls instead, one caliper proud — which is how ECMA draws
+  // cover 50, and why dropping the wings changes the code.
+  const wingD = cakeWingDepth(p);
+  const deckW = wingD > 0 ? Math.max(10, BL - 2 * layerStep(t) - 2 * fit.widthMm) : BL + t;
+  const deckX = wingD > 0 ? x0 + (BL - deckW) / 2 : x0 - t / 2;
+
+  const cover = closure({
+    prefix: 'cb-lid-',
+    parent: 'cb-back',
+    x: deckX,
+    y: y0 + BW + wallH,
+    w: deckW,
+    // The span the deck has to cross to reach the front wall. `closure` takes its own
+    // caliper term off that, so the deck's far crease lands on the front wall's INNER
+    // face and the tuck drops straight down behind it instead of over its edge.
+    depth: BW,
+    tuck: tuckDepth(W, H, p.tuckDepthMm),
+    t,
+    up: true,
+    lock: p.tuckLock,
+    thumbNotch: p.thumbNotch,
+    label: 'lid',
+    // Walls at 1, claws at 2, the deck over at 3 — and `closure` bends the tuck in at
+    // 2, the stage before the panel it hangs off, which is the order a hand does it in.
+    order: 3,
+  });
+
+  const panels: Panel[] = [...tray.panels, ...cover.panels];
+
+  if (wingD > 0) {
+    // Measured off the deck that was actually built rather than re-deriving `closure`'s
+    // own depth term here. A formula in two places is a formula that will not be kept
+    // in step, and the wings would silently stop matching the deck they hang from.
+    const deck = cover.panels[0] as Panel;
+    const [dx0, dy0, dx1, dy1] = bboxOf([deck.outline]);
+    // Chamfered on the leading corner — the one that meets the rim first as the lid
+    // comes down. A square corner catches on the wall and levers the wing back out.
+    const wingCh = Math.min(wingD * 0.35, Math.max(0, (dy1 - dy0 - 2 * g) * 0.25));
+    const wing = (id: string, hx: number, dirX: 1 | -1): Panel => ({
+      id,
+      label: 'lid wing',
+      role: 'flap',
+      outline: [
+        [hx, dy0 + g],
+        [hx + dirX * wingD, dy0 + g + wingCh],
+        [hx + dirX * wingD, dy1 - g - wingCh],
+        [hx, dy1 - g],
+      ],
+      holes: [],
+      parent: deck.id,
+      foldAngle: HALF,
+      // With the lid, not after it: by hand the wings are pinched in as it goes down.
+      order: 4,
+      undershoot: 0.04,
+    });
+    panels.push(wing('cb-wing-l', dx0, -1), wing('cb-wing-r', dx1, 1));
+  }
+
+  return {
+    panels,
+    slits: [...tray.slits, ...cover.slits],
+    rootId: 'cb-base',
+    loose: [],
+    assembly: [
+      'Stand all four walls up. The two long ones first: the ends close onto them.',
+      tray.locks
+        ? 'Fold each corner claw in flat against the inside of the end wall, and feed the prong on it out through the slit above the floor, tip first. The step on the prong is wider than the slit, so it takes a push — and once it is through, that step is behind the board and the corner cannot open. Four of those and the tray holds itself square: nothing glued, and nothing standing proud under the floor for it to rock on.'
+        : 'Fold each corner tab in flat against the inside of the end wall. There is no room for a prong on a wall this shallow, so the corners close but do not catch: tape them, or make the box taller and the claw lock comes back.',
+      'Fold the lid over from the back and slide its front flap down inside the front wall.',
+      ...(wingD > 0
+        ? [
+            'The lid nests inside the rim rather than capping over it, so bring it down square and pinch the two end wings inward as it goes: the chamfered corners are what lets them find their way past the walls. Once they are in, the lid cannot lift at the ends.',
+          ]
+        : []),
+    ],
+  };
+}
+
 // ───────────────────────────────── tray & lid ─────────────────────────────────
 
 function buildTrayLid(p: BoxParams): StyleParts {
@@ -1000,6 +1178,7 @@ function buildTuckTop(p: BoxParams): StyleParts {
     lock: p.tuckLock,
     thumbNotch: p.thumbNotch,
     label: 'top',
+    order: 5,
   });
   const bottom = closure({
     prefix: 'tt-bot-',
@@ -1016,6 +1195,7 @@ function buildTuckTop(p: BoxParams): StyleParts {
     lock: p.tuckLock === 'none' ? 'none' : 'slit',
     thumbNotch: false,
     label: 'bottom',
+    order: 5,
   });
   panels.push(...top.panels, ...bottom.panels);
   slits.push(...top.slits, ...bottom.slits);
@@ -1024,9 +1204,11 @@ function buildTuckTop(p: BoxParams): StyleParts {
     [right, s[1]],
     [left, s[3]],
   ] as const) {
+    // Stage 4: the walls take 1 to 3 to wrap, and a flap on the last wall must not
+    // fold until that wall is down.
     panels.push(
-      dustFlap(`${wall.id}-dt`, 'dust flap', wall.id, span.x, H, span.w, dust, t, true),
-      dustFlap(`${wall.id}-db`, 'dust flap', wall.id, span.x, 0, span.w, dust, t, false),
+      dustFlap(`${wall.id}-dt`, 'dust flap', wall.id, span.x, H, span.w, dust, t, true, 4),
+      dustFlap(`${wall.id}-db`, 'dust flap', wall.id, span.x, 0, span.w, dust, t, false, 4),
     );
   }
 
@@ -1078,6 +1260,7 @@ function buildSnapLock(p: BoxParams): StyleParts {
     lock: p.tuckLock,
     thumbNotch: p.thumbNotch,
     label: 'top',
+    order: 5,
   });
   panels.push(...top.panels);
   slits.push(...top.slits);
@@ -1086,12 +1269,13 @@ function buildSnapLock(p: BoxParams): StyleParts {
     [right, s[1]],
     [left, s[3]],
   ] as const) {
-    panels.push(dustFlap(`${wall.id}-dt`, 'dust flap', wall.id, span.x, H, span.w, dust, t, true));
+    panels.push(dustFlap(`${wall.id}-dt`, 'dust flap', wall.id, span.x, H, span.w, dust, t, true, 4));
   }
 
   // The base is the shared self-locking envelope (ECMA closure 55) — the same
   // structure the gable carton stands on, which is why it lives in `primitives`.
-  const base = envelopeBottom({ prefix: 'sl-', walls: body.walls, spans: s, L, W, t, y: 0 });
+  // Stages 4 to 6, after the three the walls take to wrap.
+  const base = envelopeBottom({ prefix: 'sl-', walls: body.walls, spans: s, L, W, t, y: 0, order: 4 });
   panels.push(...base.panels);
   slits.push(...base.slits);
 
@@ -1165,16 +1349,10 @@ function buildMailer(p: BoxParams): StyleParts {
     foldAngle: 0,
   };
 
-  // One hand hole per end, cut through BOTH plies of the roll at the same distance
-  // from the fold, so they line up into a single lined hole once it is rolled.
-  const hand = p.handHoles
-    ? { w: clamp(BW * 0.42, 40, 95), h: clamp(H * 0.3, 14, 26) }
-    : null;
-
   const fit = slotFit(p, machineById(p.machineId), t);
   const rolls = [
-    rollEnd({ prefix: 'ml-l', parent: base.id, x: 0, y0: 0, y1: BW, dir: -1, H, t, hand, order: 3, fit }),
-    rollEnd({ prefix: 'ml-r', parent: base.id, x: BL, y0: 0, y1: BW, dir: 1, H, t, hand, order: 3, fit }),
+    rollEnd({ prefix: 'ml-l', parent: base.id, x: 0, y0: 0, y1: BW, dir: -1, H, t, order: 3, fit }),
+    rollEnd({ prefix: 'ml-r', parent: base.id, x: BL, y0: 0, y1: BW, dir: 1, H, t, order: 3, fit }),
   ];
   base.holes = rolls.flatMap((r) => r.slots);
 
@@ -1523,61 +1701,57 @@ function buildGable(p: BoxParams): StyleParts {
   // the angle between "straight up" and the line from the wall top to the ridge.
   const roofFold = HALF - pitch;
 
-  // A handle taller than the box it stands on is not a handle, it is a flag. The
-  // slider runs to 140 for a basket tray's grip; here it is capped on L as well.
-  const blade = clamp(p.handleHeightMm, 20, Math.min(120, Math.max(20, L * 0.9)));
-  const topY = ridgeY + blade;
-  /** The notch arc's centre in NET coordinates: the ear's hinge, seen from the blade. */
-  const arcY = ridgeY - rise;
-
-  // The seat angle. NOT a taste decision: because the shoulder is radial, by the time
-  // it reaches the blade's top edge it has already come (rise + blade)·tan(lean) in
-  // from the end of the box — and two of those plus a strap between them is the whole
-  // wall. So the wall fixes the angle, and 35° is only ever the ceiling. (35° is what
-  // the trade draws; below about 15° the ear stands too near vertical for its slot to
-  // find a blade standing on the ridge at all.)
-  const LEAN_MAX = (35 * Math.PI) / 180;
-  const LEAN_MIN = (15 * Math.PI) / 180;
-  const DRAFT = (5 * Math.PI) / 180;
-  const lean = clamp(Math.atan2(s[0].w * 0.34, rise + blade), LEAN_MIN, LEAN_MAX);
-  /** How much comes off each end of the roof, and where the blade's base corner lands
-   *  on the ear's swing circle. Both are the same radius — the gable opening's edge is
-   *  itself radial, which is why the ear seats flush against the roof. */
-  const cut = rise * Math.tan(lean);
+  // The handle strip and the locking ears, re-derived on 2026-09-17 from a commercial
+  // gable gift-box dieline measured live at 315 × 202 × 62 on 1.5 mm board (the template
+  // vendor's own validation messages gave away the two relations the drawing alone did
+  // not). Nothing was copied: every term below is in L, W, H, caliper and the handle
+  // height, and the constants are proportions read off that one template. What it
+  // settled, against what this file used to draw:
+  //
+  //   · the ear leans in at 35° from vertical, ALWAYS. The roof's cut-back is that same
+  //     35° line, and so is the strip's locking edge: cut corner, notch and top corner
+  //     all sit on ONE line at 35°, which is the line the ear's plane contains. The old
+  //     derivation moved the lean with the wall width and swept the notch on an arc.
+  //   · the strip is a narrow, tall panel, not a blade as wide as the roof. Its lock
+  //     edge runs up AND in at 35° from the roof's cut corner, so it narrows by
+  //     2·tan 35° per millimetre of height, and the hand hole sits low in the wide part.
+  //   · the hook is a HORN standing outside that line, between the ridge and a notch
+  //     0.65 of the way up. The ear's slot ends at the notch: the horn passes through
+  //     the slot as the ear comes down, and its underside then overhangs the slot's
+  //     end. That overhang is the lock.
+  //   · the ear is a tall peaked flap with a small flat apex a strap's width above the
+  //     slot, not a stub reaching just past the ridge.
+  const lean = (35 * Math.PI) / 180;
+  const TAN = Math.tan(lean);
+  /** How much comes off each end of the roof: the 35° line from the eave corner reaches
+   *  the ridge this far in. The ear's plane contains that line, so the ear seats flush
+   *  against the roof's cut edge. */
+  const cut = rise * TAN;
   const toRidge = rise / Math.cos(lean);
 
-  // How much blade the ear swallows once it is home. Most of it — floored so a short
-  // handle still locks, and capped so the step stays below the blade's top edge.
-  const seat = clamp(blade * 0.6, 10, Math.max(10, blade - 4));
-  const maxReach = (rise + blade) / Math.cos(lean) - 3;
-  const reach = Math.min(toRidge + seat, maxReach);
-  const yEdge = arcY + Math.sqrt(Math.max(1, reach * reach - cut * cut));
-  const aEdge = Math.asin(clamp(cut / reach, -1, 1));
-  const stepIn = reach * Math.sin(lean);
-  const stepY = arcY + reach * Math.cos(lean);
-  /** Where the radial shoulder has got to by the blade's top edge. */
-  const topIn = stepIn + Math.max(0, topY - stepY) * Math.tan(lean + DRAFT);
-  /** Is there a lock here at all? Below MIN_SEAT_MM of engagement, or once the two
-   *  shoulders have eaten the strap between them, there is not — and then the ear
-   *  still closes the gable end but it is a cover, not a catch. Saying so beats
-   *  drawing a notch too shallow to hold and letting the box open in someone's hand. */
-  const MIN_SEAT_MM = 4;
-  const locks = reach >= toRidge + MIN_SEAT_MM && 2 * topIn <= s[0].w * 0.86;
-  // Arc segments per notch, at a fixed segment LENGTH rather than a fixed count. A
-  // count is what fixes the chord error on a big box and then, on a small one, hands
-  // `roundCorners` a 0.17 mm neighbour to clamp the step fillet against — which is
-  // under the printed sheet's own weld tolerance, so the fillet collapses to a stack
-  // of coincident points and the 3MF comes out with degenerate triangles in it. The
-  // dieline looks perfect either way; only the mesh knows.
-  const arcLen = reach * Math.max(0, lean - aEdge);
-  const AN = Math.max(4, Math.min(16, Math.round(arcLen / 2.5)));
-  /** Fillet for the blade's two TOP corners. The step below them is deliberately left
-   *  sharp: it is a reflex corner, and `roundCorners` fillets a reflex corner by
-   *  bulging it OUTWARD — straight into the arc the ear's slot end has to travel down.
-   *  Rounded to 1.2 mm there, the bulge measured 0.74 mm into the ear's path, which is
-   *  most of a card thickness of interference in the one place the box has to click
-   *  shut. It reads as a nicety in the dieline and is a jam in the hand. */
-  const topFillet = Math.min(6, (topY - stepY) / 3);
+  // The strip's height. Capped where its top would narrow to nothing: the lock edges
+  // close in at 2·tan 35° per millimetre of height, and the template keeps a top edge a
+  // third of the box long. The slider runs to 140 for a basket tray's grip; a strip that
+  // tall on a short box is a flag, so it is capped on L as well.
+  const hwMax = (s[0].w - 2 * cut - 2 * t - Math.max(20, L * 0.3)) / (2 * TAN);
+  /** No strip at all when there is no room for one 20 mm tall: the roof still closes
+   *  and the ears still cover the ends, but a 50 mm box has no handle. Forcing one in
+   *  made the strip's two lock edges cross above the ridge, and a crossed ring derives
+   *  as a zero-length crease. */
+  const blade = hwMax >= 20 ? clamp(p.handleHeightMm, 20, Math.min(120, Math.max(20, L * 0.9), hwMax)) : 0;
+  const topY = ridgeY + blade;
+  /** The notch: 0.65 of the strip up, on the 35° line (55 of 85 on the template). */
+  const notchH = blade * 0.65;
+  /** Where the 35° lock line has got to at height `h` above the ridge, in from the
+   *  roof's cut corner. */
+  const lockIn = (h: number): number => cut + h * TAN;
+  /** Is there a lock at all? The slot has to run from below the ridge corner to the
+   *  notch; under 8 mm of that there is nothing for the horn to hook, and then the ear
+   *  still closes the gable end but it is a cover, not a catch. Saying so beats drawing
+   *  a notch too shallow to hold and letting the box open in someone's hand. */
+  const slotLead = clamp(blade * 0.15, 5, 15);
+  const slotLen = (rise + notchH) / Math.cos(lean) - (toRidge - slotLead);
+  const locks = blade >= 20 && slotLen >= 8;
 
   // ── roof + handle blade on each L wall ──
   for (const i of [0, 2] as const) {
@@ -1600,101 +1774,103 @@ function buildGable(p: BoxParams): StyleParts {
       holes: [],
       parent: (body.walls[i] as Panel).id,
       foldAngle: roofFold,
-      order: 2,
+      // Stage 4 for the roof and the blades, 5 for the ears: the walls take 1 to 3
+      // to wrap, and nothing above them may fold before the last wall is down.
+      order: 4,
     });
 
-    const ring: Poly = locks
-      ? [
-          [x0 + cut, ridgeY],
-          [x1 - cut, ridgeY],
-          // Right notch: in along the swing circle from the blade's edge to the step,
-          // then back out on the radial shoulder to the top.
-          ...arcPoints(x1, arcY, reach, HALF + aEdge, HALF + lean, AN),
-          [x1 - topIn, topY],
-          [x0 + topIn, topY],
-          ...arcPoints(x0, arcY, reach, HALF - lean, HALF - aEdge, AN),
-        ]
-      : [
-          [x0 + cut, ridgeY],
-          [x1 - cut, ridgeY],
-          [x1 - cut, topY],
-          [x0 + cut, topY],
-        ];
-    // Only the corners that are actually corners get filleted; the notches are already
-    // arcs. The two step corners are CONCAVE, which is where card tears.
-    const radii = ring.map(() => 0);
-    if (locks) {
-      radii[3 + AN] = topFillet;
-      radii[4 + AN] = topFillet;
-    } else {
-      radii[2] = Math.min(10, blade / 3);
-      radii[3] = Math.min(10, blade / 3);
-    }
+    // The strip, traced anticlockwise from the ridge. Each side is: the horn flaring a
+    // hair OUTWARD from the cut corner (0.07 of the height, at 0.81 up), over its
+    // rounded tip, down its underside to the notch on the lock line, then up the lock
+    // line to the top. Above the notch the edge runs one caliper INSIDE the lock line:
+    // that is the clearance between the strip's edge and the ear that slides down past
+    // it, and it keeps the two from sharing a plane in the mesh.
+    const horn = (xc: number, dir: 1 | -1): Poly =>
+      locks
+        ? [
+            [xc, ridgeY],
+            [xc - dir * blade * 0.07, ridgeY + blade * 0.81],
+            [xc + dir * blade * 0.01, ridgeY + blade * 0.87],
+            [xc + dir * (lockIn(notchH) - cut), ridgeY + notchH],
+            [xc + dir * (lockIn(blade) - cut + t), topY],
+          ]
+        : [
+            [xc, ridgeY],
+            [xc + dir * (lockIn(blade) - cut + t), topY],
+          ];
+    const left = horn(x0 + cut, 1);
+    const right = horn(x1 - cut, -1);
+    const ring: Poly = [...left, ...[...right].reverse()];
+    // The horn's tip is rounded, the notch is deliberately SHARP (it is the catch), and
+    // the top corners take a small radius. A fillet on the notch would be a reflex
+    // corner bulging into the very path the slot's end has to travel down.
+    const rHorn = Math.min(5, blade * 0.06);
+    const rTop = Math.min(4, blade * 0.05);
+    const radii = locks
+      ? [0, rHorn, rHorn, 0, rTop, rTop, 0, rHorn, rHorn, 0]
+      : [0, rTop, rTop, 0];
 
-    // The hand hole lives in the WIDE part of the blade — below the step, where the
-    // notches have not reached yet — and clear of the ridge crease under it. Its top
-    // stops at the step for the same reason a tray's grip stops short of the rim: a
-    // hole that runs into the narrow part tears out the first time it is carried.
-    // Stopping a hair below the step rather than exactly on it: level with it, the
-    // hole's corner and the blade's shoulder share a y and the hole bridge the
-    // triangulator inserts between them comes out as a zero-area sliver.
-    const holeTop = Math.min(locks ? stepY - 2 : topY - 8, topY - 8);
-    const holeBot = ridgeY + Math.max(6, blade * 0.18);
+    // The hand hole sits low in the wide part of the strip: its floor a fixed fraction
+    // of the height above the ridge crease (20 of 85 on the template), its ceiling a
+    // hair under the notch so the hole's corner and the notch never share a y (level, the
+    // bridge the triangulator inserts between them is a zero-area sliver). Its length
+    // is the template's 0.39·L, or what fits between the two lock lines at the ceiling
+    // with a strap either side. Never clamped UP to a floor: a hand hole wider than the
+    // strap it is cut in breaches the outline, and a breached outline derives as a
+    // second blank rather than as an error.
+    const holeBot = ridgeY + blade * 0.235;
+    const holeTop = ridgeY + (locks ? notchH : blade * 0.7) - 1.5;
     const room = holeTop - holeBot;
-    // Width at the hole's ceiling: below `yEdge` the blade is full width, above it the
-    // notch arc is already eating in. Never clamped UP to a floor — a hand hole wider
-    // than the strap it is cut in breaches the outline, and a breached outline derives
-    // as a second blank rather than as an error.
-    const eaten = holeTop <= yEdge ? cut : Math.sqrt(Math.max(0, reach * reach - (holeTop - arcY) ** 2));
-    const holeW = Math.min(span.w * 0.55, span.w - 2 * (locks ? eaten : cut) - 20, 130);
-    panels.push({
+    const strap = Math.max(8, blade * 0.2);
+    const holeW = Math.min(L * 0.39, span.w - 2 * lockIn(holeTop - ridgeY) - 2 * strap, 130);
+    if (blade > 0) panels.push({
       id: `gb-blade${i}`,
       label: 'handle',
       role: 'flap',
       outline: roundCorners(ring, radii),
       holes:
-        room >= 8 && holeW >= 12
-          ? [stadium(x0 + span.w / 2, (holeBot + holeTop) / 2, holeW, clamp(room, 8, 34))]
+        room >= 8 && holeW >= room + 4
+          ? [stadium(x0 + span.w / 2, (holeBot + holeTop) / 2, holeW, clamp(room, 8, 35))]
           : [],
       // The blade rotates back by exactly the roof's own angle, which is what leaves
       // the two blades vertical, parallel and face to face.
       parent: roofId,
       foldAngle: -roofFold,
-      order: 3,
+      // The SAME stage as the roof, on purpose: its fold is the exact negative of the
+      // roof's, so folded together the blade stays parallel to the wall the whole way,
+      // which is what a handle being lifted straight up looks like. A stage later it
+      // trailed the roof and swung 4.5 mm through the plate on the way.
+      order: 4,
     });
   }
 
   // ── locking ear on each W wall ──
   const slotW = Math.max(fit.widthMm, 2 * t + 2 * fit.clearMm);
-  const earLen = reach + Math.max(5, blade * 0.12);
+  /** The slot runs from a lead-in short of the ridge corner to the notch, measured
+   *  along the ear from its hinge: the notch's height over the ear's lean. The extra
+   *  half millimetre puts the notch corner itself inside the slot rather than on its
+   *  end, so the horn's underside, not the corner, is what overhangs. */
+  const slotLo = H + Math.max(3, toRidge - slotLead);
+  const slotHi = H + (rise + notchH) / Math.cos(lean) + 0.5;
+  /** The apex stands a strap's width above the slot (15 of 85 on the template). */
+  const earLen = slotHi - H + Math.max(6, blade * 0.18);
   for (const i of [1, 3] as const) {
     const span = s[i];
     const usable = span.w - 2 * g;
-    // A trapezoid rather than a true triangle: a point leaves no material either side
-    // of a slot that runs almost the whole way to the tip.
-    const tipW = clamp(Math.max(usable * 0.22, slotW + 12), 6, usable);
+    // A peaked flap with a short flat apex rather than a point: a point leaves no
+    // material either side of a slot that runs almost the whole way up (17 of 203 on the
+    // template). Two straight sides from the wall's corners to the apex; the corners
+    // stand proud above the roofline when the ear is home, which is the detail that
+    // makes this box recognisable on a shelf.
+    const tipW = clamp(Math.max(usable * 0.085, slotW + 6), 6, usable);
     const taper = (usable - tipW) / 2;
     const cx = span.x + span.w / 2;
-    // The tip is CHAMFERED, not filleted. A fillet here is a five-segment arc running
-    // almost tangent to a flat top edge, and the two of them leave the blank's ring
-    // with a pair of vertices four ten-thousandths of a millimetre apart in y and ten
-    // millimetres apart in x. Nothing downstream of the dieline notices — but the
-    // printed sheet's triangulator turns that run into zero-area slivers and the 3MF
-    // stops being watertight. A chamfer says the same thing about the corner with
-    // four points and no near-collinear anything.
-    const tipCh = Math.min(6, earLen * 0.12, tipW * 0.25);
     const ring: Poly = [
       [span.x + g, H],
       [span.x + span.w - g, H],
-      [span.x + span.w - g - taper, H + earLen - tipCh],
-      [span.x + span.w - g - taper - tipCh, H + earLen],
-      [span.x + g + taper + tipCh, H + earLen],
-      [span.x + g + taper, H + earLen - tipCh],
+      [span.x + span.w - g - taper, H + earLen],
+      [span.x + g + taper, H + earLen],
     ];
-    // The slot starts inboard of where the blade's corner lands, so the ear has a
-    // lead-in rather than having to find both blades dead on its first millimetre.
-    const slotLo = H + Math.max(3, toRidge - Math.max(5, blade * 0.2));
-    const slotHi = H + reach;
     panels.push({
       id: `gb-ear${i}`,
       label: 'locking ear',
@@ -1706,11 +1882,11 @@ function buildGable(p: BoxParams): StyleParts {
       // seats flush against them and its corners stand proud above the roofline —
       // which is the detail that makes this box recognisable on a shelf.
       foldAngle: lean,
-      order: 4,
+      order: 5,
     });
   }
 
-  const base = envelopeBottom({ prefix: 'gb-', walls: body.walls, spans: s, L, W, t, y: 0 });
+  const base = envelopeBottom({ prefix: 'gb-', walls: body.walls, spans: s, L, W, t, y: 0, order: 4 });
   panels.push(...base.panels);
   slits.push(...base.slits);
 
@@ -1724,8 +1900,10 @@ function buildGable(p: BoxParams): StyleParts {
       'Fold the slotted base panel in, then both side flaps on top of it, then the last panel down and its tongue through the slot: the base now holds itself shut.',
       'Bring both roof panels up until the two handle blades meet face to face.',
       locks
-        ? 'Swing each end ear inward and thread its slot down over BOTH blades at once. It stops in the notch cut into their shoulders: that notch is the lock, and the roof cannot open while the ears are home.'
-        : 'Swing each end ear inward to close the gable. At this size there is no room for the slot lock, so the ears cover the ends but do not catch, so tape or a sticker holds the roof shut.',
+        ? 'Swing each end ear inward and push its slot down over BOTH handle strips at once. The horn at each strip’s top corner passes through the slot and its underside then sits over the slot’s end: that is the lock, and the roof cannot open while the ears are home.'
+        : blade === 0
+          ? 'This box is too short for the carry handle: the roof closes and the ears cover the ends, but there is no strip and nothing catches, so tape or a sticker holds the roof shut. Make the box longer for the handle.'
+          : 'Swing each end ear inward to close the gable. At this size there is no room for the slot lock, so the ears cover the ends but do not catch, so tape or a sticker holds the roof shut.',
     ],
   };
 }
@@ -1842,6 +2020,8 @@ export const WINDOW_PANEL: Record<BoxParams['style'], string> = {
   'tray-webbed': '',
   'tray-lid': 'ld-base',
   'flap-cover': 'fc-lid-deck',
+  // The lid deck: it is the face a bakery box is looked at through.
+  'cake-box': 'cb-lid-lid',
   'tuck-top': 'tt-w0',
   'snap-lock': 'sl-w0',
   gable: 'gb-w0',
@@ -1873,6 +2053,7 @@ export function buildStyle(p: BoxParams): {
     'tray-webbed': buildWebbedTray,
     'tray-lid': buildTrayLid,
     'flap-cover': buildFlapCover,
+    'cake-box': buildCakeBox,
     'tuck-top': buildTuckTop,
     'snap-lock': buildSnapLock,
     gable: buildGable,

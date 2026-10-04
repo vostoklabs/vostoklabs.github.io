@@ -35,6 +35,7 @@ import { BRAND } from '@vostok/brand';
 import { createViewer } from './viewer/viewer';
 import { mountPlatePicker } from '@vostok/plates';
 import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
+import { buildKeychainSvg, downloadKeychainSvg } from './export/svgExport';
 // Fonts, the opentype loader and the text-to-contours layout all live in
 // @vostok/fonts so every generator that puts type on a model shares one set.
 import {
@@ -51,7 +52,7 @@ import {
   getFontUrl,
   FALLBACK_FONT_ID,
 } from '@vostok/fonts';
-import type { GeometryResponse, PartMesh } from './types';
+import type { GeometryResponse, Outline, PartMesh } from './types';
 import { noAmsPauses } from './geometry/noAms';
 import type { DesktopHost } from '@vostok/ui-kit';
 
@@ -257,6 +258,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let needsRebuild = false;
   let rebuildTimeout: any = null;
   let lastParts: PartMesh[] = [];
+  let lastOutline: Outline | null = null;
 
   // Each font's natural line gap differs; this is the default the user's Line spacing
   // slider multiplies. Pixel/condensed faces want a tighter default.
@@ -770,9 +772,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
 
   async function handleExport(formatId: string) {
+    const baseName = `${state.name.trim().replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'name'}-keychain`;
     if (formatId === '3mf') {
       if (!lastParts.length) throw new Error('No 3D geometry generated yet.');
-      const fn = `${state.name.trim().replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'name'}-keychain.3mf`;
+      const fn = `${baseName}.3mf`;
       if (host) {
         // With a host the file goes to the host's own export path rather than the browser's
         // download bar.
@@ -784,6 +787,19 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       } else {
         downloadThreeMF(lastParts, fn);
         licenseAfterExport({ badge: '✓ 3MF Export started' });
+      }
+    } else if (formatId === 'svg') {
+      if (!lastOutline) throw new Error('No outline generated yet.');
+      const fn = `${baseName}.svg`;
+      if (host) {
+        const { indexed } = await host.exportToLibrary(
+          { name: fn, bytes: new TextEncoder().encode(buildKeychainSvg(lastOutline)) },
+          { designer: 'Name Keychain Generator' },
+        );
+        toast(indexed ? 'Exported to your library' : `Exported as ${fn}`, { kind: 'ok' });
+      } else {
+        downloadKeychainSvg(lastOutline, fn);
+        licenseAfterExport({ badge: '✓ SVG Export started' });
       }
     } else if (formatId === 'stl') {
       toast('STL multi-part export is zipped in 3MF, download 3MF for Orca/Bambu separate plates.', { kind: 'warn' });
@@ -983,7 +999,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // do different things is worse than either one alone. `Boolean(...)`, not `isDesktop()`:
     // a desktop host without the capability still needs these.
     hostOwnsProjects: Boolean(host?.registerProject),
-    formats: [{ id: '3mf', label: '3MF' }],
+    formats: [{ id: '3mf', label: '3MF' }, { id: 'svg', label: 'SVG' }],
     onExport: handleExport,
     onSave: () => {
       if (host) { void saveToHost(); return; }
@@ -1023,6 +1039,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         content: el('div', {}, [
           el('p', { text: 'Type a name in the Text section, pick a font from the right panel, and customise the style, colours, and keyring options.' }),
           el('p', { text: 'When you\'re happy with the preview, click Export 3MF to download a print-ready file. Open the 3MF in your slicer (Bambu Studio, Orca, PrusaSlicer) and assign filament colours.' }),
+          el('p', { text: 'Download SVG saves the flat keychain for a laser cutter, in millimetres: red hairlines are cuts (the keyring hole, then the outline), the black fill is the name to engrave, and the blue fill is the halo when the 3-colour scheme is on. Run the engrave before the cut.' }),
           el('p', { text: 'Use Save / Load project to keep your settings as a JSON file and resume later.' }),
         ]),
         actions: [{ label: 'Got it', primary: true }],
@@ -1086,6 +1103,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
     if (msg.type === 'parts') {
       lastParts = msg.parts;
+      lastOutline = msg.outline;
       viewer.setParts(msg.parts, true);
       hideStatus();
       isWorkerBusy = false;

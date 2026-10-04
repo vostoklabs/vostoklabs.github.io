@@ -92,7 +92,7 @@ export const keychainPhoneStand: TemplateDef = {
       visibleWhen: (v) => bool(v, 'usePattern'),
     },
     {
-      kind: 'number', key: 'patternWeb', label: 'Web', section: 'Pattern', value: 2, min: 1, max: 8, step: 0.1, unit: 'mm',
+      kind: 'number', key: 'patternWeb', label: 'Web', section: 'Pattern', value: 1, min: 1, max: 8, step: 0.1, unit: 'mm',
       help: 'The least material left between two holes, or between a hole and an edge.',
       visibleWhen: (v) => bool(v, 'usePattern') && str(v, 'patternOp') === 'cut',
     },

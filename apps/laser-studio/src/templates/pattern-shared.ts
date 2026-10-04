@@ -114,8 +114,10 @@ export function patternFields(o: PatternFieldOpts = {}): Field[] {
       options: [{ value: 'cut', label: 'Cut out' }, { value: 'engrave', label: 'Engrave' }, { value: 'score', label: 'Score' }],
       help: 'Line patterns cut as a lattice: the lines stay, the gaps go.',
     },
+    // 1 mm by default (Ian, 2026-10-03, with Laser Box: "make web of laser cut to be default to
+    // 1 mm"); raise it for a sturdier piece.
     {
-      kind: 'number', key: 'web', label: 'Web', section, value: 2, min: 1, max: 8, step: 0.1, unit: 'mm',
+      kind: 'number', key: 'web', label: 'Web', section, value: 1, min: 1, max: 8, step: 0.1, unit: 'mm',
       help: 'Strut width, and the least material between cuts.',
       visibleWhen: (v) => str(v, 'patternOp') === 'cut',
     },

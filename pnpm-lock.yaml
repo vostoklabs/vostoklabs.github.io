@@ -118,6 +118,9 @@ importers:
       '@vostok/export':
         specifier: workspace:*
         version: link:../../packages/export
+      '@vostok/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
       '@vostok/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
@@ -186,6 +189,9 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@vostok/manifold':
+        specifier: workspace:*
+        version: link:../../packages/manifold
       '@vostok/plates':
         specifier: workspace:*
         version: link:../../packages/plates
@@ -239,12 +245,18 @@ importers:
       '@vostok/export':
         specifier: workspace:*
         version: link:../../packages/export
+      '@vostok/manifold':
+        specifier: workspace:*
+        version: link:../../packages/manifold
       '@vostok/plates':
         specifier: workspace:*
         version: link:../../packages/plates
       '@vostok/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
+      d3-contour:
+        specifier: ^4.0.2
+        version: 4.0.2
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
@@ -366,6 +378,9 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@vostok/manifold':
+        specifier: workspace:*
+        version: link:../../packages/manifold
       '@vostok/plates':
         specifier: workspace:*
         version: link:../../packages/plates
@@ -412,6 +427,9 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@vostok/manifold':
+        specifier: workspace:*
+        version: link:../../packages/manifold
       '@vostok/plates':
         specifier: workspace:*
         version: link:../../packages/plates
@@ -449,6 +467,9 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@vostok/manifold':
+        specifier: workspace:*
+        version: link:../../packages/manifold
       '@vostok/plates':
         specifier: workspace:*
         version: link:../../packages/plates
@@ -523,6 +544,9 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../fonts
+      '@vostok/manifold':
+        specifier: workspace:*
+        version: link:../manifold
       d3-contour:
         specifier: ^4.0.2
         version: 4.0.2

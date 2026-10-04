@@ -13,6 +13,7 @@
     "@vostok/brand": "workspace:*",
     "@vostok/export": "workspace:*",
     "@vostok/fonts": "workspace:*",
+    "@vostok/manifold": "workspace:*",
     "@vostok/plates": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "@vostok/viewer": "workspace:*",

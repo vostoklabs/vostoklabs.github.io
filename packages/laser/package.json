@@ -8,7 +8,11 @@
     ".": "./src/index.ts",
     "./trace": "./src/trace/index.ts",
     "./photo": "./src/photo/index.ts",
-    "./material-preview": "./src/material-preview.ts"
+    "./material-preview": "./src/material-preview.ts",
+    "./csg2d": "./src/csg2d.ts",
+    "./blanks": "./src/blanks.ts",
+    "./sheets": "./src/sheets.ts",
+    "./ops": "./src/ops.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
@@ -17,6 +21,7 @@
     "@vostok/brand": "workspace:*",
     "@vostok/export": "workspace:*",
     "@vostok/fonts": "workspace:*",
+    "@vostok/manifold": "workspace:*",
     "d3-contour": "^4.0.2",
     "manifold-3d": "^3.0.1",
     "onnxruntime-web": "^1.29.0",

@@ -1,6 +1,8 @@
-import type { BuildParams } from '../types';
+import type { BuildParams, Outline } from '../types';
+import type { CutRing } from '@vostok/export';
 import type { LineBox } from '@vostok/fonts/textLayout';
 import { snapLayers } from './noAms';
+import { csOf, ringsOf, extrude } from '@vostok/manifold';
 
 /** Helper to ensure clean Emscripten memory allocation and disposal. */
 function withScope<T>(fn: (keep: <M extends { delete(): void }>(m: M) => M) => T): T {
@@ -45,10 +47,10 @@ function getMeshData(solid: any): { vertProperties: Float32Array; triVerts: Uint
  * bevel in place instead of sliding toward the word centre. chamfer ≤ 0 = plain
  * extrude (identical to before, so it's free when the toggle is off).
  */
-function bevelExtrude(cs: any, height: number, chamfer: number, keep: Keep): any {
-  if (chamfer <= 0.05) return keep(cs.extrude(height));
+function bevelExtrude(wasm: any, cs: any, height: number, chamfer: number, keep: Keep): any {
+  if (chamfer <= 0.05) return keep(extrude(wasm, cs, height));
   const baseH = Math.max(0.01, height - chamfer);
-  let solid = keep(cs.extrude(baseH));
+  let solid = keep(extrude(wasm, cs, baseH));
 
   const components = (cs.decompose() as any[]) ?? [cs];
   for (const comp of components) {
@@ -66,7 +68,7 @@ function bevelExtrude(cs: any, height: number, chamfer: number, keep: Keep): any
 
     const centered = keep(compCS.translate([-cx, -cy]));
     const topCap = keep(
-      centered.extrude(chamfer + 0.01, 0, 0, [scaleX, scaleY]).translate([cx, cy, baseH - 0.005]),
+      keep(extrude(wasm, centered, chamfer + 0.01, 0, 0, [scaleX, scaleY])).translate([cx, cy, baseH - 0.005]),
     );
     solid = keep(solid.add(topCap));
   }
@@ -104,12 +106,12 @@ function signedArea(poly: number[][]): number {
  * plate outline from trapping air pockets (e.g. between a short 2nd line and the
  * body) that used to show up as a phantom second hole.
  */
-function fillHoles(CrossSection: any, cs: any, keep: Keep): any {
-  const polys = cs.toPolygons() as number[][][];
+function fillHoles(wasm: any, cs: any, keep: Keep): any {
+  const polys = ringsOf(cs) as number[][][];
   const outers = polys.filter((p) => signedArea(p) > 0);
   if (outers.length === polys.length) return cs; // already hole-free
   if (outers.length === 0) return cs;
-  return keep(new CrossSection(outers, 'Positive'));
+  return keep(csOf(wasm, outers, 'Positive'));
 }
 
 /**
@@ -141,7 +143,7 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   if (textContours.length === 0 || textContours.every(c => c.length === 0)) {
     glyphsCS = keep(CrossSection.circle(0.01, 3));
   } else {
-    glyphsCS = keep(new CrossSection(textContours, 'NonZero'));
+    glyphsCS = keep(csOf(wasm, textContours, 'NonZero'));
   }
   if (Math.abs(params.boldness) > 0.02) {
     const bolded = keep(glyphsCS.offset(params.boldness, 'Round', 2.0, 12));
@@ -193,9 +195,9 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   const anchorX = holeX - neckLen * Math.cos(rad);
   const anchorY = holeY - neckLen * Math.sin(rad);
 
-  const lugDisc = keep(CrossSection.circle(lugPre, 32).translate([holeX, holeY]));
+  const lugDisc = keep(keep(CrossSection.circle(lugPre, 32)).translate([holeX, holeY]));
   const anchorR = Math.min(lugPre * 0.85, 2.0);
-  const anchorDisc = keep(CrossSection.circle(anchorR, 16).translate([anchorX, anchorY]));
+  const anchorDisc = keep(keep(CrossSection.circle(anchorR, 16)).translate([anchorX, anchorY]));
   const tabCS = keep(CrossSection.hull([lugDisc, anchorDisc]));
 
   // --- Assemble the plate source (glyphs + tab + connectors) ---
@@ -205,7 +207,7 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   let plateSrc: any;
   if (isRect) {
     const rectCS = keep(
-      CrossSection.square([Math.max(blockW, 0.1), Math.max(blockH, 0.1)], true).translate([
+      keep(CrossSection.square([Math.max(blockW, 0.1), Math.max(blockH, 0.1)], true)).translate([
         (gBox.minX + gBox.maxX) / 2,
         (gBox.minY + gBox.maxY) / 2,
       ]),
@@ -229,14 +231,14 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
       cxR = mid + minW / 2;
     }
     if (yt > yb) {
-      const band = keep(CrossSection.square([cxR - cxL, yt - yb], true).translate([(cxL + cxR) / 2, (yt + yb) / 2]));
+      const band = keep(keep(CrossSection.square([cxR - cxL, yt - yb], true)).translate([(cxL + cxR) / 2, (yt + yb) / 2]));
       plateSrc = keep(plateSrc.add(band));
     }
   } else if (!vertical && lines.length === 1 && params.name.includes(' ')) {
     // Single line with a space: a hidden central strip bridges the word gap.
     const l = lines[0]!;
     const strip = keep(
-      CrossSection.square([l.maxX - l.minX, (l.maxY - l.minY) * 0.5], true).translate([
+      keep(CrossSection.square([l.maxX - l.minX, (l.maxY - l.minY) * 0.5], true)).translate([
         (l.minX + l.maxX) / 2,
         (l.minY + l.maxY) / 2,
       ]),
@@ -245,7 +247,7 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   } else if (vertical && blockH > 0) {
     // Vertical: a central spine fuses the stacked characters into one bar.
     const spine = keep(
-      CrossSection.square([Math.max(blockW * 0.42, params.size * 0.3), blockH], true).translate([
+      keep(CrossSection.square([Math.max(blockW * 0.42, params.size * 0.3), blockH], true)).translate([
         (gBox.minX + gBox.maxX) / 2,
         (gBox.minY + gBox.maxY) / 2,
       ]),
@@ -258,15 +260,15 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   const smoothR = params.smoothing;
   let plateCS = keep(plateSrc.offset(plateMargin + smoothR, 'Round', 2.0, 24));
   if (smoothR > 0.05) plateCS = keep(plateCS.offset(-smoothR, 'Round', 2.0, 24));
-  const plateNoHole = fillHoles(CrossSection, plateCS, keep);
+  const plateNoHole = fillHoles(wasm, plateCS, keep);
 
   const holeR = params.holeDia / 2;
-  const holeCS = keep(CrossSection.circle(holeR, 32).translate([holeX, holeY]));
+  const holeCS = keep(keep(CrossSection.circle(holeR, 32)).translate([holeX, holeY]));
   const textCS = keep(glyphsCS.subtract(holeCS));
 
   let haloCS: any = null;
   if (hasHalo) {
-    haloCS = keep(glyphsCS.offset(params.haloWidth, 'Round', 2.0, 16).subtract(holeCS));
+    haloCS = keep(keep(glyphsCS.offset(params.haloWidth, 'Round', 2.0, 16)).subtract(holeCS));
   }
 
   return {
@@ -287,18 +289,39 @@ export function buildProfiles(wasm: any, textContours: number[][][], params: Bui
   };
 }
 
+/**
+ * The keychain flattened, for the laser SVG. The same cross-sections the parts are extruded
+ * from, so the cut file is the preview. Split into islands so each letter is one shape that
+ * carries its counters as holes.
+ */
+function outlineOf(wasm: any, p: ReturnType<typeof buildProfiles>, keep: Keep): Outline {
+  const islands = (cs: any): CutRing[][] =>
+    (cs.decompose() as any[])
+      .map((c) => keep(c))
+      // The empty-text placeholder is a 0.01 mm triangle, not something to engrave.
+      .filter((c) => c.area() > 0.01)
+      .map((c) => ringsOf(c) as CutRing[]);
+  const hole = keep(keep(wasm.CrossSection.circle(p.holeR, 32)).translate([p.holeX, p.holeY]));
+  return {
+    plate: islands(keep(p.plateNoHole.subtract(hole))),
+    halo: p.haloCS ? islands(p.haloCS) : [],
+    text: islands(p.textCS),
+  };
+}
+
 export function buildKeychain(
   wasm: any,
   textContours: number[][][],
   params: BuildParams,
 ): {
   parts: { name: string; vertProperties: Float32Array; triVerts: Uint32Array; colorRgb: [number, number, number] }[];
+  outline: Outline;
   warnings: string[];
 } {
   const { Manifold } = wasm;
   const warnings: string[] = [];
 
-  const parts = withScope((keep) => {
+  const { parts, outline } = withScope((keep) => {
     const p = buildProfiles(wasm, textContours, params, keep);
     if (p.emptyText) warnings.push('Text geometry is empty or degenerate. Check your characters.');
 
@@ -314,7 +337,7 @@ export function buildKeychain(
     // Straight full-height keyring hole, subtracted from the solids in 3D.
     const holeCut = (solid: any, zBottom: number, zTop: number) => {
       const cyl = keep(
-        Manifold.cylinder(zTop - zBottom + 2, p.holeR, p.holeR, 32).translate([p.holeX, p.holeY, zBottom - 1]),
+        keep(Manifold.cylinder(zTop - zBottom + 2, p.holeR, p.holeR, 32)).translate([p.holeX, p.holeY, zBottom - 1]),
       );
       return keep(solid.subtract(cyl));
     };
@@ -325,18 +348,18 @@ export function buildKeychain(
 
     if (p.isRaised) {
       // Base plate (bevelled top edge), then hole.
-      let baseSolid = bevelExtrude(p.plateNoHole, p.baseT, chamBase, keep);
+      let baseSolid = bevelExtrude(wasm, p.plateNoHole, p.baseT, chamBase, keep);
       baseSolid = holeCut(baseSolid, 0, p.baseT);
       finalParts.push({ name: 'plate', ...getMeshData(baseSolid), colorRgb: hexToRgb(params.plateColor) });
 
       // Halo band.
       if (p.hasHalo && p.haloCS) {
-        const haloSolid = keep(p.haloCS.extrude(p.haloT).translate([0, 0, p.baseT]));
+        const haloSolid = keep(keep(extrude(wasm, p.haloCS, p.haloT)).translate([0, 0, p.baseT]));
         finalParts.push({ name: 'halo', ...getMeshData(haloSolid), colorRgb: hexToRgb(params.haloColor) });
       }
 
       // Raised text (bevelled top edge).
-      const textBev = bevelExtrude(p.textCS, params.textThickness, chamText, keep);
+      const textBev = bevelExtrude(wasm, p.textCS, params.textThickness, chamText, keep);
       const textSolid = keep(textBev.translate([0, 0, p.letterZ]));
       finalParts.push({
         name: 'text',
@@ -347,10 +370,10 @@ export function buildKeychain(
       // Engraved: base plate with a recess, flush-filled with coloured inlays.
       // 3-colour engraved recesses the halo outline (letters ⊕ haloWidth) and inlays
       // an outline-coloured ring + the letters; 1/2-colour just recesses the letters.
-      let baseSolid = bevelExtrude(p.plateNoHole, p.baseT, chamBase, keep);
+      let baseSolid = bevelExtrude(wasm, p.plateNoHole, p.baseT, chamBase, keep);
       const cutDepth = Math.min(params.textThickness, p.baseT * 0.6);
       const recessCS = p.hasHalo && p.haloCS ? keep(p.haloCS.add(p.textCS)) : p.textCS;
-      const recessCut = keep(recessCS.extrude(cutDepth + 1).translate([0, 0, p.baseT - cutDepth]));
+      const recessCut = keep(keep(extrude(wasm, recessCS, cutDepth + 1)).translate([0, 0, p.baseT - cutDepth]));
       let engraved = keep(baseSolid.subtract(recessCut));
       engraved = holeCut(engraved, 0, p.baseT);
       finalParts.push({ name: 'plate', ...getMeshData(engraved), colorRgb: hexToRgb(params.plateColor) });
@@ -360,17 +383,17 @@ export function buildKeychain(
         if (p.hasHalo && p.haloCS) {
           const ringCS = keep(p.haloCS.subtract(p.textCS));
           if (ringCS.area() > 0.02) {
-            const ringSolid = keep(ringCS.extrude(cutDepth).translate([0, 0, p.baseT - cutDepth]));
+            const ringSolid = keep(keep(extrude(wasm, ringCS, cutDepth)).translate([0, 0, p.baseT - cutDepth]));
             finalParts.push({ name: 'halo', ...getMeshData(ringSolid), colorRgb: hexToRgb(params.haloColor) });
           }
         }
-        const inlaySolid = keep(p.textCS.extrude(cutDepth).translate([0, 0, p.baseT - cutDepth]));
+        const inlaySolid = keep(keep(extrude(wasm, p.textCS, cutDepth)).translate([0, 0, p.baseT - cutDepth]));
         finalParts.push({ name: 'text', ...getMeshData(inlaySolid), colorRgb: hexToRgb(params.textColor) });
       }
     }
 
-    return finalParts;
+    return { parts: finalParts, outline: outlineOf(wasm, p, keep) };
   });
 
-  return { parts, warnings };
+  return { parts, outline, warnings };
 }

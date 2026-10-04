@@ -38,7 +38,7 @@ body {
   padding: 10px 12px;
   font: inherit;
   /* The stack, and the order is the whole point: Latin comes from Chakra Petch,
-     and the Font Awesome glyphs — which Chakra does not have — fall through to the
+     and the symbol-font glyphs — which Chakra does not have — fall through to the
      icon face. `var(--font-display)` cannot be used here because it ends in a
      generic family, and a generic never falls through: it renders a tofu box, which
      is exactly what a symbol looked like after you inserted it. */

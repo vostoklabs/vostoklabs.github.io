@@ -20,7 +20,7 @@
 
 import * as THREE from 'three';
 import type { Net, Panel, Poly, Pt } from '../types';
-import { bboxOf } from '../geometry/poly';
+import { bboxOf, pointInRing, signedArea } from '../geometry/poly';
 
 /** Net-space -> panel-local: rotate by -angle about origin. */
 interface Frame {
@@ -52,6 +52,13 @@ export interface PanelNode {
   /** Total rotation about X this root reaches at t = 1: a lid arriving upside down,
    *  or a tube standing itself upright. */
   rootTilt?: number;
+  /** Tilting roots only: the bottom edge's local y, below the centroid the frame sits
+   *  at. The tilt pivots about that edge, so the box stands up the way a carton does on
+   *  a table, rather than spinning about its middle and dipping through the plate. */
+  rootEdge?: number;
+  /** Flipping roots only: how high the piece is lifted at the middle of its turn, so a
+   *  lid turning over never passes through the plate. Half the base's diagonal. */
+  rootHover?: number;
   /** Set on the two halves of a webbed corner. See `driveWeb`. */
   web?: {
     kind: 'a' | 'b';
@@ -81,6 +88,13 @@ export interface RigStyle {
   color: string;
   /** Darker line along every panel edge, so the dieline stays readable folded. */
   edge: string;
+  /** How thick each panel is drawn, in mm. Absent or 0 draws zero-thickness sheets,
+   *  which is what the tests measure against.
+   *
+   *  A function, because a printed sheet is not one thickness: anything that ends up
+   *  sandwiched between two plies (a tuck, a web, a dust flap) is built at the hinge
+   *  thickness, and the exporter is the one place that rule lives. Card is uniform. */
+  thickness?: (panel: Panel) => number;
 }
 
 function shapeFrom(outline: Poly, holes: Poly[], f: Frame): THREE.Shape {
@@ -178,7 +192,42 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
   const backDark = face(INSIDE, THREE.BackSide);
   const frontDark = face(INSIDE, THREE.FrontSide);
   const backLight = face(CARD, THREE.BackSide);
-  const mats = [frontLight, backDark, frontDark, backLight];
+  // The logo's ink. One material per face direction, front-only, because the decal is
+  // a surface on ONE side of a zero-thickness panel: rendered DoubleSide it would show
+  // through the card from the other side, which is exactly what a logo does not do.
+  // Pulled FORWARD in the depth buffer by the same trick the panels are pushed back
+  // with, so it never breaks up against its own panel at any zoom.
+  const decal = (side: THREE.Side) =>
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#26272b'),
+      roughness: 0.88,
+      metalness: 0,
+      side,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
+  const decalFront = decal(THREE.FrontSide);
+  const decalBack = decal(THREE.BackSide);
+  const decalLine = new THREE.LineBasicMaterial({ color: new THREE.Color('#26272b') });
+  // The cut edge of the board. Every panel is a SLAB, not a sheet: the caliper the net
+  // was dimensioned for is drawn, so a 1.5 mm board looks like board and a printed sheet
+  // like a printed sheet, and the gaps the net leaves for plies (the 2t strip across a
+  // rolled end, the relief beside an ear) are filled by material instead of showing as
+  // air. Hinged on the mid-plane, so the net's centre-to-centre dimensions are exact
+  // and a 90° corner interpenetrates by t/2 on the inside, which is where a real crease
+  // crushes. Distinctly darker than the face: a 0.4 mm edge is two pixels wide on a
+  // 90 mm box, and two pixels of nearly-the-same-white is no thickness at all.
+  const edgeFace = new THREE.MeshStandardMaterial({
+    color: CARD.clone().multiplyScalar(0.7),
+    roughness: 0.95,
+    metalness: 0,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+  const mats = [frontLight, backDark, frontDark, backLight, decalFront, decalBack, edgeFace];
 
   const edgeMaterial = new THREE.LineBasicMaterial({
     color: new THREE.Color(style.edge),
@@ -208,7 +257,15 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
   // roll, inner ply, lid, tuck — and sizing the timeline on depth alone crushed the
   // last four into the final 15% of the scrub, where they read as one jump.
   const stageOf = (p: Panel): number => p.order ?? depthOf(p);
-  const maxStage = Math.max(1, ...ordered.map(stageOf));
+  const maxFoldStage = Math.max(1, ...ordered.map(stageOf));
+  // A tube stands itself upright LAST, in a stage of its own after every flap is home.
+  // It used to tilt across the whole second half of the scrub, on top of the closures:
+  // the box rotated through the air while its dust flaps and tucks were still going in,
+  // which read as a carton tumbling rather than being folded. A person closes both ends
+  // with the tube lying on the table and only then stands it up, and that is the order
+  // here now. Lids that fly in (`flip`, no tilt) keep their own window below.
+  const tiltStage = maxFoldStage + 1;
+  const maxStage = ordered.some((p) => p.rootPose?.tilt) ? tiltStage : maxFoldStage;
 
   // Everything assembles around where the primary blank already sits, so the box
   // comes together in place instead of sliding across the view.
@@ -255,21 +312,50 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
 
     frames.set(panel.id, frame);
 
-    const geo = new THREE.ShapeGeometry(shapeFrom(panel.outline, panel.holes, frame));
+    // The slab: a face at +half, a face at -half, and the cut edge between them. The
+    // two faces are the same geometry either side of the hinge plane; the edge is the
+    // side wall of an extrusion, with its caps thrown away because the faces already
+    // are the caps (and a cap cannot be lit light on one side and dark on the other).
+    const half = Math.max(0, style.thickness?.(panel) ?? 0) / 2;
+    const shape = shapeFrom(panel.outline, panel.holes, frame);
+    const geo = new THREE.ShapeGeometry(shape);
+    geo.translate(0, 0, half);
     const mesh = new THREE.Mesh(geo, frontLight);
     mesh.userData.panelId = panel.id;
     pivotFrame.add(mesh);
-    // Same geometry, back faces only. One extra draw call, no extra memory.
-    const inner = new THREE.Mesh(geo, backDark);
+    // Back faces only. With no thickness it is the same geometry: one extra draw
+    // call, no extra memory.
+    const backGeo = half > 0 ? geo.clone().translate(0, 0, -2 * half) : geo;
+    const inner = new THREE.Mesh(backGeo, backDark);
     inner.userData.innerOf = panel.id;
     pivotFrame.add(inner);
+    if (half > 0) {
+      const ext = new THREE.ExtrudeGeometry(shape, { depth: 2 * half, bevelEnabled: false });
+      const sides = ext.groups.find((g) => g.materialIndex === 1);
+      if (sides) {
+        const slice = (name: string) => {
+          const a = ext.getAttribute(name) as THREE.BufferAttribute;
+          const arr = (a.array as Float32Array).slice(sides.start * a.itemSize, (sides.start + sides.count) * a.itemSize);
+          return new THREE.BufferAttribute(arr, a.itemSize);
+        };
+        const edgeGeo = new THREE.BufferGeometry();
+        edgeGeo.setAttribute('position', slice('position'));
+        edgeGeo.setAttribute('normal', slice('normal'));
+        edgeGeo.translate(0, 0, -half);
+        const edgeMesh = new THREE.Mesh(edgeGeo, edgeFace);
+        edgeMesh.userData.edgeOf = panel.id;
+        pivotFrame.add(edgeMesh);
+      }
+      ext.dispose();
+    }
 
     // The panel's own outline as a line, so every crease and cut stays visible once
     // the box is closed. This is the cheapest way to make a folded preview read as a
-    // dieline rather than as an anonymous solid.
+    // dieline rather than as an anonymous solid. On the +z face, a hair proud of it.
+    const lineZ = half + 0.01;
     const ring = panel.outline.map((p) => {
       const l = toLocal(p, frame);
-      return new THREE.Vector3(l[0], l[1], 0.01);
+      return new THREE.Vector3(l[0], l[1], lineZ);
     });
     pivotFrame.add(
       new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ring), edgeMaterial),
@@ -277,11 +363,51 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
     for (const hole of panel.holes) {
       const hp = hole.map((p) => {
         const l = toLocal(p, frame);
-        return new THREE.Vector3(l[0], l[1], 0.01);
+        return new THREE.Vector3(l[0], l[1], lineZ);
       });
       pivotFrame.add(
         new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(hp), edgeMaterial),
       );
+    }
+
+    // The logo, as a decal a hair off one face of the panel.
+    //
+    // WHICH face is not a choice — it is the file, and the file is decided by the fold.
+    // A score, a pen crease and a printed groove all fold SHUT, so the marked face turns
+    // inward: on a cut sheet the machine marks the face that is up, which becomes the
+    // INSIDE of the box, and a printed sheet is marked on its underside for exactly that
+    // reason, which becomes the outside. Every panel here folds towards +Z, so the net's
+    // +Z face is the box's inside and its -Z face is the outside. So 'top' marks sit at
+    // +z facing +Z and 'bottom' marks at -z facing -Z, and either way what you see on
+    // the folded box is what the file will actually produce.
+    const markZ = net.markFace === 'bottom' ? -(half + 0.02) : half + 0.02;
+    for (const mark of net.marks) {
+      if (mark.panelId !== panel.id) continue;
+      const outers = mark.rings.filter((r) => signedArea(r) > 0);
+      const holes = mark.rings.filter((r) => signedArea(r) <= 0);
+      for (const outer of outers) {
+        const shape = new THREE.Shape(outer.map((p) => new THREE.Vector2(...toLocal(p, frame))));
+        for (const h of holes) {
+          const probe = h[0];
+          if (probe && pointInRing(probe, outer)) {
+            shape.holes.push(new THREE.Path(h.map((p) => new THREE.Vector2(...toLocal(p, frame)))));
+          }
+        }
+        const geo = new THREE.ShapeGeometry(shape);
+        geo.translate(0, 0, markZ);
+        const mesh = new THREE.Mesh(geo, markZ < 0 ? decalBack : decalFront);
+        // Exempt from the face-flip pass below, which decides a panel's light and dark
+        // sides from which way it ends up pointing. A decal has one side by design.
+        mesh.userData.decal = true;
+        pivotFrame.add(mesh);
+      }
+      for (const line of mark.lines) {
+        const pts = line.map((p) => {
+          const l = toLocal(p, frame);
+          return new THREE.Vector3(l[0], l[1], markZ);
+        });
+        pivotFrame.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), decalLine));
+      }
     }
 
     // Stage from tree depth, which already reproduces "walls up, then dust flaps,
@@ -311,8 +437,25 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
         pose?.offset[2] ?? 0,
       );
       node.rootTilt = (pose?.flip ? Math.PI : 0) + (pose?.tilt ?? 0);
-      node.t0 = 0.45;
-      node.t1 = 1;
+      if (pose?.tilt) {
+        // No overlap with the stage before it, unlike every other stage: the box must
+        // not start tipping while its last tuck is still going in.
+        const lastFoldT1 = Math.min(1, (maxFoldStage - 1) * span * 0.92 + span * 1.35);
+        node.t0 = Math.min(0.85, lastFoldT1);
+        node.t1 = Math.min(1, node.t0 + span * 1.35);
+        node.rootEdge = bboxOf([panel.outline])[1] - c[1];
+      } else {
+        node.t0 = 0.45;
+        node.t1 = 1;
+        if (pose?.flip) {
+          // Turned over about its own middle, a lid the size of the tray swept half of
+          // itself 18 mm through the plate. Lifted by half its diagonal at mid-turn it
+          // clears the table however it is proportioned, and reads as picked up,
+          // turned over and set down.
+          const [x0, y0, x1, y1] = bboxOf([panel.outline]);
+          node.rootHover = Math.hypot(x1 - x0, y1 - y0) / 2;
+        }
+      }
     }
 
     // A web half is driven by its wall, not by its own stage, so find that wall now.
@@ -404,7 +547,22 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
         // A second blank travels to its place as the first one closes, so a two-piece
         // box assembles itself instead of appearing already stacked.
         const u = smoothstep(t, n.t0, n.t1);
+        if (n.rootEdge !== undefined && n.rootTilt) {
+          // Stand up about the bottom edge: the centroid swings on a quarter circle of
+          // radius |edge| so the edge itself never leaves the plate. Whatever the
+          // authored pose adds beyond that quarter circle is slid in linearly.
+          const a = n.rootTilt * u;
+          const e = n.rootEdge;
+          n.frame.position.set(
+            n.rootFrom.x + (n.rootTo.x - n.rootFrom.x) * u,
+            n.rootFrom.y + e * (1 - Math.cos(a)) + (n.rootTo.y - n.rootFrom.y - e) * u,
+            n.rootFrom.z - e * Math.sin(a) + (n.rootTo.z - n.rootFrom.z + e) * u,
+          );
+          n.frame.rotation.x = a;
+          continue;
+        }
         n.frame.position.lerpVectors(n.rootFrom, n.rootTo, u);
+        if (n.rootHover) n.frame.position.z += n.rootHover * Math.sin(Math.PI * u);
         if (n.rootTilt) n.frame.rotation.x = n.rootTilt * u;
         continue;
       }
@@ -457,7 +615,7 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
     for (const node of nodes) {
       for (const child of node.pivot.children) {
         const m = child as THREE.Mesh;
-        if (!m.isMesh) continue;
+        if (!m.isMesh || m.userData.decal || m.userData.edgeOf) continue;
         m.geometry.computeBoundingSphere();
         const sphere = m.geometry.boundingSphere;
         if (!sphere) continue;
@@ -483,6 +641,7 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
     dispose() {
       for (const m of mats) m.dispose();
       edgeMaterial.dispose();
+      decalLine.dispose();
       object.traverse((c) => {
         const any = c as THREE.Mesh;
         if (any.geometry) any.geometry.dispose();

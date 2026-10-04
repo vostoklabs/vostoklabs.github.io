@@ -2,3 +2,7 @@
 _offline-check.html
 *.offline.html
 dist-offline/
+
+# The MakerLab (MakerWorld) build. Carries the cut half and the NDA SDK, so it never goes
+# near dist/, which is what deploy.yml publishes.
+dist-mw/

@@ -219,7 +219,10 @@ function depths(panels: Panel[], rootId: string): Map<string, number> {
   return out;
 }
 
-export function buildNet(parts: StyleParts): Net {
+/** Shortest non-tree fold worth marking, mm. See `minFoldMm` in `buildNet`. */
+const MIN_WEB_FOLD_MM = 2;
+
+export function buildNet(parts: StyleParts, minFoldMm = MIN_WEB_FOLD_MM): Net {
   const panels: Panel[] = parts.panels.map((p) => ({
     ...p,
     outline: ensureCCW(p.outline.map(snapPt)),
@@ -270,9 +273,47 @@ export function buildNet(parts: StyleParts): Net {
     });
   }
 
+  // 6. The folds the TREE cannot hold. Every interior edge folds — that is the rule the
+  // whole derivation rests on — but `creases` is a spanning tree, so an edge between two
+  // panels that are not parent and child has no entry in it. Collected here by the same
+  // twin test that decided it was interior in the first place.
+  //
+  // Matched to the creases by MIDPOINT rather than by endpoints: step 2 splits a contact
+  // at any other panel's vertex lying on it, so one crease can span several split edges,
+  // and an endpoint comparison would re-emit the middle of a fold that is already drawn.
+  const webFolds: { a: Pt; b: Pt }[] = [];
+  const claimed = (a: Pt, b: Pt): boolean => {
+    const mid: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    for (const c of creases) if (onSegment(mid, c.a, c.b)) return true;
+    for (const s of parts.slits) {
+      for (let i = 0; i + 1 < s.points.length; i++) {
+        if (onSegment(mid, s.points[i] as Pt, s.points[i + 1] as Pt)) return true;
+      }
+    }
+    return false;
+  };
+  // A LENGTH FLOOR, because not every interior edge is a fold anyone makes. A hem is a
+  // wall folded back on itself, and where the wall, the 2t strip and the inner ply meet
+  // there is an interior edge ACROSS the strip — one caliper long, 0.4 mm on the default
+  // card. Two of them on the hinged lid. Marking those put a 0.4 mm dot on the dieline and
+  // a 0.4 mm line in the .lac that no dash pattern can survive: `dashSegment` returns one
+  // unbroken segment below a dash plus a gap, so it would have arrived as a plunge cut
+  // through both of its own roots. The floor is caliper-aware for the same reason the edge
+  // exists — it IS the caliper — so 2.5t keeps it out on board as well as on card.
+  const takenWeb = new Set<string>();
+  for (const e of all) {
+    if (!present.has(`${key(e.b)}|${key(e.a)}`)) continue;
+    if (takenWeb.has(`${key(e.a)}|${key(e.b)}`) || takenWeb.has(`${key(e.b)}|${key(e.a)}`)) continue;
+    if (dist(e.a, e.b) < minFoldMm) continue;
+    if (claimed(e.a, e.b)) continue;
+    takenWeb.add(`${key(e.a)}|${key(e.b)}`);
+    webFolds.push({ a: e.a, b: e.b });
+  }
+
   const lengthByOp: Record<Op, number> = { cut: 0, crease: 0, perf: 0, film: 0, engrave: 0 };
   for (const r of cutRings) lengthByOp.cut += pathLength(r, true);
   for (const c of creases) lengthByOp.crease += dist(c.a, c.b);
+  for (const f of webFolds) lengthByOp.crease += dist(f.a, f.b);
   for (const s of parts.slits) lengthByOp[s.op] += pathLength(s.points, false);
   for (const l of parts.loose) {
     lengthByOp[l.op] += pathLength(l.outline, true);
@@ -291,6 +332,10 @@ export function buildNet(parts: StyleParts): Net {
     assembly: parts.assembly,
     bbox,
     lengthByOp,
+    webFolds,
+    // No logo yet: `solve` places one once it knows the make mode and the artwork.
+    marks: [],
+    markFace: 'top',
   };
 }
 
@@ -318,9 +363,11 @@ export function placeNet(net: Net, margin: number): Net {
         : {}),
     })),
     creases: net.creases.map((c) => ({ ...c, a: tp(c.a), b: tp(c.b) })),
+    webFolds: net.webFolds.map((f) => ({ a: tp(f.a), b: tp(f.b) })),
     slits: net.slits.map((s) => ({ ...s, points: t(s.points) })),
     loose: net.loose.map((l) => ({ ...l, outline: t(l.outline), holes: l.holes.map(t) })),
     cutRings: net.cutRings.map(t),
+    marks: net.marks.map((m) => ({ ...m, rings: m.rings.map(t), lines: m.lines.map(t) })),
     bbox: [net.bbox[0] + dx, net.bbox[1] + dy, net.bbox[2] + dx, net.bbox[3] + dy],
   };
 }

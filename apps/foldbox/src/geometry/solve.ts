@@ -6,12 +6,13 @@
 // can cut is around 70 mm. Every incumbent lets the user find that out at the end.
 // Here it is in the status line the whole time.
 
-import type { BoxParams, Diagnostic, Machine, Net, Poly, Sheet, SolveResult, Stock } from '../types';
+import type { Artwork, BoxParams, Diagnostic, Machine, Net, Poly, Sheet, SolveResult, Stock } from '../types';
 import { MACHINES, SHEETS, STOCKS } from '../types';
 import { buildNet, placeNet } from './net';
 import { TRADE_INSET, buildStyle, insideDims, styleMeta } from './styles';
 import { slotFit } from './fit';
-import { at, bboxOf, offsetRing, signedArea } from './poly';
+import { at, bboxOf, offsetRing, pathLength, signedArea } from './poly';
+import { markFaceFor, markInsetMm, placeMarks, type MarkProblem } from './marks';
 
 export const SHEET_MARGIN_MM = 5;
 
@@ -24,7 +25,11 @@ export function sheetById(id: string): Sheet {
 /** Shortest dash this machine can actually make. The H2D's drag knife swivels through
  *  a 0.36 mm arc at every direction change, so anything near 1 mm is mostly turn. */
 export function minPerfCutMm(machine: Machine): number {
-  return machine.id.startsWith('h2d') && machine.foldMode !== 'score' ? 1 : 0.5;
+  // A DRAG KNIFE, which swivels through a 0.36 mm arc at every direction change, so
+  // anything near 1 mm is mostly turn. A beam has no such arc, so this is the Bambu
+  // blade and the generic "any cutting machine", where being conservative is the only
+  // safe guess.
+  return machine.id === 'h2d-blade' || machine.id === 'blade' ? 1 : 0.5;
 }
 
 export function stockById(id: string): Stock {
@@ -165,7 +170,10 @@ export function fitToSheet(input: BoxParams): Pick<BoxParams, 'lengthMm' | 'widt
 
 function rawNet(p: BoxParams): { net: Net; windowFitted: boolean; windowInsetMm: number } {
   const { parts, windowFitted, windowInsetMm } = buildStyle(p);
-  return { net: placeNet(buildNet(parts), SHEET_MARGIN_MM), windowFitted, windowInsetMm };
+  // The fold floor is a caliper term: the shortest interior edge that is not a fold is the
+  // one across a hem's own thickness. See `minFoldMm` in `buildNet`.
+  const net = placeNet(buildNet(parts, Math.max(2, 2.5 * p.caliperMm)), SHEET_MARGIN_MM);
+  return { net, windowFitted, windowInsetMm };
 }
 
 /** The thickness the blank is actually built for.
@@ -181,7 +189,34 @@ export function effectiveCaliper(p: BoxParams): number {
     : p.caliperMm;
 }
 
-export function solve(input: BoxParams): SolveResult {
+/** The logo, placed — or not, with the reason. Marks are the last thing added to a net
+ *  because they are the one thing on it that depends on the MAKE MODE: a printed sheet
+ *  carries them mirrored on its underside. `artwork` comes from the UI, which is the
+ *  only place a font can be loaded; the solve itself never waits on one. */
+function withMarks(net: Net, p: BoxParams, artwork: Artwork | null): { net: Net; problem: MarkProblem } {
+  if (p.logo === 'none' || !artwork) return { net, problem: 'none' };
+  const { marks, problem } = placeMarks(net, p, artwork);
+  let engrave = net.lengthByOp.engrave;
+  for (const m of marks) {
+    for (const r of m.rings) engrave += pathLength(r, true);
+    for (const l of m.lines) engrave += pathLength(l, false);
+  }
+  return {
+    net: { ...net, marks, markFace: markFaceFor(p), lengthByOp: { ...net.lengthByOp, engrave } },
+    problem,
+  };
+}
+
+/* How a fold line is made is the USER'S choice, and the app does not second-guess it.
+ *
+ *  An earlier pass here resolved "perforate" into "score" on any laser, on the reasoning
+ *  that a laser has a score and a dashed cut is a worse fold. That reasoning lost to a
+ *  real sheet: a box cut on cardstock with dashed Laser Cut folds came out nice. Both
+ *  work, they are not the same, and which is better depends on the material and the
+ *  machine — so both are offered (`Machine.foldModes`), the dashed cut is what a laser
+ *  profile opens on, and nothing is rewritten on the way to the file. */
+
+export function solve(input: BoxParams, artwork: Artwork | null = null): SolveResult {
   const p: BoxParams = { ...input, caliperMm: effectiveCaliper(input) };
   const machine = machineById(p.machineId);
   const sheet = sheetById(p.sheetId);
@@ -190,7 +225,7 @@ export function solve(input: BoxParams): SolveResult {
   const meta = styleMeta(p.style);
 
   const { net: base, windowFitted, windowInsetMm } = rawNet(p);
-  const net = applyKerf(base, p.kerfMm);
+  const { net, problem: logoProblem } = withMarks(applyKerf(base, p.kerfMm), p, artwork);
 
   const netW = net.bbox[2] - net.bbox[0];
   const netH = net.bbox[3] - net.bbox[1];
@@ -210,10 +245,15 @@ export function solve(input: BoxParams): SolveResult {
       level: 'error',
       code: 'sheet',
       message: `The blank is ${netW.toFixed(0)} × ${netH.toFixed(0)} mm and ${sheet.name} gives you ${availW.toFixed(0)} × ${availH.toFixed(0)} mm.`,
+      // Naming the button matters more than naming the arithmetic. Boxes eat far more
+      // paper than anyone predicts, so this is the NORMAL state on A4 rather than an edge
+      // case — five of the eleven styles hit it at the default size — and "go smaller" left
+      // the user hunting for the number with three sliders while a button two rows below
+      // was already able to find it.
       fix:
         cube > 20
-          ? `A cube up to about ${cube} mm fits this sheet in this style. Boxes eat a lot of paper: go smaller, pick a bigger sheet, or use the 12 × 24 mat.`
-          : 'Pick a larger sheet: this box will not fit any orientation of the current one.',
+          ? `Press "Resize to fit" below and it will find the biggest version that fits. Or pick a bigger sheet: a cube up to about ${cube} mm fits this one in this style.`
+          : 'Press "Resize to fit" below, or pick a larger sheet: this box will not fit any orientation of the current one.',
     });
   }
 
@@ -289,6 +329,59 @@ export function solve(input: BoxParams): SolveResult {
     });
   }
 
+  // Which face the logo ends up on is decided by the folds, and it surprises everyone.
+  // A score or a groove folds shut, so the marked face turns INWARD: on a printed sheet
+  // the marks are put on the underside for exactly that reason, and on a cut sheet the
+  // machine can only mark the face that is up.
+  if (net.marks.length && p.makeMode === 'cut') {
+    const perforated = p.foldMode === 'perf';
+    diagnostics.push({
+      level: 'info',
+      code: 'logo-face-side',
+      message: perforated
+        ? 'The logo is marked on the face that is up in the file.'
+        : 'The logo is marked on the same face as the scores, which folds inward.',
+      fix: perforated
+        ? 'Perforated folds go either way, so fold the box with that face outward and the logo is on the outside.'
+        : 'A scored fold closes on its score, so that face becomes the inside of the box. To have the logo outside, fold it the other way — or run the logo as a second job with the sheet turned over.',
+    });
+  }
+
+  // The logo is dropped rather than squeezed, and this is where it says so. Each reason
+  // is a different fix, and none of them is "make the box bigger" by default.
+  if (logoProblem === 'no-face' && net.panels.length > 0) {
+    diagnostics.push({
+      level: 'warning',
+      code: 'logo-face',
+      message: 'This box has no face big enough for a logo.',
+      fix: 'Every panel is under 10 mm across. Make the box bigger, or leave the logo off.',
+    });
+  } else if (logoProblem === 'no-room') {
+    diagnostics.push({
+      level: 'warning',
+      code: 'logo-fit',
+      message: 'The logo does not fit on that face, so it has been left off.',
+      fix:
+        p.makeMode === 'print'
+          ? `It is inlaid into the first layer, which near a fold IS the hinge, so it keeps ${markInsetMm(p).toFixed(1)} mm clear of every groove. Shrink it, or put it on a bigger face.`
+          : `It keeps ${markInsetMm(p).toFixed(1)} mm clear of every fold and cut. Shrink it, or put it on a bigger face.`,
+    });
+  } else if (logoProblem === 'conflict') {
+    diagnostics.push({
+      level: 'warning',
+      code: 'logo-window',
+      message: 'The logo runs into the window on that face, so it has been left off.',
+      fix: 'Shrink the logo, put it on another face, or turn the window off.',
+    });
+  } else if (p.makeMode === 'print' && net.marks.length && !net.marks.some((m) => m.rings.length)) {
+    diagnostics.push({
+      level: 'info',
+      code: 'logo-lines',
+      message: 'The logo is outlines only, and a printer has nothing to fill.',
+      fix: 'Strokes engrave and draw fine, but only filled shapes print as a second colour. Use text, or fill the shapes in the SVG.',
+    });
+  }
+
   // A grid of 1 x 1 is a box with no dividers in it: both strip loops run zero times,
   // so the blank comes out genuinely empty. Gate on the built net rather than on the
   // raw slider values, which the builder clamps behind our back.
@@ -299,23 +392,6 @@ export function solve(input: BoxParams): SolveResult {
       message: 'A 1 x 1 grid has no dividers in it: there is nothing to cut.',
       fix: 'Take columns or rows to 2 or more. One divider strip splits a box in two.',
     });
-  }
-
-  // A hand hole needs ~14 mm of clear opening plus a margin to the rim, so the roll
-  // end refuses to cut one it cannot place. Refusing quietly is worse than not
-  // offering it: the switch moves, the file does not change, and there is no way to
-  // tell that from a bug. Read it off the built net rather than re-deriving the
-  // condition here, so the two can never drift apart.
-  if (p.handHoles && meta.uses.handHoles) {
-    const cut = net.panels.some((x) => /wall|inner/.test(x.id) && x.holes.length > 0);
-    if (!cut) {
-      diagnostics.push({
-        level: 'warning',
-        code: 'hand-hole',
-        message: `There is no room for a hand hole on a ${H.toFixed(0)} mm tall end.`,
-        fix: 'A hole you can get a finger through needs about 14 mm, and it has to stay clear of the rim or it tears out. Take the box to 30 mm tall or more, or leave the holes off.',
-      });
-    }
   }
 
   const tuckNeeded = 2 * 8;
@@ -335,11 +411,19 @@ export function solve(input: BoxParams): SolveResult {
   const dashedFolds =
     p.makeMode === 'cut' && p.foldMode !== 'none' && (p.foldMode === 'perf' || machine.svgFold === 'dashed');
   if (hems > 0 && dashedFolds) {
+    // Two different situations wear the same collapse, and telling a user the wrong one
+    // sends them to a setting that changes nothing. When they asked for a PERFORATION the
+    // collapse is physical and it is in every file. When it is only the SVG's transport
+    // dash — Suite reads shape alone, so a solid fold line would arrive on the blade — the
+    // `.lac` names the operation and carries BOTH lines, and that is the file they open.
+    const perforating = p.foldMode === 'perf';
     diagnostics.push({
       level: 'info',
       code: 'hem',
-      message: `The double-ply ends carry one perforated line each, not two.`,
-      fix: `Their two creases sit ${(2 * p.caliperMm).toFixed(2)} mm apart — the thickness of your card. Perforating both would cut that strip out. Choose Laser score or Draw a pen line to get both lines marked.`,
+      message: 'Double-ply ends show one fold line, not two.',
+      fix: perforating
+        ? `The pair sits ${(2 * p.caliperMm).toFixed(2)} mm apart; cutting both would take the strip out. Fold the second against the first.`
+        : 'Both lines are in the .lac. The SVG shows one, because an SVG cannot say "fold".',
     });
   }
 
@@ -406,6 +490,7 @@ export function solve(input: BoxParams): SolveResult {
     diagnostics,
     netSizeMm: [netW, netH],
     overflow,
+    usableMm: [availW, availH],
     rotated,
     largestCubeMm: largestCube(p, sheet, SHEET_MARGIN_MM),
     cutLengthMm:

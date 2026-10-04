@@ -1,5 +1,6 @@
 import type { BuildParams, PartMesh } from '../types';
 import type { LineBox } from '@vostok/fonts/textLayout';
+import { csOf, ringsOf, extrude } from '@vostok/manifold';
 import { boreFor, gripFor, HEX_CORNER_FACTOR } from '../state';
 import { snapLayers } from './noAms';
 import { identityVoids } from './identityMark';
@@ -86,14 +87,14 @@ function meshOf(solid: any): { positions: Float32Array; indices: Uint32Array } {
  * Each connected component is shrunk about ITS OWN centre, so letters bevel in
  * place instead of sliding toward the middle of the word.
  */
-function bevelExtrude(cs: any, height: number, chamfer: number, keep: Keep, bottom = false): any {
+function bevelExtrude(wasm: any, cs: any, height: number, chamfer: number, keep: Keep, bottom = false): any {
   // Both bevels have to fit with a body left between them.
   const cham = Math.min(chamfer, bottom ? (height - 0.2) / 2 : height * 0.6);
-  if (cham <= 0.05) return keep(cs.extrude(height));
+  if (cham <= 0.05) return keep(extrude(wasm, cs, height));
 
   const z0 = bottom ? cham : 0;
   const z1 = height - cham;
-  let solid = keep(cs.extrude(z1 - z0).translate([0, 0, z0]));
+  let solid = keep(keep(extrude(wasm, cs, z1 - z0)).translate([0, 0, z0]));
 
   const components = (cs.decompose() as any[]) ?? [cs];
   for (const comp of components) {
@@ -111,10 +112,10 @@ function bevelExtrude(cs: any, height: number, chamfer: number, keep: Keep, bott
     const centered = keep(compCS.translate([-cx, -cy]));
     // One wedge: full section at its base, inset at its tip. Used as-is on top and
     // mirrored underneath, so the two bevels cannot drift apart.
-    const wedge = keep(centered.extrude(cham + 0.01, 0, 0, [scaleX, scaleY]));
+    const wedge = keep(extrude(wasm, centered, cham + 0.01, 0, 0, [scaleX, scaleY]));
     solid = keep(solid.add(keep(wedge.translate([cx, cy, z1 - 0.005]))));
     if (bottom) {
-      solid = keep(solid.add(keep(wedge.mirror([0, 0, 1]).translate([cx, cy, cham + 0.005]))));
+      solid = keep(solid.add(keep(keep(wedge.mirror([0, 0, 1])).translate([cx, cy, cham + 0.005]))));
     }
   }
   return solid;
@@ -150,12 +151,12 @@ function signedArea(poly: number[][]): number {
  * blobs. Without it the plate outline traps air pockets — the gap between a short
  * second line and the socket stem shows up as a phantom hole through the plate.
  */
-function fillHoles(CrossSection: any, cs: any, keep: Keep): any {
-  const polys = cs.toPolygons() as number[][][];
+function fillHoles(wasm: any, cs: any, keep: Keep): any {
+  const polys = ringsOf(cs) as number[][][];
   const outers = polys.filter((p) => signedArea(p) > 0);
   if (outers.length === polys.length) return cs;
   if (outers.length === 0) return cs;
-  return keep(new CrossSection(outers, 'Positive'));
+  return keep(csOf(wasm, outers, 'Positive'));
 }
 
 /** Where the truncated peak is cut off, as a multiple of the bore radius. The full
@@ -173,12 +174,13 @@ const ROOF_CAP = 1.18;
  * centre. Below the centre line it stays a plain circle — that half is held up by
  * the material under it and wants to be round for the fit.
  */
-function teardrop(CrossSection: any, r: number, keep: Keep): any {
+function teardrop(wasm: any, r: number, keep: Keep): any {
+  const { CrossSection } = wasm;
   const disc = keep(CrossSection.circle(r, 48));
   const k = r / Math.SQRT2;
   const h = ROOF_CAP * r;
   const flat = r * Math.SQRT2 - h; // half-width of the bridge at the top
-  const roof = keep(new CrossSection([[[-k, k], [k, k], [flat, h], [-flat, h]]], 'NonZero'));
+  const roof = keep(csOf(wasm, [[[-k, k], [k, k], [flat, h], [-flat, h]]], 'NonZero'));
   return keep(disc.add(roof));
 }
 
@@ -210,13 +212,13 @@ const RIB_WIDTH_MM = 1.3;
  *  lie at 60 degrees to the horizontal, well inside any overhang limit, so the hole
  *  closes itself. Flat up would put a bridge the full width of the barrel across the
  *  top, which is the one thing the teardrop exists to avoid on the round bore. */
-function hexagon(CrossSection: any, cornerR: number, keep: Keep): any {
+function hexagon(wasm: any, cornerR: number, keep: Keep): any {
   const pts: number[][] = [];
   for (let i = 0; i < 6; i++) {
     const a = ((90 + i * 60) * Math.PI) / 180;
     pts.push([Math.cos(a) * cornerR, Math.sin(a) * cornerR]);
   }
-  return keep(new CrossSection([pts], 'NonZero'));
+  return keep(csOf(wasm, [pts], 'NonZero'));
 }
 
 /** Which faces of a vertex-up hexagon get a rib, best first.
@@ -228,15 +230,15 @@ function hexagon(CrossSection: any, cornerR: number, keep: Keep): any {
 const HEX_RIB_FACES_DEG = [180, 300, 240, 0, 120, 60];
 
 function boreProfile(
-  CrossSection: any,
+  wasm: any,
   boreR: number,
   gripR: number,
   ribs: number,
   hex: boolean,
   keep: Keep,
 ): any {
-  if (hex) return hexBoreProfile(CrossSection, boreR, gripR, ribs, keep);
-  let cs = teardrop(CrossSection, boreR, keep);
+  if (hex) return hexBoreProfile(wasm, boreR, gripR, ribs, keep);
+  let cs = teardrop(wasm, boreR, keep);
   if (ribs <= 0 || gripR >= boreR - 0.02) return cs;
 
   // Chord -> half-angle at the rib's crest, clamped so a wide rib on a small bore
@@ -256,7 +258,7 @@ function boreProfile(
       const t = a - half + (2 * half * k) / STEPS;
       pts.push([Math.cos(t) * (boreR + 1), Math.sin(t) * (boreR + 1)]);
     }
-    cs = keep(cs.subtract(keep(new CrossSection([pts], 'NonZero'))));
+    cs = keep(cs.subtract(keep(csOf(wasm, [pts], 'NonZero'))));
   }
   return cs;
 }
@@ -270,13 +272,14 @@ function boreProfile(
  * from the corner circle, or it would be 15 percent short of the pen.
  */
 function hexBoreProfile(
-  CrossSection: any,
+  wasm: any,
   boreR: number,
   gripR: number,
   ribs: number,
   keep: Keep,
 ): any {
-  let cs = hexagon(CrossSection, boreR, keep);
+  const { CrossSection } = wasm;
+  let cs = hexagon(wasm, boreR, keep);
   if (ribs <= 0 || gripR >= boreR - 0.02) return cs;
 
   const faceR = boreR / HEX_CORNER_FACTOR; // centre -> face of the hole
@@ -289,8 +292,8 @@ function hexBoreProfile(
     // A bar lying on the face, its inner edge at the rib crest and its outer edge
     // safely past the hole wall, then rotated onto that face's normal.
     const bar = keep(
-      CrossSection.square([RIB_WIDTH_MM, depth], true)
-        .rotate((HEX_RIB_FACES_DEG[i]! - 90))
+      keep(keep(CrossSection.square([RIB_WIDTH_MM, depth], true))
+        .rotate((HEX_RIB_FACES_DEG[i]! - 90)))
         .translate([Math.cos(a) * (ribCrest + depth / 2), Math.sin(a) * (ribCrest + depth / 2)]),
     );
     cs = keep(cs.subtract(bar));
@@ -530,7 +533,7 @@ export function buildProfiles(
   if (textContours.length === 0 || textContours.every((c) => c.length === 0)) {
     glyphsCS = keep(CrossSection.circle(0.01, 3));
   } else {
-    glyphsCS = keep(new CrossSection(textContours, 'NonZero'));
+    glyphsCS = keep(csOf(wasm, textContours, 'NonZero'));
   }
   if (Math.abs(params.boldness) > 0.02) {
     const bolded = keep(glyphsCS.offset(params.boldness, 'Round', 2.0, 12));
@@ -623,8 +626,8 @@ export function buildProfiles(
   const stemPiece = (a: number, b: number, w: number) => {
     const mid = ((a + b) / 2) * stemDir;
     return keep(
-      CrossSection.square([w, Math.max(b - a, 0.05)], true)
-        .rotate(angleDeg)
+      keep(keep(CrossSection.square([w, Math.max(b - a, 0.05)], true))
+        .rotate(angleDeg))
         .translate([anchorX + dir[0] * mid, anchorY + dir[1] * mid]),
     );
   };
@@ -650,7 +653,7 @@ export function buildProfiles(
       // A stacked name is a column of separate letters; a central spine fuses them
       // into one body before the offset rounds it.
       const spine = keep(
-        CrossSection.square([Math.max(blockW * 0.42, params.size * 0.3), blockH], true).translate([gcx, gcy]),
+        keep(CrossSection.square([Math.max(blockW * 0.42, params.size * 0.3), blockH], true)).translate([gcx, gcy]),
       );
       shapeCS = keep(shapeCS.add(spine));
     } else if ((params.lines ?? []).length >= 2) {
@@ -668,16 +671,16 @@ export function buildProfiles(
       }
       if (yt > yb) {
         const band = keep(
-          CrossSection.square([cxR - cxL, yt - yb], true).translate([(cxL + cxR) / 2, (yt + yb) / 2]),
+          keep(CrossSection.square([cxR - cxL, yt - yb], true)).translate([(cxL + cxR) / 2, (yt + yb) / 2]),
         );
         shapeCS = keep(shapeCS.add(band));
       }
     } else if (params.name.includes(' ')) {
-      const strip = keep(CrossSection.square([blockW, blockH * 0.5], true).translate([gcx, gcy]));
+      const strip = keep(keep(CrossSection.square([blockW, blockH * 0.5], true)).translate([gcx, gcy]));
       shapeCS = keep(shapeCS.add(strip));
     }
   } else {
-    const rect = keep(CrossSection.square([blockW, blockH], true).translate([gcx, gcy]));
+    const rect = keep(keep(CrossSection.square([blockW, blockH], true)).translate([gcx, gcy]));
     shapeCS = keep(rect.add(stemCS));
   }
 
@@ -685,7 +688,7 @@ export function buildProfiles(
   const smoothR = params.smoothing;
   let plateCS = keep(shapeCS.offset(plateMargin + smoothR, 'Round', 2.0, 24));
   if (smoothR > 0.05) plateCS = keep(plateCS.offset(-smoothR, 'Round', 2.0, 24));
-  plateCS = fillHoles(CrossSection, plateCS, keep);
+  plateCS = fillHoles(wasm, plateCS, keep);
 
   let textCS = glyphsCS;
   let haloCS = hasHalo ? keep(glyphsCS.offset(params.haloWidth, 'Round', 2.0, 16)) : null;
@@ -703,7 +706,7 @@ export function buildProfiles(
   if (bare && inBody && !emptyText) {
     const blindTo = Math.min(params.socketDepth, reach + plateMargin);
     const fit = bareFit(
-      plateCS.toPolygons() as number[][][],
+      ringsOf(plateCS) as number[][][],
       [anchorX, anchorY],
       dir,
       perp,
@@ -745,16 +748,16 @@ export function buildProfiles(
   // bore's own teardrop grown by one wall. They meet at exactly the same width, so
   // the join is seamless — flat foot, straight flanks, self-supporting dome.
   const isHex = params.holeShape === 'hex';
-  const boreCS = boreProfile(CrossSection, boreR, gripR, params.ribCount, isHex, keep);
+  const boreCS = boreProfile(wasm, boreR, gripR, params.ribCount, isHex, keep);
   // The collar is grown from the bore, which is the widest the void ever gets — the
   // ribs only ever stand inside it.
-  const holeOuter = isHex ? hexagon(CrossSection, boreR, keep) : teardrop(CrossSection, boreR, keep);
-  const dome = keep(holeOuter.offset(wall, 'Round', 2.0, 32).translate([0, boreZ]));
-  const foot = keep(CrossSection.square([collarW, boreZ], true).translate([0, boreZ / 2]));
+  const holeOuter = isHex ? hexagon(wasm, boreR, keep) : teardrop(wasm, boreR, keep);
+  const dome = keep(keep(holeOuter.offset(wall, 'Round', 2.0, 32)).translate([0, boreZ]));
+  const foot = keep(keep(CrossSection.square([collarW, boreZ], true)).translate([0, boreZ / 2]));
   let collarCS = keep(dome.add(foot));
   // Take the sharpness off the two bottom corners; the first layer spreads there
   // anyway and a square corner is what catches on the way off the plate.
-  collarCS = keep(collarCS.offset(-0.6, 'Round', 2.0, 12).offset(0.6, 'Round', 2.0, 12));
+  collarCS = keep(keep(collarCS.offset(-0.6, 'Round', 2.0, 12)).offset(0.6, 'Round', 2.0, 12));
 
   return {
     plateCS,
@@ -821,10 +824,10 @@ export function buildTopper(
       is built, is what left the collar sitting at x = 0 while the plate's stem was
       out at the text's centre: the two agreed on the angle and disagreed on where.
     */
-    const place = (solid: any) => keep(solid.rotate([0, 0, p.angleDeg]).translate([p.anchorX, p.anchorY, 0]));
+    const place = (solid: any) => keep(keep(solid.rotate([0, 0, p.angleDeg])).translate([p.anchorX, p.anchorY, 0]));
     /** A profile in XY -> a prism running along local -Y, top face at local y = 0. */
     const prism = (cs: any, len: number, topY = 0) =>
-      keep(cs.extrude(len).rotate([90, 0, 0]).translate([0, topY, 0]));
+      keep(keep(keep(extrude(wasm, cs, len)).rotate([90, 0, 0])).translate([0, topY, 0]));
 
     // --- Body: plate + collar ---------------------------------------------
     const chamPlate = Math.min(params.chamferOn ? params.chamfer : 0, p.plateT * 0.6);
@@ -832,7 +835,7 @@ export function buildTopper(
 
     // Bottom chamfer on the plate only: the letters sit on top of it, so their
     // underside is buried and a bevel there would just undercut them.
-    let body = bevelExtrude(p.plateCS, p.plateT, chamPlate, keep, true);
+    let body = bevelExtrude(wasm, p.plateCS, p.plateT, chamPlate, keep, true);
     // A collar is its own tube welded to the plate. An in-body bore has no tube: the
     // plate was thickened to hold it, and the spine guarantees the wall.
     if (!p.inBody) body = keep(body.add(place(prism(p.collarCS, p.collarLen))));
@@ -885,8 +888,8 @@ export function buildTopper(
     const cone = (atY: number, towardPlus: boolean) =>
       place(
         keep(
-          Manifold.cylinder(lead + 0.02, p.boreR + lead * 0.6, p.gripR, 48)
-            .rotate([towardPlus ? -90 : 90, 0, 0])
+          keep(keep(Manifold.cylinder(lead + 0.02, p.boreR + lead * 0.6, p.gripR, 48))
+            .rotate([towardPlus ? -90 : 90, 0, 0]))
             .translate([0, atY + (towardPlus ? -0.01 : 0.01), p.boreZ]),
         ),
       );
@@ -906,14 +909,14 @@ export function buildTopper(
       yTo: (p.inBody ? p.collarLen : 0) - 2,
     });
     for (const v of voids) {
-      body = keep(body.subtract(place(keep(Manifold.sphere(v.d / 2, 12).translate([v.x, v.y, v.z])))));
+      body = keep(body.subtract(place(keep(keep(Manifold.sphere(v.d / 2, 12)).translate([v.x, v.y, v.z])))));
     }
 
     // --- Engraved variant ---------------------------------------------------
     if (!p.isRaised) {
       const cutDepth = Math.min(params.textThickness, p.plateT * 0.6);
       const recessCS = p.hasHalo && p.haloCS ? keep(p.haloCS.add(p.textCS)) : p.textCS;
-      const recess = keep(recessCS.extrude(cutDepth + 1).translate([0, 0, p.plateT - cutDepth]));
+      const recess = keep(keep(extrude(wasm, recessCS, cutDepth + 1)).translate([0, 0, p.plateT - cutDepth]));
       body = keep(body.subtract(recess));
       parts.push({ name: 'plate', ...meshOf(body), color: hexToRgb(params.plateColor) });
 
@@ -921,22 +924,22 @@ export function buildTopper(
         if (p.hasHalo && p.haloCS) {
           const ringCS = keep(p.haloCS.subtract(p.textCS));
           if (ringCS.area() > 0.02) {
-            const ring = keep(ringCS.extrude(cutDepth).translate([0, 0, p.plateT - cutDepth]));
+            const ring = keep(keep(extrude(wasm, ringCS, cutDepth)).translate([0, 0, p.plateT - cutDepth]));
             parts.push({ name: 'halo', ...meshOf(ring), color: hexToRgb(params.haloColor) });
           }
         }
-        const inlay = keep(p.textCS.extrude(cutDepth).translate([0, 0, p.plateT - cutDepth]));
+        const inlay = keep(keep(extrude(wasm, p.textCS, cutDepth)).translate([0, 0, p.plateT - cutDepth]));
         parts.push({ name: 'text', ...meshOf(inlay), color: hexToRgb(params.textColor) });
       }
     } else {
       parts.push({ name: 'plate', ...meshOf(body), color: hexToRgb(params.plateColor) });
 
       if (p.hasHalo && p.haloCS) {
-        const halo = keep(p.haloCS.extrude(p.haloT).translate([0, 0, p.plateT]));
+        const halo = keep(keep(extrude(wasm, p.haloCS, p.haloT)).translate([0, 0, p.plateT]));
         parts.push({ name: 'halo', ...meshOf(halo), color: hexToRgb(params.haloColor) });
       }
 
-      const text = keep(bevelExtrude(p.textCS, params.textThickness, chamText, keep).translate([0, 0, p.letterZ]));
+      const text = keep(bevelExtrude(wasm, p.textCS, params.textThickness, chamText, keep).translate([0, 0, p.letterZ]));
       parts.push({
         name: 'text',
         ...meshOf(text),

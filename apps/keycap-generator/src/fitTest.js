@@ -16,6 +16,7 @@
  * injection is what lets tests/fit-test.test.js drive the real geometry with nothing more than
  * `await Module(); api.setup();`.
  */
+import { csOf, extrude } from '@vostok/manifold';
 import { applyStemClearance } from './stemClearance.js';
 
 // ---------------------------------------------------------------- tunables
@@ -144,8 +145,10 @@ function manifoldToPlainGeom(man) {
 
 /** Flat 2D contours (as `letterContour` returns them) -> a vertical Manifold prism. */
 function extrudeContoursLocal(api, contours, bottomZ, height) {
-  const cs = new api.CrossSection(contours, 'NonZero');
-  const solid = cs.extrude(height).translate([0, 0, bottomZ]);
+  const cs = csOf(api, contours, 'NonZero');
+  const solidRaw = extrude(api, cs, height);
+  const solid = solidRaw.translate([0, 0, bottomZ]);
+  solidRaw.delete();
   cs.delete();
   return solid;
 }
@@ -232,8 +235,9 @@ export function buildFitTestPiece(deps, tolMM) {
   ]));
 
   // ---- assemble: tab, minus the label recess, plus the stem ----
-  const tabM = api.Manifold.cube([layout.tabW, layout.tabH, FIT_TEST_TAB_THICK_MM], false)
-    .translate([-layout.tabW / 2, layout.yMin, 0]);
+  const tabRaw = api.Manifold.cube([layout.tabW, layout.tabH, FIT_TEST_TAB_THICK_MM], false);
+  const tabM = tabRaw.translate([-layout.tabW / 2, layout.yMin, 0]);
+  tabRaw.delete();
   const labelPrism = extrudeContoursLocal(
     api, contours,
     FIT_TEST_TAB_THICK_MM - FIT_TEST_LABEL_DEPTH_MM,

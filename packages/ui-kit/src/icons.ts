@@ -129,6 +129,16 @@ export const ICONS = {
   list: stroke('<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>', 18),
   // Two sliders — a category of plain settings.
   sliders: stroke('<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/>', 18),
+  // A box seen from a corner — a box's own settings (Laser Box).
+  box: stroke('<path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3z"/><path d="m3 7.5 9 4.5 9-4.5"/><path d="M12 12v9"/>', 18),
+  // A ruler — a sheet's thickness, a material.
+  ruler: stroke('<rect x="2" y="8" width="20" height="8" rx="1.5"/><path d="M6 8v3"/><path d="M10 8v4"/><path d="M14 8v3"/><path d="M18 8v4"/>', 18),
+  // Fingers meeting a straight edge — joints.
+  joint: stroke('<path d="M2 11h4V7h4v4h4V7h4v4h4"/><path d="M2 15h20"/>', 18),
+  // Three cells of a honeycomb — a repeating pattern.
+  pattern: stroke('<path d="M7.5 4.5 11.4 6.75v4.5L7.5 13.5 3.6 11.25v-4.5z"/><path d="M16.5 4.5l3.9 2.25v4.5L16.5 13.5l-3.9-2.25v-4.5z"/><path d="M12 12.3l3.9 2.25v4.5L12 21.3l-3.9-2.25v-4.5z"/>', 18),
+  // A heart — a shape something is cut inside.
+  heart: stroke('<path d="M12 20 4.6 12.6a4.2 4.2 0 0 1 7.4-5.4 4.2 4.2 0 0 1 7.4 5.4z"/>', 18),
 } as const;
 
 /** Parse a raw SVG string into an element. */

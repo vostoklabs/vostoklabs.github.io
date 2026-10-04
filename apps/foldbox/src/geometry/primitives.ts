@@ -428,8 +428,6 @@ export interface RollEndOpts {
   dir: 1 | -1;
   H: number;
   t: number;
-  /** Die-cut hand hole through BOTH plies, or null. */
-  hand?: { w: number; h: number } | null;
   /** Animation stage of the roll and the inner ply. */
   order: number;
   /** Stage of the OUTER WALL alone, when it may not wait for the roll. A webbed
@@ -499,23 +497,38 @@ export function rollEnd(o: RollEndOpts): { panels: Panel[]; slots: Poly[] } {
   // gives up `step` before it engages anything — hence the + step. This used to be a
   // flat 2.5 mm that never scaled, and was NON-MONOTONIC: at t = 0.83 a thicker board
   // got LESS grip than a thinner one.
-  const tabLen = clamp(2.5 * t, 1.2, 4) + step;
+  //
+  // The CATCH — the first term — was 2.5t floored at 1.2 and capped at 4. Stacked on
+  // `step`, that made the whole tab scale at up to 4.5 x caliper: 1.96 mm on 300 gsm,
+  // 3.6 mm on a four-layer printed sheet and 7.2 mm on e-flute, which is a quarter of
+  // the inner ply sticking out into the open. A catch is a hook, not a tongue: it only
+  // has to clear the floor's far face by enough to sit down behind it, and past that
+  // every extra millimetre is one more the user has to thread through a slot. Still
+  // monotonic in t, which is the property the old flat 2.5 lost.
+  const tabLen = clamp(1.5 * t, 0.8, 2) + step;
 
   // Along the slot, clearance is pure assembly cost — the lock works across the slot's
   // width, not its length — but every zero-kerf machine rounds an inside corner by
   // roughly its blade offset, so it cannot go to nothing either.
   const clear = Math.max(0.35, t);
-  const tabH = clamp(run * 0.2, 5, 30);
+  /** How long the nib is along the run of the wall, and with it the slot it drops into.
+   *
+   *  A fifth of the wall, ceiling 30 mm, was too much at every size: 12 mm on the
+   *  default 90 x 60 box and a full 30 mm on a 150 mm-wide one. The trade cuts a nib
+   *  of roughly 10-15 mm whatever the carton, because a lock does not scale with the
+   *  box — a finger and a slit do not get bigger.
+   *
+   *  Length is also what made a roll end fiddly to close: a 30 mm tongue has to line
+   *  up with a 30 mm slit along its whole length before any of it goes in, where a
+   *  short nib finds the slot at one corner and pivots home.
+   *
+   *  The GRIP is not this number. What stops the end springing back is the shoulder
+   *  standing proud of the floor's far face, which is `tabLen` — untouched here. */
+  const tabH = clamp(run * 0.12, 5, 14);
   const centres = [y0 + run * 0.3, y0 + run * 0.7];
 
   /** Distance out from the crease -> net x. */
   const X = (d: number): number => x + dir * d;
-  const mid = (y0 + y1) / 2;
-
-  const hand =
-    o.hand && H >= o.hand.h + 16 && run >= o.hand.w + 20
-      ? { ...o.hand, inset: o.hand.h / 2 + Math.max(7, H * 0.15) }
-      : null;
 
   const fold = o.fold ?? HALF;
 
@@ -524,11 +537,7 @@ export function rollEnd(o: RollEndOpts): { panels: Panel[]; slots: Poly[] } {
     label: 'end wall',
     role: 'body',
     outline: span(X(0), X(rollStart), y0, y1),
-    // Wide along the run of the wall, shallow across its height — the roll's x axis
-    // is the box's HEIGHT and its y axis is the box's width, so the stadium's two
-    // axes go in the opposite order to the way it reads. Swapped, a 40 mm hole ran
-    // up a 50 mm wall and the wall's hole and the inner ply's hole overlapped.
-    holes: hand ? [stadium(X(rollStart - hand.inset), mid, hand.h, hand.w)] : [],
+    holes: [],
     parent: o.parent,
     foldAngle: fold,
     order: o.wallOrder ?? o.order,
@@ -565,7 +574,7 @@ export function rollEnd(o: RollEndOpts): { panels: Panel[]; slots: Poly[] } {
     label: 'inner wall',
     role: 'flap',
     outline: [[A, innerY0], ...far, [A, innerY1]],
-    holes: hand ? [stadium(X(innerStart + hand.inset), mid, hand.h, hand.w)] : [],
+    holes: [],
     parent: roll.id,
     foldAngle: fold,
     order: o.order + 2,
@@ -791,6 +800,270 @@ export function webbedTray(o: WebbedTrayOpts): {
 
   const b = bboxOf(panels.map((q) => q.outline));
   return { panels, slits, extent: [b[2] - b[0], b[3] - b[1]] };
+}
+
+// ─────────────────────── single-wall claw-lock tray (B15.06) ───────────────────────
+
+export interface ClawTrayOpts {
+  prefix: string;
+  labelPrefix: string;
+  /** Inside dimensions. */
+  L: number;
+  W: number;
+  H: number;
+  t: number;
+  x: number;
+  y: number;
+  /** How wide the slit has to be cut for the ONE ply that goes through it. */
+  fit: SlotFit;
+}
+
+export interface ClawTray {
+  panels: Panel[];
+  slits: Slit[];
+  /** The floor's own size and the wall height, so a cover can be hung off the rim
+   *  without re-deriving terms the tray has already worked out. */
+  BL: number;
+  BW: number;
+  wallH: number;
+  /** False when the wall is too shallow to hold a hook worth the name: the corner
+   *  still closes, it just does not catch. See `MIN_HOOK_MM`. */
+  locks: boolean;
+}
+
+/** How much prong has to stand through the slit before it is a lock rather than a
+ *  suggestion. Under this the barb has nothing to bear on and the corner springs.
+ *
+ *  It is a FLOOR and not a target: the prong is always drawn this deep at least, and a
+ *  wall too shallow to hold one that deep — along with the slit, the shoulder above it
+ *  and a body worth the name — is a wall with no lock. That is what `locks` reports. */
+const MIN_HOOK_MM = 3;
+
+/** How much claw is left above the slit once the prong and its shoulder are taken out
+ *  of the wall. Less than this and the tab is a tongue with no body to hold the two
+ *  walls square, which is the claw's other job. */
+const MIN_CLAW_BODY_MM = 4;
+
+/** ECMA B15.06 — the unglued tray with four SINGLE walls, locked at the corners by a
+ *  claw. It is the cheap tray: every cake, pastry and cookie box is this one, and it
+ *  costs about half the board of the double-walled roll-end `tray()` for the same
+ *  inside size, because no wall is folded back on itself and no corner needs a full
+ *  H square of web.
+ *
+ *          ┌──┬──────────────────────┬──┐
+ *     ┌────┤cl│      back wall       │cl├────┐
+ *     │    └──┴──────────────────────┴──┘    │
+ *     │end │                          │ end  │   ▬ = the slit each claw's prong
+ *     │wall│          BASE            │ wall │       is pushed out through
+ *     │  ▬▬│                          │▬▬    │
+ *     │    ┌──┬──────────────────────┬──┐    │
+ *     └────┤cl│      front wall      │cl├────┘
+ *          └──┴──────────────────────┴──┘
+ *
+ *  What makes it a `06` and not an `01` is the corner. A nib-lock tray hangs a plain
+ *  ear beside a relief gap and holds the end down with tabs dropped through the floor.
+ *  Here the ear IS the lock: a tab hinged on the END of each long wall, folding 90
+ *  degrees about what is a vertical line once the wall is up, so it lands flat on the
+ *  inside face of the end wall. Hanging one there is easy; making it stay is the
+ *  style. The tab carries a PRONG on its lower edge, and the end wall carries a short
+ *  slit at the prong's height, parallel to the base crease: push the prong out through
+ *  the slit and the barb on it sits behind the board. The two walls can no longer come
+ *  apart, which is the whole of the lock — no tabs through the floor, no glue, no web,
+ *  and nothing standing proud on the underside for the tray to rock on.
+ *
+ *  ECMA draws the claw and does not dimension it (p.4: "some details … are not
+ *  specified or shown"), so the prong, its barb, the height the slit sits at and the
+ *  length it is cut to are derived here in caliper. See `StyleMeta.ecma` for the note
+ *  that says so in the UI and in every exported README. */
+export function clawTray(o: ClawTrayOpts): ClawTray {
+  const { prefix: p, labelPrefix: lp, L, W, H, t, x, y, fit } = o;
+  const g = relief(t);
+  const step = layerStep(t);
+
+  // Single walls, so the floor IS the inside floor and there is no roll allowance to
+  // make for — the whole 5t of `tray()`'s base goes away. The one thing it does give
+  // up is a caliper at each END, where the claw lies flat on the end wall's inner face
+  // and takes that much of the inside length with it.
+  const BL = L + 2 * t;
+  const BW = W;
+  const wallH = H + t;
+
+  const base: Panel = {
+    id: `${p}base`,
+    label: `${lp}base`,
+    role: 'base',
+    outline: rect(x, y, BL, BW),
+    holes: [],
+    parent: null,
+    foldAngle: 0,
+  };
+
+  // The long walls are inset by one relief at each end, and that gap is not slack: it
+  // is where the claw's own ply stands. Hinged there, the claw folds into the plane one
+  // relief inside the end wall, which is its inner FACE — flush against the wall rather
+  // than fighting it for the same millimetre.
+  const longWall = (id: string, label: string, yBase: number, dirY: 1 | -1): Panel => ({
+    id,
+    label,
+    role: 'body',
+    outline: span(x + g, x + BL - g, yBase, yBase + dirY * wallH),
+    holes: [],
+    parent: base.id,
+    foldAngle: HALF,
+    order: 1,
+  });
+  const front = longWall(`${p}front`, `${lp}front wall`, y, -1);
+  const back = longWall(`${p}back`, `${lp}back wall`, y + BW, 1);
+
+  const endWall = (id: string, ex: number, dirX: 1 | -1): Panel => ({
+    id,
+    label: `${lp}end wall`,
+    role: 'body',
+    outline: span(ex, ex + dirX * wallH, y, y + BW),
+    holes: [],
+    parent: base.id,
+    foldAngle: HALF,
+    order: 1,
+  });
+  const left = endWall(`${p}left`, x, -1);
+  const right = endWall(`${p}right`, x + BL, 1);
+
+  // ── the claw ──
+  //
+  // Everything below is in the END WALL's own two numbers: `u` out from the corner
+  // along the wall, `z` up from the base crease. The claw is authored in those and
+  // mapped into the net at the very end, because every term here is about where the
+  // part LANDS rather than about where it is cut — and the slit, which is cut in a
+  // different panel, has to agree with it exactly.
+  //
+  //      z                    ┌──────────────┐ zTop
+  //      ^                    │              │
+  //      |                    │   body       │
+  //      |    bodyZ  ─────────┴──┐        ┌──┘
+  //      |    slitZ  ▬▬▬▬▬▬▬▬▬▬ waist ▬▬▬▬     <- the slit, cut in the end wall
+  //      |                    └─┐      │
+  //      |    tip              └─────┘          <- barb, fed in tip first
+  //      +----------------------------------> u
+
+  /** The prong stops this far above the base crease: the floor's own folded thickness
+   *  plus a relief, or the prong fouls it on the way in. */
+  const tip = step + g;
+  /** How far the prong stands through the slit — the engagement, and the only number
+   *  that decides whether this is a lock at all. */
+  const hook = clamp(H * 0.22, MIN_HOOK_MM, 9);
+  const slitZ = tip + hook;
+  /** Board between the slit and the claw's body, which is what bears on the wall. */
+  const shoulder = Math.max(2, step);
+  const bodyZ = slitZ + shoulder;
+  const zTop = wallH - g;
+
+  // How far the claw reaches along the end wall. Capped at HALF the end, because the
+  // claw off the front wall and the claw off the back wall share it and two that meet
+  // in the middle foul each other.
+  const clawU = clamp(H * 0.7, 6, Math.max(6, BW / 2 - g));
+  const prongW = clamp(clawU * 0.4, 4, 16);
+  /** The barb: a 45 degree step on the prong's CORNER side, below the slit. It makes
+   *  the prong wider under the slit than the slit is long, so it has to be fed in tip
+   *  first and cannot be pulled straight back out. */
+  const barb = clamp(prongW * 0.22, 0.5, 1.2);
+  /** The prong's parallel-sided waist — the part that actually sits IN the slit. It
+   *  has to straddle the slit, so the barb's step is set back below it. */
+  const waist = Math.min(Math.max(1.2, 2 * barb), hook * 0.45);
+  const tipCh = Math.min(0.8, prongW * 0.2, Math.max(0.1, (hook - waist) * 0.5));
+  /** Board outboard of the prong, so the prong is a prong and not a split end. */
+  const pu1 = clawU - Math.max(2, prongW * 0.2);
+  const pu0 = pu1 - prongW;
+  const locks = bodyZ <= zTop - MIN_CLAW_BODY_MM && pu0 - barb >= 1.5;
+  const ch = Math.min(3, clawU * 0.3, (zTop - (locks ? bodyZ : g)) * 0.3);
+
+  /** One claw. `hx` is the long wall's end — the hinge — `dirU` which way it reaches
+   *  into the end wall, `hy` the base crease it stands on and `dirZ` which way the
+   *  wall's height runs in the net. */
+  const claw = (
+    id: string,
+    parent: string,
+    hx: number,
+    dirU: 1 | -1,
+    hy: number,
+    dirZ: 1 | -1,
+  ): Panel => {
+    const P = (u: number, z: number): Pt => [hx + dirU * u, hy + dirZ * z];
+    return {
+      id,
+      label: `${lp}corner claw`,
+      role: 'flap',
+      // Trapped between the end wall and the cover's wing coming down inside it.
+      thin: true,
+      outline: locks
+        ? [
+            P(0, bodyZ),
+            P(pu0, bodyZ),
+            P(pu0, slitZ - waist + barb),
+            P(pu0 - barb, slitZ - waist),
+            P(pu0 - barb, tip + tipCh),
+            P(pu0 - barb + tipCh, tip),
+            P(pu1 - tipCh, tip),
+            P(pu1, tip + tipCh),
+            P(pu1, bodyZ),
+            P(clawU, bodyZ),
+            P(clawU, zTop - ch),
+            P(clawU - ch, zTop),
+            P(0, zTop),
+          ]
+        : [
+            P(0, g),
+            P(clawU, g),
+            P(clawU, zTop - ch),
+            P(clawU - ch, zTop),
+            P(0, zTop),
+          ],
+      holes: [],
+      parent,
+      foldAngle: HALF,
+      // After the walls and before the cover: by hand the corners go in as soon as the
+      // four walls are standing, and nothing may come down over them before they are.
+      order: 2,
+    };
+  };
+
+  // The slit is the prong's width plus one slot fit, centred on it — the fit is for a
+  // SINGLE ply, because one prong goes through and nothing else ever will.
+  const s0 = pu0 - fit.widthMm / 2;
+  const s1 = pu1 + fit.widthMm / 2;
+  const slits: Slit[] = [];
+  /** A slit in one end wall. `ex` is the base crease it is measured from, `dirX` the
+   *  way the wall folds out in the net, and `corner`/`dirU` which end of the wall the
+   *  claw comes from. */
+  const slit = (panelId: string, ex: number, dirX: 1 | -1, corner: number, dirU: 1 | -1): void => {
+    slits.push({
+      panelId,
+      op: 'cut',
+      points: [
+        [ex + dirX * slitZ, corner + dirU * s0],
+        [ex + dirX * slitZ, corner + dirU * s1],
+      ],
+    });
+  };
+  if (locks) {
+    slit(left.id, x, -1, y, 1);
+    slit(left.id, x, -1, y + BW, -1);
+    slit(right.id, x + BL, 1, y, 1);
+    slit(right.id, x + BL, 1, y + BW, -1);
+  }
+
+  const panels: Panel[] = [
+    base,
+    front,
+    back,
+    left,
+    right,
+    claw(`${p}claw-fl`, front.id, x + g, -1, y, -1),
+    claw(`${p}claw-fr`, front.id, x + BL - g, 1, y, -1),
+    claw(`${p}claw-bl`, back.id, x + g, -1, y + BW, 1),
+    claw(`${p}claw-br`, back.id, x + BL - g, 1, y + BW, 1),
+  ];
+
+  return { panels, slits, BL, BW, wallH, locks };
 }
 
 // ───────────────────────────────── handle blade ─────────────────────────────────
@@ -1088,9 +1361,11 @@ export function tube(o: TubeOpts): Tube {
     foldAngle: i === 0 ? 0 : HALF,
     // A tube has no base panel to stand on — its root is the front WALL, which lies
     // flat in the blank. Left alone, the finished box would stand on its face. The
-    // tilt brings the whole assembly upright as it closes, and the z offset puts the
-    // bottom edge back on the ground once it is.
-    rootPose: i === 0 ? (o.rootPose ?? { offset: [0, 0, H / 2], tilt: HALF }) : undefined,
+    // tilt brings the whole assembly upright once every flap is home, pivoting about
+    // the wall's bottom edge (the rig does the pivot; see `rootEdge` there). The offset
+    // is where that pivot leaves the wall's centre: half a height back and half a
+    // height up, so the bottom edge stays exactly where the blank's was.
+    rootPose: i === 0 ? (o.rootPose ?? { offset: [0, -H / 2, H / 2], tilt: HALF }) : undefined,
   }));
 
   const walls = wallList as [Panel, Panel, Panel, Panel];
@@ -1103,6 +1378,11 @@ export function tube(o: TubeOpts): Tube {
     holes: [],
     parent: walls[3].id,
     foldAngle: HALF,
+    // Pre-creased, with the first wall: a lap that waits for its own wall to come
+    // down hangs off that wall's far edge pointing straight at the table, and swung
+    // 11 mm through the plate before it folded. Folded early it rides down on the
+    // inside of the wall and lands flat on the front wall, which is where the glue goes.
+    order: 1,
   };
 
   return {
@@ -1126,6 +1406,10 @@ export function dustFlap(
   depth: number,
   t: number,
   up: boolean,
+  /** The stage it folds in. A tube's walls take stages 1 to 3 to wrap, so its dust
+   *  flaps wait until 4: folded at 2 the last wall's flap swung through the plate
+   *  while that wall was still coming down. */
+  order = 2,
 ): Panel {
   // Measured inset on the reference dieline is exactly 2t either side.
   const g = Math.max(relief(t), layerStep(t));
@@ -1153,7 +1437,7 @@ export function dustFlap(
     // Past 90 so it visibly tucks under the panel closing over it — the detail that
     // makes the animation read as cardboard rather than as CAD.
     overshoot: 0.28,
-    order: 2,
+    order,
   };
 }
 
@@ -1178,8 +1462,13 @@ export function closure(opts: {
   lock: 'none' | 'friction' | 'slit';
   thumbNotch: boolean;
   label: string;
+  /** The stage the panel folds in; the tuck is bent in the stage BEFORE it. A tube's
+   *  walls take stages 1 to 3, so a tube's closures come at 5, with the dust flaps and
+   *  the tucks at 4. */
+  order?: number;
 }): { panels: Panel[]; slits: Slit[] } {
   const { prefix: p, x, y, w, t, up, tuck } = opts;
+  const order = opts.order ?? 3;
   const dir = up ? 1 : -1;
   // The closure panel is SHORTER than the box is deep, so its far crease lands on
   // the inner face of the opposite wall instead of on its edge. Two independent
@@ -1197,7 +1486,7 @@ export function closure(opts: {
     holes: [],
     parent: opts.parent,
     foldAngle: HALF,
-    order: 3,
+    order,
   };
 
   // A friction lock keeps the tuck full width and relies on the squeeze; a slit lock
@@ -1242,7 +1531,12 @@ export function closure(opts: {
     // The last flap stops just short of square so it never z-fights with the wall it
     // slides down behind.
     undershoot: 0.03,
-    order: 4,
+    // Bent in BEFORE the panel closes, the stage before it, the way a hand does it:
+    // fold the tuck over, then push the panel down and the tuck slides in. Folded after
+    // the panel, the flat tuck carries on past the panel's far edge, and with the tube
+    // lying on the table that edge is on the plate, so the tuck hung 10 mm through it
+    // until its own stage came round.
+    order: order - 1,
   };
 
   const slits: Slit[] = [];
@@ -1286,6 +1580,10 @@ export interface EnvelopeBottomOpts {
   t: number;
   /** The crease the flaps hang off — the tube's own baseline. */
   y: number;
+  /** The stage the slotted panel folds in; the side flaps follow one later and the
+   *  tongued panel two. A tube's walls take stages 1 to 3 to wrap, so its bottom
+   *  starts at 4. */
+  order?: number;
 }
 
 /** The snap-lock base, after Federal Specification PPP-B-566E fig. 10 (Style X,
@@ -1306,6 +1604,7 @@ export interface EnvelopeBottomOpts {
  *  the whole point of a four-pair code, and A55.20 and A55.75 share this exact 55. */
 export function envelopeBottom(o: EnvelopeBottomOpts): { panels: Panel[]; slits: Slit[] } {
   const { prefix: p, walls, spans: s, L, W, t, y } = o;
+  const order = o.order ?? 2;
   const [front, , , ] = walls;
   const back = walls[2];
   const g = relief(t);
@@ -1335,7 +1634,12 @@ export function envelopeBottom(o: EnvelopeBottomOpts): { panels: Panel[]; slits:
       parent: (walls[i] as Panel).id,
       foldAngle: HALF,
       overshoot: 0.25,
-      order: 3,
+      // A hair PAST square, into the box, so it draws above the closing panel rather
+      // than fighting it. Negative on purpose: short of square would leave it on the
+      // unfolded side of the plane, and once the box stands up that side is under
+      // the table.
+      undershoot: -0.02,
+      order: order + 1,
     });
   }
 
@@ -1358,7 +1662,11 @@ export function envelopeBottom(o: EnvelopeBottomOpts): { panels: Panel[]; slits:
     holes: [],
     parent: back.id,
     foldAngle: HALF,
-    order: 2,
+    // First in, so deepest: it rests furthest past square, into the box, so the flaps
+    // that land on it draw above it rather than fighting it (see the side flaps for
+    // why the sign is negative).
+    undershoot: -0.04,
+    order,
   });
   // The slot itself is an interior cut, not part of the outline — it has no area to
   // remove, it is a slit the tongue passes through.
@@ -1393,9 +1701,11 @@ export function envelopeBottom(o: EnvelopeBottomOpts): { panels: Panel[]; slits:
     holes: [],
     parent: front.id,
     foldAngle: HALF,
-    // Last down, and stopping a hair short so it visibly rests on the panel below.
-    undershoot: 0.04,
-    order: 4,
+    // Last down, so it is the outside of the base: exactly square, because once the
+    // box stands up this is the panel on the plate. It used to be the one stopping
+    // short, and that left its tongue 2.4 mm under the table in the finished box; the
+    // panels above it are the ones that stop short now.
+    order: order + 2,
   });
 
   return { panels, slits };

@@ -4,6 +4,7 @@
 // (outer CCW positive, holes CW negative, one flat list) lives in `toCS` / `fromCS`, and
 // nothing else in the app needs to know manifold's conventions.
 import type { CutRing } from '@vostok/export';
+import { csOf, ringsOf } from '@vostok/manifold';
 import { signedArea, circleRing, simplifyRing } from './rings';
 import type { Keyring } from './types';
 import type { KeychainParams } from './types';
@@ -31,65 +32,13 @@ export function withScope<T>(fn: (keep: Keep) => T): T {
 }
 
 /*
-  manifold-3d 3.5.1's JS glue leaks every ring that passes through it, both ways. Building a
-  CrossSection from rings (`polygons2vec`) copies each ring into a vector, pushes that into the
-  list BY COPY and never frees the first one; reading one back (`toPolygons`, `vec2polygons`)
-  takes a copy of each ring and never frees that. 16 bytes a vertex, gone for good, on every
-  boolean in this file — most of what the Laser Studio worker's heap grew by on every rebuild of
-  one design (0.16 MB a name tag, 0.87 MB a pattern cut out of a coaster). The vendored no-eval
-  build carries the same glue.
-
-  `csOf` and `ringsOf` do what the glue does, with the same embind pieces, and free what it
-  forgets. If a later manifold moves those pieces, they fall back to the glue: leaking, never wrong.
+  manifold-3d 3.5.1's JS glue leaks every ring that passes through it, both ways: 16 bytes a
+  vertex on every boolean in this file — most of what the Laser Studio worker's heap grew by on
+  every rebuild of one design (0.16 MB a name tag, 0.87 MB a pattern cut out of a coaster).
+  `csOf` and `ringsOf` build and read CrossSections without it. They live in @vostok/manifold
+  now, where the 3D generators get them too, and are re-exported here for this package's users.
 */
-const FILL_RULE = { EvenOdd: 0, NonZero: 1, Positive: 2, Negative: 3 } as const;
-
-/** `new CrossSection(rings, rule)` without the leak. The embind class under the glue's wrapper is
- *  the constructor of the wrapper's prototype's prototype: `setup()` builds it that way. */
-export function csOf(wasm: any, rings: number[][][], rule: keyof typeof FILL_RULE = 'Positive'): any {
-  const proto = Object.getPrototypeOf(wasm.CrossSection.prototype);
-  if (typeof proto?._ToPolygons !== 'function' || typeof wasm.Vector2_vec2 !== 'function') return new wasm.CrossSection(rings, rule);
-  const list = new wasm.Vector2_vec2();
-  try {
-    for (const r of rings) {
-      const ring = new wasm.Vector_vec2();
-      try {
-        for (const p of r) ring.push_back({ x: p[0], y: p[1] });
-        list.push_back(ring);
-      } finally {
-        ring.delete();
-      }
-    }
-    return new proto.constructor(list, FILL_RULE[rule]);
-  } finally {
-    list.delete();
-  }
-}
-
-/** `cs.toPolygons()` without the leak. */
-export function ringsOf(cs: any): CutRing[] {
-  if (typeof cs._ToPolygons !== 'function') return cs.toPolygons();
-  const list = cs._ToPolygons();
-  try {
-    const out: CutRing[] = [];
-    for (let i = 0, n = list.size(); i < n; i++) {
-      const ring = list.get(i);
-      try {
-        const pts: CutRing = [];
-        for (let j = 0, m = ring.size(); j < m; j++) {
-          const p = ring.get(j);
-          pts.push([p.x, p.y]);
-        }
-        out.push(pts);
-      } finally {
-        ring.delete();
-      }
-    }
-    return out;
-  } finally {
-    list.delete();
-  }
-}
+export { csOf, ringsOf };
 
 /** Islands → one CrossSection. The largest ring of an island is its outer, made CCW; the
  *  rest are holes, made CW; the Positive rule then fills exactly the material. */
@@ -298,7 +247,7 @@ export function buildKeychainProfile(wasm: any, textContours: number[][][], p: K
   return withScope((keep) => {
     const { CrossSection } = wasm;
     const hasText = textContours.some((c) => c.length >= 3);
-    const glyphs = hasText ? keep(new CrossSection(textContours, 'NonZero')) : keep(CrossSection.circle(0.01, 3));
+    const glyphs = hasText ? keep(csOf(wasm, textContours, 'NonZero')) : keep(CrossSection.circle(0.01, 3));
     const box = bbox(textContours);
     const w = Math.max(box.maxX - box.minX, 0.1);
     const h = Math.max(box.maxY - box.minY, 0.1);
@@ -312,9 +261,9 @@ export function buildKeychainProfile(wasm: any, textContours: number[][][], p: K
     // Plate source: the letters (fused by a strip so a word is one piece) or a box.
     let src: any;
     if (p.plateShape === 'rectangle') {
-      src = keep(CrossSection.square([w, h], true).translate([cx, cy]));
+      src = keep(keep(CrossSection.square([w, h], true)).translate([cx, cy]));
     } else {
-      const strip = keep(CrossSection.square([w, Math.max(h * 0.35, 0.5)], true).translate([cx, cy]));
+      const strip = keep(keep(CrossSection.square([w, Math.max(h * 0.35, 0.5)], true)).translate([cx, cy]));
       src = keep(glyphs.add(strip));
     }
 
@@ -326,11 +275,11 @@ export function buildKeychainProfile(wasm: any, textContours: number[][][], p: K
       const neck = Math.max(lugOuter * 2.2, 8);
       const ax = left ? hx + neck : hx;
       const ay = left ? hy : hy - neck;
-      const lug = keep(CrossSection.circle(lugPre, 32).translate([hx, hy]));
-      const anchor = keep(CrossSection.circle(Math.min(lugPre * 0.85, 2), 16).translate([ax, ay]));
+      const lug = keep(keep(CrossSection.circle(lugPre, 32)).translate([hx, hy]));
+      const anchor = keep(keep(CrossSection.circle(Math.min(lugPre * 0.85, 2), 16)).translate([ax, ay]));
       const tab = keep(CrossSection.hull([lug, anchor]));
       src = keep(src.add(tab));
-      hole = keep(CrossSection.circle(p.holeDia / 2, 48).translate([hx, hy]));
+      hole = keep(keep(CrossSection.circle(p.holeDia / 2, 48)).translate([hx, hy]));
     }
 
     const smooth = Math.max(0, p.smoothing);

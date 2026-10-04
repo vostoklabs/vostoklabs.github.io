@@ -17,6 +17,7 @@
 // the minifier changes its mind about how to write a Worker URL.
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -81,9 +82,32 @@ const mimeOf = (f) => MIME[f.slice(f.lastIndexOf('.')).toLowerCase()] ?? 'applic
 // for. Base64 costs a third on top, and there is no way round that: it has to be
 // text to live in an html file.
 const assetFiles = files.filter((f) => !SHELL_FILES.has(f));
-const assets = Object.fromEntries(
-  assetFiles.map((f) => [f, `data:${mimeOf(f)};base64,${readFileSync(shell(f)).toString('base64')}`]),
-);
+// Identical bytes are embedded ONCE, whatever they are called: the worker's build emits its
+// own copy of every asset its module graph names (laser-studio's engine imports @vostok/fonts
+// for text layout, so all 242 faces came out a second time as `worker-<face>.ttf` and the page
+// was 92 MB instead of 46). The shortest path is the canonical key — `pacifico.ttf`, not
+// `worker-pacifico.ttf` — because the prelude derives a font family from that name; the
+// others resolve through `aliases` in the prelude's `key()`.
+const assets = {};
+const aliases = {};
+const byHash = new Map();
+for (const f of assetFiles) {
+  const buf = readFileSync(shell(f));
+  const h = createHash('sha1').update(buf).digest('hex');
+  const first = byHash.get(h);
+  if (!first) {
+    byHash.set(h, f);
+    assets[f] = `data:${mimeOf(f)};base64,${buf.toString('base64')}`;
+  } else if (f.length < first.length) {
+    assets[f] = assets[first];
+    delete assets[first];
+    aliases[first] = f;
+    for (const k of Object.keys(aliases)) if (aliases[k] === first) aliases[k] = f;
+    byHash.set(h, f);
+  } else {
+    aliases[f] = first;
+  }
+}
 
 // ────────────────────────────────── the prelude ──────────────────────────────────
 
@@ -100,26 +124,52 @@ const assets = Object.fromEntries(
  *
  *  Patching the prelude rather than the bundle is what keeps this from breaking the
  *  next time the minifier writes a worker URL differently. */
-function prelude(map, workerSrc) {
+function prelude(map, workerSrc, aliasMap = {}) {
   return `(function(){
 var A = ${JSON.stringify(map)};
+var AL = ${JSON.stringify(aliasMap)};
 var W_SRC = ${JSON.stringify(workerSrc)};
 var BASE = document.baseURI;
+// The page's DIRECTORY. An iife bundle resolves its assets as new URL(name, the app.js url),
+// so a request arrives as file:///.../offline/pacifico.ttf: the folder plus the asset name,
+// which BASE (the folder plus the PAGE's name) is not a prefix of. Every one of Laser
+// Studio's fonts went past the map that way and the build reported "Failed to fetch".
+// (No backticks in this comment: it lives inside a template literal.)
+// The route hash comes first: with #/t/name-keychain on the page, the last slash of baseURI
+// is INSIDE the hash, and the folder must be cut from the page's address without it.
+var PAGE = BASE.split('#')[0].split('?')[0];
+var DIR = PAGE.replace(/[^\\/]*$/, '');
+// A font library kept ONCE (laser-studio's vite.offline.config.ts emits the .ttf files instead
+// of inlining them and empties fonts.css): every .ttf in the map gets its @font-face here, so
+// the HTML previews and getFont's fetch read the same bytes. Family = VL-<file stem>, the
+// convention @vostok/fonts writes. No .ttf in the map (every other app) — nothing happens.
+(function(){
+  var css = '';
+  for (var k in A) {
+    var m = /(?:^|\\/)([^\\/]+)\\.ttf$/.exec(k);
+    if (!m) continue;
+    css += '@font-face{font-family:VL-' + m[1] + ';src:url("' + A[k] + '");font-display:' + (m[1] === 'icon-fallback' ? 'block' : 'swap') + '}\\n';
+  }
+  if (css) { var s = document.createElement('style'); s.setAttribute('data-offline-fonts', ''); s.textContent = css; document.head.appendChild(s); }
+})();
 function key(u){
   if (u == null) return null;
   u = String(u);
   if (/^(data:|blob:|https?:)/i.test(u)) return null;
-  if (u.indexOf(BASE) === 0) u = u.slice(BASE.length);
+  if (u.indexOf(PAGE) === 0) u = u.slice(PAGE.length);
+  else if (u.indexOf(DIR) === 0) u = u.slice(DIR.length);
   u = u.replace(/^\\.\\//, '').replace(/^\\//, '').split('#')[0].split('?')[0];
   // Requests are built by concatenation in some places and by URL() in others, so
   // the same file arrives both with raw spaces and percent-encoded.
   var d = u; try { d = decodeURIComponent(u); } catch (e) {}
+  if (Object.prototype.hasOwnProperty.call(AL, d)) d = AL[d];
+  if (Object.prototype.hasOwnProperty.call(AL, u)) u = AL[u];
   if (Object.prototype.hasOwnProperty.call(A, d)) return d;
   return Object.prototype.hasOwnProperty.call(A, u) ? u : null;
 }
 var _fetch = window.fetch.bind(window);
 window.fetch = function(input, init){
-  var u = typeof input === 'string' ? input : (input && input.url);
+  var u = typeof input === 'string' ? input : (input instanceof URL ? input.href : (input && input.url));
   var k = key(u);
   return k ? _fetch(A[k], init) : _fetch(input, init);
 };
@@ -171,7 +221,19 @@ if (W_SRC) {
     // Built as an iife, so it is a CLASSIC worker whatever the caller asked for —
     // and a module worker from a blob would try to resolve imports against the
     // blob's own opaque origin.
-    if (!blob) blob = URL.createObjectURL(new Blob([W_SRC], { type: 'text/javascript' }));
+    // Inside the Blob, the worker bundle's own import.meta.url is self.location.href, a
+    // blob: address — and a blob: address is not a valid base, so every asset URL the worker
+    // builds at start-up (its copy of the font map, 242 of them) throws "Invalid URL" and
+    // the worker dies before the first job. A URL shim resolves those against the page's
+    // folder instead; the worker never fetches them, it only has to survive naming them.
+    var SHIM = '(function(){var DIR=' + JSON.stringify(DIR) + ';var U=self.URL;' +
+      'function S(u,b){if(b!==undefined&&String(b).indexOf("blob:")===0)b=DIR;' +
+      'return b===undefined?new U(u):new U(u,b);}S.prototype=U.prototype;' +
+      'for(var k in U)try{S[k]=typeof U[k]==="function"?U[k].bind(U):U[k];}catch(e){}' +
+      'S.createObjectURL=U.createObjectURL.bind(U);S.revokeObjectURL=U.revokeObjectURL.bind(U);' +
+      'if(U.canParse)S.canParse=U.canParse.bind(U);if(U.parse)S.parse=U.parse.bind(U);' +
+      'self.URL=S;})();\\n';
+    if (!blob) blob = URL.createObjectURL(new Blob([SHIM, W_SRC], { type: 'text/javascript' }));
     var o = {}; for (var p in opts) o[p] = opts[p]; o.type = 'classic';
     return new _W(blob, o);
   };
@@ -246,7 +308,8 @@ if (extraWorkers.length) throw new Error(`unhandled worker chunks: ${extraWorker
 // them is `apple-touch-icon`, which a `rel="icon"` matcher walks straight past.
 html = html.replace(/(\b(?:src|href)=")([^"]+)(")/g, (m, pre, url, post) => {
   if (/^(data:|#|https?:|mailto:)/i.test(url)) return m;
-  const k = decodeURIComponent(url.replace(/^\.\//, '').replace(/^\//, ''));
+  const k0 = decodeURIComponent(url.replace(/^\.\//, '').replace(/^\//, ''));
+  const k = aliases[k0] ?? k0;
   return assets[k] ? `${pre}${assets[k]}${post}` : m;
 });
 
@@ -271,7 +334,7 @@ const escape = (js) => js.replace(/<\/script/gi, '<\\/script');
 html = html.replace(
   '</body>',
   () =>
-    `  <script>\n${escape(prelude(assets, workerSrc))}\n  </script>\n` +
+    `  <script>\n${escape(prelude(assets, workerSrc, aliases))}\n  </script>\n` +
     `  <script>\n${escape(bundle)}\n  </script>\n</body>`,
 );
 
@@ -303,7 +366,8 @@ const biggest = assetFiles
   .sort((a, b) => b[1] - a[1])
   .slice(0, 3)
   .map(([f, n]) => `${f} ${(n / 1024 / 1024).toFixed(1)} MB`);
-console.log(`\n  ${assetFiles.length} assets embedded${biggest.length ? ` — biggest: ${biggest.join(', ')}` : ''}`);
+const aliased = Object.keys(aliases).length;
+console.log(`\n  ${assetFiles.length - aliased} assets embedded${aliased ? ` (${aliased} duplicate files aliased to them)` : ''}${biggest.length ? ` — biggest: ${biggest.join(', ')}` : ''}`);
 console.log(`  worker: ${workerSrc ? `${(workerSrc.length / 1024 / 1024).toFixed(2)} MB, inlined as a Blob` : 'none'}`);
 console.log(`  ${relative(ROOT, htmlPath)}  ${mb(htmlPath)}  (no external references)`);
 console.log(`  ${relative(ROOT, zipPath)}  ${mb(zipPath)}`);

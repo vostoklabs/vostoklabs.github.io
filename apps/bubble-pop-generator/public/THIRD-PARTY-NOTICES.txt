@@ -1,0 +1,33 @@
+THIRD-PARTY NOTICES
+============================================================
+
+Bubble pop fidget generator — pick a shape (or an image) and a number of pop buttons, get a printable snap-fit pop-it.
+Copyright (c) 2026 Vostok Labs
+
+This file lists the third-party material bundled into this application, and the
+licences it is used under. It ships with every distribution of the app.
+
+Nothing here restricts what you may do with a file you EXPORT from this
+generator — see the application's own licence for that.
+
+
+
+1. RUNTIME LIBRARIES
+------------------------------------------------------------
+
+  Every third-party library this application is built from, whether it is depended
+  on directly or reached through one of the shared Vostok Labs packages. Listed in
+  full rather than per build: which of them a given page actually loads depends on
+  which features it uses, and an omitted notice is a licence not honoured while a
+  spare one costs nobody anything.
+
+  d3-contour 4.0.2 — ISC
+  fflate 0.8.3 — MIT
+  manifold-3d 3.5.1 — Apache-2.0
+  pica 10.0.2 — MIT
+  three 0.171.0 — MIT
+
+
+
+============================================================
+Questions about any of the above: see the project's licence, or get in touch.

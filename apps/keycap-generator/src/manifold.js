@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import ManifoldModule from 'manifold-3d';
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
+import { csOf, extrude } from '@vostok/manifold';
 import { weldPositions } from './meshUtils.js';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
@@ -84,9 +85,10 @@ function embolden(cs, bold) {
 // 2D contours -> vertical prism spanning bottomZ .. bottomZ + height.
 // NonZero fill matches SVG and cleanly unions any self-overlapping paths.
 export function extrudePrism(contours, bottomZ, height, bold = 0) {
-  const { CrossSection } = api;
-  const cs = embolden(new CrossSection(contours, 'NonZero'), bold);
-  const solid = cs.extrude(height).translate([0, 0, bottomZ]);
+  const cs = embolden(csOf(api, contours, 'NonZero'), bold);
+  const solidRaw = extrude(api, cs, height);
+  const solid = solidRaw.translate([0, 0, bottomZ]);
+  solidRaw.delete();
   cs.delete();
   return solid;
 }
@@ -102,8 +104,6 @@ export function extrudePrism(contours, bottomZ, height, bold = 0) {
  * boundary-edge wall builder, where shared edges got count ≥ 2 and walls never closed).
  */
 export function extrudeStrokeGeom(flatGeom, bottomZ, height, bold = 0) {
-  const { CrossSection } = api;
-
   const pos = flatGeom.getAttribute('position');
   const idx = flatGeom.getIndex();
 
@@ -130,8 +130,10 @@ export function extrudeStrokeGeom(flatGeom, bottomZ, height, bold = 0) {
     throw new Error('Stroke geometry produced no usable triangles.');
   }
 
-  const cs = embolden(new CrossSection(contours, 'NonZero'), bold);
-  const solid = cs.extrude(height).translate([0, 0, bottomZ]);
+  const cs = embolden(csOf(api, contours, 'NonZero'), bold);
+  const solidRaw = extrude(api, cs, height);
+  const solid = solidRaw.translate([0, 0, bottomZ]);
+  solidRaw.delete();
   cs.delete();
   return solid;
 }

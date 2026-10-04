@@ -29,6 +29,7 @@
     "check:chrome": "node scripts/check-app-chrome.mjs",
     "check:ui": "node scripts/check-ui-drift.mjs",
     "check:public": "node scripts/check-public.mjs --all",
+    "check:manifold": "node scripts/check-manifold.mjs",
     "gen:licenses": "node scripts/licenses.mjs",
     "check:licenses": "node scripts/licenses.mjs --check",
     "build:offline": "node scripts/offline.mjs",

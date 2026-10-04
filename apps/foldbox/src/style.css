@@ -62,6 +62,32 @@ body {
   stroke: none;
 }
 
+/* The logo. Filled and even-odd, so a letter's counter is a hole; in the theme's ink,
+   because the file's ENGRAVE black is invisible on a dark stage. Underside marks — a
+   printed sheet's — are fainter: they are in the file, mirrored, but not on the face
+   being shown. */
+.fb-flat__mark {
+  fill: var(--text);
+  fill-opacity: 0.55;
+  stroke: var(--text);
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.fb-flat__mark-line {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 0.7;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.fb-flat__mark--under {
+  fill-opacity: 0.22;
+  stroke-opacity: 0.5;
+}
+
 .fb-flat__label {
   fill: var(--muted);
   font-family: var(--font-body);
@@ -134,9 +160,12 @@ body {
 
 /* --------------------------------------------------------------- panels -- */
 
-.fb-blurb,
+/* No margin-top: `.vl-section__body` is a flex column with a 12px row gap already,
+   and a margin on top of a gap is how one row ends up 20px from its neighbour while
+   every other row in the column is 12. Same reason `.fb-fit` and `.fb-diagnostics`
+   below carry none. */
 .fb-note {
-  margin: var(--space-2) 0 0;
+  margin: 0;
   color: var(--muted);
   font-size: var(--fs-body);
   line-height: 1.45;
@@ -179,18 +208,86 @@ body {
   cursor: help;
 }
 
-.fb-style-meta .fb-blurb {
-  margin-top: var(--space-1, 4px);
+/* The words field and the symbol button on one line. The button is sized to its label
+   and the field takes the rest — `min-width: 0` is what lets the field shrink instead of
+   pushing the button off the panel, which is what it did. */
+.fb-logo-row {
+  display: flex;
+  align-items: flex-end;
+  /* --space-3, not --space-2. The field's focus ring is a 2px spread that paints
+     OUTSIDE its border box, so an 8px gap leaves 6px of clear air to the Symbol
+     button and the focused field reads as touching it. 12px leaves 10px. */
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.fb-logo-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+}
+
+.fb-logo-sym {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .fb-fit,
 .fb-wide {
   width: 100%;
-  margin-top: var(--space-3);
 }
 
-.fb-note--warn {
-  color: var(--warn);
+/* The one alert in the app that has to be unmissable: the blank does not fit the
+   sheet, which is the normal state on A4 and the thing that stops a person dead.
+   A tint plus a hairline, not a bar — see `.fb-diag`. `color-mix` against `--panel`
+   rather than a hex, so it lands correctly in both themes and follows a palette
+   change; `--text` stays the body colour, because `--red` as text is unreadable on
+   the light panel. */
+.fb-alert {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--red) 45%, var(--line));
+  border-radius: var(--radius-box);
+  background: color-mix(in srgb, var(--red) 9%, var(--panel));
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fb-alert__title {
+  margin: 0;
+  font-size: var(--fs-strong);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Two lines, not a wrapped sentence. The blank and the surface are a COMPARISON —
+   side by side and lined up, the problem is obvious without reading; run together as
+   prose at 300 px it wrapped with "mm" orphaned on a line of its own. */
+.fb-alert__detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-compact);
+  line-height: 1.5;
+  white-space: pre-line;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The fix button sits directly under the alert that explains why it is there — it
+   used to be two sections further down, under a heading of its own, which is why a
+   reviewer read the warning and still went hunting for what to change.
+
+   Both margins go to zero: the section body is a flex column with its own 12px row
+   gap, and the host's 8px plus the button's own 12px stacked on top of it put 32px
+   between the alert and its own fix. */
+.fb-fitbtn {
+  margin-top: 0;
+}
+
+.fb-fitbtn > .fb-fit {
+  width: 100%;
+  margin-top: 0;
 }
 
 /* -------------------------------------------------------------- results -- */
@@ -237,30 +334,17 @@ body {
 .fb-diagnostics {
   display: grid;
   gap: var(--space-2);
-  margin-top: var(--space-3);
 }
 
-.fb-diagnostics:empty {
-  margin-top: 0;
-}
-
+/* No coloured left rule. Three bar colours over a stack of cards turned the results
+   panel into a barcode, and the bar was the only thing carrying the severity — which
+   made it decoration doing a job. The card is a quiet panel; the ONE thing that needs
+   to shout (the blank does not fit) is `.fb-alert` below, and it shouts with a tint
+   rather than by adding a fourth stripe. */
 .fb-diag {
   padding: var(--space-2) var(--space-3);
-  border-left: 3px solid var(--line);
   border-radius: var(--radius-s);
   background: var(--panel-2);
-}
-
-.fb-diag--error {
-  border-left-color: var(--red);
-}
-
-.fb-diag--warning {
-  border-left-color: var(--warn);
-}
-
-.fb-diag--info {
-  border-left-color: var(--accent);
 }
 
 .fb-diag__msg {
@@ -274,6 +358,13 @@ body {
   color: var(--muted);
   font-size: var(--fs-body);
   line-height: 1.45;
+}
+
+/* Info is reference, not an alarm: at body size its explanation ran to three lines in
+   the default state. Warnings and errors keep the body size — they are the ones that
+   have to be read. */
+.fb-diag--info .fb-diag__fix {
+  font-size: var(--fs-small);
 }
 
 /* The style picker carries eight options, which is more than the shared source-card
@@ -338,23 +429,42 @@ body {
   white-space: nowrap;
 }
 
-/* The dieline panel is a legend and two switches — one row, not three. `.vl-switch-row`
-   is `justify-content: space-between` and stretches to whatever box it is in, so it
-   also needs telling to take only the width it needs. */
+/* Two groups on one line: what the colours mean on the left, the switches on the right.
+   It used to be one flat wrap of three items, so the first switch sat beside the legend
+   and the second dropped to a line of its own — the legend and the switches read as one
+   ragged list rather than as two things. `.vl-switch-row` is `space-between` and stretches
+   to whatever box it is in, so each still has to be told to take only the width it needs. */
 .fb-dieline-body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2) var(--space-4);
 }
 
-.fb-dieline-body > .vl-switch-row {
+/* Stacked, not side by side. The stage panel is 380 px at most, and two switches on one
+   line plus the colour key comes to about 460 — so the key wraps under them and the panel
+   reads as one ragged list again. A column of two puts the whole block at about 320. */
+.fb-dieline-switches {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.fb-dieline-switches > .vl-switch-row {
   flex: 0 0 auto;
   gap: var(--space-2);
 }
 
 .fb-dieline-body .vl-switch-label {
   font-size: 14px;
+}
+
+/* The colour key keeps its chips together and wraps as a block, so it cannot interleave
+   with the switches on a narrow stage. */
+.fb-legend {
+  flex: 0 1 auto;
 }
 
 /* The status line moves to the top-left, under the stage label.

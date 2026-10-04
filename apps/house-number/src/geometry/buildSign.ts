@@ -11,6 +11,7 @@
  * that must not trap air. Two generators drifting on memory handling is how a WASM leak
  * gets found in the third one.
  */
+import { csOf, ringsOf, extrude } from '@vostok/manifold';
 import {
   plateOutline, keyhole, keyholePositions, bboxOf, plateSizeFor, signedArea,
   screwHolePositions, screwHolePositions4, circle, ccw, fitAngleFor, nudgeClear, pullInside,
@@ -55,10 +56,10 @@ function meshOf(solid: any): { vertProperties: Float32Array; triVerts: Uint32Arr
  * than sliding toward the word's centre — the same reason the keychain does it per
  * component rather than scaling the whole cross-section.
  */
-function bevelExtrude(cs: any, height: number, chamfer: number, keep: Keep): any {
-  if (chamfer <= 0.05) return keep(cs.extrude(height));
+function bevelExtrude(wasm: any, cs: any, height: number, chamfer: number, keep: Keep): any {
+  if (chamfer <= 0.05) return keep(extrude(wasm, cs, height));
   const baseH = Math.max(0.01, height - chamfer);
-  let solid = keep(cs.extrude(baseH));
+  let solid = keep(extrude(wasm, cs, baseH));
 
   const components = (cs.decompose() as any[]) ?? [cs];
   for (const comp of components) {
@@ -75,7 +76,7 @@ function bevelExtrude(cs: any, height: number, chamfer: number, keep: Keep): any
 
     const centered = keep(compCS.translate([-cx, -cy]));
     const topCap = keep(
-      centered.extrude(chamfer + 0.01, 0, 0, [scaleX, scaleY]).translate([cx, cy, baseH - 0.005]),
+      keep(extrude(wasm, centered, chamfer + 0.01, 0, 0, [scaleX, scaleY])).translate([cx, cy, baseH - 0.005]),
     );
     solid = keep(solid.add(topCap));
   }
@@ -89,11 +90,11 @@ function bevelExtrude(cs: any, height: number, chamfer: number, keep: Keep): any
  * Used on the *plate* outline and never on the text: a glyph's counters are the one place
  * holes are the point.
  */
-function fillHoles(CrossSection: any, cs: any, keep: Keep): any {
-  const polys = cs.toPolygons() as number[][][];
+function fillHoles(wasm: any, cs: any, keep: Keep): any {
+  const polys = ringsOf(cs) as number[][][];
   const outers = polys.filter((p) => signedArea(p) > 0);
   if (outers.length === polys.length || outers.length === 0) return cs;
-  return keep(new CrossSection(outers, 'Positive'));
+  return keep(csOf(wasm, outers, 'Positive'));
 }
 
 /**
@@ -111,22 +112,22 @@ function fillHoles(CrossSection: any, cs: any, keep: Keep): any {
  * than a full-height ring landing on top of an already-chamfered lip and overhanging it.
  */
 function frameSolid(
-  CrossSection: any,
+  wasm: any,
   outline: number[][][],
   width: number,
   height: number,
   chamfer: number,
   keep: Keep,
 ): any {
-  const outer = keep(new CrossSection(outline, 'Positive'));
+  const outer = keep(csOf(wasm, outline, 'Positive'));
   const inner = keep(outer.offset(-width, 'Round', 2, 8));
   const ring = keep(outer.subtract(inner));
 
   const c = Math.min(chamfer, Math.max(0, width / 2 - 0.05), height - 0.05);
-  if (c <= 0.05) return keep(ring.extrude(height));
+  if (c <= 0.05) return keep(extrude(wasm, ring, height));
 
   const baseH = Math.max(0.01, height - c);
-  let solid = keep(ring.extrude(baseH));
+  let solid = keep(extrude(wasm, ring, baseH));
 
   // The outline is centred on the origin by the caller, so a scale about the origin moves
   // each edge by the same amount all the way round and no re-centring is needed.
@@ -141,8 +142,8 @@ function frameSolid(
     ];
   };
 
-  const capOuter = keep(outer.extrude(c + 0.01, 0, 0, scale(ob, -c)));  // draws in going up
-  const capInner = keep(inner.extrude(c + 0.01, 0, 0, scale(ib, c)));   // opens out going up
+  const capOuter = keep(extrude(wasm, outer, c + 0.01, 0, 0, scale(ob, -c)));  // draws in going up
+  const capInner = keep(extrude(wasm, inner, c + 0.01, 0, 0, scale(ib, c)));   // opens out going up
   const cap = keep(keep(capOuter.subtract(capInner)).translate([0, 0, baseH - 0.005]));
   solid = keep(solid.add(cap));
   return solid;
@@ -191,7 +192,6 @@ export function buildSign(
   params: SignParams,
   textLines: LineBox[] = [],
 ): BuildResult {
-  const { CrossSection } = wasm;
   const warnings: string[] = [];
 
   return withScope((keep) => {
@@ -212,7 +212,7 @@ export function buildSign(
      *
      * The plate keeps `Positive` below: those outlines are ours and deliberately CCW.
      */
-    let textCS = keep(new CrossSection(contours, 'NonZero'));
+    let textCS = keep(csOf(wasm, contours, 'NonZero'));
     let textBox = bboxOf(contours);
 
     /*
@@ -262,12 +262,12 @@ export function buildSign(
 
         const pad = Math.max(1, params.lineThickness);
         const bar = labelBarContour(box2, pad, pad * 0.6, params.lineOverhang);
-        const barCS = keep(new CrossSection([ccw(bar)], 'Positive'));
-        const line2CS = keep(new CrossSection(line2, 'NonZero'));
+        const barCS = keep(csOf(wasm, [ccw(bar)], 'Positive'));
+        const line2CS = keep(csOf(wasm, line2, 'NonZero'));
         const knockout = keep(barCS.subtract(line2CS));
 
         textCS = line1.length > 0
-          ? keep(keep(new CrossSection(line1, 'NonZero')).add(knockout))
+          ? keep(keep(csOf(wasm, line1, 'NonZero')).add(knockout))
           : knockout;
         textBox = bboxOf([...contours, bar]);
       } else {
@@ -306,7 +306,7 @@ export function buildSign(
             const dy = inUpper(loop) ? upShift : downShift;
             return loop.map((p) => [p[0]!, p[1]! + dy] as number[]);
           });
-          textCS = keep(new CrossSection(working, 'NonZero'));
+          textCS = keep(csOf(wasm, working, 'NonZero'));
         }
 
         const bar = lineContour(textLines, bboxOf(working), {
@@ -321,7 +321,7 @@ export function buildSign(
           reachDown,
         });
         if (bar) {
-          textCS = keep(textCS.add(keep(new CrossSection([ccw(bar)], 'Positive'))));
+          textCS = keep(textCS.add(keep(csOf(wasm, [ccw(bar)], 'Positive'))));
           textBox = bboxOf([...working, bar]);
           contours = working;
         }
@@ -440,8 +440,8 @@ export function buildSign(
     /* ── The plate ───────────────────────────────────────────────────────────── */
     if (params.shape !== 'none') {
       const outline = plateOutline(params.shape, width, height, params.cornerRadius);
-      let plateCS = keep(new CrossSection(outline, 'Positive'));
-      plateCS = fillHoles(CrossSection, plateCS, keep);
+      let plateCS = keep(csOf(wasm, outline, 'Positive'));
+      plateCS = fillHoles(wasm, plateCS, keep);
 
       // Screw holes go through; keyholes are a pocket in the back and are handled after
       // the extrude, because they must not breach the front face.
@@ -501,7 +501,7 @@ export function buildSign(
             outline, [px + ux * push, py + uy * push], params.mountHoleDia / 2,
           );
           if (Math.abs(hx - px - ux * push) > 0.05 || Math.abs(hy - py - uy * push) > 0.05) pulled = true;
-          const holeCS = keep(new CrossSection([ccw(circle(hx, hy, params.mountHoleDia / 2))], 'Positive'));
+          const holeCS = keep(csOf(wasm, [ccw(circle(hx, hy, params.mountHoleDia / 2))], 'Positive'));
           plateCS = keep(plateCS.subtract(holeCS));
         }
 
@@ -528,8 +528,8 @@ export function buildSign(
        */
       const flatTop = frameOn || params.band !== 'none';
       let plate = flatTop
-        ? keep(plateCS.extrude(params.plateThickness))
-        : bevelExtrude(plateCS, params.plateThickness, params.chamfer, keep);
+        ? keep(extrude(wasm, plateCS, params.plateThickness))
+        : bevelExtrude(wasm, plateCS, params.plateThickness, params.chamfer, keep);
 
       // The frame is emitted as its own part rather than unioned into the plate, so it can
       // take a third filament. It is a separate body in the slicer either way — it sits on
@@ -537,7 +537,7 @@ export function buildSign(
       // match, and buys the border-in-a-different-colour that every shop sign has.
       if (frameOn) {
         const frame = keep(frameSolid(
-          CrossSection, outline, params.frameWidth, frameH, params.chamfer, keep,
+          wasm, outline, params.frameWidth, frameH, params.chamfer, keep,
         ).translate([0, 0, params.plateThickness]));
         frameBody = frame;
       }
@@ -637,8 +637,8 @@ export function buildSign(
           const k = keyhole(kx, ky, headDia, params.mountHoleDia, travel);
           const cut = (shape: number[][][], from: number, to: number) => {
             for (const loop of shape) {
-              const cs = keep(new CrossSection([loop], 'Positive'));
-              const pocket = keep(cs.extrude(to - from + 0.01).translate([0, 0, from - 0.005]));
+              const cs = keep(csOf(wasm, [loop], 'Positive'));
+              const pocket = keep(keep(extrude(wasm, cs, to - from + 0.01)).translate([0, 0, from - 0.005]));
               plate = keep(plate.subtract(pocket));
             }
           };
@@ -663,9 +663,9 @@ export function buildSign(
        */
       let panelBody: any = null;
       if (panelOn) {
-        const inner = keep(keep(new CrossSection(outline, 'Positive'))
+        const inner = keep(keep(csOf(wasm, outline, 'Positive'))
           .offset(-params.panelInset, 'Round', 2, 8));
-        panelBody = keep(inner.extrude(params.panelHeight).translate([0, 0, params.plateThickness]));
+        panelBody = keep(keep(extrude(wasm, inner, params.panelHeight)).translate([0, 0, params.plateThickness]));
       }
 
       /*
@@ -678,8 +678,8 @@ export function buildSign(
        */
       let bandBody: any = null;
       if (params.band !== 'none') {
-        const strip = keep(new CrossSection(
-          [ccw(bandContour(params.band, width, height, params.bandWidth))], 'Positive',
+        const strip = keep(csOf(
+          wasm, [ccw(bandContour(params.band, width, height, params.bandWidth))], 'Positive',
         ));
         const bandCS = keep(plateCS.intersect(strip));
         if (!bandCS.isEmpty()) {
@@ -697,7 +697,7 @@ export function buildSign(
            * exists to remove. A sharp top edge on a 2 mm bar is not worth a groove down the
            * side of the sign.
            */
-          bandBody = keep(bandCS.extrude(params.textThickness)
+          bandBody = keep(keep(extrude(wasm, bandCS, params.textThickness))
             .translate([0, 0, params.plateThickness + (panelOn ? params.panelHeight : 0)]));
         }
       }
@@ -748,13 +748,13 @@ export function buildSign(
           }
         }
         const bridged = ties.length > 0
-          ? keep(textCentred.subtract(keep(new CrossSection(ties, 'Positive'))))
+          ? keep(textCentred.subtract(keep(csOf(wasm, ties, 'Positive'))))
           : textCentred;
         if (panelOn && panelBody) {
-          const through = keep(bridged.extrude(params.panelHeight + 2).translate([0, 0, params.plateThickness - 1]));
+          const through = keep(keep(extrude(wasm, bridged, params.panelHeight + 2)).translate([0, 0, params.plateThickness - 1]));
           panelBody = keep(panelBody.subtract(through));
         } else {
-          const through = keep(bridged.extrude(params.plateThickness + 2).translate([0, 0, -1]));
+          const through = keep(keep(extrude(wasm, bridged, params.plateThickness + 2)).translate([0, 0, -1]));
           plate = keep(plate.subtract(through));
         }
       } else if (inlaid) {
@@ -762,7 +762,7 @@ export function buildSign(
         const maxDepth = (panelOn ? params.panelHeight : params.plateThickness) - 0.6;
         const depth = Math.max(0.2, Math.min(params.textThickness, maxDepth));
         recessDepth = depth;
-        const cut = keep(textCentred.extrude(depth + 0.02).translate([0, 0, faceZ - depth]));
+        const cut = keep(keep(extrude(wasm, textCentred, depth + 0.02)).translate([0, 0, faceZ - depth]));
         if (panelOn && panelBody) panelBody = keep(panelBody.subtract(cut));
         else plate = keep(plate.subtract(cut));
       }
@@ -797,7 +797,7 @@ export function buildSign(
      */
     if (inlaid) {
       const faceZ = params.plateThickness + (panelOn ? params.panelHeight : 0);
-      const fill = keep(textCentred.extrude(recessDepth).translate([0, 0, faceZ - recessDepth]));
+      const fill = keep(keep(extrude(wasm, textCentred, recessDepth)).translate([0, 0, faceZ - recessDepth]));
       parts.push({ name: 'text', ...meshOf(fill), colorRgb: hexToRgb(params.textColor) });
       if (bedAngle !== 0) rotateParts(parts, bedAngle);
       return { parts, warnings, size: { width, height } };
@@ -807,7 +807,7 @@ export function buildSign(
     const baseZ = params.shape === 'none'
       ? 0
       : params.plateThickness + (panelOn ? params.panelHeight : 0);
-    const textSolid = bevelExtrude(textCentred, params.textThickness, params.chamfer, keep);
+    const textSolid = bevelExtrude(wasm, textCentred, params.textThickness, params.chamfer, keep);
     const textPlaced = keep(textSolid.translate([0, 0, baseZ]));
 
     if (params.shape === 'none') {

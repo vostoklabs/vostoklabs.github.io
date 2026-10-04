@@ -20,6 +20,7 @@
 // assemble by flipping one over, and a flip is a rotation, so the image on the
 // underside still reads correctly. Reflecting the second half instead would
 // print a mirror-image copy that no longer matches its partner.
+import { csOf, ringsOf, extrude } from '@vostok/manifold';
 import type {
   BuildRegion,
   MagnetBuildParams,
@@ -123,7 +124,7 @@ export function buildMagnet(
     if (sectionIsEmpty(cs)) return cs;
     const rect = track(CrossSection.square([1000, 1000], true));
     const inverted = track(rect.subtract(cs));
-    const islands = [...inverted.decompose()];
+    const islands = [...inverted.decompose()].map(track);
     if (islands.length <= 1) return cs;
     let maxArea = -1;
     let outerSpace = islands[0];
@@ -151,7 +152,7 @@ export function buildMagnet(
       const angle = (Math.PI / 3) * i + Math.PI / 6;
       pts.push([Math.cos(angle) * r, Math.sin(angle) * r]);
     }
-    return track(new CrossSection([pts], 'NonZero'));
+    return track(csOf(wasm, [pts], 'NonZero'));
   };
 
   const grow = (sec: Section, d: number): Section =>
@@ -165,7 +166,7 @@ export function buildMagnet(
   const filledOutline = (s: number): Section => {
     const validRings = scaleRings(outline, s).filter((r) => r.length >= 3 && getRingArea(r) > 0.001);
     if (validRings.length === 0) return track(CrossSection.square([s, s], true));
-    return simp(track(new CrossSection(validRings, 'NonZero')), 0.03);
+    return simp(track(csOf(wasm, validRings, 'NonZero')), 0.03);
   };
 
   // --- Body footprint (plate) + the image area that inlays are clipped to. ---
@@ -180,7 +181,7 @@ export function buildMagnet(
     const solidPlate = removeHoles(raw);
     // Light morphological closing merges deep scallops between letters, then the
     // perimeter arcs collapse to a print-invisible tolerance.
-    plate = simp(track(solidPlate.offset(2.0, 'Round', 2.0, 24).offset(-2.0, 'Round', 2.0, 24)), 0.05);
+    plate = simp(track(track(solidPlate.offset(2.0, 'Round', 2.0, 24)).offset(-2.0, 'Round', 2.0, 24)), 0.05);
     imageArea = shrink(plate, margin, plate);
   } else {
     const genShape = (half: number): Section => {
@@ -251,10 +252,10 @@ export function buildMagnet(
 
   const extrudeAt = (cs: Section, h: number, z: number): Solid => {
     if (sectionIsEmpty(cs)) {
-      const dummy = track(track(Manifold.extrude(track(CrossSection.circle(0.1, 3)), 0.1)).translate([0, 0, z]));
+      const dummy = track(track(extrude(wasm, track(CrossSection.circle(0.1, 3)), 0.1)).translate([0, 0, z]));
       return track(dummy.subtract(dummy));
     }
-    return track(track(Manifold.extrude(cs, Math.max(0.01, h))).translate([0, 0, z]));
+    return track(track(extrude(wasm, cs, Math.max(0.01, h))).translate([0, 0, z]));
   };
 
   const topZFor = (level: number): number =>
@@ -272,7 +273,7 @@ export function buildMagnet(
       (ring) => ring.length >= 3 && getRingArea(ring) > 0.001,
     );
     if (validRings.length === 0) continue;
-    let cs: Section = simp(track(new CrossSection(validRings, 'NonZero')), 0.03);
+    let cs: Section = simp(track(csOf(wasm, validRings, 'NonZero')), 0.03);
     if (params.colorBleed > 0.001) cs = grow(cs, params.colorBleed);
     let clipped = track(cs.intersect(imageArea));
     // Preset shapes: clip inlays to the plate too, so colors never float outside
@@ -443,8 +444,8 @@ export function buildMagnet(
     const scaleY = H > 0.01 ? Math.max(0.01, (H - 2 * r) / H) : 1;
     const centeredOuter = track(outer.translate([-cx, -cy]));
     const centeredFp = track(footprint.translate([-cx, -cy]));
-    const boundingVolume = track(Manifold.extrude(centeredOuter, r + 0.02));
-    const partVolume = track(Manifold.extrude(centeredFp, r + 0.02, 0, 0, [scaleX, scaleY]));
+    const boundingVolume = track(extrude(wasm, centeredOuter, r + 0.02));
+    const partVolume = track(extrude(wasm, centeredFp, r + 0.02, 0, 0, [scaleX, scaleY]));
     const cutter = track(track(boundingVolume.subtract(partVolume)).translate([cx, cy, 0]));
     return track(cutter.translate([0, 0, zRef - r]));
   }
@@ -540,7 +541,7 @@ export function buildMagnet(
       ? (params.pocketProfile === 'hex' ? (dDia + fitD) / 2 / COS30 : (dDia + fitD) / 2)
       : Math.hypot(dX + fitD, dY + fitD) / 2;
     const safe = track(plate.offset(-(circumR + POCKET_WALL), 'Round', 2.0, 32));
-    const safeRings: Ring[] = sectionIsEmpty(safe) ? [] : (safe.toPolygons() as Ring[]);
+    const safeRings: Ring[] = sectionIsEmpty(safe) ? [] : (ringsOf(safe) as Ring[]);
 
     /** Even-odd test across every ring, so holes in the safe region count. */
     const inSafe = (x: number, y: number): boolean => {
@@ -874,7 +875,7 @@ export function buildMagnet(
         const ang = (v.thetaDeg * Math.PI) / 180;
         const cx = v.r * Math.cos(ang);
         const cy = v.r * Math.sin(ang);
-        const sphere = track(Manifold.sphere(v.d / 2, 16).translate([cx, cy, v.z]));
+        const sphere = track(track(Manifold.sphere(v.d / 2, 16)).translate([cx, cy, v.z]));
         let buried = false;
         try {
           const inter = track(result.intersect(sphere));

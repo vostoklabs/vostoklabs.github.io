@@ -269,7 +269,7 @@ export function arcPoints(
 }
 
 /** Cut a straight run into alternating dashes. This is how a fold line becomes a
- *  perforation on a machine with no scoring tool — which is most Cricuts, and every
+ *  perforation on a machine with no scoring tool — which is every blade cutter, and every
  *  blade cutter on heavy stock.
  *
  *  The line always starts AND ends with a bridge, never a cut: a dash that runs into
@@ -399,4 +399,19 @@ export function offsetRing(ring: Poly, d: number): Poly {
     out.push([p1[0] + e1[0] * t, p1[1] + e1[1] * t]);
   }
   return out;
+}
+
+/** Even-odd point-in-polygon. Deliberately blind to winding, so it can ask "is this
+ *  ring nested inside that one" before either has been wound the right way. */
+export function pointInRing(p: Pt, ring: Poly): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = at(ring, i);
+    const b = at(ring, j);
+    if (a[1] > p[1] !== b[1] > p[1]) {
+      const x = ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0];
+      if (p[0] < x) inside = !inside;
+    }
+  }
+  return inside;
 }
