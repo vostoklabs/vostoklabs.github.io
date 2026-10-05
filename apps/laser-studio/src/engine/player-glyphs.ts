@@ -145,7 +145,7 @@ export const heartGlyph = (w: number): Shapes => [[heartRing(w, 0.88 * w, 48)]];
 
 // ------------------------------------------------------------------ the progress bar --
 
-export interface ProgressBar {
+export interface TimelineBar {
   shapes: Shapes;
   /** Where the knob's centre landed, mm from the bar's centre. */
   knobX: number;
@@ -156,7 +156,7 @@ export interface ProgressBar {
  * across at `progress` (0..1). The knob travels between the bar's two ends, never past them, so
  * at 0 % and 100 % it still sits inside the margin the bar was measured to.
  */
-export function progressBar(len: number, progress: number, o: { knob: number; thick: number; thin: number }): ProgressBar {
+export function timelineBar(len: number, progress: number, o: { knob: number; thick: number; thin: number }): TimelineBar {
   const p = Math.max(0, Math.min(1, progress));
   const kx = -len / 2 + o.knob / 2 + p * (len - o.knob);
   const left = -len / 2 + o.thick / 2;

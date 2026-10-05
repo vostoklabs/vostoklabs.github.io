@@ -16,7 +16,7 @@ import type { Pt } from '@vostok/laser';
  * back for `r` — the usual "adjust the diameter slightly rather than leave a half-scallop"
  * rule, applied to the bump instead so the disc keeps the size the slider asked for.
  */
-export function scallopDiscRing(diameter: number, bumpDia: number): Pt[] {
+export function fitScallopRing(diameter: number, bumpDia: number): Pt[] {
   const R = Math.max(diameter, 1) / 2;
   const wanted = Math.min(Math.max(bumpDia / 2, 0.5), R * 0.45);
   const n = Math.max(8, Math.min(120, Math.round(Math.PI / Math.asin(Math.min(0.9, wanted / Math.max(R - wanted, 1e-6))))));

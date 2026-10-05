@@ -58,7 +58,7 @@ function ringFrameThumb(widthPct: number): string {
 }
 
 /** Islands → a 40 × 40 path, the way `blankSilhouette` does it, for shapes with no blank. */
-function thumbPath(shapes: Shapes): string {
+function shapesThumbPath(shapes: Shapes): string {
   const b = bboxOf(shapes);
   const k = 34 / Math.max(b.maxX - b.minX, b.maxY - b.minY, 1e-6);
   const cx = (b.minX + b.maxX) / 2;
@@ -296,11 +296,11 @@ export const splitMonogram: TemplateDef = {
       options: [
         { value: 'none', label: 'None', svgPath: NO_FRAME_THUMB },
         { value: 'ring', label: 'Ring', svgPath: ringFrameThumb(9) },
-        { value: 'disc', label: 'Disc', svgPath: silhouetteOf('circle') ?? thumbPath(discShapes(20)) },
-        { value: 'scallop', label: 'Scallop', svgPath: silhouetteOf('scallop-disc') ?? thumbPath([[scallopDiscRing(6, 16)]]) },
+        { value: 'disc', label: 'Disc', svgPath: silhouetteOf('circle') ?? shapesThumbPath(discShapes(20)) },
+        { value: 'scallop', label: 'Scallop', svgPath: silhouetteOf('scallop-disc') ?? shapesThumbPath([[scallopDiscRing(6, 16)]]) },
         // Fatter leaves than the real wreath cuts: at icon scale a 0.16 R leaf is two pixels and
         // the tile is a plain ring, which is exactly what Ring's tile already shows.
-        { value: 'laurel', label: 'Laurel', svgPath: thumbPath(laurelWreathShapes({ R: 100, pairs: 7, openDeg: 28, ribW: 6, leafMax: 0.3, leafRatio: 0.45 }).shapes) },
+        { value: 'laurel', label: 'Laurel', svgPath: shapesThumbPath(laurelWreathShapes({ R: 100, pairs: 7, openDeg: 28, ribW: 6, leafMax: 0.3, leafRatio: 0.45 }).shapes) },
       ],
       help: 'A disc or scallop adds an Engrave or Cut choice.',
     },

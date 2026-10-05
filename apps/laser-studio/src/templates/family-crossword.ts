@@ -30,7 +30,7 @@ import { bboxOf, blankById, blankSilhouette, circleRing, roundedRectRing, type S
 import type { CutRing } from '@vostok/export';
 import { FONTS } from '@vostok/fonts';
 import { textLayer } from '../engine/text';
-import { TILE_WELD, tileLayers, tileLook } from '../engine/tiles';
+import { TILE_WELD, boardTileLayers, tileLook } from '../engine/tiles';
 import { layoutCrossword, type CrosswordPrefer } from '../engine/crossword';
 import { bandChordWidth, circleBandRing, rimWidthFor, stripBandRing } from '../engine/frame';
 import { readSymbols } from '../symbols/model';
@@ -48,7 +48,7 @@ const fmt = (n: number) => Number(n.toFixed(1)).toString();
 
 /** Tile overlap, mm — §2.3: fixed, not a knob, and `tileLook`'s, so the letter tile keychain
  *  cuts the same tile. The grid PITCH is `size − WELD`, so the overlap comes out of the spacing
- *  itself rather than only from the ring growth inside `tileLayers`. */
+ *  itself rather than only from the ring growth inside `boardTileLayers`. */
 const WELD = TILE_WELD;
 
 /** The square's corner radius as a share of its side. 5 % sits in the 4–12 % band at
@@ -612,7 +612,7 @@ export const familyCrossword: TemplateDef = {
 
       const letterOp: 'engrave' | 'score' = str(v, 'letterOp') === 'score' ? 'score' : 'engrave';
       const edgeChoice = str(v, 'edgeOp');
-      const tiled = await tileLayers(placed, {
+      const tiled = await boardTileLayers(placed, {
         size: tile, corner: look.corner, weld: WELD,
         letterSize: letterCap / ratio, font, letterDy: look.letterDy, boldness: num(v, 'letterBold'),
         // The corner numerals, at a real tile's proportion — 0.34 × the letter's cap. They were

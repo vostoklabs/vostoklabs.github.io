@@ -22,7 +22,7 @@ import { applyCase, arcTextLayer, glyphLayers, symbolLayer, textLayer, type Text
 import { sizeForCapHeight } from '../engine/metrics';
 import { finalHoleCentre, fitBoxInside, holdInside, holeTrack } from '../engine/editorGeometry';
 import type { DesignLayer, KeyringSpec, OpChoice } from '../engine/types';
-import { scallopDiscRing } from './arc-coaster-scallop';
+import { fitScallopRing } from './arc-coaster-scallop';
 import { hangHoleFields, NO_KEYRING } from './keyring';
 import { letteringFields, opField, opOf, stem } from './shared';
 import { bool, num, str, type Field, type TemplateDef } from './types';
@@ -61,7 +61,7 @@ function discShapes(d: number, scalloped: boolean): Shapes {
   if (!scalloped) return [[circleRing(0, 0, d / 2, 128)]];
   // The 6–20 mm bump band written as one formula, so there is no seam at any diameter.
   // The 6 mm floor is also what keeps the arc radius over the 3 mm that cuts cleanly in ply.
-  return [[scallopDiscRing(d, Math.min(Math.max(0.08 * d, 6), 14))]];
+  return [[fitScallopRing(d, Math.min(Math.max(0.08 * d, 6), 14))]];
 }
 
 /** How far a built layer's ink actually reaches from the centre, mm — the measurement the radial

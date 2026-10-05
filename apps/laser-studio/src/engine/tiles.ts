@@ -30,7 +30,7 @@ export const TILE_WELD = 0.3;
  *  rather than as one product's idea of one. Both tile products take them from here, so the
  *  keychain's tile and the crossword's are the same object at the same size; the two design
  *  docs' tables (§2.3 and §2.2) agree on every line of it and this is where they live.
- *  `tileLayers` keeps its own fallbacks for a caller with no product opinion. */
+ *  `boardTileLayers` keeps its own fallbacks for a caller with no product opinion. */
 export interface TileLook {
   /** Corner radius, mm — 10 % of the side, the eased corner of a real tile, never a pill. */
   corner: number;
@@ -40,7 +40,7 @@ export interface TileLook {
   inset: number;
   /** The value numeral's inset from the right and bottom edges, mm. */
   valueInset: number;
-  /** Nudge the letter up from the tile's centre, mm — ON TOP of `tileLayers`' own optical lift,
+  /** Nudge the letter up from the tile's centre, mm — ON TOP of `boardTileLayers`' own optical lift,
    *  for 0.05 × size in total: the optical centre sits ~45 % from the top. */
   letterDy: number;
   /** The value numeral's cap height as a share of the letter's. */
@@ -127,7 +127,7 @@ export function tileRing(cx: number, cy: number, size: number, corner: number): 
  * Borders are inset, so they never touch each other: every tile keeps its own scored edge even
  * when the bodies have welded into one board.
  */
-export async function tileLayers(
+export async function boardTileLayers(
   cells: { x: number; y: number; char: string }[],
   spec: TileSpec,
   ops: { letter: OpChoice; border: OpChoice },

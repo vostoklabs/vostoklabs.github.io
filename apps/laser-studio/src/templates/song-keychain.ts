@@ -33,7 +33,7 @@ import { QR_MIN_CELL, qrMinSize } from '../engine/qr';
 import { glyphLayers, symbolLayer } from '../engine/text';
 import { sizeForCapHeight } from '../engine/metrics';
 import {
-  heartGlyph, nextGlyph, playGlyph, previousGlyph, progressBar, repeatGlyph, shuffleGlyph,
+  heartGlyph, nextGlyph, playGlyph, previousGlyph, timelineBar, repeatGlyph, shuffleGlyph,
 } from '../engine/player-glyphs';
 import type { DesignLayer } from '../engine/types';
 import { readSymbols, type SymbolMap } from '../symbols/model';
@@ -355,7 +355,7 @@ async function build(v: Values) {
   // ------------------------------------------------------------- the bar and the times --
   const barY = d + 1.6 * k + m.knob / 2;
   const progress = clamp(num(v, 'progress'), 0, 100) / 100;
-  push('bar', 'Progress bar', 'symbol', at(progressBar(L, progress, { knob: m.knob, thick: m.thick, thin: m.thin }).shapes, 0, -barY));
+  push('bar', 'Progress bar', 'symbol', at(timelineBar(L, progress, { knob: m.knob, thick: m.thick, thin: m.thin }).shapes, 0, -barY));
   const timeBase = barY + m.knob / 2 + 0.9 * k + m.time;
   const lengthText = str(v, 'length').trim();
   const length = lengthText ? parseTime(lengthText) : null;

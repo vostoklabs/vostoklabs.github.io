@@ -2,7 +2,7 @@ import { bboxOf, roundedRectRing, type Shapes } from '@vostok/laser';
 import { FONTS } from '@vostok/fonts';
 import { textLayer } from '../engine/text';
 import { finalHoleCentre } from '../engine/editorGeometry';
-import { tileLayers, tileLook } from '../engine/tiles';
+import { boardTileLayers, tileLook } from '../engine/tiles';
 import { readSymbols } from '../symbols/model';
 import { keyringFields, keyringFrom } from './keyring';
 import { stem } from './shared';
@@ -31,7 +31,7 @@ export async function makeTiles(cells: {x:number;y:number;char:string}[], size:n
   // did to a particular name: every tile of a given size carries the same numeral, the way a
   // real set does, and one wide glyph cannot take the values off the whole bar.
   const edge=str(v,'edgeOp');
-  const result=await tileLayers(cells,{size,corner:look.corner,letterSize:em,font,values:bool(v,'values'),valueSize:look.valueRatio*asked,valueMinSize:look.valueFloor/ratio,valueInset:look.valueInset,letterDy:look.letterDy,border:edge==='off'?0:look.inset,weld:look.weld,boldness:num(v,'letterBold'),symbols:readSymbols(v)}, {letter:str(v,'letterOp')==='score'?'score':'engrave',border:edge==='engrave'?'engrave':'score'});
+  const result=await boardTileLayers(cells,{size,corner:look.corner,letterSize:em,font,values:bool(v,'values'),valueSize:look.valueRatio*asked,valueMinSize:look.valueFloor/ratio,valueInset:look.valueInset,letterDy:look.letterDy,border:edge==='off'?0:look.inset,weld:look.weld,boldness:num(v,'letterBold'),symbols:readSymbols(v)}, {letter:str(v,'letterOp')==='score'?'score':'engrave',border:edge==='engrave'?'engrave':'score'});
   // How hard the widest glyph squeezed the whole name, the cap it ended at, and which way it
   // was squeezed: a wide FACE binds every tile at once (a font decision), a tall ask binds
   // against the tile itself (a size decision). Only we can see either one happen.
