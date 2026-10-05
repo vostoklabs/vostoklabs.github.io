@@ -52,8 +52,24 @@ import {
 } from './shared';
 import { lines, num, str, type Field, type TemplateDef } from './types';
 
-const more = (f: Field): Field => ({ ...f, advanced: true });
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+
+/**
+ * The shared frame block, with three edits this design makes and says why:
+ *   · "Loop through both layers" is gone — the layers ALWAYS register.
+ *   · the loop's hole and wall are sized from the diameter, so their fields are hidden rather
+ *     than shown with numbers the build overrides (family-crossword's own pattern); the switch
+ *     and the nudge pad stay, under Hanging.
+ *   · the frame's own width joins Diameter in "Ornament".
+ */
+const FRAME: Field[] = frameFields({ diameter: 90 })
+  .filter((f) => f.key !== 'backerRing')
+  .map((f): Field => {
+    if (f.key === 'holeDia' || f.key === 'holeRing') return { ...f, hidden: true };
+    // G25: the nudge is half the part's own longest side, never the shared 250 mm.
+    if (f.key === 'ringDx' && f.kind === 'position') return { ...f, max: 45 };
+    return f.key === 'rimWidth' ? { ...f, section: 'Ornament' } : f;
+  });
 
 /** Loop hole and the wall round it, as shares of the ornament's size — family-crossword's own
  *  numbers, so the two framed ornaments hang from the same tab. At Ø 100: a 4 mm hole in a 14 mm
@@ -268,42 +284,30 @@ export const framedNameOrnament: TemplateDef = {
     // ----------------------------------------------------- LEFT: "Ornament" (opens first) --
     // The whole of the first screen: how big the ornament is, and how wide the frame round it.
     // Two numbers about ONE object, so they are one category and not two — the rail reads
-    // Ornament · Font · More, the same three entries the christmas bauble's does.
+    // Ornament · Font · Lettering · Hanging, the same entries the christmas bauble's does.
     {
       kind: 'number', key: 'backerSize', label: 'Diameter', section: 'Ornament',
       value: 90, min: 60, max: 140, step: 1, unit: 'mm',
       help: '80–100 mm is the classic hanging-ornament range.',
     },
 
-    // The shared frame block, with three edits this design makes and says why:
-    //   · "Loop through both layers" is gone — the layers ALWAYS register.
-    //   · the loop's hole and wall are sized from the diameter above, so their fields are hidden
-    //     rather than shown with numbers the build overrides (family-crossword's own pattern),
-    //     and the switch and the nudge pad go under More.
-    //   · the frame's own width joins Diameter in "Ornament"; the loop's controls keep the
-    //     section they were built with, and every one of them is under More anyway.
-    ...frameFields({ diameter: 90 })
-      .filter((f) => f.key !== 'backerRing')
-      .map((f): Field => {
-        if (f.key === 'holeDia' || f.key === 'holeRing') return { ...f, hidden: true };
-        // G25: the nudge is half the part's own longest side, never the shared 250 mm.
-        if (f.key === 'ringDx' && f.kind === 'position') return more({ ...f, max: 45 });
-        return f.hidden ? f : f.key === 'rimWidth' ? { ...f, section: 'Ornament' } : more(f);
-      }),
+    ...FRAME.filter((f) => f.key === 'rimWidth'),
 
-    // ------------------------------------------------------------------ MORE: the lettering --
+    // --------------------------------------------------------------- LEFT: "Lettering" --
     // Hidden, not greyed, for a face that joins on its own: there are no seams to score when the
     // type designer already joined the letters.
-    more({ ...letterScoreField('Lettering'), visibleWhen: (v) => !isConnectingFont(str(v, 'font')) }),
+    { ...letterScoreField('Lettering'), visibleWhen: (v) => !isConnectingFont(str(v, 'font')) },
     // Three ways for the centre name, Welded first: the name grown into the frame's inner edge and
     // cut WITH the frame as one light piece. Raised cuts it as its own piece to glue on; Engrave
     // burns it.
     ...lightPieceFields('Lettering', 'raised', { help: 'Welded joins the name to the frame; Raised cuts it to glue on; Engrave burns it on.' })
       .map((f): Field => (f.key === 'lightOp' && f.kind === 'select'
         ? { ...f, label: 'Centre name', value: 'welded', options: [{ value: 'welded', label: 'Welded' }, ...f.options] }
-        : f))
-      .map(more),
+        : f)),
     ...letteringFields('Lettering'),
+
+    // ----------------------------------------------------------------- LEFT: "Hanging" --
+    ...FRAME.filter((f) => f.key !== 'rimWidth'),
   ],
 
   async build(v) {

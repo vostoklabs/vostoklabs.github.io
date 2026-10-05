@@ -517,6 +517,14 @@ export const heartPuzzleKeychains: TemplateDef = {
     // 0.5 mm a side at a 0.2 mm finish (0.48 at the shipped kerf's 0.23 since the floor, 2026-09-28);
     // past 10 the pair of hearts outgrows a 20 mm bar's names.
     { kind: 'number', key: 'heartSize', label: 'Heart size', section: 'Size', value: 8, min: 6.5, max: 10, step: 0.5, unit: 'mm' },
+    // 4 at most: past ~3–3.5 mm (by heart size) the corner would reach the V (`SHOULDER`) and stops.
+    { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Size', value: 2.5, min: 0, max: 4, step: 0.5, unit: 'mm' },
+
+    // ------------------------------------------------------- LEFT: "Lettering" --
+    {
+      kind: 'number', key: 'nameSize', label: 'Name size', section: 'Lettering', value: 11, min: 6, max: 16, step: 0.5, unit: 'mm',
+      help: 'Long names shrink past this to fit.',
+    },
 
     // --------------------------------------------------------- LEFT: "Keyring" --
     // The shared control, Loop tab | None, its tab RESTING inside each bar's left end where the
@@ -528,19 +536,15 @@ export const heartPuzzleKeychains: TemplateDef = {
       ringNote: 'Both bars wear the same ring, mirrored.',
     }),
 
-    // ------------------------------------------------------ LEFT: "More options" --
-    // 4 at most: past ~3–3.5 mm (by heart size) the corner would reach the V (`SHOULDER`) and stops.
-    { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Size', value: 2.5, min: 0, max: 4, step: 0.5, unit: 'mm', advanced: true },
-    {
-      kind: 'number', key: 'nameSize', label: 'Name size', section: 'Size', value: 11, min: 6, max: 16, step: 0.5, unit: 'mm', advanced: true,
-      help: 'Long names shrink past this to fit.',
-    },
+    // ------------------------------------------------------- LEFT: "Assembly" --
+    // The two bars interlock, so the number the joint is cut to has the category every
+    // interlocking design gives it.
     {
       // The kerf sets how the knobs are drawn against their sockets, so the fit lands on 0.2 mm a
       // side whatever the machine burns — up to a 0.15 mm beam; past that the drawn air stays at
       // GAP_MIN, so a field set higher than the beam never cuts a pair too tight to go together.
-      kind: 'number', key: 'kerf', label: 'Kerf', section: 'Material', value: 0.18,
-      min: 0.05, max: 0.4, step: 0.01, unit: 'mm', advanced: true,
+      kind: 'number', key: 'kerf', label: 'Kerf', section: 'Assembly', value: 0.18,
+      min: 0.05, max: 0.4, step: 0.01, unit: 'mm',
       help: 'The width the laser burns away.',
     },
   ],

@@ -92,11 +92,11 @@ export function photoFields(orientation: 'portrait' | 'landscape'): Field[] {
   ];
 }
 
-/** More options: how wide the frame is round the photo. */
+/** How wide the frame is round the photo — in the Frame category, with the photo size. */
 export function borderField(): Field {
   return {
     kind: 'number', key: 'border', label: 'Border', section: 'Frame', value: BORDER_DEFAULT,
-    min: BORDER_MIN, max: BORDER_MAX, step: 1, unit: 'mm', advanced: true,
+    min: BORDER_MIN, max: BORDER_MAX, step: 1, unit: 'mm',
     help: 'How wide the frame is round the photo.',
   };
 }

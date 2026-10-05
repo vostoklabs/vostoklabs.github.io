@@ -109,6 +109,25 @@ export const phoneStand: TemplateDef = {
     },
     { kind: 'symbol', key: 'symbol', label: 'Symbol', panel: 'right', section: 'Text', value: '', help: 'Optional, above the name.' },
 
+    // ------------------------------------------------------ LEFT: "Stand" (opens first) --
+    {
+      kind: 'number', key: 'width', label: 'Width', section: 'Stand', value: 80, min: 50, max: 120, step: 1, unit: 'mm',
+      help: 'Across the V — a big phone is 78 mm wide.',
+    },
+    { kind: 'number', key: 'height', label: 'Height', section: 'Stand', value: 130, min: 90, max: 200, step: 1, unit: 'mm' },
+    {
+      kind: 'number', key: 'lean', label: 'Lean', section: 'Stand', value: 67, min: 60, max: 72, step: 1, unit: '°',
+      help: 'How far back the phone leans off the table.',
+    },
+
+    // -------------------------------------------------------------------- LEFT: "Font" --
+    {
+      kind: 'font', key: 'font', label: 'Font', section: 'Font', value: 'montserrat',
+      // Engraved small on the lip and read across a desk: clean sans with open counters, and two
+      // scripts for a name. Every one was built at the default stand before it was listed.
+      recommended: ['montserrat', 'work-sans', 'poppins', 'manrope', 'outfit', 'bebas-neue', 'great-vibes', 'yellowtail'],
+    },
+
     // -------------------------------------------------------- LEFT: the back panel --
     { kind: 'toggle', key: 'pattern', label: 'Pattern on the panel', section: 'Pattern', value: true, help: 'Fills the big face the phone leans on.' },
     {
@@ -128,23 +147,10 @@ export const phoneStand: TemplateDef = {
       help: 'The least material left between two holes, or between a hole and an edge.',
       visibleWhen: (v) => bool(v, 'pattern') && str(v, 'patternOp') === 'cut',
     },
-    {
-      kind: 'font', key: 'font', label: 'Font', section: 'Font', value: 'montserrat',
-      // Engraved small on the lip and read across a desk: clean sans with open counters, and two
-      // scripts for a name. Every one was built at the default stand before it was listed.
-      recommended: ['montserrat', 'work-sans', 'poppins', 'manrope', 'outfit', 'bebas-neue', 'great-vibes', 'yellowtail'],
-    },
-
-    // ------------------------------------------------------ LEFT: "Stand" (opens first) --
-    {
-      kind: 'number', key: 'width', label: 'Width', section: 'Stand', value: 80, min: 50, max: 120, step: 1, unit: 'mm',
-      help: 'Across the V — a big phone is 78 mm wide.',
-    },
-    { kind: 'number', key: 'height', label: 'Height', section: 'Stand', value: 130, min: 90, max: 200, step: 1, unit: 'mm' },
 
     // -------------------------------------------------------------- LEFT: "Assembly" --
-    // The sheet the joint is cut for, in its own category rather than buried under More (every
-    // design with interlocking parts gets a separate Assembly section).
+    // The sheet the joint is cut for, in its own category (every design with interlocking parts
+    // gets a separate Assembly section).
     {
       kind: 'number', key: 'thickness', label: 'Material thickness', section: 'Assembly', value: 3, min: 1.5, max: 9, step: 0.1, unit: 'mm',
       help: 'Measure your sheet, the slots are cut to match it.',
@@ -157,11 +163,6 @@ export const phoneStand: TemplateDef = {
       kind: 'select', key: 'fit', label: 'Fit', section: 'Assembly', value: 'snug',
       options: [{ value: 'tight', label: 'Tight' }, { value: 'snug', label: 'Snug' }, { value: 'easy', label: 'Easy' }],
       help: 'Tight knocks home, Snug takes a thumb, Easy pulls apart.',
-    },
-    // ------------------------------------------------------------------ LEFT: "More" --
-    {
-      kind: 'number', key: 'lean', label: 'Lean', section: 'Stand', value: 67, min: 60, max: 72, step: 1, unit: '°', advanced: true,
-      help: 'How far back the phone leans off the table.',
     },
   ],
 

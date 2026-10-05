@@ -66,10 +66,9 @@ import { MIN_COUNTER, applyCase, textLayer } from '../engine/text';
 import type { DesignLayer, KeyringSpec, PartInput } from '../engine/types';
 import { NO_KEYRING, hangHoleFields } from './keyring';
 import { connectSpec, countersTooTight, letterScoreField, letteringFields, lightPieceFields, stem } from './shared';
-import { num, str, type Field, type TemplateDef } from './types';
+import { num, str, type TemplateDef } from './types';
 
 const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo);
-const more = (f: Field): Field => ({ ...f, advanced: true });
 
 /**
  * The faces this design is for, in order (G2), and it is the same shelf the Christmas ornament
@@ -341,20 +340,23 @@ export const themedFaceOrnament: TemplateDef = {
       help: 'Across the whiskers, tip to tip.',
     },
 
-    // ------------------------------------------------------------- LEFT: "More options" --
-    more({
+    {
       kind: 'number', key: 'rimWidth', label: 'Frame width', section: 'Ornament',
       value: +rimWidthFor(90).toFixed(1), min: 5, max: 14, step: 0.5, unit: 'mm',
       help: 'How wide the rim round the head is.',
-    }),
-    // The design's own hole, not the shared Ring control: a cat hangs from the
-    // boss between its ears, so there is nothing to choose and nothing to drag.
-    ...hangHoleFields('Ornament', { dia: 3, maxDia: 6, label: 'Hanging hole' }).map(more),
+    },
+
+    // --------------------------------------------------------------- LEFT: "Lettering" --
     ...lightPieceFields('Lettering', 'raised', {
       help: 'Raised welds the name into the frame; Engrave burns it on.',
-    }).map(more),
-    more(letterScoreField('Lettering')),
+    }),
+    letterScoreField('Lettering'),
     ...letteringFields('Lettering'),
+
+    // ----------------------------------------------------------------- LEFT: "Hanging" --
+    // The design's own hole, not the shared Ring control: a cat hangs from the
+    // boss between its ears, so there is nothing to choose and nothing to drag.
+    ...hangHoleFields('Hanging', { dia: 3, maxDia: 6, label: 'Hanging hole' }),
   ],
 
   async build(v) {

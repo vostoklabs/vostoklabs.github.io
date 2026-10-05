@@ -223,6 +223,10 @@ export const coupleKeychains: TemplateDef = {
     { kind: 'number', key: 'width', label: 'Width', section: 'Tags', value: 28, min: 24, max: 42, step: 1, unit: 'mm' },
     { kind: 'number', key: 'height', label: 'Height', section: 'Tags', value: 60, min: 45, max: 85, step: 1, unit: 'mm' },
     {
+      kind: 'number', key: 'corner', label: 'Corner radius', section: 'Tags', value: 6,
+      min: 0, max: 12, step: 0.5, unit: 'mm',
+    },
+    {
       kind: 'select', key: 'heartOp', label: 'Heart', section: 'Tags', value: 'engrave',
       options: [{ value: 'engrave', label: 'Engraved' }, { value: 'cut', label: 'Cut through' }],
       help: 'Cut through bites the heart out of both inner edges.',
@@ -230,6 +234,21 @@ export const coupleKeychains: TemplateDef = {
     {
       kind: 'number', key: 'heartSize', label: 'Heart size', section: 'Tags', value: 26, min: 14, max: 40, step: 1, unit: 'mm',
       help: 'Across both tags — each one carries half.',
+    },
+    {
+      // The kerf sets how far each half of the heart stops short of the join, so it is a real
+      // setting here even though nothing is jointed — and it belongs to the heart, so it sits
+      // under it.
+      kind: 'number', key: 'kerf', label: 'Kerf', section: 'Tags', value: 0.18,
+      min: 0.05, max: 0.4, step: 0.01, unit: 'mm',
+      help: 'The width the laser burns away.',
+    },
+
+    // ------------------------------------------------------- LEFT: "Lettering" --
+    {
+      kind: 'number', key: 'dateSize', label: 'Date size', section: 'Lettering', value: 3.5,
+      min: 3, max: 6, step: 0.5, unit: 'mm',
+      help: 'Long text shrinks past this to fit.',
     },
 
     // --------------------------------------------------------- LEFT: "Keyring" --
@@ -247,23 +266,6 @@ export const coupleKeychains: TemplateDef = {
       ringNote: 'Both tags wear the same ring, mirrored.',
     }),
 
-    // ------------------------------------------------------ LEFT: "More options" --
-    {
-      kind: 'number', key: 'corner', label: 'Corner radius', section: 'Tags', value: 6,
-      min: 0, max: 12, step: 0.5, unit: 'mm', advanced: true,
-    },
-    {
-      kind: 'number', key: 'dateSize', label: 'Date size', section: 'Date', value: 3.5,
-      min: 3, max: 6, step: 0.5, unit: 'mm', advanced: true,
-      help: 'Long text shrinks past this to fit.',
-    },
-    {
-      // The kerf sets how far each half of the heart stops short of the join, so it is a real
-      // setting here even though nothing is jointed.
-      kind: 'number', key: 'kerf', label: 'Kerf', section: 'Material', value: 0.18,
-      min: 0.05, max: 0.4, step: 0.01, unit: 'mm', advanced: true,
-      help: 'The width the laser burns away.',
-    },
   ],
 
   async build(v) {

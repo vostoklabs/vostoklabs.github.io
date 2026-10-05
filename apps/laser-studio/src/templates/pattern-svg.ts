@@ -57,7 +57,7 @@ export const patternSvg: TemplateDef = {
     // uninvited is a hole in someone else's drawing. The option stays one click away. Since
     // 2026-09-28 it is the usual loop tab, which can be dragged inside the shape to hang from a
     // hole with its own border; a Hole saved before then opens as the tab, resting where it was.
-    ...keyringFields('none', { section: 'Hanging hole', dia: 2.5, ring: 2, maxDia: 8, maxRing: 5, nudge: 60, ringNote: 'A tab grown off the edge, with a hole for a jump ring.' }),
+    ...keyringFields('none', { section: 'Hanging', dia: 2.5, ring: 2, maxDia: 8, maxRing: 5, nudge: 60, ringNote: 'A tab grown off the edge, with a hole for a jump ring.' }),
   ],
 
   async build(v) {

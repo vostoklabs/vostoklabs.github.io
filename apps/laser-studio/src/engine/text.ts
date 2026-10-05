@@ -4,7 +4,7 @@
 import { bboxOf, buildSymbol, centreShapes, islandsFromContours, placeShapes, type Box, type Shapes } from '@vostok/laser';
 import { FALLBACK_FONT_ID, getFont, getHorizontalContours, getVerticalContours, pathCommandsToPolygons } from '@vostok/fonts';
 import { withSymbols, symbolIslands, type SymbolMap } from '../symbols/model';
-import { insideUnion, unionOutlineDistance } from './editorGeometry';
+import { unionIndex, unionOutlineDistance, type UnionIndex } from './editorGeometry';
 import type { DesignLayer, OpChoice } from './types';
 
 /**
@@ -300,35 +300,108 @@ const WELD_CONTACT = 0.02;
  *  thickened, mm. Under this a laser's kerf closes it and an "a" prints as a blob. */
 export const MIN_COUNTER = 1;
 
+/** How far apart the walk probes a glyph's outline BETWEEN its vertices, mm — the walk's own step.
+ *  Only an edge longer than this gets points of its own: a curve is already drawn in short
+ *  steps, and its vertices sample it as finely as this would. */
+const PROBE_STEP = 0.25;
+
 /**
- * The deepest any vertex of `probe`, moved `dx` mm along x, lies INSIDE `target` — 0 when the
- * two do not overlap at all.
+ * Every point of a glyph's outline the walk tests, flat — `[x0, y0, x1, y1, …]`: each vertex, and
+ * points every `PROBE_STEP` along any edge longer than that. Made once per glyph per walk.
+ *
+ * Vertices alone were blind to the commonest junction in a block or pixel face: two stems side
+ * by side, the same height. A stem's only vertices are its corners, and those sit ON the
+ * neighbour's cap line and baseline — inside by nothing, depth 0 — so the walk read "not touching
+ * yet" with the stems a millimetre deep in each other, and kept walking until some vertex in the
+ * middle of a letter, the corner where an N's diagonal leaves its stem, finally got in: Bebas
+ * "MINNIE" bit 3.9 mm where 0.9 was asked, Press Start 2P's "ll" 8.4 mm. Where no such vertex ever
+ * got in, the pair never registered contact and was left standing apart — Bebas's M and I, Anton's
+ * "Olivia" either side of its v. The middle of the stem's edge is where the depth is, so the middle
+ * of the edge is probed.
+ */
+function probePoints(shapes: Shapes): Float64Array {
+  const out: number[] = [];
+  for (const island of shapes) {
+    for (const ring of island) {
+      for (let i = 0; i < ring.length; i++) {
+        const [ax, ay] = ring[i]!;
+        const [bx, by] = ring[(i + 1) % ring.length]!;
+        out.push(ax, ay);
+        const steps = Math.ceil(Math.hypot(bx - ax, by - ay) / PROBE_STEP);
+        for (let k = 1; k < steps; k++) out.push(ax + ((bx - ax) * k) / steps, ay + ((by - ay) * k) / steps);
+      }
+    }
+  }
+  return Float64Array.from(out);
+}
+
+/** One glyph as the walk measures it, made once per walk: its islands, the points of its outline
+ *  it is probed at (`probePoints`), its union indexed (`unionIndex`), its box, and whether its
+ *  islands stand apart (`islandsApart`). */
+interface Measured {
+  shapes: Shapes;
+  probe: Float64Array;
+  union: UnionIndex;
+  box: Box;
+  apart: boolean;
+}
+
+function measured(shapes: Shapes): Measured {
+  return { shapes, probe: probePoints(shapes), union: unionIndex(shapes), box: bboxOf(shapes), apart: islandsApart(shapes) };
+}
+
+/**
+ * The deepest any of `probe`'s points, moved `dx` mm along x, lies INSIDE `target`, or `floor` if
+ * none lies deeper — 0 when the two do not overlap at all.
  *
  * `insideUnion` / `unionOutlineDistance` rather than the even-odd pair: a glyph drawn as several
  * overlapping contours (Playfair's R is a bowl, a stem and a leg) reads as a hole where they
  * cross under even-odd, and the seam between two of its own contours is not an edge to measure
- * to. Nothing is allocated — the offset is applied to the probe point, not to the outline — so
- * the walk costs point tests and no geometry.
+ * to. Nothing is allocated but the point asked about — the offset is applied to the probe point,
+ * not to the outline — so the walk costs point tests and no geometry.
+ *
+ * Where the target's islands overlap, the depth is also held to the union's own reach along the
+ * axes (`UnionIndex.exit`): `unionOutlineDistance` skips an edge whose nearest point is buried in
+ * another island, and on a stroke-built face whose strokes share outlines that read a point just
+ * inside Baloo's n as 2.4 mm deep — the walk stopped at first contact, the letters only touching.
+ * Islands that stand apart are measured plainly and need no such hold.
+ *
+ * Either way no point is deeper than it is inside the target's box, so a point nearer the box's
+ * edge than the deepest bite found so far cannot change the answer and is not asked about. That is
+ * every probe point lying on a shared cap line or baseline, most of what probing the edges added.
  */
-function deepestInside(probe: Shapes, target: Shapes, dx: number, box: Box): number {
-  let deepest = 0;
-  for (const island of probe) {
-    for (const ring of island) {
-      for (const [x, y] of ring) {
-        // Nowhere near the letter behind: two comparisons instead of a point-in-polygon over its
-        // whole outline. Most of a glyph's vertices are the far side of it, and the walk asks
-        // this of every vertex at every step of every letter of the word.
-        if (y < box.minY || y > box.maxY) continue;
-        const px = x + dx;
-        if (px < box.minX || px > box.maxX) continue;
-        const p: [number, number] = [px, y];
-        if (!insideUnion(target, p)) continue;
-        const d = unionOutlineDistance(target, p);
-        if (d > deepest) deepest = d;
-      }
-    }
+function deepestInside(probe: Float64Array, dx: number, target: Measured, floor: number): number {
+  const box = target.box;
+  let deepest = floor;
+  for (let i = 0; i < probe.length; i += 2) {
+    // Nowhere near the letter behind: two comparisons instead of a point-in-polygon over its
+    // whole outline. Most of a glyph's outline is the far side of it, and the walk asks this of
+    // every probe point at every step of every letter of the word.
+    const y = probe[i + 1]!;
+    if (y < box.minY || y > box.maxY) continue;
+    const px = probe[i]! + dx;
+    if (px < box.minX || px > box.maxX) continue;
+    if (Math.min(px - box.minX, box.maxX - px, y - box.minY, box.maxY - y) <= deepest) continue;
+    if (!target.union.inside(px, y)) continue;
+    let d = unionOutlineDistance(target.shapes, [px, y]);
+    if (d > deepest && !target.apart) d = Math.min(d, target.union.exit(px, y));
+    if (d > deepest) deepest = d;
   }
   return deepest;
+}
+
+/** Whether no two of these islands' outer rings share any of their boxes — the case in which
+ *  `unionOutlineDistance` is the plain distance to the nearest outer ring. */
+function islandsApart(shapes: Shapes): boolean {
+  const boxes = shapes.map((island) => bboxOf([[island[0] ?? []]]));
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i]!;
+      const b = boxes[j]!;
+      if (!(a.maxX < b.minX || b.maxX < a.minX || a.maxY < b.minY || b.maxY < a.minY)) return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -343,12 +416,12 @@ function deepestInside(probe: Shapes, target: Shapes, dx: number, box: Box): num
  * "SOPHIA" in Oswald came out with four joining bars invented for junctions that were already
  * overlapping. The O's own vertices ARE inside the P's stem, so the reverse test sees it.
  */
-function penetration(glyph: Shapes, prev: Shapes, dx: number, box: Box, glyphBox: Box): number {
-  const forward = deepestInside(glyph, prev, dx, box);
-  // `prev`'s vertices moved back by dx, against the glyph where it is drawn: the same overlap
-  // read from the other side, so `glyphBox` (never shifted) is the box to cull against.
-  const backward = deepestInside(prev, glyph, -dx, glyphBox);
-  return Math.max(forward, backward);
+function penetration(glyph: Measured, prev: Measured, dx: number): number {
+  const forward = deepestInside(glyph.probe, dx, prev, 0);
+  // `prev`'s outline moved back by dx, against the glyph where it is drawn: the same overlap
+  // read from the other side, so the glyph's own box (never shifted) is the box to cull against.
+  // It starts from the forward bite, so only a deeper one is looked for.
+  return deepestInside(prev.probe, -dx, glyph, forward);
 }
 
 /**
@@ -374,9 +447,9 @@ function penetration(glyph: Shapes, prev: Shapes, dx: number, box: Box, glyphBox
  */
 function weldShift(glyph: Shapes, prev: Shapes, want: number, travel: number, burial: number, loose = false): number {
   if (want <= 0 || travel <= 0 || !glyph.length || !prev.length) return 0;
-  const box = bboxOf(prev);
-  const glyphBox = bboxOf(glyph);
-  const at = (shift: number) => penetration(glyph, prev, -shift, box, glyphBox);
+  const g = measured(glyph);
+  const p = measured(prev);
+  const at = (shift: number) => penetration(g, p, -shift);
   const deepest0 = at(0);
   // `joinLoose`: a script's own joins are the type designer's and are never deepened — only a
   // letter that does not touch its neighbour at all is walked.

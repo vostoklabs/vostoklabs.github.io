@@ -77,9 +77,8 @@ export const tableSign: TemplateDef = {
     },
 
     // -------------------------------------------------------------- LEFT: "Assembly" --
-    // A design with a joint says what it is cut from, in its own category rather than buried
-    // under More (every design with interlocking parts gets a separate Assembly section with
-    // kerf, fit and so on).
+    // A design with a joint says what it is cut from, in its own category (every design with
+    // interlocking parts gets a separate Assembly section with kerf, fit and so on).
     {
       kind: 'number', key: 'thickness', label: 'Material thickness', section: 'Assembly', value: 3, min: 1.5, max: 9, step: 0.1, unit: 'mm',
       help: 'Measure your sheet, the joints are cut to match it.',
@@ -93,9 +92,9 @@ export const tableSign: TemplateDef = {
       options: [{ value: 'tight', label: 'Tight' }, { value: 'snug', label: 'Snug' }, { value: 'easy', label: 'Easy' }],
       help: 'Tight knocks home, Snug takes a thumb, Easy pulls apart.',
     },
-    // ------------------------------------------------------------------ LEFT: "More" --
+    // ----------------------------------------------------------- LEFT: "Sign", last row --
     {
-      kind: 'number', key: 'angle', label: 'Angle', section: 'Sign', value: 72, min: 60, max: 82, step: 1, unit: '°', advanced: true,
+      kind: 'number', key: 'angle', label: 'Angle', section: 'Sign', value: 72, min: 60, max: 82, step: 1, unit: '°',
       help: 'How steeply each panel leans off the table.',
     },
   ],

@@ -395,8 +395,19 @@ export const heartCutoutKeychains: TemplateDef = {
     { kind: 'number', key: 'width', label: 'Width', section: 'Tags', value: 70, min: 66, max: 90, step: 1, unit: 'mm' },
     { kind: 'number', key: 'height', label: 'Height', section: 'Tags', value: 22, min: 18, max: 28, step: 1, unit: 'mm' },
     {
+      kind: 'number', key: 'corner', label: 'Corner radius', section: 'Tags', value: 2,
+      min: 0, max: 5, step: 0.5, unit: 'mm',
+    },
+    {
       kind: 'number', key: 'heartSize', label: 'Heart size', section: 'Tags', value: 26, min: 16, max: 30, step: 1, unit: 'mm',
       help: 'Across both bars — each one carries half.',
+    },
+
+    // ------------------------------------------------------- LEFT: "Lettering" --
+    {
+      kind: 'number', key: 'dateSize', label: 'Date size', section: 'Lettering', value: 4,
+      min: 3, max: 6, step: 0.5, unit: 'mm',
+      help: 'Long text shrinks past this to fit.',
     },
 
     // --------------------------------------------------------- LEFT: "Keyring" --
@@ -411,16 +422,6 @@ export const heartCutoutKeychains: TemplateDef = {
       ringNote: 'Both bars wear the same ring, mirrored.',
     }),
 
-    // ------------------------------------------------------ LEFT: "More options" --
-    {
-      kind: 'number', key: 'corner', label: 'Corner radius', section: 'Tags', value: 2,
-      min: 0, max: 5, step: 0.5, unit: 'mm', advanced: true,
-    },
-    {
-      kind: 'number', key: 'dateSize', label: 'Date size', section: 'Date', value: 4,
-      min: 3, max: 6, step: 0.5, unit: 'mm', advanced: true,
-      help: 'Long text shrinks past this to fit.',
-    },
   ],
 
   async build(v) {

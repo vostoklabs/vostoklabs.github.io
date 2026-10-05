@@ -20,11 +20,12 @@ import { readSymbols } from '../symbols/model';
 // (`assembled.ts` `CARD_THICKNESS`), not another sheet of ply.
 //
 // The FORM follows the product, one section per part: one for the card (its notch/slot sizes,
-// its text and other settings), then one for the bracelets. So: **Card** holds the card's size,
-// how the cord leaves it and how big that opening is, the tear-off and the hang hole;
-// **Bracelets** holds the count, the bar and its lettering; **Font**; **More options** the fine
-// numbers of each part, the card's first. Nothing about the card is in a category called "Size"
-// any more, and nothing that shapes a piece is on the right — the right panel is the typing.
+// its text and other settings), then one for the bracelets. So: **Card** holds the card's size
+// and corners, how the cord leaves it and how big that opening is, the tear-off and the hang
+// hole; **Bracelets** holds the count, the bar and its cord holes; **Font**; **Lettering** every
+// size anything is printed at, the bars' first and then the card's. Nothing about the card is in
+// a category called "Size" any more, and nothing that shapes a piece is on the right — the right
+// panel is the typing.
 import { bboxOf, blankById, buildBlank, circleRing, placeShapes, roundedRectRing, type Pt, type Shapes } from '@vostok/laser';
 import { applyCase, fitShapes, symbolLayer } from '../engine/text';
 import { sizeForCapHeight } from '../engine/metrics';
@@ -339,16 +340,18 @@ export function makeBraceletSet(variant: BraceletVariant): TemplateDef {
       // ------------------------------------------------------ LEFT: "Card" (opens first) --
       //
       // One section per PART of the product: everything that shapes the CARD is
-      // here — how big it is, how the cord leaves it and how big that opening is, whether it tears
-      // in two, whether it hangs. Its fine numbers (corner, caption size, symbol size) are one
-      // click away under More; its words are on the right with the rest of the typing. Six rows
-      // rather than the usual four, which is the cost of the grouping — the rule that still
-      // holds is that the panel does not
-      // scroll and nothing about the card hides in a category called "Size".
+      // here — how big it is, how round, how the cord leaves it and how big that opening is,
+      // whether it tears in two, whether it hangs. Its words are on the right with the rest of the
+      // typing, and the size they are printed at is under Lettering with every other type size.
+      // Nothing about the card hides in a category called "Size".
       { kind: 'number', key: 'cardW', label: 'Card width', section: 'Card', value: 90, min: 70, max: 120, step: 1, unit: 'mm' },
       {
         kind: 'number', key: 'cardH', label: 'Card height', section: 'Card', value: 130, min: 90, max: 200, step: 1, unit: 'mm',
         help: 'More bracelets need a taller card to stay comfortable.',
+      },
+      {
+        kind: 'number', key: 'cardCorner', label: 'Rounded corners', section: 'Card',
+        value: 5.4, min: 2, max: 14, step: 0.1, unit: 'mm',
       },
       {
         kind: 'select', key: 'cord', label: 'Cord openings', section: 'Card', value: 'notch',
@@ -381,8 +384,8 @@ export function makeBraceletSet(variant: BraceletVariant): TemplateDef {
 
       // -------------------------------------------------------------- LEFT: "Bracelets" --
       //
-      // The other part, and everything that shapes it: how many, how big the bar is, and how its
-      // lettering is set. The count leads, because it is the knob that makes this a SET.
+      // The other part, and everything that shapes it: how many, how big the bar is, and where its
+      // cord holes go. The count leads, because it is the knob that makes this a SET.
       {
         kind: 'stepper', key: 'count', label: 'Bracelets', section: 'Bracelets',
         value: 2, min: 1, max: BAR_COUNT,
@@ -391,43 +394,37 @@ export function makeBraceletSet(variant: BraceletVariant): TemplateDef {
       { kind: 'number', key: 'width', label: 'Bar length', section: 'Bracelets', value: 30, min: 22, max: 42, step: 1, unit: 'mm' },
       { kind: 'number', key: 'height', label: 'Bar height', section: 'Bracelets', value: 8, min: 6, max: 11, step: 0.5, unit: 'mm' },
       {
-        kind: 'number', key: 'letterHeight', label: symbolBars ? 'Symbol height' : 'Text height', section: 'Bracelets',
-        value: symbolBars ? 5.5 : 3.6, min: 2.5, max: symbolBars ? 9 : 5, step: 0.1, unit: 'mm',
-        help: symbolBars ? 'The bar’s own height is the ceiling.' : 'Below 3 mm, engraved text stops reading clearly.',
-      },
-      opField('Bracelets', 'engrave', symbolBars ? 'Symbol' : 'Letters'),
-
-      // ------------------------------------------------------------------- LEFT: "Font" --
-      { kind: 'font', key: 'font', label: 'Font', section: 'Font', value: 'montserrat', recommended: BAR_FACES },
-
-      // ----------------------------------------------------------- LEFT: "More options" --
-      //
-      // The card's fine numbers first, then the bar's, then the type knobs the kit shares — the
-      // order a person scanning for "the thing I could not find in Card" reads in.
-      {
-        kind: 'number', key: 'cardCorner', label: 'Rounded corners', section: 'Card',
-        value: 5.4, min: 2, max: 14, step: 0.1, unit: 'mm', advanced: true,
-      },
-      {
-        kind: 'number', key: 'captionSize', label: 'Caption size', section: 'Card',
-        value: CAPTION_CAP, min: 4, max: 9, step: 0.5, unit: 'mm', advanced: true,
-        help: 'Sets every caption on the card, and its bottom line.',
-      },
-      {
-        kind: 'number', key: 'symbolSize', label: 'Card symbol size', section: 'Card', value: 16, min: 8, max: 28, step: 1, unit: 'mm', advanced: true,
-        help: 'Stays inside the footer band, leaving room for the caption.',
-      },
-      {
         kind: 'number', key: 'cordHole', label: 'Cord hole', section: 'Bracelets',
-        value: 1.6, min: 1.2, max: 2.2, step: 0.1, unit: 'mm', advanced: true,
+        value: 1.6, min: 1.2, max: 2.2, step: 0.1, unit: 'mm',
         help: '1.6 mm passes 1 mm cord with room to spare.',
       },
       {
         kind: 'number', key: 'cordInset', label: 'Hole inset', section: 'Bracelets',
-        value: 3, min: 2, max: 5, step: 0.5, unit: 'mm', advanced: true,
+        value: 3, min: 2, max: 5, step: 0.5, unit: 'mm',
         help: 'Too small and the rim around the hole gets fragile.',
       },
-      ...letteringFields('Bracelets', { textCase: 'upper' }),
+
+      // ------------------------------------------------------------------- LEFT: "Font" --
+      { kind: 'font', key: 'font', label: 'Font', section: 'Font', value: 'montserrat', recommended: BAR_FACES },
+
+      // -------------------------------------------------------------- LEFT: "Lettering" --
+      // The bars' type first, then the card's: every size anything is printed at, in one place.
+      {
+        kind: 'number', key: 'letterHeight', label: symbolBars ? 'Symbol height' : 'Text height', section: 'Lettering',
+        value: symbolBars ? 5.5 : 3.6, min: 2.5, max: symbolBars ? 9 : 5, step: 0.1, unit: 'mm',
+        help: symbolBars ? 'The bar’s own height is the ceiling.' : 'Below 3 mm, engraved text stops reading clearly.',
+      },
+      opField('Lettering', 'engrave', symbolBars ? 'Symbol' : 'Letters'),
+      ...letteringFields('Lettering', { textCase: 'upper' }),
+      {
+        kind: 'number', key: 'captionSize', label: 'Caption size', section: 'Lettering',
+        value: CAPTION_CAP, min: 4, max: 9, step: 0.5, unit: 'mm',
+        help: 'Sets every caption on the card, and its bottom line.',
+      },
+      {
+        kind: 'number', key: 'symbolSize', label: 'Card symbol size', section: 'Lettering', value: 16, min: 8, max: 28, step: 1, unit: 'mm',
+        help: 'Stays inside the footer band, leaving room for the caption.',
+      },
     ],
 
     async build(v): Promise<BuildInput> {

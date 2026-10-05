@@ -22,8 +22,8 @@
 // SHAPE, its mark, its size and its own font. The charm's menu carries the charm's font because
 // it is truly the charm's menu, where the user changes its shape and font, and because
 // `form.ts` can only spell it one way: a picker is named by
-// the category it sits in, and the FIRST font field's section exiles every other left control in
-// it to "More options". So the charm's font — declared second — shares its category, and the
+// the category it sits in, and the FIRST font field's section sends every other left control in
+// it to Lettering. So the charm's font — declared second — shares its category, and the
 // calendar's font, declared first, is a category on its own, called "Calendar font". The rail
 // letters a button with its category's first word, so that button reads "Calendar" and its
 // tooltip and panel heading read "Calendar font"; the button itself would need one change in
@@ -307,8 +307,8 @@ export const dateKeychain: TemplateDef = {
       // Mono One (2.17 ×) are both off the list for that — measured in
       // tests/node/date-keychain.test.mjs §6, which fails if a listed face stops fitting.
       //
-      // Its own category, and the FIRST font field: `form.ts` folds every other left-panel
-      // control declared in the first font field's section into "More options", so this section
+      // Its own category, and the FIRST font field: `form.ts` moves every other left-panel
+      // control declared in the first font field's section into Lettering, so this section
       // holds the picker and nothing else.
       //
       // The CATEGORY is the name the customer reads — on the rail, and as the panel's heading —
@@ -355,6 +355,9 @@ export const dateKeychain: TemplateDef = {
       options: [{ value: '+', label: '+' }, { value: '&', label: '&' }, { value: 'heart', label: 'Heart' }],
       help: 'Sits between every initial, as in “E & J”.',
     },
+    // How the charm's letters are burnt: the charm's own question, in the charm's own menu, above
+    // its font list (which fills the rest of the panel).
+    opField('Charm', 'engrave', 'Charm letters', { key: 'charmOp' }),
     {
       kind: 'font', key: 'charmFont', label: 'Charm font', section: 'Charm', value: 'playfair-display',
       recommended: ['playfair-display', 'libre-baskerville', 'dela-gothic-one', 'archivo-black', 'dancing-script', 'pacifico'],
@@ -370,11 +373,10 @@ export const dateKeychain: TemplateDef = {
       ringNote: 'Grows a tab, and sets the charm’s own hole to match.',
     }),
 
-    // --------------------------------------------------- LEFT: "More options" --
-    // Engrave is what nineteen customers in twenty want on a calendar, so neither of these earns
-    // a category of its own on a rail that should read Calendar · Font · Charm · Keyring · More.
-    { ...opField('Finish', 'engrave', 'Calendar letters', { help: 'The heart behind the chosen day always engraves, whatever this says.' }), advanced: true },
-    { ...opField('Finish', 'engrave', 'Charm letters', { key: 'charmOp' }), advanced: true },
+    // ------------------------------------------------------ LEFT: "Tag & grid", last row --
+    // How the calendar is burnt, beside the tag it is burnt on — each part's letters in that part's
+    // own menu, as the charm's are.
+    opField('Tag & grid', 'engrave', 'Calendar letters', { help: 'The heart behind the chosen day always engraves, whatever this says.' }),
   ],
 
   async build(v) {

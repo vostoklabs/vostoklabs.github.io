@@ -19,10 +19,9 @@ interface FieldBase {
   help?: string;
   /** `right` for the inputs (text, font, symbol); everything else is a setting on the left. */
   panel?: 'left' | 'right';
-  /** The section heading the field sits under. Sections appear in first-use order. */
+  /** The section heading the field sits under. Sections appear in first-use order, and every
+   *  setting lives in the section that names what it changes — there is no "More" drawer. */
   section?: string;
-  /** Under "More options", closed by default, at the end of the left panel. */
-  advanced?: boolean;
   /** Saved and loaded, never rendered — a value the preview writes (the hole's position). */
   hidden?: boolean;
   /** Hide the control unless this says so — "Loop reach" only for a loop tab. */
@@ -114,10 +113,11 @@ export interface TemplateDef {
 export const lines = (v: Values, k: string): string[] => String(v[k] ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
 export function defaultsOf(t: TemplateDef): Values {
-  // The reserved values: `__symbols` holds the inline symbols, and the three batch keys hold
-  // what the Single | Batch control writes. They are seeded here so `coerceValues` keeps them
-  // (it drops any key the defaults do not name) and Save/Load carries a run of names with it.
-  const out: Values = { __symbols: '{}', __batch: false, __batchLines: '', __sheet: '300x300' };
+  // The reserved values: `__symbols` holds the inline symbols, and the batch keys hold what the
+  // Single | Batch control writes — `__colours` is `separate` or `together` (`BatchColours`).
+  // They are seeded here so `coerceValues` keeps them (it drops any key the defaults do not name)
+  // and Save/Load carries a run of names with it.
+  const out: Values = { __symbols: '{}', __batch: false, __batchLines: '', __sheet: '300x300', __colours: 'separate' };
   for (const f of t.fields) {
     out[f.key] = f.value;
     if (f.kind === 'position') out[f.keyY] = f.valueY;
@@ -144,6 +144,13 @@ export function coerceValues(t: TemplateDef, raw: unknown): Values {
       if (typeof old.letterOp === 'string') out.letterLines = old.letterOp;
       else if (typeof old.scoreLetters === 'boolean') out.letterLines = old.scoreLetters ? 'score' : 'off';
     }
+  }
+  if (t.id === 'name-keychain') {
+    // The base arrived on 2026-10-05, and with it "Cut out" went back to meaning letters punched
+    // through the plate. Before that, Cut out WAS the welded piece — the letters with no plate —
+    // which is Base: None now. A project saved then opens as the piece its owner made.
+    const old = raw as Record<string, unknown>;
+    if (!('base' in old) && old.op === 'cut') out.base = 'none';
   }
   if (t.id === 'cake-topper') {
     // The topper was rebuilt on 2026-09-21: `topLine` + `text` (the name) became

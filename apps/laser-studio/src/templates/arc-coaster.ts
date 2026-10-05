@@ -205,6 +205,19 @@ export const arcCoaster: TemplateDef = {
       kind: 'text', key: 'topText', label: 'Top text', panel: 'right', section: 'Text',
       value: 'THE MILLERS', placeholder: 'A family name or motto', maxLength: 24, symbols: true,
     },
+    // What goes in the middle — right above the fields it brings up, on the side where you type
+    // them. On the left it was a switch whose effect happened in the other panel.
+    {
+      kind: 'select', key: 'centreMode', label: 'Centre style', panel: 'right', section: 'Text',
+      value: 'monogram',
+      options: [
+        { value: 'monogram', label: 'Monogram' },
+        { value: 'name', label: 'Name' },
+        { value: 'symbol', label: 'Symbol' },
+        { value: 'emblem', label: 'Split year' },
+      ],
+      help: 'What sits in the middle of the coaster.',
+    },
     {
       kind: 'text', key: 'centreText', label: 'Centre text', panel: 'right', section: 'Text',
       value: 'Miller', placeholder: 'A name', maxLength: 16, symbols: true,
@@ -222,6 +235,11 @@ export const arcCoaster: TemplateDef = {
       visibleWhen: (v) => str(v, 'centreMode') === 'emblem',
     },
     {
+      kind: 'symbol', key: 'centreSymbol', label: 'Symbol', panel: 'right', section: 'Text',
+      value: '',
+      visibleWhen: (v) => str(v, 'centreMode') === 'symbol' || str(v, 'centreMode') === 'emblem',
+    },
+    {
       kind: 'text', key: 'yearB', label: 'Right of the symbol', panel: 'right', section: 'Text',
       value: '24', placeholder: '24', maxLength: 4, symbols: false,
       visibleWhen: (v) => str(v, 'centreMode') === 'emblem',
@@ -237,11 +255,6 @@ export const arcCoaster: TemplateDef = {
       // library's Roman-capital serifs, its two book serifs, and three geometric/condensed sans
       // that set caps well. Every one built and looked at on this disc before it was listed.
       recommended: ['playfair-display', 'cinzel', 'marcellus', 'libre-baskerville', 'montserrat', 'oswald', 'bebas-neue'],
-    },
-    {
-      kind: 'symbol', key: 'centreSymbol', label: 'Symbol', panel: 'right', section: 'Symbol',
-      value: '',
-      visibleWhen: (v) => str(v, 'centreMode') === 'symbol' || str(v, 'centreMode') === 'emblem',
     },
 
     // ------------------------------------------------ LEFT: "Shape & size" (opens first) --
@@ -261,20 +274,9 @@ export const arcCoaster: TemplateDef = {
       help: 'Double rule and Scalloped can shrink the top text a little.',
     },
 
-    // ----------------------------------------------------------------- LEFT: "Lettering" --
+    // -------------------------------------------------------------------- LEFT: "Centre" --
     {
-      kind: 'select', key: 'centreMode', label: 'Centre style', section: 'Lettering',
-      value: 'monogram',
-      options: [
-        { value: 'monogram', label: 'Monogram' },
-        { value: 'name', label: 'Name' },
-        { value: 'symbol', label: 'Symbol' },
-        { value: 'emblem', label: 'Split year' },
-      ],
-      help: 'Fill in the matching text on the right panel.',
-    },
-    {
-      kind: 'number', key: 'centreSize', label: 'Centre size', section: 'Lettering',
+      kind: 'number', key: 'centreSize', label: 'Centre size', section: 'Centre',
       // The floor sits just above Top/Bottom text size's own ceiling (14 mm), so the middle mark
       // can never end up the same weight as the lines curving round it — the two-tier hierarchy
       // this design is built on is a range, not just a lucky default.
@@ -282,10 +284,12 @@ export const arcCoaster: TemplateDef = {
       help: 'Stays bigger than the curved top and bottom text.',
     },
     {
-      kind: 'toggle', key: 'fitCentre', label: 'Shrink to fit', section: 'Lettering',
+      kind: 'toggle', key: 'fitCentre', label: 'Shrink to fit', section: 'Centre',
       value: true,
       help: 'Off draws it at full size, even if it crowds the text.',
     },
+
+    // ----------------------------------------------------------------- LEFT: "Lettering" --
     {
       kind: 'number', key: 'topSize', label: 'Top text size', section: 'Lettering',
       value: 6, min: 4, max: 14, step: 0.5, unit: 'mm',
@@ -314,9 +318,7 @@ export const arcCoaster: TemplateDef = {
     // engine's bug, not this design's — `stencilBridge` no longer pre-judges and `stencilPunch`
     // unions before it looks. The same default now cuts as one island.
     opField('Lettering', 'engrave', 'Letters', { help: 'Also sets the divider mark, cut keeps letter middles on bridges.' }),
-    // G7's shared typographic knobs, in the section they belong to. There is no left-hand "Font"
-    // category any more: the font CARDS are in the right panel, and a rail stop holding one
-    // slider was both thin and a straight icon collision with "Lettering" (G21).
+    // G7's shared typographic knobs, in the section they belong to.
     ...letteringFields('Lettering', { textCase: 'upper' }).map((f): Field => {
       if (f.kind === 'number' && f.key === 'letterSpacing') {
         // Deliberately still 0. Opening arc caps a few percent looks better on a short line — but
@@ -331,11 +333,11 @@ export const arcCoaster: TemplateDef = {
       return f;
     }),
 
-    // --------------------------------------------------- LEFT: "Ribbon hole" (the design's own) --
+    // ------------------------------------------------------ LEFT: "Hanging" (the design's own) --
     // The shared Ring control is Loop tab | None since 2026-09-21; a coaster that hangs
     // is an ornament with a hole INSIDE its rim at 12 o'clock, so the hole is this design's own
     // (`hangHoleFields`: on/off + size, no drag), off by default — a coaster does not hang.
-    ...hangHoleFields('Ribbon hole', { dia: 3, maxDia: 5, label: 'Ribbon hole' }).map((f) =>
+    ...hangHoleFields('Hanging', { dia: 3, maxDia: 5, label: 'Ribbon hole' }).map((f) =>
       f.key === 'hangHole' ? ({ ...f, value: false, help: 'Rests at 12 o’clock, where it can shrink the top text.' } as Field) : f),
   ],
 

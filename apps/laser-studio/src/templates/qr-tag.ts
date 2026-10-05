@@ -68,7 +68,6 @@ export const qrTag = qrTemplate({
     ...qrCodeFields({ key: 'tagQrSize', value: 36, min: 12, max: 60 }),
     qrFontField(),
     ...qrLetteringFields(),
-    qrBorderField(),
     // Seven tiles, not the shape library: the picker IS the restriction. `thumbs` shows
     // each silhouette at 40 × 40, which is how you pick a shape — by looking at it.
     {
@@ -84,6 +83,7 @@ export const qrTag = qrTemplate({
     // A circle is as wide as it is tall by construction, so its height is not a control.
     { kind: 'number', key: 'height', label: 'Height', section: 'Shape & size', value: 100, min: 75, max: 200, step: 1, unit: 'mm', visibleWhen: (v) => shapeOf(v) !== 'circle' },
     { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Shape & size', value: 8, min: 0, max: 30, step: 0.5, unit: 'mm', visibleWhen: (v) => HAS_CORNER.includes(shapeOf(v)) },
+    qrBorderField(),
     // The loop tab, never a punched hole: the shared Ring control is Loop tab | None since
     // 2026-09-21. The nudge is half the
     // tag's own longest side, so the loop can reach any point ON the tag and nowhere else.

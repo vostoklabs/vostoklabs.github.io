@@ -76,7 +76,6 @@ export const qrStand = qrTemplate({
     ...qrCodeFields({ key: 'qrSize', value: 45, min: 20, max: 120 }),
     qrFontField(),
     ...qrLetteringFields(),
-    qrBorderField(),
 
     // ------------------------------------------------------ LEFT: "Stand" (the product) --
     { kind: 'number', key: 'width', label: 'Plate width', section: 'Stand', value: 100, min: 60, max: 250, step: 1, unit: 'mm' },
@@ -88,10 +87,11 @@ export const qrStand = qrTemplate({
       kind: 'number', key: 'lean', label: 'Lean', section: 'Stand', value: 12, min: 0, max: 25, step: 1, unit: '°',
       help: 'How far back the plate leans off vertical.',
     },
-    { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Stand', value: 9, min: 0, max: 30, step: 0.5, unit: 'mm', advanced: true },
+    { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Stand', value: 9, min: 0, max: 30, step: 0.5, unit: 'mm' },
+    qrBorderField('Stand'),
 
-    // -------------------------------------------- LEFT: "Assembly" (above "More options") --
-    // Declared last, which is what puts the category directly above More options.
+    // -------------------------------------------------------------- LEFT: "Assembly" --
+    // Declared last, which is what puts the category at the end of the rail.
     ...qrAssemblyFields({ help: 'Measure your sheet, the slots are cut to match it.' }),
   ],
 

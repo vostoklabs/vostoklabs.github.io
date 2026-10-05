@@ -36,10 +36,9 @@ import { MIN_COUNTER, applyCase, textLayer } from '../engine/text';
 import type { DesignLayer, KeyringSpec, PartInput } from '../engine/types';
 import { NO_KEYRING, hangHoleFields } from './keyring';
 import { connectSpec, countersTooTight, letterScoreField, letteringFields, lightPieceFields, stem } from './shared';
-import { num, str, type Field, type TemplateDef } from './types';
+import { num, str, type TemplateDef } from './types';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-const more = (f: Field): Field => ({ ...f, advanced: true });
 
 /**
  * The faces this design is for, in order (G2). The name is cut as ONE welded piece, so the
@@ -188,17 +187,16 @@ export const christmasOrnament: TemplateDef = {
       help: '70–90 mm is the classic hanging-ornament range.',
     },
 
-    // ------------------------------------------------------------- MORE: the ribbon hole --
-    // The design's own hole, not the shared Ring control: a bauble hangs from
-    // the loop it draws, so there is nothing to choose and nothing to drag — which is exactly why
-    // it is under More rather than a rail category of its own. The rail reads Ornament · Font ·
-    // More: one open category holding the product's own knob, and everything else folded.
-    ...hangHoleFields('Ribbon', { dia: 3, maxDia: 6, label: 'Ribbon hole' }).map(more),
-
-    // ------------------------------------------------------------------ MORE: the lettering --
-    more(letterScoreField('Lettering')),
-    ...lightPieceFields('Lettering', 'raised', { help: 'Raised cuts the name as a piece to glue on.' }).map(more),
+    // ---------------------------------------------------------------- LEFT: "Lettering" --
+    letterScoreField('Lettering'),
+    ...lightPieceFields('Lettering', 'raised', { help: 'Raised cuts the name as a piece to glue on.' }),
     ...letteringFields('Lettering'),
+
+    // ------------------------------------------------------------------ LEFT: "Hanging" --
+    // The design's own hole, not the shared Ring control: a bauble hangs from the loop it draws,
+    // so there is nothing to drag — only whether it is cut, and how big. The rail reads
+    // Ornament · Font · Lettering · Hanging, the order the other ornaments use.
+    ...hangHoleFields('Hanging', { dia: 3, maxDia: 6, label: 'Ribbon hole' }),
   ],
 
   async build(v) {

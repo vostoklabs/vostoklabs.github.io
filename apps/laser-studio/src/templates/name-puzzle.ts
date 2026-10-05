@@ -328,21 +328,22 @@ export const namePuzzle: TemplateDef = {
       help: 'The floor the letters and their loose middles sit on.',
     },
 
-    // ------------------------------------------------------------ LEFT: "More options" --
+    // Everything below is the board's own geometry too — the pockets' fit, the lift notch, the
+    // wall between two pockets — so it stays in Board, under the two that set the board's size.
     {
       kind: 'number', key: 'clearance', label: 'Letter clearance', section: 'Board',
-      value: 0.4, min: 0.3, max: 0.6, step: 0.05, unit: 'mm', advanced: true,
+      value: 0.4, min: 0.3, max: 0.6, step: 0.05, unit: 'mm',
       help: 'Air around each letter, higher is looser.',
     },
     {
       kind: 'number', key: 'notch', label: 'Finger notch', section: 'Board',
-      value: 12, min: 10, max: 14, step: 0.5, unit: 'mm', advanced: true,
+      value: 12, min: 10, max: 14, step: 0.5, unit: 'mm',
       help: 'The dip above each letter you lift it out by.',
     },
-    { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Board', value: 10, min: 4, max: 20, step: 1, unit: 'mm', advanced: true },
+    { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Board', value: 10, min: 4, max: 20, step: 1, unit: 'mm' },
     {
       kind: 'number', key: 'spacing', label: 'Letter spacing', section: 'Board',
-      value: 8, min: 6, max: 20, step: 0.5, unit: 'mm', advanced: true,
+      value: 8, min: 6, max: 20, step: 0.5, unit: 'mm',
       help: 'Board left standing between two pockets.',
     },
   ],

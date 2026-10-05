@@ -104,10 +104,8 @@ export function patternFields(o: PatternFieldOpts = {}): Field[] {
       visibleWhen: (v) => spacingRoom(str(v, 'pattern'), 1) > 0,
     },
     { kind: 'number', key: 'patternAngle', label: 'Angle', section, value: 0, min: 0, max: 180, step: 5, unit: '°' },
-    // NOT advanced. It was, and it was the only advanced field either pattern design had — so
-    // "More options" existed as a whole rail category holding one nudge pad, stripped of the
-    // "Pattern" heading that said what it moved — a stray d-pad. Under the Pattern heading,
-    // "Position" needs no more words.
+    // Under the Pattern heading, "Position" needs no more words; filed anywhere else it was a
+    // stray d-pad with nothing saying what it moved.
     { kind: 'position', key: 'patternX', keyY: 'patternY', label: 'Position', section, value: 0, valueY: 0, max: 30, step: 0.5, unit: 'mm' },
     {
       kind: 'select', key: 'patternOp', label: 'Make it', section, value: o.op ?? 'score',
@@ -126,7 +124,6 @@ export function patternFields(o: PatternFieldOpts = {}): Field[] {
     {
       kind: 'number', key: 'thinnestWood', label: 'Thinnest wood', section, value: THINNEST_WOOD, min: THINNEST_WOOD, max: 2, step: 0.1, unit: 'mm',
       help: 'The narrowest strip of wood left inside one cut-out.',
-      advanced: true,
       visibleWhen: (v) => str(v, 'patternOp') === 'cut',
     },
     { kind: 'number', key: 'margin', label: 'Edge margin', section, value: o.margin ?? 4, min: 0, max: 30, step: 0.5, unit: 'mm' },

@@ -55,7 +55,7 @@ import { readSymbols } from '../symbols/model';
 import type { DesignLayer, KeyringSpec, PartInput } from '../engine/types';
 import { keyringFrom } from './keyring';
 import { frameFields, letteringFields, lightPieceFields, stem } from './shared';
-import { num, str, type TemplateDef } from './types';
+import { num, str, type Field, type TemplateDef } from './types';
 
 /** How far inside the piece it traces a glue guide is scored, mm — the line has to vanish under
  *  the piece it registers, never show as a halo round it. */
@@ -115,6 +115,11 @@ const HOUSE_FACES = ['playfair-display', 'cinzel', 'libre-baskerville', 'arvo', 
 /** Engraved ink shorter than this stops reading (3–6 mm is the band). The fit still
  *  goes below it rather than refusing to build; the warning is what says so. */
 const MIN_INK = 3;
+
+/** The shared frame block — its width beside the house's own, its loop under Hanging — without
+ *  "Loop through both layers": the ribbon goes through both, always, so the toggle is a control
+ *  with nothing left to decide. */
+const FRAME: Field[] = frameFields({ diameter: 90, section: 'House', pieceNoun: 'the house' }).filter((f) => f.key !== 'backerRing');
 
 /** Where a closed ring crosses the line `at`. `axis` 1 reads a horizontal line and returns the
  *  x's it cuts (the wall's real width at the band's height); `axis` 0 reads a vertical line and
@@ -390,22 +395,19 @@ export const houseOrnament: TemplateDef = {
     },
     { kind: 'font', key: 'font', label: 'Font', panel: 'right', section: 'Font', value: 'playfair-display', recommended: HOUSE_FACES },
 
-    // -------------------------------------------------------- LEFT: "Size" (opens first) --
+    // ------------------------------------------------------- LEFT: "House" (opens first) --
+    // The house's two sizes in one category: how wide it is, and how wide the frame round it.
     {
       // 70 mm, not 60: at 60 the chimney's face is 8.4 mm across and the card's own year engraves
       // at 2.8 mm, under the 3 mm floor, while the wall takes the default family name to 2.7 mm —
       // a slider end that warns twice about text nobody has touched is a broken end, not a size
       // (G25).
-      kind: 'number', key: 'houseWidth', label: 'House width', section: 'Size',
+      kind: 'number', key: 'houseWidth', label: 'House width', section: 'House',
       value: 80, min: 70, max: 120, step: 1, unit: 'mm',
       help: 'Height follows automatically, keeping the 80×90 proportion.',
     },
 
-    // --------------------------------------------------------------------- LEFT: "Frame" --
-    // Without "Loop through both layers": the ribbon goes through both, always,
-    // so the toggle is a control with nothing left to decide. The shared helper still draws it for
-    // the designs that have not been through this pass.
-    ...frameFields({ diameter: 90, pieceNoun: 'the house' }).filter((f) => f.key !== 'backerRing'),
+    ...FRAME.filter((f) => f.key === 'rimWidth'),
 
     // ----------------------------------------------------------------- LEFT: "Lettering" --
     ...lightPieceFields('Lettering'),
@@ -414,6 +416,9 @@ export const houseOrnament: TemplateDef = {
     // lowercase came out nearly twice as tall (7.2 mm against 3.8) for no reason the form ever
     // gave. Capitals by default, and one control to leave them.
     ...letteringFields('Lettering', { textCase: 'upper' }),
+
+    // ------------------------------------------------------------------- LEFT: "Hanging" --
+    ...FRAME.filter((f) => f.key !== 'rimWidth'),
   ],
 
   async build(v) {

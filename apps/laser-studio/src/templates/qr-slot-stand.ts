@@ -76,7 +76,6 @@ export const qrSlotStand: TemplateDef = {
     ...qrCodeFields({ key: 'qrSize', value: 45, min: 15, max: 120 }),
     qrFontField(),
     ...qrLetteringFields(),
-    qrBorderField(),
 
     // ------------------------------------------------------ LEFT: "Stand" (opens first) --
     { kind: 'number', key: 'width', label: 'Width', section: 'Stand', value: 90, min: 50, max: 250, step: 1, unit: 'mm' },
@@ -90,17 +89,16 @@ export const qrSlotStand: TemplateDef = {
     ...lightPieceFields('Stand', 'raised', { help: 'Raised cuts the code as a plate to glue on.' })
       .map((f) => (f.key === 'glue' ? { ...f, help: 'Scores where the code plate glues on.' } : f)),
 
-    // ------------------------------------------------------------------ LEFT: "More" --
-    { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Stand', value: 10, min: 0, max: 30, step: 0.5, unit: 'mm', advanced: true, help: 'Rounds the upright’s two top corners.' },
+    { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Stand', value: 10, min: 0, max: 30, step: 0.5, unit: 'mm', help: 'Rounds the upright’s two top corners.' },
     {
-      kind: 'number', key: 'lean', label: 'Lean', section: 'Stand', value: 10, min: 0, max: 25, step: 1, unit: '°', advanced: true,
+      kind: 'number', key: 'lean', label: 'Lean', section: 'Stand', value: 10, min: 0, max: 25, step: 1, unit: '°',
       help: 'How far back the upright leans off vertical.',
     },
+    qrBorderField('Stand'),
 
-    // -------------------------------------------- LEFT: "Assembly" (above "More options") --
-    // The tongue and the base's slot are cut to these three, and they were scattered under More
-    // options with no Fit at all. Declared last, which is what puts the
-    // category directly above More options.
+    // -------------------------------------------------------------- LEFT: "Assembly" --
+    // The tongue and the base's slot are cut to these three, and they were scattered with no Fit
+    // at all. Declared last, which is what puts the category at the end of the rail.
     ...qrAssemblyFields({ help: 'Measure your sheet, the slot is cut to match it.' }),
   ],
 

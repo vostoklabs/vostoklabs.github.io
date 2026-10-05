@@ -118,6 +118,46 @@ export function useSegmented(labels: string[]): boolean {
   return labels.reduce((n, l) => n + l.length, 0) <= 24;
 }
 
+/* ----------------------------------------------------------- where a field lives -- */
+
+/** What `fieldHome` reads off a field. */
+export interface HomedField {
+  kind: string;
+  panel?: 'left' | 'right';
+  section?: string;
+}
+
+/**
+ * Which panel a field is drawn in, and which category it sits under.
+ *
+ * The right panel is for what the customer TYPES, so the font is never there whatever a template
+ * says: it is a setting — the biggest one — and a category on the rail. Every other field sits
+ * in the section it names. There is no catch-all: a "More options" drawer used to collect
+ * anything marked advanced, which filed tile spacing away from the tiles and boldness away from
+ * the lettering, two folds from what each one moves.
+ *
+ * One exception, and it is a move rather than a drawer: a type knob a template declared in the
+ * FONT's own section goes to Lettering, because the Font tab is the font list and nothing else
+ * (the list fills the tab, and a slider under it is pushed off the bottom).
+ */
+export function fieldHome(f: HomedField, fontSection: string): { right: boolean; title: string } {
+  const right = f.panel === 'right' && f.kind !== 'font';
+  if (f.kind === 'font') return { right: false, title: f.section ?? 'Font' };
+  if (!right && f.section === fontSection) return { right: false, title: 'Lettering' };
+  return { right, title: f.section ?? (right ? '' : 'Settings') };
+}
+
+/**
+ * The rail's order: categories in the order their first field is declared — except that the
+ * rail opens on the knob that makes this design this design (Size on a keychain, Code on a QR
+ * stand), so a Font category that came first goes second.
+ */
+export function railOrder(titles: string[], fontTitle: string): string[] {
+  const out = [...titles];
+  if (out.length > 1 && out[0] === fontTitle) out.splice(1, 0, out.splice(0, 1)[0]!);
+  return out;
+}
+
 /* ------------------------------------------------------- G33 · "Surprise me" -- */
 
 /** Pattern Monster's "Inspire me" look in the studio's pattern vocabulary — the rule lives in
@@ -136,7 +176,6 @@ export type RailIconKey = 'plus' | 'list' | 'layers' | 'grid' | 'qr' | 'maximize
  */
 export function railIconKey(title: string): RailIconKey {
   const t = title.toLowerCase();
-  if (t === 'more options') return 'plus';
   if (/\b(guest|guests|names|list|lines|family|members)\b/.test(t)) return 'list';
   if (/\b(layer|layers)\b/.test(t)) return 'layers';
   if (/\b(tile|tiles|grid|crossword|puzzle|tray)\b/.test(t)) return 'grid';

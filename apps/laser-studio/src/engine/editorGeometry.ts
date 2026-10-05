@@ -419,6 +419,131 @@ function pointInRing(p: Pt, ring: Pt[]): boolean {
   return c;
 }
 
+/** How many bands `unionIndex` files a shape's edges into, along each axis. */
+const UNION_BANDS = 64;
+
+/** Every ring's edges, filed by the band of one axis they span: per island, per ring, per band, as
+ *  flat [xi, yi, xj, yj, …] with i and j paired the way `pointInRing` pairs them. An edge level in
+ *  that axis never crosses a line across it and is left out. */
+type FiledEdges = number[][][][];
+
+/** A set of overlapping islands asked about many times — the overlap walk asks of every point it
+ *  probes, at every step of every letter, whether it is inside the neighbour and how deep. */
+export interface UnionIndex {
+  /** `insideUnion(shapes, [x, y])`, read from the edges crossing the point's own height only. */
+  inside(x: number, y: number): boolean;
+  /** How far from (x, y) the islands' union reaches along the four axis directions — the nearest
+   *  of the four ends, mm, or 0 when (x, y) is not inside. The union is the one `inside` reads
+   *  (each ring even-odd), every end lies on its outline, and so this is never less than the
+   *  distance to that outline. */
+  exit(x: number, y: number): number;
+}
+
+/**
+ * The islands' union, indexed once for many questions.
+ *
+ * `inside` is `insideUnion`: each ring's edges are filed by the heights they span, so a question
+ * reads only the edges crossing the point's own height, with `pointInRing`'s crossing test edge for
+ * edge and in the same order of operations. An edge that does not span the point's height can
+ * never pass that test, so every answer is the one `insideUnion` gives.
+ *
+ * `exit` is what keeps a depth honest where `unionOutlineDistance` is not. That function skips an
+ * edge whose nearest point lies inside another island, and a stroke-built face draws strokes whose
+ * outlines COINCIDE — Baloo's n is three — so a point just inside the letter's edge can find every
+ * edge near it "buried" and be told it is 2.4 mm deep. The union's extent along the axes through
+ * the point is the same union read the plain way: no answer of it is ever shallower than the truth.
+ */
+export function unionIndex(shapes: Shapes): UnionIndex {
+  const box = bboxOf(shapes);
+  const h = (box.maxY - box.minY) / UNION_BANDS;
+  const w = (box.maxX - box.minX) / UNION_BANDS;
+  const row = (y: number) => (h > 0 ? Math.max(0, Math.min(UNION_BANDS - 1, Math.floor((y - box.minY) / h))) : 0);
+  const col = (x: number) => (w > 0 ? Math.max(0, Math.min(UNION_BANDS - 1, Math.floor((x - box.minX) / w))) : 0);
+  const file = (axis: 0 | 1, band: (v: number) => number): FiledEdges => shapes.map((island) => island.map((ring) => {
+    const bands: number[][] = Array.from({ length: UNION_BANDS }, () => []);
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i]!;
+      const b = ring[j]!;
+      if (a[axis] === b[axis]) continue;
+      for (let k = band(Math.min(a[axis], b[axis])); k <= band(Math.max(a[axis], b[axis])); k++) bands[k]!.push(a[0], a[1], b[0], b[1]);
+    }
+    return bands;
+  }));
+  const rows = file(1, row);
+  const cols = file(0, col);
+  const crosses = (bands: number[][], x: number, y: number) => {
+    const e = bands[row(y)]!;
+    let c = false;
+    for (let k = 0; k < e.length; k += 4) {
+      const xi = e[k]!;
+      const yi = e[k + 1]!;
+      const xj = e[k + 2]!;
+      const yj = e[k + 3]!;
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  };
+  /** Along the line {axis = c}, the distance from `at` (a position along the other axis) to the
+   *  nearer end of the stretch of the union holding it — 0 if none does. */
+  const reach = (filed: FiledEdges, band: number, axis: 0 | 1, c: number, at: number): number => {
+    const spans: [number, number][] = [];
+    for (const rings of filed) {
+      // Where each ring crosses the line, tagged with the ring; even-odd per ring, swept in order.
+      const hits: [number, number][] = [];
+      rings.forEach((bands, r) => {
+        const e = bands[band]!;
+        for (let k = 0; k < e.length; k += 4) {
+          const ai = axis ? e[k + 1]! : e[k]!;
+          const aj = axis ? e[k + 3]! : e[k + 2]!;
+          if (ai > c === aj > c) continue;
+          const bi = axis ? e[k]! : e[k + 1]!;
+          const bj = axis ? e[k + 2]! : e[k + 3]!;
+          hits.push([((bj - bi) * (c - ai)) / (aj - ai) + bi, r]);
+        }
+      });
+      hits.sort((p, q) => p[0] - q[0]);
+      const parity = rings.map(() => false);
+      let from: number | null = null;
+      for (const [pos, r] of hits) {
+        parity[r] = !parity[r];
+        let holes = false;
+        for (let i = 1; i < parity.length; i++) if (parity[i]) holes = !holes;
+        const covered = parity[0]! && !holes;
+        if (covered && from === null) from = pos;
+        else if (!covered && from !== null) { spans.push([from, pos]); from = null; }
+      }
+    }
+    spans.sort((p, q) => p[0] - q[0]);
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const [s, e] of spans) {
+      if (s > hi) {
+        if (lo <= at && at <= hi) break;
+        lo = s;
+        hi = e;
+      } else hi = Math.max(hi, e);
+    }
+    return lo <= at && at <= hi ? Math.min(at - lo, hi - at) : 0;
+  };
+  return {
+    inside(x, y) {
+      // Outside every ring's box a ray crosses each ring an even number of times, or not at all.
+      if (x < box.minX || x > box.maxX || y < box.minY || y > box.maxY) return false;
+      for (const rings of rows) {
+        if (!rings[0] || !crosses(rings[0], x, y)) continue;
+        let inHole = false;
+        for (let i = 1; i < rings.length; i++) if (crosses(rings[i]!, x, y)) inHole = !inHole;
+        if (!inHole) return true;
+      }
+      return false;
+    },
+    exit(x, y) {
+      if (x < box.minX || x > box.maxX || y < box.minY || y > box.maxY) return 0;
+      return Math.min(reach(rows, row(y), 1, y, x), reach(cols, col(x), 0, x, y));
+    },
+  };
+}
+
 function projectOnSegment(p: Pt, a: Pt, b: Pt): Pt {
   const dx = b[0] - a[0], dy = b[1] - a[1];
   const len2 = dx * dx + dy * dy;

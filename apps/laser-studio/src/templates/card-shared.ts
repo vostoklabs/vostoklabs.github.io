@@ -242,20 +242,21 @@ export const sideField = (value: 'left' | 'right'): Field => ({
  *   · "Make it" opens on Cut out — every card photo is cut through;
  *   · Web opens at the 1.5 mm `WALL` and never goes under 1.2 or past 2;
  *   · no Edge margin — the border is fixed (see the header);
- *   · Angle and Position go under More: the layout has already placed the pattern, and the
- *     first screen keeps to the picker, Zoom, Make it and Web.
+ *   · Angle and Position go LAST in the category: the layout has already placed the pattern, so
+ *     the picker, Zoom, Make it and Web come first.
  * `zoom` is the layout's own default: a card is small, and each pattern's cell is sized by eye
  * against its photo.
  */
 export function cardPatternFields(o: { value: string; zoom?: number }): Field[] {
-  return patternFields({ section: 'Pattern', value: o.value, op: 'cut', margin: BORDER })
+  const placed = (f: Field) => f.key === 'patternAngle' || f.key === 'patternX';
+  const fields = patternFields({ section: 'Pattern', value: o.value, op: 'cut', margin: BORDER })
     .filter((f) => f.key !== 'margin')
     .map((f): Field => {
       if (f.key === 'patternScale' && f.kind === 'number') return { ...f, value: o.zoom ?? 100 };
       if (f.key === 'web' && f.kind === 'number') return { ...f, value: WALL, min: MIN_WEB, max: MAX_WEB };
-      if (f.key === 'patternAngle' || f.key === 'patternX') return { ...f, advanced: true };
       return f;
     });
+  return [...fields.filter((f) => !placed(f)), ...fields.filter(placed)];
 }
 
 /** How the lines of the lockup line up with each other and sit in their space. */
@@ -272,8 +273,9 @@ const MOVE_REACH = 25;
  *
  *  Align, Move the text, the three sizes and Line spacing came in 2026-09-29: lettering settings
  *  (alignment, size, position), where before there was no way to adjust or move the text at
- *  all. "Letters are" and the Rule went under More to keep
- *  the category at six controls.
+ *  all. Two categories hold them, so neither runs past seven controls: Lettering is the type
+ *  itself (sizes, case, spacing, how it is burnt), Layout is where it sits (alignment, the move,
+ *  the rule under the name, the logo's size).
  *
  *  The phone and third line have a size of their OWN, in mm (the same evening). The first cut
  *  scaled them with the title by one
@@ -299,27 +301,12 @@ export function cardLetteringFields(o: { nameSize?: number; logoSize?: boolean; 
       help: 'Letter height of the phone number and the third line.',
     },
     {
-      kind: 'select', key: 'textAlign', label: 'Align', section: 'Lettering', value: o.align ?? 'left',
-      options: [{ value: 'left', label: 'Left' }, { value: 'centre', label: 'Centre' }, { value: 'right', label: 'Right' }],
-    },
-    {
-      kind: 'position', key: 'textX', keyY: 'textY', label: 'Move the text', section: 'Lettering',
-      value: 0, valueY: 0, max: MOVE_REACH, step: 0.5, unit: 'mm',
-      help: 'Moves it within the space the pattern leaves clear.',
-    },
-    { kind: 'toggle', key: 'rule', label: 'Rule between name and details', section: 'Lettering', value: true, advanced: true },
-    ...(o.logoSize === false ? [] : [{
-      kind: 'number', key: 'logoSize', label: 'Logo size', section: 'Lettering',
-      value: 14, min: 12, max: 18, step: 0.5, unit: 'mm', visibleWhen: (v: Values) => str(v, 'logo') !== '',
-    } satisfies Field]),
-    { kind: 'font', key: 'font', label: 'Font', panel: 'right', section: 'Font', value: 'montserrat', recommended: READS_SMALL },
-    {
-      kind: 'select', key: 'op', label: 'Letters are', section: 'Lettering', value: 'engrave', advanced: true,
+      kind: 'select', key: 'op', label: 'Letters are', section: 'Lettering', value: 'engrave',
       options: [{ value: 'engrave', label: 'Engrave' }, { value: 'score', label: 'Score' }],
       help: 'No cut option, letters this small would drop out as scrap.',
     },
     {
-      kind: 'select', key: 'textCase', label: 'Capitalise the name', section: 'Lettering', value: o.textCase ?? 'upper', advanced: true,
+      kind: 'select', key: 'textCase', label: 'Capitalise the name', section: 'Lettering', value: o.textCase ?? 'upper',
       options: [
         { value: 'as-typed', label: 'As typed' }, { value: 'upper', label: 'UPPERCASE' },
         { value: 'lower', label: 'lowercase' }, { value: 'title', label: 'Title case' },
@@ -327,14 +314,29 @@ export function cardLetteringFields(o: { nameSize?: number; logoSize?: boolean; 
     },
     {
       kind: 'number', key: 'letterSpacing', label: 'Letter spacing', section: 'Lettering',
-      value: 0, min: -10, max: 30, step: 1, unit: '%', advanced: true,
+      value: 0, min: -10, max: 30, step: 1, unit: '%',
       help: 'Applies to every line, not just the name.',
     },
     {
       kind: 'number', key: 'lineSpacing', label: 'Line spacing', section: 'Lettering',
-      value: 100, min: 60, max: 200, step: 5, unit: '%', advanced: true,
+      value: 100, min: 60, max: 200, step: 5, unit: '%',
       help: 'The space between the lines.',
     },
+    {
+      kind: 'select', key: 'textAlign', label: 'Align', section: 'Layout', value: o.align ?? 'left',
+      options: [{ value: 'left', label: 'Left' }, { value: 'centre', label: 'Centre' }, { value: 'right', label: 'Right' }],
+    },
+    {
+      kind: 'position', key: 'textX', keyY: 'textY', label: 'Move the text', section: 'Layout',
+      value: 0, valueY: 0, max: MOVE_REACH, step: 0.5, unit: 'mm',
+      help: 'Moves it within the space the pattern leaves clear.',
+    },
+    { kind: 'toggle', key: 'rule', label: 'Rule between name and details', section: 'Layout', value: true },
+    ...(o.logoSize === false ? [] : [{
+      kind: 'number', key: 'logoSize', label: 'Logo size', section: 'Layout',
+      value: 14, min: 12, max: 18, step: 0.5, unit: 'mm', visibleWhen: (v: Values) => str(v, 'logo') !== '',
+    } satisfies Field]),
+    { kind: 'font', key: 'font', label: 'Font', panel: 'right', section: 'Font', value: 'montserrat', recommended: READS_SMALL },
   ];
 }
 

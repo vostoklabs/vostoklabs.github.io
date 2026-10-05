@@ -39,9 +39,9 @@ export const myDesign: TemplateDef = {
 `font` (the curated font cards + "Browse all"), `number` (a slider: `min`, `max`, `step`,
 `unit`), `select` (a segmented control up to four options, a dropdown after that), `toggle`,
 `symbol` (the icon library), `blank` (the shape library, `categories` narrows it). Every field
-has a `value` — its default. `advanced: true` folds it under "More options"; `group: 'Keyring'`
-puts it in its own closed section; `under: 'font'` folds it as a satellite of that field ("Show
-font options"); `hidden: true` saves and loads it without a control; `help` adds a "?" tooltip
+has a `value` — its default. `section` names the category it sits in, and every setting sits
+with what it changes — tile spacing under Tiles, boldness under Lettering, the ring under
+Keyring — because there is no "More" drawer; `hidden: true` saves and loads it without a control; `help` adds a "?" tooltip
 of one short sentence (the only copy a control gets — no paragraphs, 2026-09-21)
 under the control; `visibleWhen: (v) => …` hides it until it applies. Keep the first
 screen to three or four fields: text, font, size, the one knob that makes this design this
@@ -161,7 +161,9 @@ preview, save/load and SVG export.
 Use `panel: 'right'` for what the customer types (text, a list, a symbol, a link) — the font
 field is always a LEFT category — and `section` to group left-side
 settings. Text fields support symbols by default (`symbols: false` opts out).
-Use `visibleWhen` for dependent controls and `advanced` for rarely used settings.
+Use `visibleWhen` for dependent controls; a rarely used setting still goes in the section that
+names what it changes (`fieldHome` in `src/form-rules.ts` is the rule, and the form test holds
+every template to it).
 Keep font fields in their own section so the font list can fill the remaining height.
 Before registering a design, check default geometry, empty/long text, symbols,
 save/load and SVG export at desktop and narrow widths.

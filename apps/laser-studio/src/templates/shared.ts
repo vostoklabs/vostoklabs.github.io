@@ -111,6 +111,12 @@ export function shapeFields(o: ShapeFieldOpts): Field[] {
   ];
 }
 
+/** The same fields, shown only while `gate` says so — on top of any `visibleWhen` a field
+ *  already has. `visibleWhen` is per field, never per section, so a design whose base can be an
+ *  outline OR a shape from the library shows the shape's sliders only on the shape. */
+export const onlyWhen = (fields: Field[], gate: (v: Values) => boolean): Field[] =>
+  fields.map((f) => ({ ...f, visibleWhen: (v: Values) => gate(v) && (f.visibleWhen ? f.visibleWhen(v) : true) }));
+
 /** The picked blank's parameters as the size sliders set them. The keyring is the engine's job,
  *  not the blank's — two holes is a bug, not a feature. */
 function blankParamsOf(v: Values, def: { defaults: BlankParams }): BlankParams {
@@ -732,8 +738,9 @@ export const opOf = (v: Values, key = 'op'): OpChoice => (str(v, key) || 'engrav
  * does the arithmetic its own spec asks for —
  * `TextSpec.letterSpacing` is a fraction of the size, so `pct / 100`; `applyCase` does the case.
  *
- * All three are `advanced`, because none of them makes the design the design: they are what you
- * reach for once the name is on the part and something is a hair off.
+ * All three live in the section the template names — Lettering, almost always — beside the
+ * name they move, never in a drawer of their own: none of them makes the design the design, but
+ * a type knob two folds away from the lettering is a knob nobody finds.
  *
  * `letterSpacing` is deliberately the key a few templates already use for a raw fraction. A
  * template spreading these must drop its own copy, not sit beside it — two controls writing one
@@ -743,14 +750,14 @@ export function letteringFields(section: string, o: { multiLine?: boolean; textC
   return [
     {
       kind: 'number', key: 'letterSpacing', label: 'Letter spacing', section, value: 0,
-      min: -10, max: 30, step: 1, unit: '%', advanced: true,
+      min: -10, max: 30, step: 1, unit: '%',
     },
     {
       // A design whose lettering is CUT at one size reads very differently in capitals and in
       // lowercase — a width-bound fit scales a lowercase string up until it fills the same room,
       // so the same name comes out nearly twice as tall. A template whose design is in
       // capitals says so here rather than leaving the customer to discover it.
-      kind: 'select', key: 'textCase', label: 'Capitalise', section, value: o.textCase ?? 'as-typed', advanced: true,
+      kind: 'select', key: 'textCase', label: 'Capitalise', section, value: o.textCase ?? 'as-typed',
       options: [
         { value: 'as-typed', label: 'As typed' },
         { value: 'upper', label: 'UPPERCASE' },
@@ -761,7 +768,7 @@ export function letteringFields(section: string, o: { multiLine?: boolean; textC
     ...(o.multiLine
       ? [{
           kind: 'number', key: 'lineHeight', label: 'Line height', section, value: 100,
-          min: 60, max: 140, step: 1, unit: '%', advanced: true,
+          min: 60, max: 140, step: 1, unit: '%',
         } as Field]
       : []),
   ];
@@ -794,25 +801,28 @@ export const SAMPLE_SITE = 'https://www.example.com';
 /** The rim, its loop and the registration switch — identical across every framed template.
  *  `diameter` seeds the frame
  *  width's default once; the loop is the standard keyring block in loop-tab mode, resting at
- *  the top. */
-export function frameFields(o: { diameter: number; section?: string; pieceNoun?: string }): Field[] {
+ *  the top.
+ *
+ *  Two sections, because they are two questions: the frame's own width under `section`, and the
+ *  loop — how the ornament HANGS — under `hangSection`, the word every ornament and sign uses for
+ *  it. A "Frame" category whose every other control was about the loop answered neither. */
+export function frameFields(o: { diameter: number; section?: string; hangSection?: string; pieceNoun?: string }): Field[] {
   const section = o.section ?? 'Frame';
+  const hang = o.hangSection ?? 'Hanging';
   // What the dark piece IS, in the customer's words. "The backer" is right for an ornament and
   // wrong for a house or a face — the house's dark piece is the house.
   const piece = o.pieceNoun ?? 'the backer';
   return [
     {
-      // NOT advanced: a section called "Frame" whose every control is about the LOOP, with the
-      // one number that sets the rim's own width folded away under "More options", is a menu
-      // that answers a question nobody asked. The frame's width is the frame's decision.
       kind: 'number', key: 'rimWidth', label: 'Frame width', section,
       value: +rimWidthFor(o.diameter).toFixed(1), min: 5, max: 14, step: 0.5, unit: 'mm',
       help: `How wide the rim round ${piece} is, loop included.`,
     },
-    ...keyringFields('outside', { section, dia: 3, ring: 4, side: 'top', along: 50 }),
+    ...keyringFields('outside', { section: hang, dia: 3, ring: 4, side: 'top', along: 50 }),
     {
-      kind: 'toggle', key: 'backerRing', label: 'Loop through both layers', section, value: false, advanced: true,
+      kind: 'toggle', key: 'backerRing', label: 'Loop through both layers', section: hang, value: false,
       help: `On, ${piece} gets its own lug and the loop is two sheets thick.`,
+      visibleWhen: (v) => str(v, 'ringMode') !== 'none',
     },
   ];
 }

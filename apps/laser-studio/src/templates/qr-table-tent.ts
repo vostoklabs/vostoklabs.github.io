@@ -60,7 +60,6 @@ export const qrTableTent = qrTemplate({
     ...qrCodeFields({ key: 'qrSize', value: 45, min: 15, max: 120 }),
     qrFontField(),
     ...qrLetteringFields(),
-    qrBorderField(),
 
     // ------------------------------------------------------- LEFT: "Tent" (opens first) --
     { kind: 'number', key: 'width', label: 'Width', section: 'Tent', value: 95, min: 60, max: 200, step: 1, unit: 'mm' },
@@ -69,16 +68,15 @@ export const qrTableTent = qrTemplate({
       help: 'The panels lean, so the tent stands a little lower.',
     },
 
-    // ------------------------------------------------------------------ LEFT: "More" --
     {
-      kind: 'number', key: 'angle', label: 'Angle', section: 'Tent', value: 72, min: 60, max: 82, step: 1, unit: '°', advanced: true,
+      kind: 'number', key: 'angle', label: 'Angle', section: 'Tent', value: 72, min: 60, max: 82, step: 1, unit: '°',
       help: 'How steeply each panel leans off the table.',
     },
+    qrBorderField('Tent'),
 
-    // -------------------------------------------- LEFT: "Assembly" (above "More options") --
-    // Four slots and eight notches are cut to these three, and they were under More options with
-    // no Fit at all. Declared last, which is what puts the category directly
-    // above More options.
+    // -------------------------------------------------------------- LEFT: "Assembly" --
+    // Four slots and eight notches are cut to these three, and they were filed away with no Fit
+    // at all. Declared last, which is what puts the category at the end of the rail.
     ...qrAssemblyFields({ help: 'Measure your sheet, the joints are cut to match it.' }),
   ],
 

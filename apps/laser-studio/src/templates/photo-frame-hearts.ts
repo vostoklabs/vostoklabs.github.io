@@ -246,7 +246,7 @@ export const photoFrameHearts: TemplateDef = {
     { kind: 'font', key: 'messageFont', label: 'Message font', section: 'Font', value: 'quicksand', recommended: MESSAGE_FACES, previewFrom: 'message' },
     ...frameAssemblyFields(),
     {
-      kind: 'stepper', key: 'hearts', label: 'Small hearts', section: 'Frame', value: 5, min: 0, max: 9, advanced: true,
+      kind: 'stepper', key: 'hearts', label: 'Small hearts', section: 'Frame', value: 5, min: 0, max: 9,
       help: 'The little hearts down the right side.',
     },
     borderField(),

@@ -68,7 +68,6 @@ import {
 import { num, str, type Field, type TemplateDef, type Values } from './types';
 
 const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo);
-const more = (f: Field): Field => ({ ...f, advanced: true });
 
 /** Material left round the hanging hole, mm. §5.2/§5.4 of the laser reference: 2 mm is real
  *  shipped precedent on plywood, and the rim is GROWN to hold it rather than the hole being
@@ -1372,14 +1371,17 @@ function tagFields(spec: BallSpec): Field[] {
       value: 85, min: spec.minSize, max: MAX_SIZE, step: 1, unit: 'mm',
       help: '75–90 mm is the usual bag-tag size.',
     },
-    ...lightPieceFields('Tag', 'raised', { help: 'Raised welds the lettering into the frame; Engrave burns it on.' }),
 
-    // --------------------------------------------------------------- LEFT: "More options" --
+    // ------------------------------------------------------------------ LEFT: "Lettering" --
+    // The name and the number ARE the light pieces, so how they are made is a lettering choice.
+    ...lightPieceFields('Lettering', 'raised', { help: 'Raised welds the lettering into the frame; Engrave burns it on.' }),
     // Always on the page, whatever the face: every name runs into the ring and into itself, and
     // both are the lines this control draws.
-    more({ ...letterScoreField('Lettering'), help: 'Scores each letter where it meets the frame or the next letter.' }),
+    { ...letterScoreField('Lettering'), help: 'Scores each letter where it meets the frame or the next letter.' },
+
+    // -------------------------------------------------------------------- LEFT: "Hanging" --
     // The football hangs from a loop tab on its backer, not a hole through its thin frame.
-    ...hangHoleFields('Hanging', { dia: 3, maxDia: 6, ...(spec.football ? { label: 'Hanging loop' } : {}) }).map(more),
+    ...hangHoleFields('Hanging', { dia: 3, maxDia: 6, ...(spec.football ? { label: 'Hanging loop' } : {}) }),
   ];
 }
 

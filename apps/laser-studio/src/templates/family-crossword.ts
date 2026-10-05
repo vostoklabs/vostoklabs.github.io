@@ -399,9 +399,6 @@ function silhouettePath(blankId: string): string | undefined {
   return def ? blankSilhouette(def) : undefined;
 }
 
-/** Everything but the shape, the size and what you type lives under More options. */
-const more = (f: Field): Field => ({ ...f, advanced: true });
-
 export const familyCrossword: TemplateDef = {
   id: 'family-crossword',
   name: 'Family names crossword',
@@ -446,7 +443,7 @@ export const familyCrossword: TemplateDef = {
       visibleWhen: (v) => str(v, 'familyName').trim() !== '',
     },
 
-    // ------------------------------------------------- LEFT: "Ornament" (the only category) --
+    // ------------------------------------------------------- LEFT: "Ornament" (opens first) --
     {
       kind: 'thumbs', key: 'backer', label: 'Shape', section: 'Ornament', value: 'round', columns: 2,
       options: [
@@ -458,50 +455,55 @@ export const familyCrossword: TemplateDef = {
       kind: 'number', key: 'backerSize', label: 'Size', section: 'Ornament', value: 100, min: 60, max: 140, step: 1, unit: 'mm',
       help: '80–110 mm is the classic hanging-ornament range.',
     },
+    {
+      kind: 'number', key: 'backerMargin', label: 'Edge margin', section: 'Ornament', value: 3, min: 2, max: 15, step: 0.5, unit: 'mm',
+      help: 'Material kept clear around the tiles, inside the frame.',
+    },
 
-    // ------------------------------------------------------------------------ More options --
-    more({
-      kind: 'stepper', key: 'layout', label: 'Layout', section: 'Crossword', value: 1, min: 1, max: 99, step: 1,
+    // ------------------------------------------------------------------- LEFT: "Tiles" --
+    {
+      kind: 'stepper', key: 'layout', label: 'Layout', section: 'Tiles', value: 1, min: 1, max: 99, step: 1,
       help: 'Steps through different interlocks of the same names.',
-    }),
-    more({
-      kind: 'number', key: 'letterScale', label: 'Letter size', section: 'Tiles', value: 0.55, min: 0.35, max: 0.65, step: 0.01,
-      format: (val: number) => `${Math.round(val * 100)}% of the tile`,
-    }),
+    },
     // The word-game value in each tile's corner. On, like the tiles it copies: without the
     // numeral a letter tile reads as a square with a letter in it, and at this same scale it
     // still engraves cleanly. The numeral is small (about 1.5 mm at Ø 100), so it is dropped —
     // and said — when the tiles get small enough that it would engrave as a smudge.
-    more({
+    {
       kind: 'toggle', key: 'values', label: 'Letter values', section: 'Tiles', value: true,
       help: 'The small number in each tile’s corner.',
-    }),
-    more({
-      kind: 'select', key: 'letterOp', label: 'Letters', section: 'Tiles', value: 'engrave',
-      options: [{ value: 'engrave', label: 'Engrave' }, { value: 'score', label: 'Score' }],
-      help: 'No cut-out option, since it would sever letters like A and O.',
-    }),
-    more({
+    },
+    {
       kind: 'select', key: 'edgeOp', label: 'Tile edges', section: 'Tiles', value: 'score',
       options: [{ value: 'score', label: 'Score' }, { value: 'engrave', label: 'Engrave' }, { value: 'off', label: 'Off' }],
       help: 'If your software cuts on blue, use Engrave instead.',
-    }),
-    more({
-      kind: 'number', key: 'letterBold', label: 'Boldness', section: 'Tiles', value: 0, min: -0.2, max: 0.6, step: 0.05, unit: 'mm',
-      help: 'Grows or shrinks the engraved strokes without changing letter size.',
-    }),
-    more({
-      kind: 'number', key: 'backerMargin', label: 'Edge margin', section: 'Ornament', value: 3, min: 2, max: 15, step: 0.5, unit: 'mm',
-      help: 'Material kept clear around the tiles, inside the frame.',
-    }),
+    },
     // Raised is the product: the tiles are their own light piece, glued on the dark backer over
     // a scored guide. Engrave burns them into the backer instead, for one sheet of material.
-    ...lightPieceFields('Tiles', 'raised', { help: 'Raised cuts the tiles as a piece to glue on.' }).map(more),
+    ...lightPieceFields('Tiles', 'raised', { help: 'Raised cuts the tiles as a piece to glue on.' }),
+
+    // --------------------------------------------------------------- LEFT: "Lettering" --
+    // The same three knobs, in the same section, as the letter tile keychain's.
+    {
+      kind: 'number', key: 'letterScale', label: 'Letter size', section: 'Lettering', value: 0.55, min: 0.35, max: 0.65, step: 0.01,
+      format: (val: number) => `${Math.round(val * 100)}% of the tile`,
+    },
+    {
+      kind: 'select', key: 'letterOp', label: 'Letters', section: 'Lettering', value: 'engrave',
+      options: [{ value: 'engrave', label: 'Engrave' }, { value: 'score', label: 'Score' }],
+      help: 'No cut-out option, since it would sever letters like A and O.',
+    },
+    {
+      kind: 'number', key: 'letterBold', label: 'Boldness', section: 'Lettering', value: 0, min: -0.2, max: 0.6, step: 0.05, unit: 'mm',
+      help: 'Grows or shrinks the engraved strokes without changing letter size.',
+    },
+
+    // ----------------------------------------------------------------- LEFT: "Hanging" --
     // The loop is grown from the FRAME, resting at top centre, and its size comes from the
     // ornament (below) — so the shared block keeps only the switch and the nudge pad.
     ...keyringFields('outside', { section: 'Hanging', dia: 4, ring: 5, side: 'top', along: 50, nudge: 70 }).map((f): Field => {
       if (f.key === 'holeDia' || f.key === 'holeRing') return { ...f, hidden: true };
-      return f.hidden ? f : more(f);
+      return f;
     }),
   ],
 

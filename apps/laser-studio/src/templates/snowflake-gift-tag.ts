@@ -168,15 +168,15 @@ export const snowflakeGiftTag: TemplateDef = {
       visibleWhen: (v) => v.__batch === true,
     },
     { kind: 'font', key: 'font', label: 'Font', section: 'Font', value: 'sacramento', recommended: TAG_FONTS, previewFrom: 'name' },
+    { kind: 'number', key: 'width', label: 'Width', section: 'Size', value: WIDTH, min: 40, max: 60, step: 1, unit: 'mm' },
+    { kind: 'number', key: 'height', label: 'Height', section: 'Size', value: HEIGHT, min: 60, max: 100, step: 1, unit: 'mm', help: 'To the bottom edge; the snowflake hangs below it.' },
     { kind: 'number', key: 'size', label: 'Name size', section: 'Lettering', value: 16, min: 8, max: 24, step: 0.5, unit: 'mm', help: 'Long names shrink to fit the tag.' },
     { kind: 'toggle', key: 'fit', label: 'Shrink long names to fit', section: 'Lettering', value: true, help: 'Off cuts the name at the edge instead of shrinking it.' },
     // Engrave or score only (see the header): no "Cut out".
     { kind: 'select', key: 'op', label: 'Letters', section: 'Lettering', value: 'engrave', options: [{ value: 'engrave', label: 'Engrave' }, { value: 'score', label: 'Score' }] },
-    { kind: 'position', key: 'offsetX', keyY: 'offsetY', label: 'Name position', section: 'Lettering', value: 0, valueY: 0, max: 20, step: 0.5, unit: 'mm', advanced: true },
+    { kind: 'position', key: 'offsetX', keyY: 'offsetY', label: 'Name position', section: 'Lettering', value: 0, valueY: 0, max: 20, step: 0.5, unit: 'mm' },
     ...letteringFields('Lettering'),
-    { kind: 'number', key: 'width', label: 'Width', section: 'Size', value: WIDTH, min: 40, max: 60, step: 1, unit: 'mm' },
-    { kind: 'number', key: 'height', label: 'Height', section: 'Size', value: HEIGHT, min: 60, max: 100, step: 1, unit: 'mm', help: 'To the bottom edge; the snowflake hangs below it.' },
-    ...hangHoleFields('Size', { dia: 4.5, maxDia: 6, label: 'Ribbon hole' }),
+    ...hangHoleFields('Hanging', { dia: 4.5, maxDia: 6, label: 'Ribbon hole' }),
   ],
   async build(v) {
     const W = num(v, 'width');

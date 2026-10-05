@@ -37,7 +37,7 @@ import { lines, str } from './templates/types';
 import { keyringFrom } from './templates/keyring';
 import { renderForm } from './form';
 import { createPreview } from './preview';
-import { buildLaserStudioSvg, downloadLaserStudioSvg } from './export/laserSvg';
+import { buildLaserStudioSvg, downloadCutFiles } from './export/laserSvg';
 import { fmtSize, onUnitChange } from './units';
 import { CHANGELOG } from './changelog';
 
@@ -120,7 +120,7 @@ export function createEditor(opts: EditorOptions): HTMLElement {
     // `__batchIndex` is the copy's place in the run — the only thing that tells two copies of the
     // same name apart (the gift tag steps its snowflake along it).
     const inputs = await Promise.all(names.map((n, i) => t.build({ ...values, [b.key]: n, __batchIndex: i })));
-    return mergeBatch(inputs, names, sheetOf(str(values, '__sheet')), b.noun);
+    return mergeBatch(inputs, names, sheetOf(str(values, '__sheet')), b.noun, values.__colours === 'together' ? 'together' : 'separate');
   }
 
   let timer = 0;
@@ -140,6 +140,8 @@ export function createEditor(opts: EditorOptions): HTMLElement {
         const out = await build(input);
         if (mine !== serial) return;
         output = out;
+        // How many colours the design is cut from: Batch offers to separate them when it is more than one.
+        form.setColourCount(new Set([input.material ?? 'light', ...(input.parts ?? []).map((p) => p.material ?? 'light')]).size);
         // No Ring control (a design with its own fixed hole — pet tag, matching keychains) →
         // no drag handle: a drag would write ringDx/ringDy the form does not declare and snap
         // back.
@@ -289,7 +291,8 @@ export function createEditor(opts: EditorOptions): HTMLElement {
         return;
       }
 
-      downloadLaserStudioSvg(output, `${stem}.svg`, import.meta.env.VITE_BUILD_ID);
+      // One SVG, or — a run on more than one sheet — a zip of one per sheet with a README.
+      downloadCutFiles(output, stem, { design: t.name, note: fileNoteFor(output.objects.some((o) => o.op === 'score')), buildId: import.meta.env.VITE_BUILD_ID });
       licenseAfterExport();
     },
     // The embedded build has no download path, so the kit hides Save and Open there.

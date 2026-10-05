@@ -254,18 +254,19 @@ export const ticTacToe: TemplateDef = {
       help: 'Silhouette cuts the symbol shape itself, others engrave it on a token.',
     },
     {
-      kind: 'number', key: 'thickness', label: 'Material thickness', section: 'Board', advanced: true,
+      kind: 'number', key: 'thickness', label: 'Material thickness', section: 'Board',
       value: 3, min: 2, max: 6, step: 0.5, unit: 'mm',
       help: 'Sets how wide a bridge needs to hold a symbol together.',
     },
     {
-      kind: 'select', key: 'glueGuide', label: 'Glue guide', section: 'Board', advanced: true, value: 'score',
+      kind: 'select', key: 'glueGuide', label: 'Glue guide', section: 'Board', value: 'score',
       options: [{ value: 'score', label: 'Score' }, { value: 'none', label: 'None' }],
       help: 'Scores the base so the two layers line up when glued.',
     },
 
-    // ------------------------------------------------------- LEFT: "Rim lettering" --
-    ...letteringFields('Rim lettering'),
+    // ----------------------------------------------------------- LEFT: "Lettering" --
+    // The rim's words — the house word for the type category, like every other design.
+    ...letteringFields('Lettering'),
   ],
 
   async build(v) {

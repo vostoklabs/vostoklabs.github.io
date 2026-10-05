@@ -39,6 +39,11 @@ const SHEET_MARGIN = 5;
 /** Air between pieces, mm: wide enough that one piece's cut cannot reach its neighbour. */
 const GAP = 4;
 
+/** How a run of two-colour pieces shares its sheets. `separate`: each colour on sheets of its own
+ *  (the engine's `byMaterial`) — the default, because a sheet IS one material. `together`: every
+ *  piece where it falls, colours mixed on one page. A one-colour design lays out the same either way. */
+export type BatchColours = 'separate' | 'together';
+
 /**
  * One build per name → one build of the whole run.
  *
@@ -46,7 +51,7 @@ const GAP = 4;
  * ("Backer · colour 1") keeps that label; one that does not gets the first name, so every piece
  * on the sheet is labelled.
  */
-export function mergeBatch(inputs: BuildInput[], names: string[], sheet: { width: number; height: number }, noun: string): BuildInput {
+export function mergeBatch(inputs: BuildInput[], names: string[], sheet: { width: number; height: number }, noun: string, colours: BatchColours = 'separate'): BuildInput {
   const first = inputs[0];
   if (!first) throw new Error('A batch needs at least one name.');
 
@@ -88,7 +93,7 @@ export function mergeBatch(inputs: BuildInput[], names: string[], sheet: { width
     label: first.label || names[0] || '',
     parts,
     layout: { flow: 'wrap', gap: GAP },
-    sheet: { width: sheet.width, height: sheet.height, margin: SHEET_MARGIN },
+    sheet: { width: sheet.width, height: sheet.height, margin: SHEET_MARGIN, ...(colours === 'separate' ? { byMaterial: true } : {}) },
     status: `${n} ${noun}${n === 1 ? '' : 's'}`,
     warnings,
   };

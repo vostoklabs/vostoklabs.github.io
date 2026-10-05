@@ -119,8 +119,8 @@ export const jigsawBlank: TemplateDef = {
     { kind: 'number', key: 'knob', label: 'Knob size', section: 'Knobs', value: 25, min: 18, max: 32, step: 1, unit: '%', help: 'Knob width as a share of a piece.' },
     { kind: 'number', key: 'wobble', label: 'Irregularity', section: 'Knobs', value: 40, min: 0, max: 100, step: 5, unit: '%', help: 'How far the pieces stray from a perfect grid.' },
 
-    // ---------------------------------------------------------------- More options --
-    { kind: 'number', key: 'corner', label: 'Rounded corners', section: 'Puzzle', value: 4, min: 0, max: 15, step: 0.5, unit: 'mm', advanced: true, visibleWhen: (v) => str(v, 'outline') === 'rect' || str(v, 'outline') === 'square' },
+    // ---------------------------------------------------------- LEFT: "Puzzle", last row --
+    { kind: 'number', key: 'corner', label: 'Rounded corners', section: 'Puzzle', value: 4, min: 0, max: 15, step: 0.5, unit: 'mm', visibleWhen: (v) => str(v, 'outline') === 'rect' || str(v, 'outline') === 'square' },
   ],
   async build(v) {
     const size = jigsawSize(v);

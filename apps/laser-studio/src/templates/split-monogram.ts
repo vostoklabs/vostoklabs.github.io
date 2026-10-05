@@ -241,8 +241,10 @@ export const splitMonogram: TemplateDef = {
       kind: 'text', key: 'initials', label: 'Initial(s)', panel: 'right', section: 'Initial',
       value: 'M', placeholder: 'A letter or two', maxLength: 3, symbols: false,
     },
+    // Both pickers sit in ONE Font category, each named for its role: two categories called
+    // "Initial" and "Name" that each held a bare font list put a font list where the rail opens.
     {
-      kind: 'font', key: 'letterFont', label: 'Font', panel: 'right', section: 'Initial',
+      kind: 'font', key: 'letterFont', label: 'Initial font', panel: 'right', section: 'Font',
       value: 'cinzel',
       // Roman capitals with a stem thick enough to survive a 3 mm sheet at this size, each built
       // and measured with the harness (tests/node/split-monogram.test.mjs §6).
@@ -256,7 +258,7 @@ export const splitMonogram: TemplateDef = {
       value: 'the Marshalls', placeholder: 'A name', maxLength: 28, symbols: true,
     },
     {
-      kind: 'font', key: 'nameFont', label: 'Font', panel: 'right', section: 'Name',
+      kind: 'font', key: 'nameFont', label: 'Name font', panel: 'right', section: 'Font',
       value: 'parisienne',
       // Scripts whose joined letters survive being cut at this size; Great Vibes is here for the
       // look, and its hairlines are the reason Name border exists.
@@ -271,41 +273,20 @@ export const splitMonogram: TemplateDef = {
       help: 'Wider reads as a banner, narrower as a plain letter.',
     },
     {
+      kind: 'number', key: 'splitRise', label: 'Raise the split', section: 'Split',
+      value: 4, min: 0, max: 12, step: 1, unit: '%',
+      help: 'A small lift reads as centred, since serif feet sit low.',
+    },
+    {
       kind: 'toggle', key: 'rules', label: 'Rules through the split', section: 'Split',
       value: true,
       help: 'They physically hold the letter, name and frame together.',
     },
     {
-      kind: 'number', key: 'nameSizePct', label: 'Name size', section: 'Split',
-      value: 85, min: 40, max: 120, step: 1, unit: '%',
-      help: 'Past about 110% the name starts to touch the letter.',
-    },
-    {
-      kind: 'number', key: 'splitRise', label: 'Raise the split', section: 'Split',
-      value: 4, min: 0, max: 12, step: 1, unit: '%',
-      advanced: true,
-      help: 'A small lift reads as centred, since serif feet sit low.',
-    },
-    {
       kind: 'number', key: 'ruleWeight', label: 'Rule weight', section: 'Split',
       value: 10, min: 4, max: 25, step: 1, unit: '%',
-      advanced: true,
+      visibleWhen: (v) => bool(v, 'rules'),
       help: 'Floored at your material’s thickness, however low you set it.',
-    },
-    {
-      kind: 'number', key: 'nameWeld', label: 'Name border', section: 'Split',
-      value: 0.7, min: 0, max: 2.5, step: 0.1, unit: 'mm',
-      advanced: true,
-      help: 'Thickens the name’s thin strokes so it survives the cut.',
-    },
-    {
-      kind: 'number', key: 'nameTracking', label: 'Name spacing', section: 'Split',
-      // +0.08 em is as far as a script can be opened before its letters stop touching each
-      // other: at +0.12 the default name came off the bed in five pieces (G25).
-      value: 0, min: -0.06, max: 0.08, step: 0.02,
-      advanced: true,
-      format: (n) => `${n > 0 ? '+' : ''}${n.toFixed(2)}`,
-      help: 'Past about +0.08 the letters stop touching each other.',
     },
 
     // ---------------------------------------------------------- LEFT: "Frame & size" --
@@ -349,18 +330,11 @@ export const splitMonogram: TemplateDef = {
     {
       kind: 'number', key: 'wreathOpen', label: 'Wreath opening', section: 'Frame & size',
       value: 28, min: 10, max: 60, step: 1, unit: '°',
-      advanced: true,
       visibleWhen: (v) => str(v, 'frame') === 'laurel',
       help: 'How wide the gap is at the top of the wreath.',
     },
-    {
-      kind: 'number', key: 'letterScale', label: 'Letter size', section: 'Frame & size',
-      value: 100, min: 70, max: 115, step: 1, unit: '%',
-      advanced: true,
-      help: 'Most letters read best at 100% of the frame.',
-    },
-
-    // -------------------------------------------------------------- LEFT: "Lettering" --
+    // What the disc or scallop does with the letter — a frame's question, asked only of the two
+    // frames that are solid behind it.
     {
       kind: 'select', key: 'op', label: 'Letters', section: 'Frame & size',
       value: 'engrave',
@@ -375,17 +349,46 @@ export const splitMonogram: TemplateDef = {
       help: 'A scored double line just inside the edge.',
     },
     {
+      kind: 'number', key: 'thickness', label: 'Material thickness', section: 'Frame & size',
+      value: 3, min: 2, max: 8, step: 0.5, unit: 'mm',
+      help: 'Sets the ring’s minimum width and the rails’ floor.',
+    },
+
+    // -------------------------------------------------------------- LEFT: "Lettering" --
+    // The initial's knobs, then the name's: both sets of type in one category.
+    {
+      kind: 'number', key: 'letterScale', label: 'Letter size', section: 'Lettering',
+      value: 100, min: 70, max: 115, step: 1, unit: '%',
+      help: 'Most letters read best at 100% of the frame.',
+    },
+    {
       kind: 'number', key: 'letterWeld', label: 'Letter weight', section: 'Lettering',
       value: 0, min: -0.4, max: 1.5, step: 0.1, unit: 'mm',
-      advanced: true,
       help: "Thickens or thins the letter's own strokes without changing its size.",
     },
     {
       kind: 'number', key: 'letterTracking', label: 'Initial spacing', section: 'Lettering',
       value: 6, min: 0, max: 25, step: 1, unit: '%',
-      advanced: true,
       visibleWhen: (v) => str(v, 'initials').length >= 2,
       help: 'Space between the initials, as a share of their height.',
+    },
+    {
+      kind: 'number', key: 'nameSizePct', label: 'Name size', section: 'Lettering',
+      value: 85, min: 40, max: 120, step: 1, unit: '%',
+      help: 'Past about 110% the name starts to touch the letter.',
+    },
+    {
+      kind: 'number', key: 'nameWeld', label: 'Name border', section: 'Lettering',
+      value: 0.7, min: 0, max: 2.5, step: 0.1, unit: 'mm',
+      help: 'Thickens the name’s thin strokes so it survives the cut.',
+    },
+    {
+      kind: 'number', key: 'nameTracking', label: 'Name spacing', section: 'Lettering',
+      // +0.08 em is as far as a script can be opened before its letters stop touching each
+      // other: at +0.12 the default name came off the bed in five pieces (G25).
+      value: 0, min: -0.06, max: 0.08, step: 0.02,
+      format: (n) => `${n > 0 ? '+' : ''}${n.toFixed(2)}`,
+      help: 'Past about +0.08 the letters stop touching each other.',
     },
 
     // ---------------------------------------------------------------- LEFT: "Hanging" --
@@ -426,17 +429,8 @@ export const splitMonogram: TemplateDef = {
     {
       kind: 'number', key: 'wallAngle', label: 'Hole spread', section: 'Hanging',
       value: 35, min: 0, max: 70, step: 1, unit: '°',
-      advanced: true,
       visibleWhen: (v) => str(v, 'hang') === 'wall' && str(v, 'frame') !== 'none',
       help: 'How far round the ring the two holes sit.',
-    },
-
-    // ------------------------------------------- LEFT: "Material" (folds to More options) --
-    {
-      kind: 'number', key: 'thickness', label: 'Material thickness', section: 'Material',
-      value: 3, min: 2, max: 8, step: 0.5, unit: 'mm',
-      advanced: true,
-      help: 'Sets the ring’s minimum width and the rails’ floor.',
     },
   ],
 

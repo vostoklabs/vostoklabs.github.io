@@ -20,7 +20,7 @@ import { readSymbols } from '../symbols/model';
 import { MIN_COUNTER, textLayer } from '../engine/text';
 import { keyringFields, keyringFrom } from './keyring';
 import { WELDING_SCRIPTS, bridgeModeOf, connectSpec, connectWarning, connectedTextFields, countersTooTight, joinDots, weldOverlap } from './shared';
-import { bool, num, str, type TemplateDef } from './types';
+import { bool, num, str, type Field, type TemplateDef } from './types';
 
 /** A share of the letter height, in millimetres. Border, Rounded corners and Boldness are all
  *  fractions of `size` rather than flat millimetres: 0.5 mm of border is a hair round a 30 mm
@@ -54,17 +54,20 @@ export const connectedText: TemplateDef = {
     // Zero: the outline IS the letters (G31). Anything above it is a jacket round the word, and
     // the blob seen in testing was that jacket at 1.7 % with a smoothing pass on top of it.
     { kind: 'number', key: 'border', label: 'Border', section: 'Size & border', value: 0, min: 0, max: 3, step: 0.1, unit: '%', format: (v) => `${v ? `${v.toFixed(1)}% of the size` : 'none — cut on the letters'}`, help: 'Stay under half the stroke width or letters merge into a blob.' },
-    // How WIDE a joining bar is, which is a question only once there are bars: the toggle under
-    // Lettering opens off, so this is hidden until it is on — hidden, never
-    // greyed.
-    { kind: 'number', key: 'bridge', label: 'Bridge width', section: 'Size & border', value: 3, min: 1, max: 6, step: 0.5, unit: 'mm', help: 'Match this to your material, about 3 mm for plywood or acrylic.', visibleWhen: (v) => bool(v, 'bridges') },
     { kind: 'number', key: 'smoothing', label: 'Rounded corners', section: 'Size & border', value: 0, min: 0, max: 4, step: 0.1, unit: '%', format: (v) => `${v.toFixed(1)}% of the size`, help: 'Rounds the inside corner where two letters meet, zero keeps original curves.' },
     { kind: 'number', key: 'letterSpacing', label: 'Letter spacing', section: 'Lettering', value: 0, min: -0.2, max: 0.3, step: 0.01, format: (v) => `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`, help: 'Negative pulls letters together, any gap left is overlapped or bridged.' },
     { kind: 'number', key: 'lineSpacing', label: 'Line spacing', section: 'Lettering', value: 1, min: 0.5, max: 1.8, step: 0.05, format: (v) => `${Math.round(v * 100)}%`, visibleWhen: (v) => bool(v, 'twoLines') && str(v, 'line2').trim() !== '' },
     // Thicken, Connect and Letter lines — the three every connected-text design shares. Thicken
     // replaces the old Boldness: one control, named the way the thing is named, and the same
     // percentage-of-the-size decision at every letter height.
-    ...connectedTextFields('Lettering'),
+    //
+    // How WIDE a joining bar is, which is a question only once there are bars: it sits right
+    // under the "Join loose letters" switch that makes them, and is hidden until that is on —
+    // hidden, never greyed.
+    ...connectedTextFields('Lettering').flatMap((f): Field[] => (f.key !== 'bridges' ? [f] : [f, {
+      kind: 'number', key: 'bridge', label: 'Bridge width', section: 'Lettering', value: 3, min: 1, max: 6, step: 0.5, unit: 'mm',
+      help: 'Match this to your material, about 3 mm for plywood or acrylic.', visibleWhen: (v) => bool(v, 'bridges'),
+    }])),
     ...keyringFields('none'),
   ],
   async build(v) {

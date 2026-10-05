@@ -131,7 +131,7 @@ export const hairTieCard: TemplateDef = {
       kind: 'number', key: 'slotW', label: 'Slot width', section: 'Size', value: 11, min: 6, max: 40, step: 0.5, unit: 'mm',
       help: 'The gap the ties are threaded through.',
     },
-    ...letteringFields('Name'),
+    ...letteringFields('Lettering'),
   ],
 
   async build(v: Values): Promise<BuildInput> {

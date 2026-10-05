@@ -5,7 +5,7 @@ import { areaStage, areasOf, areasValue, artworkFaces, openAreaPicker, pickedAre
 // The form: a template's fields → kit controls, in two homes. The RIGHT panel holds what the
 // customer TYPES (text lines, a list, a symbol, a link) and nothing else; the LEFT panel holds
 // every setting, in named categories on a rail — the font among them, as its own category —
-// with "More options" folded at the end. Every control is a kit component, and every control
+// each setting in the category it belongs to. Every control is a kit component, and every control
 // that needs a word of explanation carries it as a "?" tooltip, never as a paragraph
 // (2026-09-21: no paragraph under each slider).
 import {
@@ -54,7 +54,7 @@ import {
   dropZone,
 } from '@vostok/ui-kit';
 import { BATCH_SHEETS } from './engine/batch';
-import { fontSampleOf, railIconKeys, surpriseValues, useSegmented } from './form-rules';
+import { fieldHome, fontSampleOf, railIconKeys, railOrder, surpriseValues, useSegmented } from './form-rules';
 import { loadPatternLibrary, openPatternGallery, paintPattern, patternTitle } from '@vostok/patterns/ui';
 import { fmtLength, getUnit, onUnitChange } from './units';
 import { lines, type Field, type Values } from './templates/types';
@@ -73,7 +73,8 @@ export interface FormOptions {
   /** Every change, live. The form has already written `values[key]`. */
   onChange(key: string): void;
   /** The template's `batch` opt-in: `key` is the text field that becomes a list in Batch mode.
-   *  Given, the form grows the Single | Batch switch, the list and the Sheet select. */
+   *  Given, the form grows the Single | Batch switch, the list, the Sheet select and the
+   *  Colours switch. */
   batch?: { key: string; noun: string };
 }
 
@@ -84,6 +85,9 @@ export interface Form {
   right: HTMLElement;
   /** Push values back into every control — after Load or Reset. */
   sync(): void;
+  /** How many materials the built design is cut from. The editor reports it after every build:
+   *  Batch's Colours switch is only there for a design of two colours or more. */
+  setColourCount(n: number): void;
   /** Drop the form's subscriptions. The editor calls it on the way out; a form left
    *  subscribed to the unit switch goes on re-formatting controls nobody can see. */
   dispose(): void;
@@ -496,36 +500,33 @@ export function renderForm(opts: FormOptions): Form {
     }
   }
 
-  // Two homes. Sections appear in first-use order; "More options" folds the long tail.
+  // Two homes. Sections appear in first-use order, and every setting sits in the section it
+  // names — the rule is `fieldHome` in form-rules.ts, where a node test holds every template to
+  // it.
   const rightSections = new Map<string, HTMLElement[]>();
   const leftSections = new Map<string, HTMLElement[]>();
-  const advanced: HTMLElement[] = [];
   const fontSection = fields.find((f) => f.kind === 'font')?.section ?? 'Font';
   for (const f of fields) {
     if (f.hidden) continue;
     const c = make(f);
     controls.set(f.key, c);
-    // The Font tab holds the font list and nothing else: a type knob a template declared in the
-    // font's section — boldness, letter spacing — is a setting, and lives under More (design
-    // guidelines §8.6), where the list cannot push it off the bottom of the tab.
-    if (f.advanced || (f.kind !== 'font' && f.panel !== 'right' && f.section === fontSection)) { advanced.push(c.node); continue; }
-    // The right panel is for what the customer types. The font is a setting — the biggest one —
-    // so it is a category on the rail, whatever a template wrote before 2026-09-21.
-    const onRight = f.panel === 'right' && f.kind !== 'font';
+    const { right: onRight, title } = fieldHome(f, fontSection);
     const home = onRight ? rightSections : leftSections;
-    const title = f.kind === 'font' ? (f.section ?? 'Font') : f.section ?? (onRight ? '' : 'Settings');
     if (!home.has(title)) home.set(title, []);
     home.get(title)!.push(c.node);
   }
 
   // -- Single | Batch -----------------------------------------------------------------------
-  // A design that cuts in runs gets three controls at the TOP of the section its text field
-  // lives in: the switch, the list of names, and the sheet the run is laid out on. They are not
-  // template fields — `__batch`, `__batchLines` and `__sheet` mean the same thing for every
+  // A design that cuts in runs gets its controls at the TOP of the section its text field
+  // lives in: the switch, the list of names, the sheet the run is laid out on, and — for a
+  // design cut from two colours — whether the colours share a sheet. They are not template
+  // fields — `__batch`, `__batchLines`, `__sheet` and `__colours` mean the same thing for every
   // batch design, so no template should have to declare them — but they are ordinary kit
   // components registered in `controls`, so Load and Reset push values back into them like
   // everything else.
   const batch = opts.batch;
+  /** The materials the last build was cut from (`setColourCount`); one until a build says. */
+  let colourCount = 1;
   if (batch) {
     const keyField = fields.find((f) => f.key === batch.key);
     const list = textareaField({
@@ -538,6 +539,14 @@ export function renderForm(opts: FormOptions): Form {
       label: 'Sheet', options: BATCH_SHEETS.map((s) => ({ value: s.id, label: s.label })),
       value: String(values.__sheet ?? ''), help: 'The sheet the pieces are laid out on.',
       onChange: (v) => change('__sheet', v),
+    });
+    // A sheet IS one material: a backer and the name glued on it laid side by side put half of
+    // every page in the wrong colour. So Separate is the default and Together the choice.
+    const colours = segmentedControl<'separate' | 'together'>({
+      label: 'Colours', help: 'Separate lays each colour’s pieces on sheets of their own.',
+      options: [{ value: 'separate', label: 'Separate' }, { value: 'together', label: 'Together' }],
+      value: values.__colours === 'together' ? 'together' : 'separate',
+      onChange: (v) => change('__colours', v),
     });
     const seg = segmentedControl<'single' | 'batch'>({
       options: [{ value: 'single', label: 'Single' }, { value: 'batch', label: 'Batch' }],
@@ -556,22 +565,18 @@ export function renderForm(opts: FormOptions): Form {
     controls.set('__batch', { node: seg, set: (v) => seg.setValue(v === true ? 'batch' : 'single') });
     controls.set('__batchLines', { node: list, set: (v) => list.setValue(String(v)) });
     controls.set('__sheet', { node: sheet, set: (v) => sheet.setValue(String(v)) });
+    controls.set('__colours', { node: colours, set: (v) => colours.setValue(v === 'together' ? 'together' : 'separate') });
     const home = keyField?.panel === 'right' ? rightSections : leftSections;
     const title = keyField?.section ?? (keyField?.panel === 'right' ? '' : 'Settings');
     if (!home.has(title)) home.set(title, []);
-    home.get(title)!.unshift(seg, list, sheet);
+    home.get(title)!.unshift(seg, list, sheet, colours);
   }
 
   const right = el('div', { className: 'ls-form ls-form--right' }, [...rightSections].map(([title, body]) => section({ title: title || 'Design', body })));
-  // Categories fold: the first one open, the rest a click away — set it up further if you
-  // want to, visually clean if you do not.
-  if (advanced.length) leftSections.set('More options', advanced);
   // The rail opens on the knob that makes this design this design — Size on a keychain, Code
   // on a QR stand — so the Font category, which most templates declare before their first
-  // setting, goes second, never first.
-  const fontTitle = fields.find((f) => f.kind === 'font')?.section ?? 'Font';
-  const ordered = [...leftSections];
-  if (ordered.length > 1 && ordered[0]![0] === fontTitle) ordered.splice(1, 0, ordered.splice(0, 1)[0]!);
+  // setting, goes second, never first (`railOrder`).
+  const ordered = railOrder([...leftSections.keys()], fontSection).map((title) => [title, leftSections.get(title)!] as const);
   const panels = el('div', { className: 'ls-settings-panels' });
   const entries = ordered.map(([title, body], i) => {
     // The Font category fills its tab: the cards scroll inside it and Browse all / Import stay
@@ -623,6 +628,8 @@ export function renderForm(opts: FormOptions): Form {
       controls.get(batch.key)?.node.classList.toggle('hidden', on || (keyField?.visibleWhen ? !keyField.visibleWhen(values) : false));
       controls.get('__batchLines')?.node.classList.toggle('hidden', !on);
       controls.get('__sheet')?.node.classList.toggle('hidden', !on);
+      // One colour has nothing to separate: hidden, never greyed.
+      controls.get('__colours')?.node.classList.toggle('hidden', !on || colourCount < 2);
     }
     // Every control in a category can be hidden at once — "Keyring" on a design whose ring is
     // off, "Stand" on a style with no stand. A category with nothing to set is not on the rail,
@@ -657,8 +664,13 @@ export function renderForm(opts: FormOptions): Form {
     right,
     sync() {
       for (const f of fields) controls.get(f.key)?.set(values[f.key] ?? f.value);
-      if (batch) for (const k of ['__batch', '__batchLines', '__sheet']) controls.get(k)?.set(values[k] ?? '');
+      if (batch) for (const k of ['__batch', '__batchLines', '__sheet', '__colours']) controls.get(k)?.set(values[k] ?? '');
       for (const h of fontHandles) h.setSample(fontSample(h.key));
+      applyVisibility();
+    },
+    setColourCount(n) {
+      if (n === colourCount) return;
+      colourCount = n;
       applyVisibility();
     },
     dispose: stopUnits,
@@ -680,9 +692,8 @@ export function renderForm(opts: FormOptions): Form {
 const foldsWhenEmpty = (f: Field, values: Values): boolean =>
   f.kind === 'text' && f.placeholder === 'Optional' && !f.visibleWhen && !String(values[f.key] ?? '').trim();
 
-/** The rail shows one word per category: "Shape & size" → "Shape", "More options" → "More". */
+/** The rail shows one word per category: "Shape & size" → "Shape". */
 function railLabel(title: string): string {
-  if (title === 'More options') return 'More';
   const first = title.split(/[\s&·,/]+/)[0] ?? title;
   return first.length > 9 ? first.slice(0, 8) + '…' : first;
 }

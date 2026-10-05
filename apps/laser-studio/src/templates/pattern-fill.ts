@@ -57,7 +57,7 @@ export const patternFill: TemplateDef = {
     { kind: 'number', key: 'clearRadius', label: 'Clear radius', section: 'Centre', value: 17, min: 3, max: 120, step: 0.5, unit: 'mm', visibleWhen: (v) => bool(v, 'clearCentre') },
     { kind: 'number', key: 'size', label: 'Monogram size', section: 'Centre', value: 20, min: 4, max: 120, step: 0.5, unit: 'mm', visibleWhen: (v) => str(v, 'text').trim() !== '' },
     opField('Centre', 'engrave', 'Monogram'),
-    ...keyringFields('none', { section: 'Ring', nudge: SIZE / 2 }),
+    ...keyringFields('none', { section: 'Hanging', nudge: SIZE / 2 }),
   ],
   async build(v) {
     const shapes = blankShapes(v, 'coaster-round');

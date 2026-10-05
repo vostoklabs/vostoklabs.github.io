@@ -357,7 +357,9 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
       out.sheets.pages.forEach((pg, i) => {
         guides.append(svgEl('rect', { x: num(pg.minX), y: num(-pg.maxY), width: num(pg.maxX - pg.minX), height: num(pg.maxY - pg.minY), rx: 1 }));
         const t = svgEl('text', { x: num(pg.minX + 2), y: num(-pg.maxY - fs * 0.5), 'font-size': num(fs * 0.85), fill: muted, stroke: 'none', 'font-family': 'inherit' });
-        t.textContent = `Sheet ${i + 1} · ${Math.round(pg.maxX - pg.minX)} × ${Math.round(pg.maxY - pg.minY)} mm`;
+        // A run laid out a colour at a time says which colour each sheet is.
+        const material = out.sheets?.materials?.[i];
+        t.textContent = `Sheet ${i + 1}${material ? ` · ${material}` : ''} · ${Math.round(pg.maxX - pg.minX)} × ${Math.round(pg.maxY - pg.minY)} mm`;
         guides.append(t);
       });
       svg.insertBefore(guides, partG);

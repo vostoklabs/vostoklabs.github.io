@@ -137,8 +137,8 @@ const FIELDS: Field[] = [
     kind: 'select', key: 'codeSide', label: 'Code side', section: 'Card', value: 'left',
     options: [{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }],
   },
-  { kind: 'toggle', key: 'rule', label: 'Divider', section: 'Card', value: true, advanced: true },
-  { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Card', value: 4, min: 0, max: MAX_CORNER, step: 0.5, unit: 'mm', advanced: true },
+  { kind: 'toggle', key: 'rule', label: 'Divider', section: 'Card', value: true },
+  { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Card', value: 4, min: 0, max: MAX_CORNER, step: 0.5, unit: 'mm' },
 
   // ------------------------------------------------------------------ LEFT: "Code" --
   ...codeFields(),

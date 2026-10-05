@@ -14,6 +14,17 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    date: '2026-10-05',
+    title: 'Every setting where you would look for it',
+    changes: [
+      { kind: 'changed', text: 'More options is gone: every setting sits in the category it changes. Tile spacing is under Tiles, boldness and letter spacing under Lettering, ring and hole sizes under Keyring or Hanging, kerf and thickness under Assembly.' },
+      { kind: 'changed', text: 'Name keychain: Cut out cuts the letters out of the outline again, the middles of o, a and e kept on small bridges. Base picks the outline, a shape from the library, or None for the letters joined into one piece.' },
+      { kind: 'added', text: 'Layered keychain: the backer can be a shape from the library, and Boldness thickens or thins the name.' },
+      { kind: 'added', text: 'Batch: a design cut from two colours lays each colour on sheets of its own, or all on one sheet if you choose Together.' },
+      { kind: 'fixed', text: 'Letter lines score one clean line where each letter meets the next, on block and pixel faces too, including letters that only touch.' },
+    ],
+  },
+  {
     date: '2026-09-29',
     title: 'Clearer categories, and business card lettering you can move',
     changes: [

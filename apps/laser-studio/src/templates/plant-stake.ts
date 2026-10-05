@@ -450,7 +450,7 @@ export const plantStake: TemplateDef = {
     { kind: 'number', key: 'length', label: 'Length', section: 'Stake', value: LENGTH, min: 100, max: 280, step: 5, unit: 'mm' },
     {
       kind: 'number', key: 'rail', label: 'Rail under the letters', section: 'Stake', value: RAIL_SHARE, min: 30, max: 45, step: 1, unit: '%',
-      advanced: true, help: 'The strip the letters stand on, never under 5 mm.',
+      help: 'The strip the letters stand on, never under 5 mm.',
     },
     ...letteringFields('Lettering', { textCase: 'upper' }),
   ],

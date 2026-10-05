@@ -124,27 +124,8 @@ export const cakeTopper: TemplateDef = {
       kind: 'toggle', key: 'backer', label: 'Backer', section: 'Topper', value: false,
       help: 'A second sheet behind the letters, in another colour.',
     },
-
-    // ----------------------------------------------------------- LEFT: "More options" --
     {
-      kind: 'number', key: 'stickWidth', label: 'Stick width', section: 'Stick', advanced: true,
-      value: 9, min: 6, max: 14, step: 0.5, unit: 'mm',
-      help: 'Under 8 mm the stick flexes going into the cake.',
-    },
-    {
-      kind: 'number', key: 'stickLength', label: 'Stick length', section: 'Stick', advanced: true,
-      value: 100, min: 60, max: 140, step: 1, unit: 'mm',
-      help: 'About 40 mm of it ends up inside the cake.',
-    },
-    {
-      kind: 'number', key: 'lineHeight', label: 'Line height', section: 'Lettering', advanced: true,
-      value: 80, min: 55, max: 100, step: 1, unit: '%', format: (v) => `${Math.round(v)}% of the letter height`,
-      visibleWhen: (v) => [str(v, 'line1'), str(v, 'line2'), str(v, 'line3')].filter((t) => t.trim()).length >= 2,
-      help: 'Lower packs the lines deeper into each other.',
-    },
-    { ...letterScoreField('Lettering'), advanced: true },
-    {
-      kind: 'select', key: 'accent', label: 'Accent', section: 'Lettering', advanced: true,
+      kind: 'select', key: 'accent', label: 'Accent', section: 'Topper',
       value: 'none',
       options: [
         { value: 'none', label: 'None' },
@@ -153,6 +134,27 @@ export const cakeTopper: TemplateDef = {
         { value: 'balloon', label: 'Balloon' },
       ],
       help: 'A shape welded at the top right of the lettering.',
+    },
+
+    // --------------------------------------------------------------- LEFT: "Lettering" --
+    {
+      kind: 'number', key: 'lineHeight', label: 'Line height', section: 'Lettering',
+      value: 80, min: 55, max: 100, step: 1, unit: '%', format: (v) => `${Math.round(v)}% of the letter height`,
+      visibleWhen: (v) => [str(v, 'line1'), str(v, 'line2'), str(v, 'line3')].filter((t) => t.trim()).length >= 2,
+      help: 'Lower packs the lines deeper into each other.',
+    },
+    letterScoreField('Lettering'),
+
+    // ------------------------------------------------------------------- LEFT: "Stick" --
+    {
+      kind: 'number', key: 'stickWidth', label: 'Stick width', section: 'Stick',
+      value: 9, min: 6, max: 14, step: 0.5, unit: 'mm',
+      help: 'Under 8 mm the stick flexes going into the cake.',
+    },
+    {
+      kind: 'number', key: 'stickLength', label: 'Stick length', section: 'Stick',
+      value: 100, min: 60, max: 140, step: 1, unit: 'mm',
+      help: 'About 40 mm of it ends up inside the cake.',
     },
   ],
 

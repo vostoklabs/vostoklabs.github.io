@@ -22,8 +22,8 @@ import { fitBoxInside, finalHoleCentre } from '../engine/editorGeometry';
 import type { Blank, DesignLayer, OpChoice } from '../engine/types';
 import { readSymbols } from '../symbols/model';
 import { keyringFields, keyringFrom } from './keyring';
-import { blankDetailLayers, blankShapes, blankTextBox, fitPlan, shapeFields, stem } from './shared';
-import { bool, num, str, type Field, type TemplateDef, type Values } from './types';
+import { blankDetailLayers, blankShapes, blankTextBox, fitPlan, onlyWhen, shapeFields, stem } from './shared';
+import { bool, num, str, type TemplateDef, type Values } from './types';
 
 type Pt = [number, number];
 
@@ -41,10 +41,6 @@ const DEFAULT_SYMBOL = '';
 const isShape = (v: Values) => str(v, 'base') === 'shape';
 const isOutline = (v: Values) => !isShape(v);
 const hasName = (v: Values) => str(v, 'text').trim() !== '';
-
-/** The same fields, shown only on one base — `visibleWhen` is per field, never per section. */
-const onlyWhen = (fields: Field[], gate: (v: Values) => boolean): Field[] =>
-  fields.map((f) => ({ ...f, visibleWhen: (v: Values) => gate(v) && (f.visibleWhen ? f.visibleWhen(v) : true) }));
 
 const move = (layers: DesignLayer[], dx: number, dy: number): DesignLayer[] =>
   Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9 ? layers : layers.map((l) => ({ ...l, shapes: placeShapes(l.shapes, dx, dy, 0) }));
@@ -103,10 +99,20 @@ export const svgKeychain: TemplateDef = {
       help: 'Off keeps your size exactly, anything overhanging the shape is cut away.',
     },
 
+    // What happens to the artwork, and which way up it goes: the artwork's own category. The
+    // name's three controls follow under Lettering, and only once there is a name.
     {
-      kind: 'select', key: 'op', label: 'Artwork is', section: 'Lettering', value: 'engrave',
+      kind: 'select', key: 'op', label: 'Artwork is', section: 'Artwork', value: 'engrave',
       options: [{ value: 'engrave', label: 'Engraved' }, { value: 'score', label: 'Scored' }, { value: 'cut', label: 'Cut out' }],
       help: 'Cut out keeps enclosed pieces on stencil bridges, so nothing falls out.',
+    },
+    {
+      kind: 'number', key: 'rotation', label: 'Rotation', section: 'Artwork', value: 0, min: -180, max: 180, step: 1, unit: '°',
+      help: 'Turns the artwork only, the name stays upright.',
+    },
+    {
+      kind: 'toggle', key: 'flip', label: 'Flip artwork', section: 'Artwork', value: false,
+      help: 'Mirrors the artwork, useful for an arrow facing the wrong way.',
     },
     { kind: 'number', key: 'textSize', label: 'Name size', section: 'Lettering', value: 8, min: 4, max: 30, step: 0.5, unit: 'mm', visibleWhen: hasName },
     {
@@ -116,14 +122,6 @@ export const svgKeychain: TemplateDef = {
     {
       kind: 'select', key: 'textOp', label: 'Name is', section: 'Lettering', value: 'engrave', visibleWhen: hasName,
       options: [{ value: 'engrave', label: 'Engrave' }, { value: 'score', label: 'Score' }],
-    },
-    {
-      kind: 'number', key: 'rotation', label: 'Rotation', section: 'Lettering', value: 0, min: -180, max: 180, step: 1, unit: '°', advanced: true,
-      help: 'Turns the artwork only, the name stays upright.',
-    },
-    {
-      kind: 'toggle', key: 'flip', label: 'Flip artwork', section: 'Lettering', value: false, advanced: true,
-      help: 'Mirrors the artwork, useful for an arrow facing the wrong way.',
     },
 
     ...keyringFields('outside'),

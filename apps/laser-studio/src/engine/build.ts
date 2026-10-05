@@ -36,175 +36,13 @@ import { distanceToOutline, finalHoleCentre, insideShapes, nearestBridge, neares
 import { buildRimResult } from './frame';
 import { MIN_BRIDGE, stencilPunch } from './stencil';
 import { cutLinePieces } from './cut-lines';
+import { seamPaths } from './seams';
 
 type Pt = [number, number];
 
 /** How far inside the plate a plain score is kept: enough that a rule drawn on the outline does
  *  not come back as a second burn along the cut. */
 const SCORE_INSET = 0.1;
-
-/**
- * The seams of a welded word: for each letter, the run of ITS outline that a LATER letter covers
- * (G32).
- *
- * The letters are handed over as islands in reading order, so "later" is "further along the
- * word": each letter tucks behind the one after it, and the line burnt at a junction is the
- * buried edge of the earlier letter — one clean line per join, which is what a reader's eye
- * takes for the letter's own edge.
- *
- * Per LETTER, and `glyphIslands` is what says where one letter ends (W3). An island is a
- * contour group, not a glyph: a stroke-built face draws Fredoka's H as three overlapping bars
- * and its y as two, Baloo's H and E as five each. Read island-by-island, the rule scored the
- * junctions a letter makes with ITSELF — two lines straight across the H's crossbar and one down
- * the middle of the y, three of the seven seams on "Holly". So the probe is the LETTER'S OWN
- * OUTLINE (its islands unioned, which is what a reader calls the edge of an H) and the target is
- * the union of the LATER GLYPHS; a sibling stroke is neither. Unioning matters twice over:
- * handing the strokes over separately leaves each one's buried edge in the probe, and Baloo's
- * "HE" scored its junction twice — two runs down the same line, overlapping by 2.2 mm, because
- * the H's right stem is two overlapping bars. Only manifold can do it (concatenating the
- * contours into one island cannot: `toCS` orients the largest ring CCW and every other ring CW
- * under 'Positive', so the H's second stem would be read as a hole in the first) — which is why
- * this is the engine's job and not a template's.
- *
- * No `glyphIslands` (or a count that does not add up to the islands handed over): one island is
- * one glyph, which is exactly what this did before — so a layer built by hand behaves as it did.
- *
- * What this replaced was every glyph's whole outline, inset and clipped to the plate. That kept
- * a fragment of every edge that happened to lie a third of a millimetre inside the border, so a
- * four-letter name came out as a dozen scratches at no particular place ("N o a h"). Nothing is
- * inset here, nothing is clipped to the plate, and a word whose letters do not touch has no
- * seams at all — and nothing to say about it.
- *
- * `union: true` because these islands OVERLAP: under even-odd the deepest part of a junction —
- * where two letters cover the same material — reads as a hole, and the seam would come back cut
- * in half at exactly the point it matters.
- *
- * Two things are never seams. A DOT — an i's tittle, an inline symbol's pip — is not a letter
- * tucking behind its neighbour; it is a crumb the hug bridges, and a line burnt round it reads as
- * a scratch. And the bridges themselves are never here at all: they are made by the hug, out of
- * the plate, after this runs.
- *
- * A seam RUNS TO THE CUT (2026-09-22). It used to lose `SEAM_TRIM` = 0.3 mm off each end so
- * the score could never double the burn on the cut line — and what that bought, in the cut file,
- * was a visible gap between the blue and the red at both ends of every junction: the seam reads
- * as a scratch that stops short rather than as the join it is drawing. A seam runs from one
- * crossing of the later letter's outline to the next, and both crossings are corners OF THE
- * UNION, so an untrimmed seam ends exactly on the outline and never a step past it — the trim
- * was protecting against nothing the geometry could do. What is left is a tolerance: manifold
- * re-tessellates the union, so an end can miss the re-drawn ring by a few microns, and
- * `snapEnds` puts it back on the ring when it is within `SEAM_SNAP`. Nothing is shortened.
- *
- * `plate` is the piece as it will be cut. It is only ever used to snap the ends onto; a seam is
- * never clipped to it (the clip is what left "N o a h" as a dozen scratches).
- */
-function seamPaths(wasm: any, islands: Shapes, glyphIslands?: number[], plate?: Shapes): Pt[][] {
-  const out: Pt[][] = [];
-  const boxes = islands.map((isl) => bboxOf([isl]));
-  // The same rule `dotIndex` uses, applied to every island at once: a crumb beside the body of
-  // the word. Measured against the tallest letter's SHORT side, so it holds at any size. Still
-  // per ISLAND, so an i's tittle is a dot whether or not its stem is the same glyph.
-  const body = Math.max(0, ...boxes.map((b) => Math.min(b.maxX - b.minX, b.maxY - b.minY)));
-  const isDot = boxes.map((b) => Math.max(b.maxX - b.minX, b.maxY - b.minY) <= 0.4 * body);
-  const glyphs = glyphGroups(islands.length, glyphIslands);
-  for (let g = 0; g < glyphs.length - 1; g++) {
-    const own = glyphs[g]!.filter((i) => !isDot[i]).map((i) => islands[i]!);
-    if (!own.length) continue;
-    // The letter's own outline: one union per glyph, and only where there is more than one
-    // stroke to union.
-    const probe = own.length > 1 ? unionShapes(wasm, own) : own;
-    if (!probe.length) continue;
-    // Only the later letters whose box actually meets this one's: a letter cannot bury an edge
-    // it is nowhere near, and a name of twenty letters would otherwise clip every letter against
-    // every letter after it — a hundredfold more edges than the two neighbours that matter.
-    const a = bboxOf(probe);
-    const later: Shapes = [];
-    for (let k = g + 1; k < glyphs.length; k++) {
-      for (const j of glyphs[k]!) {
-        if (isDot[j]) continue;
-        const b = boxes[j]!;
-        if (b.maxX < a.minX || b.minX > a.maxX || b.maxY < a.minY || b.minY > a.maxY) continue;
-        later.push(islands[j]!);
-      }
-    }
-    if (!later.length) continue;
-    const clipped = clipShapesToLines(probe, later, { union: true });
-    for (const path of clipped.paths) {
-      if (lineLength([], [path]) < MIN_SEAM) continue;
-      out.push(plate ? snapEnds(path, plate) : path);
-    }
-    // A letter swallowed WHOLE by the next one keeps its ring; drawn as a closed path it is
-    // still one seam and still an open run in the export, which is what every seam is. A ring has
-    // no ends to poke out of anything, so it is not trimmed.
-    for (const island of clipped.shapes) for (const ring of island) out.push([...ring, ring[0]!]);
-  }
-  return out;
-}
-
-/** The island indices of each glyph, in reading order. A `counts` that does not account for
- *  every island is not trusted — a layer whose shapes were rebuilt since `textLayer` set it
- *  falls back to one island per glyph rather than grouping by a stale tally. */
-function glyphGroups(total: number, counts?: number[]): number[][] {
-  if (counts && counts.reduce((a, b) => a + b, 0) === total) {
-    const out: number[][] = [];
-    let at = 0;
-    for (const n of counts) {
-      out.push(Array.from({ length: n }, (_, k) => at + k));
-      at += n;
-    }
-    return out;
-  }
-  return Array.from({ length: total }, (_, i) => [i]);
-}
-
-/** The shortest run worth burning as a seam, mm. Not a trim — a floor: under this a junction is
- *  a nick where two outlines graze, and a line a tenth of a millimetre long is a dot on the
- *  material and a stutter in the machine. */
-const MIN_SEAM = 0.1;
-
-/** How far an end may be off the re-tessellated outline and still be pulled onto it, mm. A seam's
- *  ends are corners of the union by construction, so the only distance here is the union's own
- *  re-drawing — microns. Wide enough to catch that, far too narrow to move a seam that genuinely
- *  ends in the middle of the material (where three letters overlap and the run stops against a
- *  third letter's edge, not the piece's). */
-const SEAM_SNAP = 0.05;
-
-/** The polyline with each END moved onto the nearest point of the cut outline, when it is already
- *  within `SEAM_SNAP` of it. Nothing is shortened and nothing in between is touched: this only
- *  closes the micron the boolean's re-tessellation opened, so blue meets red. */
-function snapEnds(path: Pt[], plate: Shapes): Pt[] {
-  if (path.length < 2 || !plate.length) return path;
-  const out = [...path];
-  for (const at of [0, out.length - 1]) {
-    const p = out[at]!;
-    const near = nearestCutPoint(plate, p, SEAM_SNAP);
-    if (near) out[at] = near;
-  }
-  return out;
-}
-
-/** The closest point on ANY of the plate's rings to `p`, within `within` mm, or null. Every ring,
- *  not just the outer one: a letter buried by the next one can end its run on the edge of a
- *  counter — the inside of an o — and that ring is cut red too, so blue has to meet it there as
- *  well. `nearestOutlinePoint` answers on outer rings only, which is right for a keyring neck and
- *  wrong here. */
-function nearestCutPoint(plate: Shapes, p: Pt, within: number): Pt | null {
-  let best: Pt | null = null;
-  let d = within;
-  for (const island of plate) for (const ring of island) {
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i]!;
-      const b = ring[(i + 1) % ring.length]!;
-      const dx = b[0] - a[0];
-      const dy = b[1] - a[1];
-      const l2 = dx * dx + dy * dy;
-      const t = l2 > 1e-18 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
-      const q: Pt = [a[0] + t * dx, a[1] + t * dy];
-      const dd = Math.hypot(q[0] - p[0], q[1] - p[1]);
-      if (dd < d) { d = dd; best = q; }
-    }
-  }
-  return best;
-}
 
 /** The plate an empty hug-mode part shows, so the stage is never blank. */
 const EMPTY_PLATE = (): Shapes => [[roundedRectRing(40, 20, 4)]];
@@ -835,18 +673,34 @@ function movePiece(r: PieceResult, dx: number, dy: number): PieceResult {
   };
 }
 
+/** The sheet a piece is cut from. */
+type Material = NonNullable<PartInput['material']>;
+
 /**
  * Lay the extra pieces out beside the primary. `row`: to its right, centres level; `column`:
  * under it, centres aligned; `wrap`: shelves from the primary's top-left, no wider than
  * `maxWidth`, rows running down the sheet. A part with `at` goes exactly there instead.
+ *
+ * A sheet with `byMaterial` is filled a material at a time — the primary's own (`material`)
+ * first, then the others in the order they first appear — and each new material opens a fresh
+ * page, which `materials` names. Only the order the pieces are PLACED in changes: `placed` is
+ * still in input order, and a sheet without it is laid out exactly as before.
  */
-function placePieces(primary: PieceResult, parts: PieceResult[], inputs: PartInput[], layout: BuildInput['layout'], sheet: BuildInput['sheet']): { placed: PieceResult[]; pages: Box[] } {
+function placePieces(primary: PieceResult, parts: PieceResult[], inputs: PartInput[], layout: BuildInput['layout'], sheet: BuildInput['sheet'], material: Material): { placed: PieceResult[]; pages: Box[]; materials?: Material[] } {
   const flow = layout?.flow ?? (sheet ? 'wrap' : 'row');
   const gap = layout?.gap ?? 4;
   const margin = sheet?.margin ?? 5;
   const gutter = sheet?.gutter ?? 10;
   const maxWidth = Math.max(20, sheet ? sheet.width - 2 * margin : layout?.maxWidth ?? 300);
   const pageHeight = sheet ? Math.max(20, sheet.height - 2 * margin) : Infinity;
+  const materialOf = (i: number): Material => inputs[i]?.material ?? 'light';
+  const kinds = [...new Set([material, ...parts.map((_, i) => materialOf(i))])];
+  const grouped = flow === 'wrap' && !!sheet?.byMaterial && kinds.length > 1;
+  // A stable sort, so within one material the pieces keep their input order.
+  const order = parts.map((_, i) => i);
+  if (grouped) order.sort((a, b) => kinds.indexOf(materialOf(a)) - kinds.indexOf(materialOf(b)));
+  let current = material;
+  const materials: Material[] = [material];
   const out: PieceResult[] = [];
   const p = primary.bbox;
   const pcx = (p.minX + p.maxX) / 2;
@@ -861,7 +715,16 @@ function placePieces(primary: PieceResult, parts: PieceResult[], inputs: PartInp
   let shelfTop = p.maxY;
   let shelfH = p.maxY - p.minY;
   const pages: Box[] = sheet ? [{ minX: left - margin, maxX: left - margin + sheet.width, minY: pageTop + margin - sheet.height, maxY: pageTop + margin }] : [];
-  for (let i = 0; i < parts.length; i++) {
+  /** A fresh page to the right of the last one, cut from the `current` material. */
+  const newPage = (s: NonNullable<BuildInput['sheet']>) => {
+    left = (pages[pages.length - 1]?.maxX ?? left) + gutter + margin;
+    shelfX = left;
+    shelfTop = pageTop;
+    shelfH = 0;
+    pages.push({ minX: left - margin, maxX: left - margin + s.width, minY: pageTop + margin - s.height, maxY: pageTop + margin });
+    materials.push(current);
+  };
+  for (const i of order) {
     const r = parts[i]!;
     const at = inputs[i]?.at;
     const b = r.bbox;
@@ -869,33 +732,32 @@ function placePieces(primary: PieceResult, parts: PieceResult[], inputs: PartInp
     const h = b.maxY - b.minY;
     const cx = (b.minX + b.maxX) / 2;
     const cy = (b.minY + b.maxY) / 2;
-    if (at) { out.push(movePiece(r, at.x - cx, at.y - cy)); continue; }
+    if (at) { out[i] = movePiece(r, at.x - cx, at.y - cy); continue; }
     if (flow === 'column') {
-      out.push(movePiece(r, pcx - cx, cursorY - h / 2 - cy));
+      out[i] = movePiece(r, pcx - cx, cursorY - h / 2 - cy);
       cursorY -= h + gap;
     } else if (flow === 'wrap') {
+      // The next material: a page of its own, and this piece opens it.
+      if (grouped && sheet && materialOf(i) !== current) {
+        current = materialOf(i);
+        newPage(sheet);
+      }
       if (shelfX + w > left + maxWidth && shelfX > left) {
         shelfTop -= shelfH + gap;
         shelfX = left;
         shelfH = 0;
       }
       // Off the bottom of the page: a fresh page to the right, and this piece opens it.
-      if (sheet && shelfTop - h < pageTop - pageHeight && shelfX === left && shelfTop < pageTop) {
-        left = (pages[pages.length - 1]?.maxX ?? left) + gutter + margin;
-        shelfX = left;
-        shelfTop = pageTop;
-        shelfH = 0;
-        pages.push({ minX: left - margin, maxX: left - margin + sheet.width, minY: pageTop + margin - sheet.height, maxY: pageTop + margin });
-      }
-      out.push(movePiece(r, shelfX - b.minX, shelfTop - b.maxY));
+      if (sheet && shelfTop - h < pageTop - pageHeight && shelfX === left && shelfTop < pageTop) newPage(sheet);
+      out[i] = movePiece(r, shelfX - b.minX, shelfTop - b.maxY);
       shelfX += w + gap;
       shelfH = Math.max(shelfH, h);
     } else {
-      out.push(movePiece(r, cursorX - b.minX, pcy - cy));
+      out[i] = movePiece(r, cursorX - b.minX, pcy - cy);
       cursorX += w + gap;
     }
   }
-  return { placed: out, pages };
+  return { placed: out, pages, ...(grouped ? { materials } : {}) };
 }
 
 export function buildKeychain(wasm: any, input: BuildInput): BuildOutput {
@@ -941,7 +803,7 @@ export function buildKeychain(wasm: any, input: BuildInput): BuildOutput {
     register(part.id, keyring.kind === 'none' ? input.keyring : keyring.spec, r);
     return r;
   });
-  const { placed, pages } = placePieces(primary, built, partInputs, input.layout, input.sheet);
+  const { placed, pages, materials } = placePieces(primary, built, partInputs, input.layout, input.sheet, input.material ?? 'light');
   const pieces = [primary, ...placed];
 
   const objects: BuildObject[] = [];
@@ -1022,7 +884,7 @@ export function buildKeychain(wasm: any, input: BuildInput): BuildOutput {
     designBox,
     warnings,
     parts,
-    ...(input.sheet ? { sheets: { count: pages.length, width: input.sheet.width, height: input.sheet.height, pages } } : {}),
+    ...(input.sheet ? { sheets: { count: pages.length, width: input.sheet.width, height: input.sheet.height, pages, ...(materials ? { materials } : {}) } } : {}),
     ...(status ? { status } : {}),
   };
 }

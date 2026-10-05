@@ -23,7 +23,7 @@
 //          width, never under 12 mm), so a tie is slipped in from the side instead of threaded
 //          through. Rungs are ≥ 6 mm (the sheet's thickness on 6 mm ply, twice it on 3 mm) and
 //          at most 12 — past that the spare length goes to the plain blade under the last slot,
-//          which is what a real tie looks like. "Slide-in slots" off (More options) closes them
+//          which is what a real tie looks like. "Slide-in slots" off closes them
 //          with the spine's width of web on each side, the stronger board on 3 mm stock.
 //
 // Why it holds (6 mm ply, the default the export note states): the hook's worst section is the
@@ -379,19 +379,19 @@ export const tieHolder: TemplateDef = {
       help: 'Hook to point; the width follows.',
     },
     { kind: 'stepper', key: 'slots', label: 'Slots', section: 'Tie', value: 8, min: 4, max: 12 },
-    { kind: 'number', key: 'monogramSize', label: 'Monogram size', section: 'Tie', value: CAP, min: CAP_MIN, max: CAP_MAX, step: 0.5, unit: 'mm' },
-
-    // ------------------------------------------------------------ More options --
     // The photo's slots open on the left; closed slots are the stronger board on 3 mm stock.
     {
-      kind: 'toggle', key: 'open', label: 'Slide-in slots', section: 'Tie', value: true, advanced: true,
+      kind: 'toggle', key: 'open', label: 'Slide-in slots', section: 'Tie', value: true,
       help: 'Open on one side, so a tie slips in.',
     },
     {
       kind: 'number', key: 'rod', label: 'Rail size', section: 'Tie', value: ROD, min: ROD_MIN, max: ROD_MAX, step: 1, unit: 'mm',
-      advanced: true, help: 'The thickest closet rail the hook fits over.',
+      help: 'The thickest closet rail the hook fits over.',
     },
-    ...letteringFields('Tie', { textCase: 'upper' }),
+
+    // ------------------------------------------------------------- LEFT: "Lettering" --
+    { kind: 'number', key: 'monogramSize', label: 'Monogram size', section: 'Lettering', value: CAP, min: CAP_MIN, max: CAP_MAX, step: 0.5, unit: 'mm' },
+    ...letteringFields('Lettering', { textCase: 'upper' }),
   ],
 
   async build(v: Values): Promise<BuildInput> {

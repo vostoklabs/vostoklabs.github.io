@@ -190,11 +190,11 @@ export const hairTieHolder: TemplateDef = {
     // card read as a frame rather than a holder. The slider is on the first screen either way.
     { kind: 'number', key: 'slotH', label: 'Slot height', section: 'Card', value: 12, min: 6, max: 40, step: 0.5, unit: 'mm' },
 
-    { kind: 'number', key: 'nameSize', label: 'Name size', section: 'Name', value: 14, min: 8, max: 28, step: 0.5, unit: 'mm' },
+    { kind: 'number', key: 'nameSize', label: 'Name size', section: 'Lettering', value: 14, min: 8, max: 28, step: 0.5, unit: 'mm' },
     // The bars that join letters the weld could not reach. They were forced on and unmentioned,
     // which is how a name comes off the bed wearing them with nothing to switch: letters had
     // bridges with no way to turn them off.
-    bridgeField('Name', 'Join loose letters'),
+    bridgeField('Lettering', 'Join loose letters'),
 
     // The whole card, patterned — the same engine and the same knobs the pattern holder uses,
     // behind one switch so a plain card stays a plain card.
@@ -204,7 +204,7 @@ export const hairTieHolder: TemplateDef = {
       // back is the thing being asked for.
       .filter((f) => !['margin', 'web'].includes(f.key))
       .map((f) => ({ ...f, visibleWhen: (vv: Values) => bool(vv, 'usePattern') && (f.visibleWhen ? f.visibleWhen(vv) : true) })),
-    ...letteringFields('Name', { textCase: 'upper' }),
+    ...letteringFields('Lettering', { textCase: 'upper' }),
   ],
 
   async build(v: Values): Promise<BuildInput> {

@@ -11,7 +11,7 @@
 //   · `qrCodeFields` — the Code category: size, the four module styles, the symbol in the middle,
 //     toughness and invert.
 //   · `qrAssemblyFields` — the Assembly category every INTERLOCKING design gets: material
-//     thickness, kerf and fit, together, directly above "More options".
+//     thickness, kerf and fit, together, last on the rail.
 //   · `qrTextFields` / `qrFontField` / `qrLetteringFields` — the two lines and the face they are
 //     set in. The font card previews the TITLE, never the link (`previewFrom`).
 //   · `qrLayers` — the payload → the engraved code (+ its symbol), ready to place.
@@ -123,9 +123,12 @@ export function qrLetteringFields(): Field[] {
   ];
 }
 
-export function qrBorderField(): Field {
+/** The plate's printed border. `section` is the category the PLATE is set in — a stand's own
+ *  "Stand" or "Tent" — so the border sits beside the plate it rules rather than alone in a
+ *  category of its own. */
+export function qrBorderField(section = 'Shape & size'): Field {
   return {
-    kind: 'select', key: 'border', label: 'Border', section: 'Shape & size', value: 'rule',
+    kind: 'select', key: 'border', label: 'Border', section, value: 'rule',
     // "Double rule" is 11 characters, which the segmented control truncates to "Double …"
     // (G22); "Two rules" fits, so the choice stays three tabs rather than a dropdown.
     options: [{ value: 'none', label: 'None' }, { value: 'rule', label: 'Rule' }, { value: 'double', label: 'Two rules' }],
@@ -153,29 +156,27 @@ export function qrCodeFields(size: { key: string; value: number; min: number; ma
       help: 'Share of the code the symbol covers.',
       visibleWhen: (v) => str(v, 'symbol') !== '',
     },
-    // Toughness is the CODE's, and it stays with the code. It used to be `advanced: true`, which
-    // in this form means "not in your section at all" — the field was pulled out of Code and
-    // filed under More options beside the kerf. Toughness belongs in the Code section.
+    // Toughness is the CODE's, and it stays with the code — beside the kerf it was a joint number
+    // to anyone reading the panel.
     {
       kind: 'select', key: 'level', label: 'Toughness', section: 'Code', value: 'Q',
       options: [{ value: 'L', label: 'L · 7%' }, { value: 'M', label: 'M · 15%' }, { value: 'Q', label: 'Q · 25%' }, { value: 'H', label: 'H · 30%' }],
       help: 'How much damage the code survives, at the cost of more modules.',
     },
-    { kind: 'toggle', key: 'invert', label: 'Invert', section: 'Code', value: false, advanced: true, help: 'For dark material: burns the light squares instead.' },
+    { kind: 'toggle', key: 'invert', label: 'Invert', section: 'Code', value: false, help: 'For dark material: burns the light squares instead.' },
   ];
 }
 
 /**
- * LEFT: "Assembly" — the three numbers a JOINT is cut to, in one category of their own, directly
- * above "More options".
+ * LEFT: "Assembly" — the three numbers a JOINT is cut to, in one category of their own, last on
+ * the rail.
  *
  * Every design with interlocking parts gets a separate Assembly section with material
- * thickness, kerf and fit. They were scattered — two
- * of them marked `advanced`, which files a control under More options whatever section it names,
+ * thickness, kerf and fit. They were scattered — two of them filed away from their section,
  * and Fit missing altogether on the stands that hardcoded a 0.05 mm clearance.
  *
- * Declare these LAST among a template's left-hand fields: sections appear in first-use order and
- * "More options" is appended after them, so last is what puts Assembly directly above it.
+ * Declare these LAST among a template's left-hand fields: sections appear in first-use order, so
+ * last is what puts Assembly at the end of the rail.
  * A design with no joint (the QR tag) does not call this at all.
  */
 export function qrAssemblyFields(o: { thickness?: Partial<Field>; help?: string } = {}): Field[] {
@@ -205,9 +206,9 @@ export const fitOf = (v: Values): number => fitClearance(str(v, 'fit'));
 /**
  * LEFT: "Shape & size" for a construction that cuts a PLATE, plus its Assembly category.
  *
- * `assembly: false` leaves the three joint numbers where they were before 2026-09-22 — inside
- * "Shape & size" and marked `advanced`, so they show under More options. Nothing passes it
- * today; the flag exists so a caller that is NOT an interlocking design can opt out.
+ * `assembly: false` leaves the three joint numbers inside "Shape & size" rather than a category
+ * of their own. Nothing passes it today; the flag exists so a caller that is NOT an interlocking
+ * design can opt out.
  */
 export function qrPlateFields(o: { arch: boolean; leanHelp: string; assembly?: boolean }): Field[] {
   const joint = o.assembly === false
@@ -215,10 +216,10 @@ export function qrPlateFields(o: { arch: boolean; leanHelp: string; assembly?: b
       // 6 mm is the thickest sheet the material library offers and the thickest these joints are
       // drawn for: past it the half-lap is wider than the foot's own crown and the tent's tabs are
       // barely longer than the sheet is thick.
-      { kind: 'number', key: 'thickness', label: 'Material thickness', section: 'Shape & size', value: 3, min: 1.5, max: 6, step: 0.1, unit: 'mm', advanced: true, help: 'Measure your sheet with calipers: "3 mm" ply is often 2.8, and every slot is cut to this number.' } as Field,
-      { kind: 'number', key: 'kerf', label: 'Kerf', section: 'Shape & size', value: 0.18, min: 0, max: 0.5, step: 0.01, unit: 'mm', advanced: true, help: 'The width your laser burns away per pass.' } as Field,
+      { kind: 'number', key: 'thickness', label: 'Material thickness', section: 'Shape & size', value: 3, min: 1.5, max: 6, step: 0.1, unit: 'mm', help: 'Measure your sheet with calipers: "3 mm" ply is often 2.8, and every slot is cut to this number.' } as Field,
+      { kind: 'number', key: 'kerf', label: 'Kerf', section: 'Shape & size', value: 0.18, min: 0, max: 0.5, step: 0.01, unit: 'mm', help: 'The width your laser burns away per pass.' } as Field,
       {
-        kind: 'select', key: 'fit', label: 'Fit', section: 'Shape & size', value: 'snug', advanced: true,
+        kind: 'select', key: 'fit', label: 'Fit', section: 'Shape & size', value: 'snug',
         options: [{ value: 'tight', label: 'Tight' }, { value: 'snug', label: 'Snug' }, { value: 'easy', label: 'Easy' }],
         help: 'Tight knocks home, Snug takes a thumb, Easy pulls apart.',
       } as Field,

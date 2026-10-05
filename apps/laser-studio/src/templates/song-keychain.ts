@@ -281,7 +281,7 @@ const FIELDS: Field[] = [
     kind: 'number', key: 'width', label: 'Width', section: 'Shape & size', value: BASE_W, min: 32, max: 50, step: 1, unit: 'mm',
     help: 'The height follows the song and the code.',
   },
-  { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Shape & size', value: 3, min: 0, max: 8, step: 0.5, unit: 'mm', advanced: true },
+  { kind: 'number', key: 'corner', label: 'Corner radius', section: 'Shape & size', value: 3, min: 0, max: 8, step: 0.5, unit: 'mm' },
 
   // ------------------------------------------------------------------ LEFT: "Keyring" --
   // The matching keychains' ring (couple-keychains.ts): the shared control, Loop tab | None, its

@@ -84,11 +84,11 @@ export const symbolCharm: TemplateDef = {
       help: 'Cut out keeps islands on stencil bridges, so nothing falls out.',
     }),
     {
-      kind: 'number', key: 'rotation', label: 'Rotation', section: 'Size & outline', value: 0, min: -180, max: 180, step: 1, unit: '°', advanced: true,
+      kind: 'number', key: 'rotation', label: 'Rotation', section: 'Symbol', value: 0, min: -180, max: 180, step: 1, unit: '°',
       help: 'Turns the symbol and its outline together.',
     },
     {
-      kind: 'toggle', key: 'flip', label: 'Flip', section: 'Size & outline', value: false, advanced: true,
+      kind: 'toggle', key: 'flip', label: 'Flip', section: 'Symbol', value: false,
       help: 'Mirrors the symbol so it can face the other way.',
     },
     ...keyringFields('outside', {

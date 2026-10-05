@@ -77,26 +77,6 @@ export const keychainPhoneStand: TemplateDef = {
     { kind: 'symbol', key: 'logo', label: 'Your logo', panel: 'right', section: 'Logo', value: DEFAULT_LOGO, visibleWhen: (v) => !bool(v, 'usePattern') },
     { kind: 'font', key: 'font', label: 'Font', panel: 'right', section: 'Font', value: 'montserrat', recommended: FACES, visibleWhen: (v) => !bool(v, 'usePattern') },
 
-    // ------------------------------------------------------------- LEFT: the pattern --
-    {
-      kind: 'toggle', key: 'usePattern', label: 'Use a pattern instead of the name and logo', section: 'Pattern', value: false,
-      help: 'Fills the whole bar. The name and logo controls go away while it is on.',
-    },
-    { kind: 'pattern', key: 'patternId', label: 'Pattern', section: 'Pattern', value: DEFAULT_PATTERN, visibleWhen: (v) => bool(v, 'usePattern') },
-    { kind: 'number', key: 'patternScale', label: 'Zoom', section: 'Pattern', value: 100, min: 40, max: 300, step: 5, unit: '%', visibleWhen: (v) => bool(v, 'usePattern') },
-    { kind: 'number', key: 'patternAngle', label: 'Angle', section: 'Pattern', value: 0, min: 0, max: 180, step: 5, unit: '°', visibleWhen: (v) => bool(v, 'usePattern') },
-    {
-      kind: 'select', key: 'patternOp', label: 'Make it', section: 'Pattern', value: 'engrave',
-      options: [{ value: 'cut', label: 'Cut out' }, { value: 'engrave', label: 'Engrave' }, { value: 'score', label: 'Score' }],
-      help: 'Line patterns cut as a lattice: the lines stay, the gaps go.',
-      visibleWhen: (v) => bool(v, 'usePattern'),
-    },
-    {
-      kind: 'number', key: 'patternWeb', label: 'Web', section: 'Pattern', value: 1, min: 1, max: 8, step: 0.1, unit: 'mm',
-      help: 'The least material left between two holes, or between a hole and an edge.',
-      visibleWhen: (v) => bool(v, 'usePattern') && str(v, 'patternOp') === 'cut',
-    },
-
     // --------------------------------------------------------------- LEFT: the bar --
     { kind: 'number', key: 'length', label: 'Length', section: 'Size', value: 60, min: 40, max: 110, step: 1, unit: 'mm' },
     { kind: 'number', key: 'height', label: 'Height', section: 'Size', value: 20, min: 12, max: 40, step: 0.5, unit: 'mm' },
@@ -118,13 +98,6 @@ export const keychainPhoneStand: TemplateDef = {
       help: 'The stub in front of the phone that stops it sliding out.',
     },
 
-    // ------------------------------------------------------------- LEFT: the keyring --
-    { kind: 'toggle', key: 'hole', label: 'Keyring hole', section: 'Keyring', value: true },
-    {
-      kind: 'number', key: 'holeDia', label: 'Hole diameter', section: 'Keyring', value: 5, min: 2.5, max: 8, step: 0.5, unit: 'mm',
-      help: '5 mm takes a split ring.', visibleWhen: (v) => bool(v, 'hole'),
-    },
-
     // --------------------------------------------------------------- LEFT: placing them --
     // Two pads, because two things. Each is an offset from where that mark sits by default —
     // the name centred on the face, the logo under it — so zero is always the sensible answer
@@ -141,11 +114,39 @@ export const keychainPhoneStand: TemplateDef = {
     {
       kind: 'position', key: 'logoX', keyY: 'logoY', label: 'Move the logo', section: 'Name & logo',
       value: 0, valueY: 0, max: 40, step: 0.5, unit: 'mm',
-      visibleWhen: (v) => str(v, 'logo') !== '',
+      visibleWhen: (v) => !bool(v, 'usePattern') && str(v, 'logo') !== '',
     },
 
-    // ----------------------------------------------------------------- More options --
-    { ...opField('More options', 'engrave', 'Name and logo'), advanced: true },
+    // How the name and the logo are burnt, under the two they apply to — and gone with them when
+    // the pattern takes the face.
+    { ...opField('Name & logo', 'engrave', 'Name and logo'), visibleWhen: (v) => !bool(v, 'usePattern') },
+
+    // ------------------------------------------------------------- LEFT: the pattern --
+    {
+      kind: 'toggle', key: 'usePattern', label: 'Use a pattern instead of the name and logo', section: 'Pattern', value: false,
+      help: 'Fills the whole bar. The name and logo controls go away while it is on.',
+    },
+    { kind: 'pattern', key: 'patternId', label: 'Pattern', section: 'Pattern', value: DEFAULT_PATTERN, visibleWhen: (v) => bool(v, 'usePattern') },
+    { kind: 'number', key: 'patternScale', label: 'Zoom', section: 'Pattern', value: 100, min: 40, max: 300, step: 5, unit: '%', visibleWhen: (v) => bool(v, 'usePattern') },
+    { kind: 'number', key: 'patternAngle', label: 'Angle', section: 'Pattern', value: 0, min: 0, max: 180, step: 5, unit: '°', visibleWhen: (v) => bool(v, 'usePattern') },
+    {
+      kind: 'select', key: 'patternOp', label: 'Make it', section: 'Pattern', value: 'engrave',
+      options: [{ value: 'cut', label: 'Cut out' }, { value: 'engrave', label: 'Engrave' }, { value: 'score', label: 'Score' }],
+      help: 'Line patterns cut as a lattice: the lines stay, the gaps go.',
+      visibleWhen: (v) => bool(v, 'usePattern'),
+    },
+    {
+      kind: 'number', key: 'patternWeb', label: 'Web', section: 'Pattern', value: 1, min: 1, max: 8, step: 0.1, unit: 'mm',
+      help: 'The least material left between two holes, or between a hole and an edge.',
+      visibleWhen: (v) => bool(v, 'usePattern') && str(v, 'patternOp') === 'cut',
+    },
+
+    // ------------------------------------------------------------- LEFT: the keyring --
+    { kind: 'toggle', key: 'hole', label: 'Keyring hole', section: 'Keyring', value: true },
+    {
+      kind: 'number', key: 'holeDia', label: 'Hole diameter', section: 'Keyring', value: 5, min: 2.5, max: 8, step: 0.5, unit: 'mm',
+      help: '5 mm takes a split ring.', visibleWhen: (v) => bool(v, 'hole'),
+    },
   ],
 
   async build(v) {

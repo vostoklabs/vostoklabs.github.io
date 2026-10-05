@@ -133,6 +133,11 @@ export interface SheetSpec {
   /** Air between pages on the preview, mm. Default 10. */
   gutter?: number;
   label?: string;
+  /** One material per page: a sheet IS one material, so a run of two-colour pieces is laid out
+   *  a colour at a time — the primary's material first, then the others in the order they first
+   *  appear — and a change of material starts a fresh page. Only where the pieces are PLACED
+   *  changes; they are built, and listed in the output, in input order. */
+  byMaterial?: boolean;
 }
 
 export type Blank =
@@ -324,8 +329,10 @@ export interface BuildOutput {
   designBox: Box | null;
   warnings: string[];
   parts: PartPlacement[];
-  /** The pages a paginated batch landed on, when the build named a sheet. */
-  sheets?: { count: number; width: number; height: number; pages: Box[] };
+  /** The pages a paginated batch landed on, when the build named a sheet. `materials`, beside
+   *  `pages` and in step with it, is what each page is cut from — present only when the sheet
+   *  asked for `byMaterial` and the pieces really are cut from more than one. */
+  sheets?: { count: number; width: number; height: number; pages: Box[]; materials?: ('light' | 'dark' | 'card')[] };
   status?: string;
 }
 

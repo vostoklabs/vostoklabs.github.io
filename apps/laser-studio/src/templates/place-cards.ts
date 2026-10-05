@@ -226,6 +226,10 @@ export const placeCards: TemplateDef = {
       help: 'The height it stands, folded — the sheet is twice this.',
     },
     {
+      kind: 'number', key: 'corner', label: 'Corner radius', section: 'Card',
+      value: 3, min: 0, max: 10, step: 0.5, unit: 'mm',
+    },
+    {
       // TWO options, not three. The old "Perforate" was this same operation sized for 3 mm ply
       // (6 mm slots, a ligament one sheet thick); on kraft there is nothing for that rule to
       // measure itself against, and a second perforation differing only in its numbers is a
@@ -253,16 +257,11 @@ export const placeCards: TemplateDef = {
       visibleWhen: hasSecond,
     },
 
-    // ------------------------------------------------------------ More options --
-    {
-      kind: 'number', key: 'corner', label: 'Corner radius', section: 'Card', advanced: true,
-      value: 3, min: 0, max: 10, step: 0.5, unit: 'mm',
-    },
     // "Material thickness" went with the ply: it only ever set the ligament between the old
     // slots, and the dashed fold's 1 mm bridge is fixed by the 3:1 ratio. A knob that moves
     // nothing is worse than no knob.
     {
-      kind: 'select', key: 'op', label: 'Letters', section: 'Lettering', advanced: true,
+      kind: 'select', key: 'op', label: 'Letters', section: 'Lettering',
       value: 'engrave',
       options: [{ value: 'engrave', label: 'Engrave' }, { value: 'score', label: 'Score' }],
       help: 'Score outlines the letters instead of filling them.',
@@ -271,19 +270,19 @@ export const placeCards: TemplateDef = {
       // The face is the picker's now, so this is what is left of the old "Script (same font) |
       // Small caps": the CASE. Both values are kept, so a project saved with either opens
       // lettered the way it was saved.
-      kind: 'select', key: 'secondStyle', label: 'Second line style', section: 'Lettering', advanced: true,
+      kind: 'select', key: 'secondStyle', label: 'Second line style', section: 'Lettering',
       value: 'caps',
       options: [{ value: 'caps', label: 'Small caps' }, { value: 'script', label: 'As typed' }],
       help: 'Small caps set it in spaced capitals.',
       visibleWhen: hasSecond,
     },
     {
-      kind: 'number', key: 'letterSpacing', label: 'Letter spacing', section: 'Lettering', advanced: true,
+      kind: 'number', key: 'letterSpacing', label: 'Letter spacing', section: 'Lettering',
       value: 0, min: -0.10, max: 0.30, step: 0.02,
       format: (x) => `${x > 0 ? '+' : ''}${x.toFixed(2)}`,
     },
     {
-      kind: 'number', key: 'textY', label: 'Move text up/down', section: 'Lettering', advanced: true,
+      kind: 'number', key: 'textY', label: 'Move text up/down', section: 'Lettering',
       value: 0, min: -10, max: 10, step: 0.5, unit: 'mm',
     },
   ],

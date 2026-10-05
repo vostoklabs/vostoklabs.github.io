@@ -24,7 +24,7 @@ import { MIN_COUNTER, textLayer } from '../engine/text';
 import type { BuildInput, DesignLayer, KeyringSpec } from '../engine/types';
 import { hangHoleFields, NO_KEYRING } from './keyring';
 import { connectSpec, countersTooTight, letterScoreField, stem } from './shared';
-import { bool, lines, num, str, type Field, type TemplateDef } from './types';
+import { bool, lines, num, str, type TemplateDef } from './types';
 
 /** The em every name is measured at. Big enough that the weld's overlap is already the 3 %-of-
  *  size branch of `weldOverlap`, so a measured width scales linearly with the size — which is
@@ -189,34 +189,30 @@ export const familyTreeNames: TemplateDef = {
       value: 2.5, min: 1, max: 6, step: 0.5, unit: 'mm',
       help: 'Thin lines snap; keep it near the material thickness.',
     },
+    {
+      kind: 'number', key: 'thickness', label: 'Material thickness', section: 'Tree', value: 3, min: 1.5, max: 12, step: 0.5, unit: 'mm',
+      help: 'Sets the floor for any bridge the engine has to add.',
+    },
 
-    // ----------------------------------------------------- long tail → More options --
+    // --------------------------------------------------------------- LEFT: Lettering --
     // The same control, the same units, as every other design that sets type: a share of the
     // letter height, so it survives a size change.
     {
-      kind: 'number', key: 'letterSpacing', label: 'Letter spacing', value: 0, min: -0.1, max: 0.3, step: 0.02,
-      advanced: true,
+      kind: 'number', key: 'letterSpacing', label: 'Letter spacing', section: 'Lettering', value: 0, min: -0.1, max: 0.3, step: 0.02,
       format: (n) => `${n > 0 ? '+' : ''}${Math.round(n * 100)}%`,
       help: 'Air between the letters, as a share of their height.',
     },
-    // Not advanced: it is the difference between a name you can read and a silhouette you
-    // cannot, which is not a long-tail decision.
-    { ...letterScoreField('Tree', 'score'), label: 'Outline the letters' },
+    // The difference between a name you can read and a silhouette you cannot.
+    { ...letterScoreField('Lettering', 'score'), label: 'Outline the letters' },
     {
-      kind: 'number', key: 'yearSize', label: 'Year size', value: 65, min: 30, max: 90, step: 1, unit: '%',
-      advanced: true,
+      kind: 'number', key: 'yearSize', label: 'Year size', section: 'Lettering', value: 65, min: 30, max: 90, step: 1, unit: '%',
       help: 'A share of the last name’s letters.',
       visibleWhen: (v) => str(v, 'year').trim() !== '',
-    },
-    {
-      kind: 'number', key: 'thickness', label: 'Material thickness', value: 3, min: 1.5, max: 12, step: 0.5, unit: 'mm',
-      advanced: true,
-      help: 'Sets the floor for any bridge the engine has to add.',
     },
     // The hole is the DESIGN's: it goes in the topper, it is never dragged, and there is no Ring
     // control on this template at all (the loop tab is for keychains, an ornament
     // hangs from a hole in its own crown).
-    ...hangHoleFields('More options', { dia: 3, maxDia: 6, label: 'Ribbon hole' }).map((f): Field => ({ ...f, advanced: true })),
+    ...hangHoleFields('Hanging', { dia: 3, maxDia: 6, label: 'Ribbon hole' }),
   ],
 
   async build(v): Promise<BuildInput> {
