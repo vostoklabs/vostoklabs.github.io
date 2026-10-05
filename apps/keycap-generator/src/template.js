@@ -241,15 +241,6 @@ export const TEMPLATE = `
 
       </div>
 
-      <!-- Hidden legacy controls the shared ui-kit footer delegates to. These MUST
-           live outside #keycapFooter: mounting the footer replaces #keycapFooter,
-           which would otherwise destroy these and crash main.js ($('export') etc.). -->
-      <div id="keycapLegacyControls" hidden>
-        <button id="export" type="button" disabled></button>
-        <button id="saveProj"></button>
-        <input type="file" id="projFile" accept="application/json" hidden />
-      </div>
-
       <!-- Mount point for the shared ui-kit sidebar footer (Export / Save / Load / Help / theme). -->
       <div id="keycapFooter"></div>
     </aside>

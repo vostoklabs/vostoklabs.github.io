@@ -23,7 +23,7 @@ import {
   topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs,
   promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile,
   button, dropZone, toast, themeColorHex, licenseAfterExport,
-  nudgePad, busyChip, panelCredit, paletteRow, segmentedControl,
+  nudgePad, busyChip, panelCredit, paletteRow, segmentedControl, readProjectFile,
 } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
@@ -65,6 +65,7 @@ import { ICONS } from '@vostok/ui-kit';
 import { CHANGELOG } from './changelog';
 import { TEMPLATE } from './template.js';
 import { setAssetBase, assetUrl } from './assets.js';
+import { PROJECT_FILE, projectFileText } from './projectFile.js';
 
 /**
  * @param {HTMLElement} container where the generator's DOM goes
@@ -168,19 +169,22 @@ export function mount(container, host) {
       // RETURNED, not fired and forgotten. The kit greys this button for as long as the promise
       // is pending, which is the whole feedback story for a keyboard set — see runPrimaryExport.
       onExport: () => runPrimaryExport(),
-      onSave: () => $('saveProj')?.click(),
+      onSave: () => {
+        if (host) { void saveToHost(); return; }
+        downloadFile(projectFileText(collectState()), 'keycap-project.json', 'application/json');
+        setStatus('Project saved ✓');
+      },
       onLoad: (file) => {
         // On the desktop the kit's Load button hands us nothing and expects the host's own
         // picker to be opened instead — there is no file input in that story.
         if (host) { void openFromHost(); return; }
         if (!file) return;
-        const projFile = $('projFile');
-        if (projFile) {
-          const dt = new DataTransfer();
-          dt.items.add(file);
-          projFile.files = dt.files;
-          projFile.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+        // A file that is not a keycap project (another generator's, or not one at all) is
+        // refused with the kit's message and changes nothing.
+        void readProjectFile(file, (data) => {
+          applyLoadedState(data);
+          setStatus('Project loaded ✓');
+        }, PROJECT_FILE);
       },
       onHelp: () => {
         dialog({
@@ -1077,8 +1081,6 @@ export function mount(container, host) {
       updateStemMaterial();
       lastBodies = { keycapGeometry: capG, logoGeometry: logoG, extraGeometries: extraG };
 
-      $('export').disabled = false;
-
       // One footprint per legend, so the "it won't fit" warning covers the second one too —
       // it is the layer most likely to be pushed out to an edge.
       const fps = [logoFootprint(currentLegend.box, oneOpts.widthMM)];
@@ -1105,7 +1107,6 @@ export function mount(container, host) {
       }
     } catch (e) {
       console.error(e);
-      $('export').disabled = true;
       setStatus('Could not generate this legend (try a simpler icon/letter or smaller size).', 'err');
     } finally {
       setBusyState(null);
@@ -1247,7 +1248,6 @@ export function mount(container, host) {
     } catch (e) {
       console.error(e);
       currentLegend = null;
-      $('export').disabled = true;
       setStatus(e.message || 'Could not read this letter.', 'err');
     }
   }
@@ -1739,8 +1739,7 @@ export function mount(container, host) {
    * to be able to AWAIT it. The kit's export panel disables its buttons for as long as
    * `onExport` is pending — but the footer reached this through `$('export').click()`, which
    * returns the moment the handler starts, so the button un-greyed itself immediately and a
-   * twenty-minute keyboard set ran with no sign that anything had happened. The hidden
-   * `#export` button stays wired to the same function: other code still clicks it.
+   * twenty-minute keyboard set ran with no sign that anything had happened.
    */
   async function runPrimaryExport() {
     // Checked BEFORE the Pro panel gets a say: Fit test is free, and unlike Full set it does
@@ -1769,8 +1768,6 @@ export function mount(container, host) {
       `Keycap in ${count} colour${filaments === 1 ? '' : 's'}, made with the Keycap Legend Generator.`
     );
   }
-
-  $('export').addEventListener('click', () => { void runPrimaryExport(); });
 
   // Export the bare cap (uncarved shell + stem) in a single colour — no legend.
   // Works for any size; uses the loaded shell directly (already a clean indexed solid).
@@ -2687,28 +2684,6 @@ export function mount(container, host) {
     const arrivingWith = host?.initialProjectId?.();
     if (arrivingWith) void openProject(arrivingWith);
   }
-
-  $('saveProj')?.addEventListener('click', () => {
-    if (host) { void saveToHost(); return; }
-    downloadFile(JSON.stringify(collectState(), null, 2), 'keycap-project.json', 'application/json');
-    setStatus('Project saved ✓');
-  });
-
-  $('projFile')?.addEventListener('change', () => {
-    const f = $('projFile').files[0];
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        applyLoadedState(JSON.parse(reader.result));
-        setStatus('Project loaded ✓');
-      } catch {
-        setStatus('Failed to load project file', 'err');
-      }
-    };
-    reader.readAsText(f);
-    $('projFile').value = '';
-  });
 
   /** Applies a parameter blob to the live UI. Shared by both load paths. */
   function applyLoadedState(loaded) {
