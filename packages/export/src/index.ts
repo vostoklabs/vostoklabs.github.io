@@ -1,5 +1,5 @@
-// Shared model exporters, promoted from the magnet generator's export/ (the
-// clicker, keycap, keychain and bubble-pop all ship a near-identical copy).
+// Shared model exporters, promoted from the magnet generator's export/. The
+// clicker and the keycap generator still carry their own 3MF writers.
 //
 // The 3MF is authored as a SINGLE object with N pre-coloured, mating parts —
 // the shape Bambu Studio / OrcaSlicer import cleanly with each part on its own
