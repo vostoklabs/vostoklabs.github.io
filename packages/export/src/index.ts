@@ -1,5 +1,5 @@
 // Shared model exporters, promoted from the magnet generator's export/. The
-// clicker and the keycap generator still carry their own 3MF writers.
+// clicker still carries its own 3MF writer.
 //
 // The 3MF is authored as a SINGLE object with N pre-coloured, mating parts —
 // the shape Bambu Studio / OrcaSlicer import cleanly with each part on its own
@@ -171,11 +171,10 @@ export interface ProvenanceMeta {
  * The provenance mark, in the two forms a 3MF carries it: Core metadata that slicers show,
  * and a plain-text file inside the zip that survives casual inspection.
  *
- * One function rather than a block inside `buildThreeMF`, because not every generator uses
- * that writer. The keycap generator hand-rolls its own zip (it builds a components wrapper
- * this one does not), and hand-rolling the zip is how it ended up hand-rolling nothing at
- * all: no Designer, no Copyright, no LicenseTerms, no vostok_labs.txt. Every export path in
- * the catalogue can call this, whatever writes the rest of the file around it.
+ * One function rather than a block inside `buildThreeMF`, because not every file is a 3MF: the
+ * OBJ header (`provenanceComment`) and the laser cut file (`buildCutSvg`) carry the same mark.
+ * Every export path in the catalogue can call this, whatever writes the rest of the file around
+ * it.
  *
  * It is forensic evidence, not DRM: nothing here gates a feature, none of it is visible on a
  * print, and it is disclosed in the licence and the FAQ. See invariant #2.

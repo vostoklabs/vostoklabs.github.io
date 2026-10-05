@@ -27,6 +27,7 @@ import {
 } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
+import { downloadFile } from '@vostok/export';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadKeycap } from './keycap.js';
@@ -1688,11 +1689,7 @@ export function mount(container, host) {
       return;
     }
 
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${baseName}.3mf`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadFile(blob, `${baseName}.3mf`, 'model/3mf');
     setStatus(downloadMsg);
     // The status line is 12px of muted grey in the corner of the viewport, which is the whole
     // reason a finished export used to feel like nothing had happened. The detail stays there;
@@ -1931,11 +1928,7 @@ export function mount(container, host) {
           return;
         }
 
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([zipped], { type: 'application/zip' }));
-        a.download = `${baseName}.zip`;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        downloadFile(zipped, `${baseName}.zip`, 'application/zip');
         setStatus('Exported full alphabet set ✓  26 keycaps (A–Z) zipped. Open each 3MF in your slicer.');
         toast('Alphabet set exported ✓', { kind: 'success' });
         nudgeLicense();
