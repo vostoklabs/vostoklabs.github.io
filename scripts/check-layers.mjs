@@ -14,7 +14,9 @@
   - UI imports anything on the shelf below it;
   - an app imports anything on the shelf, but never another app;
   - nobody reaches into another package or app by a relative path: a package is imported by its
-    name, so its public entry is the only door.
+    name, so its public entry is the only door;
+  - a worker or a node test imports no entry that loads the font registry (see the end of this
+    file).
 
   ## Why this exists
 
@@ -30,7 +32,7 @@
 
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
-import { rel, abs, blankComments, appSourceFiles, packageSourceFiles, privateBudgets } from './lib/source.mjs';
+import { rel, abs, blankComments, appSourceFiles, packageSourceFiles, testFiles, privateBudgets } from './lib/source.mjs';
 
 const LAYERS = [
   ['config/', 'config'],
@@ -187,17 +189,91 @@ for (const file of files) {
   }
 }
 
+/* ------------------------------------------------------------ the font registry */
+
+/*
+  A worker or a node test never imports an entry that loads the font registry.
+
+  `@vostok/fonts` loads every font file through Vite's `import.meta.glob`, and the root of
+  `@vostok/laser` reaches it through its text module. A worker importing either carries the
+  whole registry in its bundle, and a node test cannot run it without a stand-in for the glob;
+  the subpaths (`@vostok/laser/csg2d`, `/rings`, `/blanks`...) load none of it. Which entries
+  load it is read from the import graph, so a package that starts loading the fonts is caught
+  without an edit here. Only the file's own imports are checked: a test that sets out to
+  measure text reaches the fonts through the code it tests, with the stand-in in place.
+
+  Exceptions go in KNOWN (or "layersKnown" in the private budgets) as "<file> -> <import>".
+*/
+const FONT_REGISTRY = resolvePackage('@vostok/fonts')?.file ?? null;
+const isCodeFile = (f) => /\.[cm]?[jt]sx?$/.test(f);
+
+/** The code files `file` imports for their values; a type-only import is erased at build. */
+function valueImports(file) {
+  const out = [];
+  for (const m of blankComments(readFileSync(file, 'utf8')).matchAll(IMPORT)) {
+    if (/^(?:import|export)\s+type\b/.test(m[0])) continue;
+    const spec = m[1] ?? m[2];
+    const target = spec.startsWith('.') ? resolveFile(resolve(dirname(file), spec)) : resolvePackage(spec)?.file;
+    if (target && isCodeFile(target)) out.push(target);
+  }
+  return out;
+}
+
+const fontLoaders = new Map(); // entry file -> whether its import graph reaches the registry
+function loadsFonts(entry) {
+  if (!fontLoaders.has(entry)) {
+    const seen = new Set([entry]);
+    const queue = [entry];
+    let hit = false;
+    while (queue.length && !hit) {
+      const file = queue.pop();
+      if (file === FONT_REGISTRY) hit = true;
+      else for (const t of valueImports(file)) if (!seen.has(t)) seen.add(t), queue.push(t);
+    }
+    fontLoaders.set(entry, hit);
+  }
+  return fontLoaders.get(entry);
+}
+
+const workers = files.filter((f) => /\.worker\.[cm]?[jt]sx?$/.test(f) || /\/src\/workers\//.test(f));
+const tests = testFiles();
+const fontProblems = [];
+for (const file of FONT_REGISTRY ? [...workers, ...tests] : []) {
+  for (const m of blankComments(readFileSync(abs(file), 'utf8')).matchAll(IMPORT)) {
+    if (/^(?:import|export)\s+type\b/.test(m[0])) continue;
+    const spec = m[1] ?? m[2];
+    const entry = spec.startsWith('.') ? null : resolvePackage(spec)?.file;
+    if (!entry || !isCodeFile(entry) || !loadsFonts(entry)) continue;
+    const key = `${file} -> ${spec}`;
+    if (KNOWN.has(key) || PRIVATE_KNOWN.has(key)) {
+      seenKnown.add(key);
+      continue;
+    }
+    fontProblems.push(`${file} imports ${spec}, which loads the font registry.`);
+  }
+}
+
 if (problems.length) {
   console.error('\nLayers: an import points the wrong way.\n');
   for (const p of problems) console.error(`  ${p}`);
   console.error('\nCores know nothing about machines, screens or apps; connectors nothing about apps. When a core');
   console.error('seems to need something from above, that knowledge belongs in the layer above, passed down as an option.\n');
-  process.exit(1);
 }
+if (fontProblems.length) {
+  console.error('\nLayers: a worker or a node test loads the font registry.\n');
+  for (const p of fontProblems) console.error(`  ${p}`);
+  console.error('\nThe registry loads every font through import.meta.glob: a worker carries all of them in its bundle,');
+  console.error('and a node test cannot run it without a stand-in. Import the subpath the file needs instead');
+  console.error('(@vostok/laser/csg2d, @vostok/laser/rings, @vostok/fonts/textLayout...).\n');
+}
+if (problems.length || fontProblems.length) process.exit(1);
 const fixed = [...KNOWN, ...PRIVATE_KNOWN].filter((k) => !seenKnown.has(k));
 if (fixed.length) {
   console.log('\nLayers: ground gained. Drop these from KNOWN in scripts/check-layers.mjs (or layersKnown in scripts/budgets.private.json):\n');
   for (const k of fixed) console.log(`  ${k}`);
   console.log('');
 }
-console.log(`layers ok — ${files.length} files; ${seenKnown.size} known exceptions`);
+console.log(
+  `layers ok — ${files.length} files; ${seenKnown.size} known exceptions; ` +
+    `no font registry in ${workers.length} workers or ${tests.length} node test files`,
+);

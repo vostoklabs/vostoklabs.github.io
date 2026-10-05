@@ -107,6 +107,26 @@ export function packageSourceFiles() {
 }
 
 /**
+ * Node tests: every code file in an app's or a package's `tests/` (or `test/`) folder, where their
+ * fixtures and runners live too, and the `*.test.*` / `*.check.*` / `*.spec.*` files kept beside
+ * the source. Read from the disk like the rest, so private tests are included. Repo-relative paths.
+ */
+export function testFiles() {
+  const isCode = (name) => /\.[cm]?[jt]sx?$/.test(name) && !name.endsWith('.d.ts');
+  const isTest = (name) => /\.(test|check|spec)\.[cm]?[jt]sx?$/.test(name);
+  const out = [];
+  for (const group of ['apps', 'packages']) {
+    const dir = abs(group);
+    if (!existsSync(dir)) continue;
+    for (const name of readdirSync(dir).sort()) {
+      for (const sub of ['tests', 'test']) walk(join(dir, name, sub), out, isCode);
+      walk(join(dir, name, 'src'), out, isTest);
+    }
+  }
+  return out;
+}
+
+/**
  * Which of these repo-relative paths git ignores, i.e. which are private. A new file that is
  * merely not committed yet is NOT private; only a gitignored one is. A folder takes a trailing
  * slash (`apps/<id>/`).
