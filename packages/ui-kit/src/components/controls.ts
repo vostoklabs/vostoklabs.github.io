@@ -709,6 +709,18 @@ export interface SegmentedOptions<T extends string = string> {
    * would squeeze the name out.
    */
   stacked?: boolean;
+  /**
+   * `'fill'` (default): the row spans its container and the options share the width.
+   * `'content'`: the row is as wide as its options, each as wide as the widest label: for a
+   * switch in a bar beside other controls (the view and unit switches over a preview), where a
+   * row that fills would push its neighbour out.
+   */
+  fit?: 'fill' | 'content';
+  /**
+   * `'compact'`: smaller labels and padding, a step smaller again on a phone: for a switch in a
+   * bar over a picture rather than in a settings panel. Default: the panel size. Tabs only.
+   */
+  size?: 'compact';
 }
 
 /** What `segmentedControl` returns: a `ValueRow` plus per-option visibility. */
@@ -748,8 +760,11 @@ export function segmentedControl<T extends string = string>(
   // `minmax(0, 1fr)`, not `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, and that `auto` floors
   // every column at its own min-content width — so a four-option control in a 333 px sidebar
   // could not shrink and simply ran off the panel with the last option clipped in half.
+  const plainTabs = (opts.variant ?? 'tabs') === 'tabs';
   const root = el('div', {
-    className: `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : pictures ? ' vl-tabs--pictures' : ''}${tiles ? ' vl-tabs--tiles' : ''}${opts.variant === 'cards' && opts.stacked ? ' vl-tabs--stacked' : ''}`,
+    className:
+      `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : pictures ? ' vl-tabs--pictures' : ''}${tiles ? ' vl-tabs--tiles' : ''}${opts.variant === 'cards' && opts.stacked ? ' vl-tabs--stacked' : ''}` +
+      `${opts.fit === 'content' ? ' vl-tabs--fit-content' : ''}${plainTabs && opts.size === 'compact' ? ' vl-tabs--compact' : ''}`,
     attrs: { role: 'radiogroup', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr))` },
   });
 

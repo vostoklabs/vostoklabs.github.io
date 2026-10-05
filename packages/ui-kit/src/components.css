@@ -290,6 +290,17 @@
 .vl-tab:hover:not(.active) { color: var(--text); background: rgba(255, 255, 255, 0.03); }
 :root[data-theme='light'] .vl-tab:hover:not(.active) { background: rgba(0, 0, 0, 0.03); }
 
+/* `segmentedControl({ fit: 'content' })`: as wide as the options, each column as wide as the
+   widest label (the columns stay equal), for a switch in a bar beside other controls. */
+.vl-tabs--fit-content { width: max-content; }
+/* `segmentedControl({ size: 'compact' })`: a switch in a bar over a picture, not in a settings
+   panel. A step smaller again on a phone, where three of them share the bar with the unit switch.
+   The view switch over Laser Studio's preview, at its shipped numbers. */
+.vl-tabs--compact .vl-tab { font-size: var(--fs-small); padding-inline: 10px; }
+@media (max-width: 760px) {
+  .vl-tabs--compact .vl-tab { font-size: var(--fs-micro); padding-inline: 6px; }
+}
+
 /* The sliding selection pill.
 
    `segmentedControl()` adds `.vl-tabs--indicator` and one `.vl-tabs__indicator` child, then
@@ -918,6 +929,13 @@
 .vl-credit-link--text { color: inherit; }
 .vl-credit-link--text:hover { text-decoration: none; }
 .vl-credit-logo { width: 15px; height: 15px; flex: 0 0 15px; }
+/* `generatorHeader({ compact: true })`: a header heading a page rather than a panel (Laser
+   Studio's gallery, beside its search box): tighter lines, the description and byline a size
+   down, the mark at the credit strip's size. */
+.vl-app-header--compact { margin: 0; gap: 2px; }
+.vl-app-header--compact .vl-app-subtitle { font-size: var(--fs-small); }
+.vl-app-header--compact .vl-app-credit { font-size: var(--fs-small); }
+.vl-app-header--compact .vl-credit-logo { width: 12px; height: 12px; flex: 0 0 12px; }
 
 /* ---------- Generator chrome: quality callout ---------- */
 .vl-callout {

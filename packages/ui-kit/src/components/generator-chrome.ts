@@ -40,6 +40,12 @@ export interface GeneratorHeaderOptions {
    * the same reason as `panelCredit`'s option of this name.
    */
   hostOwnsLinks?: boolean;
+  /**
+   * Tighter lines and a smaller description and byline, the mark at the credit strip's size: for
+   * a header that heads a page rather than a panel (Laser Studio's gallery), beside a search box
+   * on the same row. Default false.
+   */
+  compact?: boolean;
 }
 
 /** Title + description + "Made by Vostok Labs" — the top of every generator sidebar. */
@@ -68,7 +74,7 @@ export function generatorHeader(opts: GeneratorHeaderOptions): HTMLElement {
     children.push(el('p', { className: 'vl-app-credit' }, [document.createTextNode('Made by '), credit]));
   }
 
-  return el('div', { className: 'vl-app-header' }, children);
+  return el('div', { className: opts.compact ? 'vl-app-header vl-app-header--compact' : 'vl-app-header' }, children);
 }
 
 export interface QualityCalloutOptions {

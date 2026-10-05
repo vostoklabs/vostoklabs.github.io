@@ -106,6 +106,20 @@
   gap: 10px;
 }
 
+/* `PanelOptions.compact`: the chrome round a panel that is mostly a flush settings rail (Laser
+   Studio's left panel). The header follows the rail's rhythm and a button in it keeps its own
+   width; the generator header in the panel drops its own spacing; the footer is one slim row
+   whose button keeps its width, while a `buttonRow()` still spans it; the credit strip goes to
+   the very foot, under the footer. Before the `sidebarFooter()` rule below, which still wins in
+   a footer that holds one. */
+.vl-panel--compact > .vl-panel__header { padding: var(--space-3) var(--space-4) var(--space-4); gap: var(--space-3); }
+.vl-panel--compact > .vl-panel__header > .vl-btn { align-self: flex-start; }
+/* Three classes: it beats `.vl-panel__scroll > .vl-app-header` wherever the header sits. */
+.vl-panel.vl-panel--compact .vl-app-header { padding: 0; margin: 0; }
+.vl-panel--compact > .vl-panel__footer { padding: var(--space-2) var(--space-4); align-items: flex-start; }
+.vl-panel--compact > .vl-panel__footer > .vl-btn-row { align-self: stretch; }
+.vl-panel--compact > .vl-panel-credit { order: 1; }
+
 /* `sidebarFooter()` already brings its own padding and top border. Handing it to
    appShell's `footer:` slot nested it inside this one and the two stacked: 40px
    of horizontal padding vanished from the content box, which is what squeezed

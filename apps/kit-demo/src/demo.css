@@ -252,6 +252,51 @@ body {
   border-top: 2px dashed var(--accent-2);
 }
 
+/* A bar of switches over a picture, as a preview card's: one at each end. */
+.kit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+
+/* A page's heading row: the header on the left, the search box taking the rest. */
+.kit-page-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+.kit-page-head__search { min-width: 0; }
+@media (max-width: 680px) {
+  .kit-page-head { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* A box's sides as it unfolds, one chip a cell: the lid over the front, the walls in a row, the
+   bottom under the front. */
+.kit-sides {
+  inline-size: 320px;
+  max-inline-size: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-areas: '. lid . .' 'left front right back' '. bottom . .';
+  grid-auto-rows: 30px;
+  gap: 4px;
+}
+.kit-side--lid { grid-area: lid; }
+.kit-side--left { grid-area: left; }
+.kit-side--front { grid-area: front; }
+.kit-side--right { grid-area: right; }
+.kit-side--back { grid-area: back; }
+.kit-side--bottom { grid-area: bottom; }
+
 /* A play button beside a scrubber that takes the rest of the row, in a stage panel. */
 .kit-scrub-row { display: flex; align-items: center; gap: var(--space-3); }
 .kit-scrub { flex: 1 1 auto; }

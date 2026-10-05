@@ -42,6 +42,14 @@ export interface SettingsRailOptions {
   label?: string;
   /** A category was opened, by a click or by `open()`. */
   onChange?(id: string): void;
+  /**
+   * The rail fills the panel's scroll from edge to edge and the open category does the scrolling:
+   * the scroll it is placed in loses its padding and, on a desktop, its own scrollbar. For a
+   * panel that is the rail and nothing else (Laser Studio's left panel; pair it with
+   * `PanelOptions.compact`). Default false: the rail sits in a padded scroll beside other rows,
+   * as the clicker's does.
+   */
+  flush?: boolean;
 }
 
 export type SettingsRailHandle = HTMLElement & {
@@ -92,7 +100,7 @@ export function settingsRail(opts: SettingsRailOptions): SettingsRailHandle {
   rail.root.setAttribute('aria-label', opts.label ?? 'Settings');
   for (const e of entries) rail.button(e.item.id)?.setAttribute('aria-controls', e.panel.id);
 
-  const root = el('div', { className: 'vl-settings-rail' }, [rail.root, panels]) as unknown as SettingsRailHandle;
+  const root = el('div', { className: opts.flush ? 'vl-settings-rail vl-settings-rail--flush' : 'vl-settings-rail' }, [rail.root, panels]) as unknown as SettingsRailHandle;
   let current: string | null = null;
 
   const shown = (e: (typeof entries)[number]) =>

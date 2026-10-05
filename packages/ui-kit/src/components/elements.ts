@@ -20,6 +20,12 @@ export interface ChipOptions {
   className?: string;
   /** Fired with the NEW pressed state. Omit for a static tag. */
   onToggle?: (pressed: boolean) => void;
+  /**
+   * The label in the middle of the chip, for a chip stretched wider than its label: a cell of a
+   * grid of chips, such as a map of a box's sides. Default false: the label starts at the left,
+   * which is the same thing for a chip only as wide as its label.
+   */
+  centered?: boolean;
 }
 
 export type ChipHandle = HTMLButtonElement & { setPressed(pressed: boolean): void };
@@ -28,7 +34,7 @@ export type ChipHandle = HTMLButtonElement & { setPressed(pressed: boolean): voi
  *  stylesheet keys the filled look off — so the two cannot disagree. */
 export function chip(opts: ChipOptions): ChipHandle {
   const node = el('button', {
-    className: `vl-chip${opts.className ? ` ${opts.className}` : ''}`,
+    className: `vl-chip${opts.centered ? ' vl-chip--centered' : ''}${opts.className ? ` ${opts.className}` : ''}`,
     attrs: { type: 'button', 'aria-pressed': String(opts.pressed ?? false) },
   }) as ChipHandle;
 

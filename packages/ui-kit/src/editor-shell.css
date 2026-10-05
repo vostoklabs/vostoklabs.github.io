@@ -276,6 +276,16 @@
     grid-template-columns: minmax(352px, 25vw) minmax(0, 1fr) minmax(320px, 24.2vw);
   }
 }
+/* `settingsRail({ flush: true })`: the rail takes the panel's scroll from edge to edge and the open
+   category scrolls instead of the panel, so the rail stays put. On a phone the panels stack and
+   the page scrolls, so the scroll lets its content out. Laser Studio's left panel. */
+.vl-panel__scroll:has(> .vl-settings-rail--flush) { padding: 0; }
+@media (min-width: 901px) {
+  .vl-panel__scroll:has(> .vl-settings-rail--flush) { overflow: hidden; }
+}
+@media (max-width: 760px) {
+  .vl-panel__scroll:has(> .vl-settings-rail--flush) { flex: none; overflow: visible; }
+}
 
 /* -------------------------------------------------------------------- canvas -- */
 

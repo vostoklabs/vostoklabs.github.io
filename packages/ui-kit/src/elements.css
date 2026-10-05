@@ -47,6 +47,8 @@
 }
 .vl-chip:focus-visible { outline: none; box-shadow: var(--ring); }
 .vl-chip:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+/* `chip({ centered: true })`: a chip stretched to fill a grid cell keeps its label in the middle. */
+.vl-chip--centered { justify-content: center; }
 
 /* ---------- Empty state ---------- */
 .vl-empty {

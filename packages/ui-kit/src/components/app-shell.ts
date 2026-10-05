@@ -20,6 +20,14 @@ export interface PanelOptions {
    * panel, the way the clicker and keycap generators mount it.
    */
   credit?: HTMLElement;
+  /**
+   * Slimmer chrome round a panel that is mostly a `settingsRail({ flush: true })`, as Laser
+   * Studio's left panel is: the header's padding follows the rail's rhythm and a generator header
+   * in it loses its own spacing, a button in the header keeps its own width, the footer is one
+   * slim row whose button keeps its width (a `buttonRow()` still spans it), and the credit strip
+   * goes to the very foot, under the footer. Default false.
+   */
+  compact?: boolean;
 }
 
 export interface AppShellOptions {
@@ -62,7 +70,7 @@ export function panel(side: 'left' | 'right', opts: PanelOptions): { panel: HTML
   if (opts.header?.length) children.unshift(el('div', { className: 'vl-panel__header' }, opts.header));
   if (opts.credit) children.push(opts.credit);
   if (opts.footer?.length) children.push(el('div', { className: 'vl-panel__footer' }, opts.footer));
-  const p = el('div', { className: `vl-panel vl-panel--${side}` }, children);
+  const p = el('div', { className: `vl-panel vl-panel--${side}${opts.compact ? ' vl-panel--compact' : ''}` }, children);
   return { panel: p, scroll };
 }
 

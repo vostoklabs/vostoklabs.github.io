@@ -248,6 +248,21 @@ app.append(
       }),
     ]),
   ),
+  entry(
+    'generatorHeader({ compact: true })',
+    'Page header',
+    'The same header heading a page rather than a panel, on one row with the search box: tighter ' +
+      'lines, the description and the byline a size down, the mark at the credit strip’s size. ' +
+      'Laser Studio’s gallery.',
+    el('div', { className: 'kit-page-head' }, [
+      generatorHeader({
+        title: 'Laser Studio',
+        description: 'Pick a design, type your text, download the cut file.',
+        compact: true,
+      }),
+      searchField({ label: 'Search designs', placeholder: 'Search 44 designs', className: 'kit-page-head__search', onInput: () => {} }),
+    ]),
+  ),
 );
 
 /* ---------- Foundations ---------- */
@@ -474,6 +489,27 @@ app.append(
     ),
   ),
   entry(
+    "segmentedControl({ fit: 'content', size: 'compact' })",
+    'Tabs in a bar',
+    'A switch in a bar beside other controls, as over a preview: as wide as its options rather than ' +
+      'the bar, so the switch beside it keeps its place, and a size down from the panel’s tabs, a ' +
+      'step smaller again on a phone. The unit switch on the right is fit to its content only.',
+    el('div', { className: 'kit-bar' }, [
+      segmentedControl({
+        options: [
+          { value: 'design', label: '2D Design' },
+          { value: 'three', label: '3D Preview' },
+          { value: 'file', label: 'Export Preview' },
+        ],
+        value: 'three',
+        fit: 'content',
+        size: 'compact',
+        onChange: (v) => toast(`View: ${v}`),
+      }),
+      segmentedControl({ options: [{ value: 'mm', label: 'mm' }, { value: 'in', label: 'in' }], value: 'mm', fit: 'content' }),
+    ]),
+  ),
+  entry(
     'stepperRow()',
     'Stepper row',
     "sliderRow()'s sibling, for a value that is COUNTED rather than swept. A printed sheet is " +
@@ -642,6 +678,28 @@ app.append(
         chip({ label: 'PETG', onToggle: (p) => toast('PETG ' + (p ? 'on' : 'off')) }),
         chip({ label: 'TPU', onToggle: () => {} }),
         chip({ label: 'Discontinued', disabled: true }),
+      ),
+    ),
+  ),
+  entry(
+    'chip({ centered: true })',
+    'Chips as grid cells',
+    'A chip stretched to fill a cell of a grid keeps its label in the middle. A map of a box’s ' +
+      'sides as it unfolds: the lid over the front, the four walls in a row, the bottom under the ' +
+      'front. Press a side to cut a pattern into it.',
+    panel(
+      el(
+        'div',
+        { className: 'kit-sides' },
+        ['lid', 'left', 'front', 'right', 'back', 'bottom'].map((side) =>
+          chip({
+            label: side[0]!.toUpperCase() + side.slice(1),
+            centered: true,
+            className: `kit-side--${side}`,
+            pressed: side === 'front',
+            onToggle: (on) => toast(`${side}: ${on ? 'patterned' : 'plain'}`),
+          }),
+        ),
       ),
     ),
   ),
@@ -1700,6 +1758,38 @@ const appFrame = appShell({
   },
 });
 
+/* A left panel that is a rail and nothing else: the name over the rail, Reset at the foot, the
+   credit under it. The panel is compact and the rail flush, so the open category scrolls and the
+   rail stays put. */
+const flushRail = settingsRail({
+  label: 'Keychain settings',
+  flush: true,
+  items: [
+    { id: 'shape', label: 'Shape', icon: ICONS.box, body: [outlineTabs('Outline'), mmSlider('Width', 30, 90, 56), mmSlider('Height', 20, 60, 32), mmSlider('Corner radius', 0, 10, 3)] },
+    { id: 'text', label: 'Text', icon: ICONS.text, body: [mmSlider('Letter size', 6, 20, 12), mmSlider('Letter spacing', 0, 4, 0.6)] },
+    { id: 'hole', label: 'Hole', icon: ICONS.target, divider: true, body: [toggleSwitch({ label: 'Hanging hole', checked: true }), mmSlider('Hole size', 3, 8, 5)] },
+  ],
+});
+const railShell = appShell({
+  contained: true,
+  topbar: topbarLinks({ themeToggle: false }),
+  left: {
+    compact: true,
+    header: [
+      button({ label: 'All designs', icon: ICONS.chevronLeft, emphasis: 'ghost', onClick: () => toast('Back to the gallery') }),
+      generatorHeader({ title: 'Name Keychain', hideCredit: true }),
+    ],
+    scroll: [flushRail],
+    footer: [button({ label: 'Reset', icon: ICONS.rotateLeft, emphasis: 'ghost', onClick: () => toast('Reset') })],
+    credit: panelCredit({ title: 'Laser Studio' }),
+  },
+  stage: [stagePlaceholder(ICONS.box, 'The preview mounts here', 'The left panel is the rail: pick a category, and only that category scrolls.')],
+  right: {
+    scroll: [section({ title: 'Text', body: [textField({ label: 'Name', value: 'Max' })] })],
+    footer: [button({ label: 'Download SVG', emphasis: 'primary', block: true, icon: ICONS.download, onClick: () => toast('Download') })],
+  },
+});
+
 /* The editor frame: a Design body (tool rail, panel slot, canvas, Objects) and a studio, swapped
    by the suite bar's tabs. */
 const EDITOR_TOOLS = [
@@ -1817,6 +1907,17 @@ app.append(
         'header, a scrolling body, a credit strip and a sticky footer; an app fills the slots and ' +
         'mounts its viewer in shell.stage. In an app it is the whole window; here it is a fixed-height box.',
       inWindow(appFrame.root),
+    ),
+  ),
+  fullWidth(
+    entry(
+      'appShell({ left: { compact: true } }) · settingsRail({ flush: true })',
+      'Rail panel',
+      'A left panel that is the rail and nothing else, as Laser Studio’s is. The rail is flush: it ' +
+        'fills the panel edge to edge and only the open category scrolls, so the rail stays put. The ' +
+        'panel is compact: the header follows the rail’s rhythm with the back button at its own ' +
+        'width, the footer is one slim row, and the credit strip sits at the very foot.',
+      inWindow(railShell.root),
     ),
   ),
   fullWidth(
