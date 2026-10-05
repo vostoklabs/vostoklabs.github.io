@@ -8,10 +8,11 @@
 
   The tracker is driven with the geometry worker's own messages, through a stand-in worker that
   answers the oldest request it holds (the real one answers in arrival order: see shownBuild.ts)
-  and a stand-in for mount.ts that keeps the parts on screen the way mount.ts does. mount.ts needs
-  a browser, so the last checks read it and the worker as text: every exporter is handed the
-  settled parts, every debounced build is waited out, every message to the worker is counted, and
-  a failure names the request it belongs to.
+  and a stand-in for mount.ts that keeps the parts on screen the way mount.ts does. How mount.ts
+  wires it (the holds, the pokes, the failures it reports) is checked by driving the real mount()
+  in tests/mount.test.mjs; the last checks here read mount.ts and the worker as text: every
+  exporter is handed the settled parts, every debounced build is waited out, every message to the
+  worker is counted, and a failure names the request it belongs to.
 
   Run from the repo root:
 
