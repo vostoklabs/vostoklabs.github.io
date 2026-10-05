@@ -2706,6 +2706,26 @@
       "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
     },
     {
+      "id": "font/libertinus-sans",
+      "kind": "font",
+      "files": {
+        "packages/fonts/src/fonts/libertinus-sans.ttf": "1bdd06a2543add2b03290337714d5f35fdfb2015924926c49fddb18e2a95e956"
+      },
+      "licence": "OFL-1.1",
+      "copyright": "Copyright 2025 The Libertinus Sans Project Authors (https://github.com/googlefonts/libertinus)",
+      "reservedNames": [],
+      "shipsAs": "cut",
+      "source": {
+        "url": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/libertinussans/LibertinusSans-Regular.ttf",
+        "commit": "9710da1eacb3be272583c3224dcb70f9da6eadbb"
+      },
+      "licenceUrl": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/libertinussans/OFL.txt",
+      "notice": [
+        "packages/fonts/src/fonts/OFL.txt"
+      ],
+      "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
+    },
+    {
       "id": "font/libre-baskerville",
       "kind": "font",
       "files": {
@@ -3271,6 +3291,46 @@
       "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
     },
     {
+      "id": "font/noto-sans",
+      "kind": "font",
+      "files": {
+        "packages/fonts/src/fonts/noto-sans.ttf": "dace035b762419993c89d41e61fc0107b3d4fb1e2eac60d1ee5b0fecdd86946e"
+      },
+      "licence": "OFL-1.1",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)",
+      "reservedNames": [],
+      "shipsAs": "cut",
+      "source": {
+        "url": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notosans/NotoSans[wdth,wght].ttf",
+        "commit": "9710da1eacb3be272583c3224dcb70f9da6eadbb"
+      },
+      "licenceUrl": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notosans/OFL.txt",
+      "notice": [
+        "packages/fonts/src/fonts/OFL.txt"
+      ],
+      "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
+    },
+    {
+      "id": "font/noto-sans-mono",
+      "kind": "font",
+      "files": {
+        "packages/fonts/src/fonts/noto-sans-mono.ttf": "f2a75e654d62ceb6d92d6bbb1099cd67db7104d491746f577fc37c011015aff6"
+      },
+      "licence": "OFL-1.1",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)",
+      "reservedNames": [],
+      "shipsAs": "cut",
+      "source": {
+        "url": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notosansmono/NotoSansMono[wdth,wght].ttf",
+        "commit": "9710da1eacb3be272583c3224dcb70f9da6eadbb"
+      },
+      "licenceUrl": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notosansmono/OFL.txt",
+      "notice": [
+        "packages/fonts/src/fonts/OFL.txt"
+      ],
+      "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
+    },
+    {
       "id": "font/noto-sans-sc",
       "kind": "font",
       "files": {
@@ -3287,6 +3347,26 @@
         "commit": "9710da1eacb3be272583c3224dcb70f9da6eadbb"
       },
       "licenceUrl": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notosanssc/OFL.txt",
+      "notice": [
+        "packages/fonts/src/fonts/OFL.txt"
+      ],
+      "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
+    },
+    {
+      "id": "font/noto-serif",
+      "kind": "font",
+      "files": {
+        "packages/fonts/src/fonts/noto-serif.ttf": "4b2fbdbe401414e8eab8301505a45829d5616751c363c970d5e28c90fd5e635c"
+      },
+      "licence": "OFL-1.1",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)",
+      "reservedNames": [],
+      "shipsAs": "cut",
+      "source": {
+        "url": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notoserif/NotoSerif[wdth,wght].ttf",
+        "commit": "9710da1eacb3be272583c3224dcb70f9da6eadbb"
+      },
+      "licenceUrl": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notoserif/OFL.txt",
       "notice": [
         "packages/fonts/src/fonts/OFL.txt"
       ],
@@ -4008,6 +4088,26 @@
         "commit": "9710da1eacb3be272583c3224dcb70f9da6eadbb"
       },
       "licenceUrl": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/righteous/OFL.txt",
+      "notice": [
+        "packages/fonts/src/fonts/OFL.txt"
+      ],
+      "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
+    },
+    {
+      "id": "font/roboto",
+      "kind": "font",
+      "files": {
+        "packages/fonts/src/fonts/roboto.ttf": "bbd298268609673265bbb95feb033a1174e5e291d2d619cc20a7c6bb6fa9536a"
+      },
+      "licence": "OFL-1.1",
+      "copyright": "Copyright 2011 The Roboto Project Authors (https://github.com/googlefonts/roboto-classic)",
+      "reservedNames": [],
+      "shipsAs": "cut",
+      "source": {
+        "url": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/roboto/Roboto[wdth,wght].ttf",
+        "commit": "9710da1eacb3be272583c3224dcb70f9da6eadbb"
+      },
+      "licenceUrl": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/roboto/OFL.txt",
       "notice": [
         "packages/fonts/src/fonts/OFL.txt"
       ],

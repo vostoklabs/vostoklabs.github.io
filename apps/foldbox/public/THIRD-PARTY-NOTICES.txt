@@ -12,7 +12,7 @@ generator — see the application's own licence for that.
 
 
 
-1. TYPEFACES  (251 families)
+1. TYPEFACES  (256 families)
 ------------------------------------------------------------
 
   All bundled typefaces come from Google Fonts and are licensed under either the
@@ -26,8 +26,10 @@ generator — see the application's own licence for that.
   family's original file from the google/fonts repository, unmodified, because a
   modified copy may not carry a Reserved Font Name. The Korean, Japanese and
   Chinese faces were cut by Vostok Labs to the common characters of their
-  alphabet, and Noto Sans SC pinned to its Black weight; those changes are ours,
-  and every file stays under its original licence.
+  alphabet, and Noto Sans SC pinned to its Black weight. Roboto, Noto Sans, Noto
+  Serif, Noto Sans Mono and Libertinus Sans were cut by Vostok Labs to their
+  Latin, Greek and Cyrillic characters at their Regular weight. Those changes are
+  ours, and every file stays under its original licence.
 
   SIL Open Font License 1.1   https://openfontlicense.org
   Apache License 2.0          https://www.apache.org/licenses/LICENSE-2.0
@@ -35,7 +37,7 @@ generator — see the application's own licence for that.
   Each typeface remains the copyright of its respective authors. None is sold or
   redistributed on its own; they ship only as part of this generator.
 
-Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allura, Amatic SC, Anton, Architects Daughter, Archivo, Archivo Black, Arvo, Audiowide, Bad Script, Bagel Fat One, Bakbak One, Baloo 2, Bangers, Barlow Condensed, Bebas Neue, Berkshire Swash, Bevan, Bitter, Black Han Sans, Black Ops One, Boogaloo, Bowlby One, Bowlby One SC, Bree Serif, Bungee, Bungee Inline, Bungee Shade, Butcherman, Cabin, Caveat, Cedarville Cursive, Chakra Petch, Changa One, Cherry Bomb One, Chewy, Chicle, Chonburi, Cinzel, Cinzel Decorative, Comfortaa, Comic Neue, Comic Relief, Coming Soon, Concert One, Cookie, Courgette, Coustard, Creepster, Crete Round, Cutive Mono, Damion, Dancing Script, Days One, Dela Gothic One, Dela Gothic One JP, Delius Swash Caps, DM Mono, Do Hyeon, Domine, DotGothic16, Eater, EB Garamond, Electrolize, Ewert, Exo 2, Faster One, Faustina, Figtree, Fira Mono, Fjalla One, Flavors, Fredoka, Frijole, Fugaz One, Gaegu, Gasoek One, Gelasio, Gloria Hallelujah, Gochi Hand, Gothic A1, Grand Hotel, Grandstander, Gravitas One, Great Vibes, Griffy, Gruppo, Handjet, Handlee, Henny Penny, Homemade Apple, IBM Plex Mono, Iceland, Inconsolata, Indie Flower, Inter, Italianno, Itim, Jersey 15, Jersey 25, JetBrains Mono, Jolly Lodger, Josefin Sans, Josefin Slab, Jua, Jura, Just Another Hand, Kalam, Kanit, Kaushan Script, Khand, Kreon, Lacquer, Lexend, Libre Baskerville, Lilita One, Literata, Lobster, Lobster Two, Lora, Luckiest Guy, M PLUS 1p, Major Mono Display, Mali, Manrope, Marcellus, Marck Script, Martian Mono, Merriweather, Metal Mania, Michroma, Micro 5, Modak, Monoton, Montserrat, Neucha, New Rocker, Niconne, Norican, Nosifer, Nothing You Could Do, Noto Sans SC, Nova Mono, Nova Square, Nunito, Orbitron, Oswald, Outfit, Oxanium, Pacifico, Pangolin, Parisienne, Passion One, Patrick Hand, Patua One, Paytone One, Permanent Marker, Petit Formal Script, Petrona, Pinyon Script, Pirata One, Pixelify Sans, Playfair Display, Podkova, Poppins, Press Start 2P, PT Serif, Quantico, Quicksand, Racing Sans One, Rajdhani, Raleway, Rammetto One, Ranchers, Reenie Beanie, Righteous, Roboto Mono, Roboto Slab, Rochester, Rock Salt, Rokkitt, Rowdies, Rubik, Rubik Beastly, Rubik Burned, Rubik Distressed, Rubik Glitch, Rubik Mono One, Rubik Moonrocks, Rubik One, Rubik Puddles, Rubik Spray Paint, Rubik Storm, Rubik Vinyl, Rufina, Russo One, Rye, Sacramento, Saira Condensed, Sanchez, Sancreek, Sansita, Sansita Swashed, Satisfy, Schoolbell, Secular One, Shadows Into Light, Share Tech Mono, Short Stack, Shrikhand, Sigmar One, Silkscreen, Sixtyfour, Sniglet, Sora, Source Code Pro, Space Mono, Special Elite, Spectral, Squada One, Sriracha, Staatliches, Sue Ellen Francisco, Syncopate, Syne Mono, Tangerine, Teko, Tiny5, Titan One, Titillium Web, Tomorrow, Turret Road, Ultra, Unica One, Urbanist, Vollkorn, VT323, Wallpoet, Work Sans, Workbench, Xanh Mono, Yellowtail, Yeseva One, ZCOOL KuaiLe, Zen Dots, Zilla Slab.
+Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allura, Amatic SC, Anton, Architects Daughter, Archivo, Archivo Black, Arvo, Audiowide, Bad Script, Bagel Fat One, Bakbak One, Baloo 2, Bangers, Barlow Condensed, Bebas Neue, Berkshire Swash, Bevan, Bitter, Black Han Sans, Black Ops One, Boogaloo, Bowlby One, Bowlby One SC, Bree Serif, Bungee, Bungee Inline, Bungee Shade, Butcherman, Cabin, Caveat, Cedarville Cursive, Chakra Petch, Changa One, Cherry Bomb One, Chewy, Chicle, Chonburi, Cinzel, Cinzel Decorative, Comfortaa, Comic Neue, Comic Relief, Coming Soon, Concert One, Cookie, Courgette, Coustard, Creepster, Crete Round, Cutive Mono, Damion, Dancing Script, Days One, Dela Gothic One, Dela Gothic One JP, Delius Swash Caps, DM Mono, Do Hyeon, Domine, DotGothic16, Eater, EB Garamond, Electrolize, Ewert, Exo 2, Faster One, Faustina, Figtree, Fira Mono, Fjalla One, Flavors, Fredoka, Frijole, Fugaz One, Gaegu, Gasoek One, Gelasio, Gloria Hallelujah, Gochi Hand, Gothic A1, Grand Hotel, Grandstander, Gravitas One, Great Vibes, Griffy, Gruppo, Handjet, Handlee, Henny Penny, Homemade Apple, IBM Plex Mono, Iceland, Inconsolata, Indie Flower, Inter, Italianno, Itim, Jersey 15, Jersey 25, JetBrains Mono, Jolly Lodger, Josefin Sans, Josefin Slab, Jua, Jura, Just Another Hand, Kalam, Kanit, Kaushan Script, Khand, Kreon, Lacquer, Lexend, Libertinus Sans, Libre Baskerville, Lilita One, Literata, Lobster, Lobster Two, Lora, Luckiest Guy, M PLUS 1p, Major Mono Display, Mali, Manrope, Marcellus, Marck Script, Martian Mono, Merriweather, Metal Mania, Michroma, Micro 5, Modak, Monoton, Montserrat, Neucha, New Rocker, Niconne, Norican, Nosifer, Nothing You Could Do, Noto Sans, Noto Sans Mono, Noto Sans SC, Noto Serif, Nova Mono, Nova Square, Nunito, Orbitron, Oswald, Outfit, Oxanium, Pacifico, Pangolin, Parisienne, Passion One, Patrick Hand, Patua One, Paytone One, Permanent Marker, Petit Formal Script, Petrona, Pinyon Script, Pirata One, Pixelify Sans, Playfair Display, Podkova, Poppins, Press Start 2P, PT Serif, Quantico, Quicksand, Racing Sans One, Rajdhani, Raleway, Rammetto One, Ranchers, Reenie Beanie, Righteous, Roboto, Roboto Mono, Roboto Slab, Rochester, Rock Salt, Rokkitt, Rowdies, Rubik, Rubik Beastly, Rubik Burned, Rubik Distressed, Rubik Glitch, Rubik Mono One, Rubik Moonrocks, Rubik One, Rubik Puddles, Rubik Spray Paint, Rubik Storm, Rubik Vinyl, Rufina, Russo One, Rye, Sacramento, Saira Condensed, Sanchez, Sancreek, Sansita, Sansita Swashed, Satisfy, Schoolbell, Secular One, Shadows Into Light, Share Tech Mono, Short Stack, Shrikhand, Sigmar One, Silkscreen, Sixtyfour, Sniglet, Sora, Source Code Pro, Space Mono, Special Elite, Spectral, Squada One, Sriracha, Staatliches, Sue Ellen Francisco, Syncopate, Syne Mono, Tangerine, Teko, Tiny5, Titan One, Titillium Web, Tomorrow, Turret Road, Ultra, Unica One, Urbanist, Vollkorn, VT323, Wallpoet, Work Sans, Workbench, Xanh Mono, Yellowtail, Yeseva One, ZCOOL KuaiLe, Zen Dots, Zilla Slab.
 
 
 2. SYMBOL / ICON FONT
@@ -281,6 +283,7 @@ APPENDIX A — COPYRIGHT NOTICES FOR EACH BUNDLED FACE
   kreon: Copyright 2018 The Kreon Project Authors (https://github.com/googlefonts/kreon)
   lacquer: Copyright 2019 The Lacquer Project Authors (https://github.com/Lacquer-Font/Lacquer)
   lexend: Copyright 2019 The Lexend Project Authors (https://github.com/ThomasJockin/lexend)
+  libertinus-sans: Copyright 2025 The Libertinus Sans Project Authors (https://github.com/googlefonts/libertinus)
   libre-baskerville: Copyright 2012 The Libre Baskerville Project Authors (https://github.com/impallari/Libre-Baskerville)
   lilita-one: Copyright (c) 2011 Juan Montoreano (juan@remolacha.biz), with Reserved Font Names "Lilita One"
   literata: Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)
@@ -308,7 +311,10 @@ APPENDIX A — COPYRIGHT NOTICES FOR EACH BUNDLED FACE
   norican: Copyright 2011 The Norican Project Authors (https://github.com/googlefonts/NoricanFont)
   nosifer: Copyright (c) 2011, Typomondo, with Reserved Font Name "Nosifer"
   nothing-you-could-do: Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com). This Font Software is licensed under the SIL Open Font License, Version 1.1. This license available with a FAQ at: http://scripts.sil.org/OFL
+  noto-sans-mono: Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
   noto-sans-sc: (c) 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.
+  noto-sans: Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+  noto-serif: Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
   nova-mono: wmk69 SIL - Open Font License v.1.1
   nova-square: Copyright (c) 2011, wmk69 (wmk69@o2.pl) with Reserved Font Names 'NovaSquare' and 'Nova Square'. This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL
   nunito: Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
@@ -345,6 +351,7 @@ APPENDIX A — COPYRIGHT NOTICES FOR EACH BUNDLED FACE
   righteous: Copyright (c) 2011 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), with Reserved Font Name "Righteous"
   roboto-mono: Copyright 2015 The Roboto Mono Project Authors (https://github.com/googlefonts/robotomono)
   roboto-slab: Copyright 2018 The Roboto Slab Project Authors (https://github.com/googlefonts/robotoslab)
+  roboto: Copyright 2011 The Roboto Project Authors (https://github.com/googlefonts/roboto-classic)
   rochester: Copyright (c) 2010 by Font Diner, Inc DBA Sideshow. All rights reserved. Available under the Apache 2.0 licence. http://www.apache.org/licenses/LICENSE-2.0.html
   rock-salt: Copyright (c) 2010 by Font Diner, Inc DBA Sideshow. All rights reserved.
   rokkitt: Copyright 2016 The Rokkit Project Authors (https://github.com/googlefonts/RokkittFont)

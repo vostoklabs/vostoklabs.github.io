@@ -119,6 +119,7 @@
 @font-face { font-family: VL-kreon; src: url('./fonts/kreon.ttf'); font-display: swap; }
 @font-face { font-family: VL-lacquer; src: url('./fonts/lacquer.ttf'); font-display: swap; }
 @font-face { font-family: VL-lexend; src: url('./fonts/lexend.ttf'); font-display: swap; }
+@font-face { font-family: VL-libertinus-sans; src: url('./fonts/libertinus-sans.ttf'); font-display: swap; }
 @font-face { font-family: VL-libre-baskerville; src: url('./fonts/libre-baskerville.ttf'); font-display: swap; }
 @font-face { font-family: VL-lilita-one; src: url('./fonts/lilita-one.ttf'); font-display: swap; }
 @font-face { font-family: VL-literata; src: url('./fonts/literata.ttf'); font-display: swap; }
@@ -146,7 +147,10 @@
 @font-face { font-family: VL-norican; src: url('./fonts/norican.ttf'); font-display: swap; }
 @font-face { font-family: VL-nosifer; src: url('./fonts/nosifer.ttf'); font-display: swap; }
 @font-face { font-family: VL-nothing-you-could-do; src: url('./fonts/nothing-you-could-do.ttf'); font-display: swap; }
+@font-face { font-family: VL-noto-sans; src: url('./fonts/noto-sans.ttf'); font-display: swap; }
+@font-face { font-family: VL-noto-sans-mono; src: url('./fonts/noto-sans-mono.ttf'); font-display: swap; }
 @font-face { font-family: VL-noto-sans-sc; src: url('./fonts/noto-sans-sc.ttf'); font-display: swap; }
+@font-face { font-family: VL-noto-serif; src: url('./fonts/noto-serif.ttf'); font-display: swap; }
 @font-face { font-family: VL-nova-mono; src: url('./fonts/nova-mono.ttf'); font-display: swap; }
 @font-face { font-family: VL-nova-square; src: url('./fonts/nova-square.ttf'); font-display: swap; }
 @font-face { font-family: VL-nunito; src: url('./fonts/nunito.ttf'); font-display: swap; }
@@ -181,6 +185,7 @@
 @font-face { font-family: VL-ranchers; src: url('./fonts/ranchers.ttf'); font-display: swap; }
 @font-face { font-family: VL-reenie-beanie; src: url('./fonts/reenie-beanie.ttf'); font-display: swap; }
 @font-face { font-family: VL-righteous; src: url('./fonts/righteous.ttf'); font-display: swap; }
+@font-face { font-family: VL-roboto; src: url('./fonts/roboto.ttf'); font-display: swap; }
 @font-face { font-family: VL-roboto-mono; src: url('./fonts/roboto-mono.ttf'); font-display: swap; }
 @font-face { font-family: VL-roboto-slab; src: url('./fonts/roboto-slab.ttf'); font-display: swap; }
 @font-face { font-family: VL-rochester; src: url('./fonts/rochester.ttf'); font-display: swap; }

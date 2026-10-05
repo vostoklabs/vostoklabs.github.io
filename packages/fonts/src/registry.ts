@@ -1452,6 +1452,21 @@ export const FONTS: FontChoice[] = [
     "bytes": 99892
   },
   {
+    "id": "libertinus-sans",
+    "label": "Libertinus Sans",
+    "category": "Clean",
+    "curated": false,
+    "subsets": [
+      "cyrillic",
+      "greek",
+      "latin",
+      "latin-ext",
+      "vietnamese"
+    ],
+    "latinExtB": "ƀ-ȿɁɃɉ",
+    "bytes": 114288
+  },
+  {
     "id": "libre-baskerville",
     "label": "Libre Baskerville",
     "category": "Serif",
@@ -1789,6 +1804,38 @@ export const FONTS: FontChoice[] = [
     "bytes": 26800
   },
   {
+    "id": "noto-sans",
+    "label": "Noto Sans",
+    "category": "Clean",
+    "curated": false,
+    "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
+      "greek",
+      "latin",
+      "latin-ext",
+      "vietnamese"
+    ],
+    "latinExtB": "ƀ-ɏ",
+    "bytes": 119440
+  },
+  {
+    "id": "noto-sans-mono",
+    "label": "Noto Sans Mono",
+    "category": "Mono",
+    "curated": false,
+    "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
+      "greek",
+      "latin",
+      "latin-ext",
+      "vietnamese"
+    ],
+    "latinExtB": "ƀ-ɏ",
+    "bytes": 81596
+  },
+  {
     "id": "noto-sans-sc",
     "label": "Noto Sans SC",
     "category": "Clean",
@@ -1801,6 +1848,22 @@ export const FONTS: FontChoice[] = [
     ],
     "latinExtB": "ƒƠơƯưǍ-ǜǸǹ",
     "bytes": 1201664
+  },
+  {
+    "id": "noto-serif",
+    "label": "Noto Serif",
+    "category": "Serif",
+    "curated": false,
+    "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
+      "greek",
+      "latin",
+      "latin-ext",
+      "vietnamese"
+    ],
+    "latinExtB": "ƀ-ɏ",
+    "bytes": 145036
   },
   {
     "id": "nova-mono",
@@ -2229,6 +2292,22 @@ export const FONTS: FontChoice[] = [
     ],
     "latinExtB": "Ǽ-ǿȷ",
     "bytes": 43104
+  },
+  {
+    "id": "roboto",
+    "label": "Roboto",
+    "category": "Clean",
+    "curated": false,
+    "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
+      "greek",
+      "latin",
+      "latin-ext",
+      "vietnamese"
+    ],
+    "latinExtB": "ƏƒƠơƯưǰǺ-ǿȘ-țȷ",
+    "bytes": 79944
   },
   {
     "id": "roboto-mono",

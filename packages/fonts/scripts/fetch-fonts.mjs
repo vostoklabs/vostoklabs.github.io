@@ -310,6 +310,14 @@ const MAP = {
   'cherry-bomb-one': ['Cherry Bomb One', 'Comic'],
   'zcool-kuaile': ['ZCOOL KuaiLe', 'Comic'],
   'noto-sans-sc': ['Noto Sans SC', 'Clean'],
+
+  // ----- plain faces for Latin, Greek and Cyrillic alike. Fetched from google/fonts and cut to
+  // those alphabets, a variable file fixed at its Regular: see UPSTREAM. -----
+  'roboto': ['Roboto', 'Clean'],
+  'noto-sans': ['Noto Sans', 'Clean'],
+  'noto-serif': ['Noto Serif', 'Serif'],
+  'noto-sans-mono': ['Noto Sans Mono', 'Mono'],
+  'libertinus-sans': ['Libertinus Sans', 'Clean'],
 };
 
 /** Faces taken from the google/fonts repository instead of the font API, which serves Latin
@@ -346,6 +354,11 @@ const UPSTREAM = {
   'noto-sans-sc': { file: 'ofl/notosanssc/NotoSansSC[wght].ttf', cut: true, pin: { wght: 900 }, for: ['chinese-simplified'] },
   'rubik-one': { file: 'ofl/rubikone/RubikOne-Regular.ttf', for: ['cyrillic'] },
   'comic-relief': { file: 'ofl/comicrelief/ComicRelief-Bold.ttf', for: ['cyrillic', 'greek'] },
+  'roboto': { file: 'ofl/roboto/Roboto[wdth,wght].ttf', cut: true, pin: { wdth: 100, wght: 400 }, for: ['cyrillic', 'greek'] },
+  'noto-sans': { file: 'ofl/notosans/NotoSans[wdth,wght].ttf', cut: true, pin: { wdth: 100, wght: 400 }, for: ['cyrillic', 'greek'] },
+  'noto-serif': { file: 'ofl/notoserif/NotoSerif[wdth,wght].ttf', cut: true, pin: { wdth: 100, wght: 400 }, for: ['cyrillic', 'greek'] },
+  'noto-sans-mono': { file: 'ofl/notosansmono/NotoSansMono[wdth,wght].ttf', cut: true, pin: { wdth: 100, wght: 400 }, for: ['cyrillic', 'greek'] },
+  'libertinus-sans': { file: 'ofl/libertinussans/LibertinusSans-Regular.ttf', cut: true, for: ['cyrillic', 'greek'] },
 };
 
 /** Faces whose licence reserves their name. OFL 3 lets no Modified Version use a Reserved Font

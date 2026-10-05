@@ -81,8 +81,10 @@ const FONT_LICENCES = `  All bundled typefaces come from Google Fonts and are li
   family's original file from the google/fonts repository, unmodified, because a
   modified copy may not carry a Reserved Font Name. The Korean, Japanese and
   Chinese faces were cut by Vostok Labs to the common characters of their
-  alphabet, and Noto Sans SC pinned to its Black weight; those changes are ours,
-  and every file stays under its original licence.
+  alphabet, and Noto Sans SC pinned to its Black weight. Roboto, Noto Sans, Noto
+  Serif, Noto Sans Mono and Libertinus Sans were cut by Vostok Labs to their
+  Latin, Greek and Cyrillic characters at their Regular weight. Those changes are
+  ours, and every file stays under its original licence.
 
   SIL Open Font License 1.1   https://openfontlicense.org
   Apache License 2.0          https://www.apache.org/licenses/LICENSE-2.0

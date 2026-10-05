@@ -1,6 +1,6 @@
 # Bundled fonts
 
-All 251 fonts in this folder are from [Google Fonts](https://fonts.google.com). Each is
+All 256 fonts in this folder are from [Google Fonts](https://fonts.google.com). Each is
 licensed under the **SIL Open Font License 1.1** ([`OFL.txt`](OFL.txt)) or the
 **Apache License 2.0** (https://www.apache.org/licenses/LICENSE-2.0), as stated on its
 Google Fonts specimen page linked below. Both licenses permit embedding and bundling in
@@ -128,6 +128,7 @@ redistributed on its own — they ship only as part of this generator.
 | Kreon | Slab | https://fonts.google.com/specimen/Kreon |
 | Lacquer | Spooky | https://fonts.google.com/specimen/Lacquer |
 | Lexend | Clean | https://fonts.google.com/specimen/Lexend |
+| Libertinus Sans | Clean | https://fonts.google.com/specimen/Libertinus+Sans |
 | Libre Baskerville | Serif | https://fonts.google.com/specimen/Libre+Baskerville |
 | Lilita One | Comic | https://fonts.google.com/specimen/Lilita+One |
 | Literata | Serif | https://fonts.google.com/specimen/Literata |
@@ -155,7 +156,10 @@ redistributed on its own — they ship only as part of this generator.
 | Norican | Script | https://fonts.google.com/specimen/Norican |
 | Nosifer | Spooky | https://fonts.google.com/specimen/Nosifer |
 | Nothing You Could Do | Handwriting | https://fonts.google.com/specimen/Nothing+You+Could+Do |
+| Noto Sans | Clean | https://fonts.google.com/specimen/Noto+Sans |
+| Noto Sans Mono | Mono | https://fonts.google.com/specimen/Noto+Sans+Mono |
 | Noto Sans SC | Clean | https://fonts.google.com/specimen/Noto+Sans+SC |
+| Noto Serif | Serif | https://fonts.google.com/specimen/Noto+Serif |
 | Nova Mono | Mono | https://fonts.google.com/specimen/Nova+Mono |
 | Nova Square | Tech | https://fonts.google.com/specimen/Nova+Square |
 | Nunito | Clean | https://fonts.google.com/specimen/Nunito |
@@ -190,6 +194,7 @@ redistributed on its own — they ship only as part of this generator.
 | Ranchers | Comic | https://fonts.google.com/specimen/Ranchers |
 | Reenie Beanie | Handwriting | https://fonts.google.com/specimen/Reenie+Beanie |
 | Righteous | Tech | https://fonts.google.com/specimen/Righteous |
+| Roboto | Clean | https://fonts.google.com/specimen/Roboto |
 | Roboto Mono | Mono | https://fonts.google.com/specimen/Roboto+Mono |
 | Roboto Slab | Slab | https://fonts.google.com/specimen/Roboto+Slab |
 | Rochester | Script | https://fonts.google.com/specimen/Rochester |
@@ -284,6 +289,11 @@ with a Reserved Font Name.
 | Cherry Bomb One | hiragana and katakana | `ofl/cherrybombone/CherryBombOne-Regular.ttf` |
 | ZCOOL KuaiLe | the 3,755 hanzi of GB2312 level 1 | `ofl/zcoolkuaile/ZCOOLKuaiLe-Regular.ttf` |
 | Noto Sans SC | the 3,755 hanzi of GB2312 level 1; fixed at wght 900 | `ofl/notosanssc/NotoSansSC[wght].ttf` |
+| Roboto | Cyrillic; Greek; fixed at wdth 100, wght 400 | `ofl/roboto/Roboto[wdth,wght].ttf` |
+| Noto Sans | Cyrillic; Greek; fixed at wdth 100, wght 400 | `ofl/notosans/NotoSans[wdth,wght].ttf` |
+| Noto Serif | Cyrillic; Greek; fixed at wdth 100, wght 400 | `ofl/notoserif/NotoSerif[wdth,wght].ttf` |
+| Noto Sans Mono | Cyrillic; Greek; fixed at wdth 100, wght 400 | `ofl/notosansmono/NotoSansMono[wdth,wght].ttf` |
+| Libertinus Sans | Cyrillic; Greek | `ofl/libertinussans/LibertinusSans-Regular.ttf` |
 
 ## Icon fallback
 

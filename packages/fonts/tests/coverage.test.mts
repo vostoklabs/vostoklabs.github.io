@@ -117,6 +117,15 @@ answers('comic-relief', ['Привет Ёё', 'Γειά'], ['안녕']);
 // only ƒ of it.
 answers('libre-baskerville', ['Żółć', 'Știință', 'Ǎǎ Ǒǒ'], ['ƚ', 'Ɂ', 'Știință ƚ']);
 answers('aldrich', ['ƒ'], ['Știință', 'ƚ']);
+
+// The plain faces cut from google/fonts for Latin, Greek and Cyrillic alike, each answering from
+// what its own cut file holds: Noto has all of Latin Extended-B, Roboto only a few letters of it,
+// Libertinus Sans most of it but not the Kazakh letters of Cyrillic.
+answers('noto-sans', ['Привет Ёё', 'Қазақ', 'Γειά', 'Știință', 'ƚ Ɂ'], ['안녕', 'Բարեւ']);
+answers('noto-serif', ['Привет Ёё', 'Қазақ', 'Γειά', 'ƚ Ɂ'], ['こんにちは']);
+answers('noto-sans-mono', ['Привет Ёё', 'Қазақ', 'Γειά', 'ƚ Ɂ'], ['你好']);
+answers('roboto', ['Привет Ёё', 'Қазақ', 'Γειά', 'Știință'], ['ƚ', 'Ɂ', '안녕']);
+answers('libertinus-sans', ['Привет Ёё', 'Γειά', 'Știință', 'ƚ Ɂ'], ['Қазақ', 'ɂ']);
 ok(FONTS.every((f) => typeof f.latinExtB === 'string'), 'every face in the registry carries its Latin Extended-B letters');
 // The runs round-trip: every code point of the block reads back as held or not, as measured.
 const held = new Set([0x180, 0x181, 0x183, 0x185, 0x186, 0x187, 0x24f]);
