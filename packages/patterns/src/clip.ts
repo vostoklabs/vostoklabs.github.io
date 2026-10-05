@@ -200,17 +200,47 @@ export function clipRun(points: Pt[], index: EdgeIndex, isRing: boolean, minRun 
   return runs.filter((r) => r.points.length >= 2 && (r.closed || runLength(r.points) >= minRun));
 }
 
+export interface ClipOptions {
+  /**
+   * Drop the steps of no length first (two points within a millionth of a millimetre, and a
+   * ring's trailing copy of its first point). A step of no length has no midpoint to test, so
+   * the walk reads it as a gap: a font's outline, rounded to three decimals, is full of them,
+   * and a scored word lying wholly on the plate came back as dozens of open runs where closed
+   * rings were wanted, the laser lifting its head at each. Off, the points are walked as given.
+   */
+  compact?: boolean;
+}
+
+/** Two points this close are the same point: far under the three-decimal rounding of a font's
+ *  outline, and under both thresholds a step of no length trips below. */
+const SAME_POINT = 1e-6;
+const samePoint = (a: Pt, b: Pt): boolean => Math.abs(a[0] - b[0]) < SAME_POINT && Math.abs(a[1] - b[1]) < SAME_POINT;
+
+/** The points with each one that repeats the last one kept left out; for a ring, also the
+ *  copies of its first point at its end. */
+function withoutRepeats(points: Pt[], isRing: boolean): Pt[] {
+  const out: Pt[] = [];
+  for (const p of points) if (!out.length || !samePoint(out[out.length - 1]!, p)) out.push(p);
+  if (isRing) while (out.length > 1 && samePoint(out[0]!, out[out.length - 1]!)) out.pop();
+  return out;
+}
+
+/** The region as an edge index: the caller's own, or one built for this call. */
+const indexOf = (region: EdgeIndex | Shapes): EdgeIndex => (region instanceof EdgeIndex ? region : new EdgeIndex(region));
+
 /** The parts of each open polyline that lie on the region's material. */
-export function clipPolylines(polylines: Polyline[], index: EdgeIndex): Polyline[] {
-  return polylines.flatMap((p) => clipRun(p, index, false).map((r) => r.points));
+export function clipPolylines(polylines: Polyline[], region: EdgeIndex | Shapes, opts: ClipOptions = {}): Polyline[] {
+  const index = indexOf(region);
+  return polylines.flatMap((p) => clipRun(opts.compact ? withoutRepeats(p, false) : p, index, false).map((r) => r.points));
 }
 
 /** Rings clipped as lines: a ring that survived whole stays closed, the rest become runs. */
-export function clipRingsAsLines(rings: Ring[], index: EdgeIndex): { closed: Ring[]; open: Polyline[] } {
+export function clipRingsAsLines(rings: Ring[], region: EdgeIndex | Shapes, opts: ClipOptions = {}): { closed: Ring[]; open: Polyline[] } {
+  const index = indexOf(region);
   const closed: Ring[] = [];
   const open: Polyline[] = [];
   for (const ring of rings) {
-    for (const run of clipRun(ring, index, true)) {
+    for (const run of clipRun(opts.compact ? withoutRepeats(ring, true) : ring, index, true)) {
       if (run.closed) closed.push(run.points);
       else open.push(run.points);
     }

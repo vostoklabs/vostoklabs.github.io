@@ -54,6 +54,7 @@ export {
   dedupeIslands,
   dropNearDuplicates,
   sameRing,
+  type ClipOptions,
 } from './clip';
 export {
   SQRT3,

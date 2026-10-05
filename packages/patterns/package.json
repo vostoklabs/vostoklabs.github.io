@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./library": "./src/library/index.ts",
     "./lattice": "./src/lattice.ts",
+    "./clip": "./src/clip.ts",
     "./library-index": "./data/pattern-monster-index.json",
     "./ui": "./src/ui/index.ts"
   },

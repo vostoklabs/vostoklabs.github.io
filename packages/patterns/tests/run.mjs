@@ -552,6 +552,29 @@ for (const def of P.PATTERNS) {
   }
 }
 
+// ---- 14. clipping lines: a region given as shapes, and steps of no length ----
+{
+  const plate = [[P.circle(0, 0, 30, 96), P.circle(12, 0, 5, 40).reverse()]];
+  const index = new P.EdgeIndex(plate);
+  const lines = [[[-40, 0], [40, 0]], [[-20, -20], [20, 20], [20, -10]], [[0, 0], [5, 5]]];
+  const rings = [P.circle(-8, 4, 6, 24), P.circle(12, 0, 9, 32), P.circle(0, 0, 50, 40)];
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  ok(same(P.clipPolylines(lines, plate), P.clipPolylines(lines, index)), 'clipPolylines: a region given as shapes clips as its edge index does');
+  ok(same(P.clipRingsAsLines(rings, plate), P.clipRingsAsLines(rings, index)), 'clipRingsAsLines: a region given as shapes clips as its edge index does');
+  ok(same(P.clipPolylines(lines, index, {}), P.clipPolylines(lines, index)), 'no options is the clip as it was');
+  // A ring wholly on the plate, drawn the way a font's rounding leaves it: one point twice, and
+  // its first point again at the end. Walked as given, the repeat reads as a gap and the ring
+  // comes back as an open run; compacted, it is still the one closed ring it is.
+  const ring = P.circle(-8, 4, 6, 24);
+  const rounded = [...ring.slice(0, 5), ring[4], ...ring.slice(5), ring[0]];
+  const loose = P.clipRingsAsLines([rounded], plate);
+  const tight = P.clipRingsAsLines([rounded], plate, { compact: true });
+  ok(loose.closed.length === 0 && loose.open.length >= 1, `walked as given, the repeated point splits the ring (${loose.closed.length} closed, ${loose.open.length} open)`);
+  ok(tight.closed.length === 1 && tight.open.length === 0 && tight.closed[0].length === ring.length, `compact: one closed ring of ${ring.length} points (${tight.closed.length} closed, ${tight.open.length} open)`);
+  const line = [[-10, 2], [-5, 2], [-5, 2], [5, 2]];
+  ok(P.clipPolylines([line], plate, { compact: true }).length === 1, 'compact: a line with a step of no length stays one run');
+}
+
 /** Least distance between two closed rings, mm. */
 function ringGap(a, b) {
   let best = Infinity;
