@@ -424,6 +424,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     socketOffset: sliderRow({
       label: 'Pen position', min: -1, max: 1, step: 0.05, value: settings.socketOffset,
       format: (v) => (Math.abs(v) < 0.03 ? 'centred' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`),
+      parse: (typed) => typed / 100,
       help: 'Slides the pen along the edge it enters, so the name can hang off one end instead of balancing in the middle.',
       onInput: (v) => { settings.socketOffset = v; refreshMount(); triggerRebuild(); },
     }),
@@ -512,6 +513,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     lineSpacing: sliderRow({
       label: 'Line spacing', min: 0.5, max: 1.8, step: 0.05, value: settings.lineSpacing,
       format: (v) => `${Math.round(v * 100)}%`,
+      parse: (typed) => typed / 100,
       onInput: (v) => { settings.lineSpacing = v; triggerRebuild(); },
     }),
     line2Scale: sliderRow({

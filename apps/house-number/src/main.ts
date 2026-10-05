@@ -264,6 +264,7 @@ const controls = {
   scale: sliderRow({
     label: 'Overall size', min: 0.25, max: 4, step: 0.05, value: params.scale,
     format: (v) => `${Math.round(v * 100)}%`,
+    parse: (typed) => typed / 100,
     help: 'Scales the whole sign — type, plate, margins and fixing positions together. '
         + 'Thickness, text depth and screw size are printing decisions and keep their own '
         + 'millimetres.',
