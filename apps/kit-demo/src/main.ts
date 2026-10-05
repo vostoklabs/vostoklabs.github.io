@@ -1297,8 +1297,7 @@ app.append(
     'The two-pane modal: a working surface on the left, its controls on the right, and a footer ' +
       'that shares the action bar. The stage keeps its own overflow and the control column scrolls ' +
       'independently, so a long list of settings never scrolls the thing it is settings for off the ' +
-      'screen. Below 900px the panes stack, stage first. openSvgImport() is built on it; so is the ' +
-      'laser keychain’s picture wizard.',
+      'screen. Below 900px the panes stack, stage first. openSvgImport() is built on it.',
     row(
       button({
         label: 'Open split dialog',

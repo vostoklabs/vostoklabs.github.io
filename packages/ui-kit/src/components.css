@@ -423,7 +423,7 @@
 .vl-tabs--pictures .vl-tab__desc { font-size: var(--fs-compact); line-height: 1.3; color: var(--muted); }
 
 /* `variant: 'tiles'` — the picture cards in a grid, each picture ABOVE its name: a choice whose
-   look is the whole difference (Laser Box's box styles), where a row per option would spend the
+   look is the whole difference (the styles of a box), where a row per option would spend the
    panel on descriptions the pictures already give. Pictures fill their box (`cover`): a tile's
    picture is a photo of the thing, framed, not a cut-out sitting on the theme's ground. */
 .vl-tabs--tiles .vl-tab {

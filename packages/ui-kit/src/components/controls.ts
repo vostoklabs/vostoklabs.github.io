@@ -691,7 +691,7 @@ export interface SegmentedOptions<T extends string = string> {
    * because an accent fill behind a picture drowns it.
    *
    * `'tiles'`: the same picture cards in a grid, each picture ABOVE its name — for a choice whose
-   * look is the whole difference (Laser Box's box styles, its joints), where a row per option
+   * look is the whole difference (the styles of a box, its joints), where a row per option
    * would spend the panel on descriptions the pictures already give. Two columns unless
    * `columns` says otherwise.
    */
