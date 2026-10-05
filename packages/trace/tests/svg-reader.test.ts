@@ -1,18 +1,15 @@
 /*
-  The SVG reader's winding: which rings come out as shapes and which as holes.
+  The SVG reader's two readings of a filled stroke drawing, and which rings they wind as holes.
 
-  The rings are filled non-zero downstream (the clicker builds with one), so the direction a
-  ring is wound IS the answer to "solid or hole". Two things went wrong in the reader's pooled
-  line drawings, and this pins both:
+  By default a stroke drawing is read as a cut file is: lines that meet end to end are joined
+  across paths and the loops filled even-odd, so a slot drawn inside a panel is a hole in it.
+  The apps that read it that way re-nest the rings by containment, and they must get exactly
+  the rings they always had, so the default is pinned here ring for ring.
 
-   1. A line that stays open was filled even-odd together with the loops, so a check mark drawn
-      inside a circle came out wound against the circle: filled, the mark was cut out of the disc
-      instead of adding to it. It is a shape of its own now, wound like every other shape.
-   2. A loop joined from loose lines went into the hole test without its last edge, so a slot
-      could come out wound with its panel instead of against it.
-
-  The cut-file case, where the even-odd fill of loops is the point (a slot drawn inside a panel
-  is a hole in it), must keep working, so it is here too.
+  `fillAsPainted` fills every path on its own, the way a browser paints it, for a caller that
+  fills the rings non-zero (the clicker), where a ring's direction decides solid or hole. Read
+  as a cut file there, a check mark drawn inside a circle, both filled, was wound against the
+  circle and cut out of it; nested circles came out as a bullseye.
 
     pnpm --filter @vostok/trace test
 */
@@ -21,6 +18,7 @@ import { DOMParser } from '@xmldom/xmldom';
 const { parseSvg } = await import('../src/logo');
 
 type Ring = [number, number][];
+type Options = Parameters<typeof parseSvg>[1];
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail: string) => {
@@ -39,23 +37,80 @@ const ringsOf = (set: ReturnType<typeof parseSvg>): Ring[] =>
 /** The area a non-zero fill paints, when nothing overlaps: holes count against. */
 const area = (set: ReturnType<typeof parseSvg>): number => Math.abs(ringsOf(set).reduce((s, r) => s + signed(r), 0));
 const signs = (set: ReturnType<typeof parseSvg>): string => ringsOf(set).map((r) => (signed(r) > 0 ? '+' : '-')).join('');
+/** Every ring in order, by its signed area: what a non-zero fill makes of the trace. */
+const signature = (set: ReturnType<typeof parseSvg>): string => ringsOf(set).map((r) => signed(r).toFixed(4)).join(' ');
+const alike = (set: ReturnType<typeof parseSvg>): boolean => /^(\+*|-*)$/.test(signs(set));
 const near = (a: number, b: number, tol = 1e-9) => Math.abs(a - b) <= tol;
 
 const svg = (inner: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">${inner}</svg>`;
 const line = (d: string) => `<path d="${d}" fill="none" stroke="#000" stroke-width="2"/>`;
-
-// ---------------------------------------------------------------- an outline drawing
+const ring = (cx: number, cy: number, r: number) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#000" stroke-width="2"/>`;
 
 /** A circle and a check mark inside it, both drawn as strokes: the usual icon upload. */
-const checkInCircle = svg(`<circle cx="50" cy="50" r="34" fill="none" stroke="#000" stroke-width="2"/>${line('M32 50 L48 66 L72 38')}`);
-const strokes = parseSvg(checkInCircle);
-const filled = parseSvg(checkInCircle, { fillStrokes: true });
-const mixed = parseSvg(checkInCircle, { overrides: { 0: { mode: 'fill' }, 1: { mode: 'outline' } } });
+const checkInCircle = svg(ring(50, 50, 34) + line('M32 50 L48 66 L72 38'));
+/** Three arcs inside each other, none closed and none touching. */
+const arcs = svg(['M90 70 A40 40 0 0 0 10 70', 'M75 70 A25 25 0 0 0 25 70', 'M60 70 A10 10 0 0 0 40 70'].map(line).join(''));
+/** Three circles inside each other. */
+const target = svg(ring(50, 50, 40) + ring(50, 50, 24) + ring(50, 50, 8));
+/** An outline drawn as one open path with a gap, a line through the gap and a chevron inside. */
+const gap = svg(line('M10 40 V10 H90 V90 H10 V60') + line('M0 50 H50') + line('M40 65 L50 50 L40 35'));
+/** A panel 80 × 60 and a 6 × 20 slot inside it, every edge its own path, the way a box generator
+ *  writes a cut file; and an open V inside the panel that closes on nothing. */
+const panel = svg([
+  'M10 80 V20', 'M10 20 H90', 'M90 20 V80', 'M90 80 H10',
+  'M30 40 H36', 'M36 40 V60', 'M36 60 H30', 'M30 60 V40',
+].map(line).join('') + line('M55 35 L65 60 L75 35'));
 
+const fill: Options = { fillStrokes: true };
+const mixedChoice: Options = { overrides: { 0: { mode: 'fill' }, 1: { mode: 'outline' } } };
+
+// ---------------------------------------------------------------- default: read as a cut file
+
+const cut = parseSvg(panel, fill);
+// Normalised by the longest side, 80.
+const cutArea = (80 * 60 - 6 * 20 - (20 * 25) / 2) / (80 * 80);
+check(
+  'default: loose edges join into the panel and its slot, and the slot is a hole in it',
+  ringsOf(cut).length === 3 && signs(cut) === '-++' && near(area(cut), cutArea),
+  `ring signs ${signs(cut)}, area ${area(cut).toFixed(6)} (panel less slot less V: ${cutArea.toFixed(6)})`,
+);
+
+/* The rings the default gave before `fillAsPainted` existed, in order, by signed area. Any change
+   here changes what the apps reading SVGs as cut files make of these drawings. */
+const BEFORE: [string, string, Options][] = [
+  ['outlines', checkInCircle, {}],
+  ['check mark in a circle, filled', checkInCircle, fill],
+  ['circle filled, check mark as an outline', checkInCircle, mixedChoice],
+  ['arcs inside each other, filled', arcs, fill],
+  ['circles inside each other, filled', target, fill],
+  ['an outline with a gap, filled', gap, fill],
+  ['a panel of loose edges, filled', panel, fill],
+];
+const EXPECTED = [
+  '-0.7841 0.6970 -0.0243',
+  '-0.7804 0.0900',
+  '-0.7804 -0.0257',
+  '-0.3921 0.1532 -0.0245',
+  '-0.7804 0.2809 -0.0312',
+  '-0.0234 1.0000',
+  '-0.7500 0.0187 0.0391',
+];
+BEFORE.forEach(([name, file, opts], i) => {
+  const got = signature(parseSvg(file, opts));
+  check(`default, unchanged: ${name}`, got === EXPECTED[i], got === EXPECTED[i] ? got : `${got}, was ${EXPECTED[i]}`);
+});
+
+// ---------------------------------------------------------------- fillAsPainted
+
+const painted = (file: string, opts: Options = {}) => parseSvg(file, { ...opts, fillAsPainted: true });
+
+const strokes = painted(checkInCircle);
+const filled = painted(checkInCircle, fill);
+const mixed = painted(checkInCircle, mixedChoice);
 const [disc, mark] = ringsOf(filled);
 check(
-  'filled, the check mark is wound like the circle it sits in',
-  ringsOf(filled).length === 2 && Math.sign(signed(disc)) === Math.sign(signed(mark)),
+  'painted: the check mark is wound like the circle it sits in',
+  ringsOf(filled).length === 2 && alike(filled),
   `ring signs ${signs(filled)} (a hole would be wound the other way)`,
 );
 check(
@@ -64,73 +119,50 @@ check(
   `filled area ${area(filled).toFixed(4)} = disc ${Math.abs(signed(disc)).toFixed(4)} + mark ${Math.abs(signed(mark)).toFixed(4)}`,
 );
 check(
-  'one outline filled while another stays an outline: more than both outlines, less than both filled',
+  'painted: one outline filled while another stays an outline is more than both outlines, less than both filled',
   area(strokes) * 3 < area(mixed) && area(mixed) < area(filled),
   `outlines ${area(strokes).toFixed(4)} < mixed ${area(mixed).toFixed(4)} < filled ${area(filled).toFixed(4)}`,
 );
 check(
-  'and in the mixed file every ring is a shape: the outline sits on the disc, it is not cut out of it',
-  /^(\+*|-*)$/.test(signs(mixed)),
+  '…and in the mixed file the outline sits on the disc, it is not cut out of it',
+  alike(mixed),
   `ring signs ${signs(mixed)}`,
 );
+const arcsPainted = painted(arcs, fill);
+check(
+  'painted: arcs inside each other fill as three shapes wound alike, not as bands',
+  ringsOf(arcsPainted).length === 3 && alike(arcsPainted),
+  `ring signs ${signs(arcsPainted)}`,
+);
+const targetPainted = painted(target, fill);
+check(
+  'painted: circles inside each other fill as one solid disc, not a bullseye',
+  ringsOf(targetPainted).length === 3 && alike(targetPainted),
+  `ring signs ${signs(targetPainted)}`,
+);
+const gapPainted = painted(gap, fill);
+check(
+  'painted: an outline left open is a shape, with the chevron inside it on top',
+  ringsOf(gapPainted).length === 2 && alike(gapPainted),
+  `${ringsOf(gapPainted).length} rings, signs ${signs(gapPainted)}`,
+);
+const panelPainted = painted(panel, fill);
+check(
+  'painted: loose edges are not joined across paths; a straight edge on its own has no area',
+  ringsOf(panelPainted).length === 1,
+  `${ringsOf(panelPainted).length} ring (the V)`,
+);
+
+// ---------------------------------------------------------------- outlines, either way
 
 const ribbon = ringsOf(strokes)
   .map((r) => signed(r))
   .sort((a, b) => Math.abs(b) - Math.abs(a));
 check(
   'a closed outline is a strip: its inner edge is wound against its outer one',
-  ribbon.length === 3 && Math.sign(ribbon[0]) !== Math.sign(ribbon[1]),
-  `outer ${ribbon[0].toFixed(4)}, inner ${ribbon[1].toFixed(4)}`,
+  ribbon.length === 3 && Math.sign(ribbon[0]) !== Math.sign(ribbon[1]) && signature(strokes) === signature(parseSvg(checkInCircle)),
+  `outer ${ribbon[0].toFixed(4)}, inner ${ribbon[1].toFixed(4)}; the same with the option off`,
 );
 
-// Three arcs inside each other, none closed and none touching: filled, each closes on itself.
-const arcs = svg([
-  'M90 70 A40 40 0 0 0 10 70', 'M75 70 A25 25 0 0 0 25 70', 'M60 70 A10 10 0 0 0 40 70',
-].map(line).join(''));
-const arcsFilled = parseSvg(arcs, { fillStrokes: true });
-check(
-  'arcs drawn inside each other fill as three shapes wound alike, not as bands',
-  ringsOf(arcsFilled).length === 3 && /^(\+*|-*)$/.test(signs(arcsFilled)),
-  `ring signs ${signs(arcsFilled)}`,
-);
-
-// An outline drawn as one open path with a gap, a line through the gap and a chevron inside.
-// Filled even-odd together, the outline came out wound as a hole and the chevron was cut out.
-const gap = svg(line('M10 40 V10 H90 V90 H10 V60') + line('M0 50 H50') + line('M40 65 L50 50 L40 35'));
-const gapFilled = parseSvg(gap, { fillStrokes: true });
-check(
-  'an outline left open is still a shape when other lines cross its gap',
-  ringsOf(gapFilled).length === 2 && /^(\+*|-*)$/.test(signs(gapFilled)),
-  `${ringsOf(gapFilled).length} rings, signs ${signs(gapFilled)}`,
-);
-
-// ---------------------------------------------------------------- a cut file of loose lines
-
-/* A panel 80 × 60 and a 6 × 20 slot inside it, every edge its own path, the way a box generator
-   writes a cut file; and an open V inside the panel that closes on nothing. */
-const panel = svg([
-  'M10 20 H90', 'M90 20 V80', 'M90 80 H10', 'M10 80 V20',
-  'M30 40 H36', 'M36 40 V60', 'M36 60 H30', 'M30 60 V40',
-].map(line).join('') + line('M55 35 L65 60 L75 35'));
-const cut = parseSvg(panel, { fillStrokes: true });
-const [board, slot, vee] = ringsOf(cut);
-// Normalised by the longest side, 80.
-const expected = (80 * 60 - 6 * 20 + (20 * 25) / 2) / (80 * 80);
-check(
-  'a slot drawn as loose lines inside a panel of loose lines is a hole in it',
-  ringsOf(cut).length === 3 && Math.sign(signed(slot)) !== Math.sign(signed(board)),
-  `panel ${signed(board).toFixed(4)}, slot ${signed(slot).toFixed(5)}`,
-);
-check(
-  'a line that stays open inside the panel is a shape of its own, wound with the panel',
-  Math.sign(signed(vee)) === Math.sign(signed(board)),
-  `V ${signed(vee).toFixed(5)}`,
-);
-check(
-  'so the panel paints its area, less the slot, plus the V',
-  near(area(cut), expected),
-  `${area(cut).toFixed(6)} (expected ${expected.toFixed(6)})`,
-);
-
-console.log(failures ? `\n${failures} FAILED` : '\nthe SVG reader winds every shape one way and every hole the other');
+console.log(failures ? `\n${failures} FAILED` : '\nthe cut-file reading is unchanged, and the painted one winds every shape alike');
 process.exit(failures ? 1 : 0);

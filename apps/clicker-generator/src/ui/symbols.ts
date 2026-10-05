@@ -49,7 +49,7 @@ function remember(sym: TracedSymbol): void {
 /** An SVG's filled outline, as one symbol. Throws a plain sentence when there is nothing in it. */
 export function traceSvgSymbol(svgText: string): Ring[] {
   const flat = flattenSvgStyles(svgText.replace(/currentColor/gi, '#000000'));
-  const rings = normaliseRings(parseSvg(flat, { removeBg: false }).outline);
+  const rings = normaliseRings(parseSvg(flat, { removeBg: false, fillAsPainted: true }).outline);
   if (!rings.length) throw new Error('There is nothing to print in that SVG.');
   return rings;
 }

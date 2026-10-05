@@ -318,6 +318,16 @@ export interface SvgOptions {
    *  "SVG import is broken" and it is really "your SVG has no fills". Closing the subpaths and
    *  filling them turns the same file into solid shapes. */
   fillStrokes?: boolean;
+  /** Fill every filled path on its own, the way a browser paints it: a line that does not close
+   *  is closed by a straight edge, lines are not joined across paths, and shapes drawn by
+   *  separate paths add up instead of cutting holes in each other. For a caller that fills the
+   *  rings non-zero and wants the drawing as it looks, like the clicker: there, a check mark
+   *  drawn inside a circle and both filled is a solid disc, not a disc with the mark cut out.
+   *
+   *  Off, a stroke drawing is read as a cut file is: lines that meet end to end are joined
+   *  across paths first, and the loops they make are filled even-odd, so a slot drawn inside a
+   *  panel is a hole in it. A caller that re-nests the rings by containment wants that reading. */
+  fillAsPainted?: boolean;
 }
 
 /**
@@ -451,10 +461,10 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
     // Filled paths. A FILL closes every subpath by itself, so an authored fill — or a stroke
     // drawing whose lines are all closed already — is taken as it stands. A stroke drawing
     // with open lines is pooled and joined first, because closing one of those on its own is
-    // inventing an edge the file never drew.
+    // inventing an edge the file never drew; `fillAsPainted` takes it as it stands too.
     if (hasFill) {
       const open = !authoredFill && path.subPaths.some((sub: any) => !sub.autoClose);
-      if (!open) {
+      if (!open || opts.fillAsPainted) {
         addShapes(rgb, SVGLoader.createShapes(path));
       } else {
         const hex = rgb.map(v => v.toString(16).padStart(2, '0')).join('');
@@ -485,31 +495,15 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
     }
   });
 
-  // The pooled line drawings, joined. The loops are filled together, even-odd: a slot drawn
-  // inside a panel is a hole in it whichever way round the file happened to draw either. A line
-  // that stays open is closed on itself and filled as a shape of its own, the way a fill closes
-  // a single path: an icon's stroke-drawn mouth, eyebrow or check mark.
-  //
-  // Not in with the loops: there, even-odd made an open line inside a loop that loop's hole,
-  // wound against it, so under a non-zero fill (the clicker's) a check mark drawn inside a
-  // circle was cut out of it when both were filled. On its own it is wound like every other
-  // filled shape and adds to whatever it overlaps.
-  //
-  // Each loop goes to the hole test closed. A joined loop drops its repeated end point
-  // (`joinOpenLines`), and the test reads a path's points, not its shape, so the edge back to
-  // the start was missing from it: a slot whose panel closed on its left edge was wound with
-  // the panel instead of against it. The shapes themselves are built from the curves, as before.
+  // The pooled line drawings, joined into loops and filled even-odd: a slot drawn inside a
+  // panel is a hole in it whichever way round the file happened to draw either. A line that
+  // joins nothing is closed on itself as before, which is still right for an icon's
+  // stroke-drawn mouth or eyebrow.
   for (const { rgb, lines } of loose.values()) {
-    const chains = chainsOf(lines).filter((c) => c.pts.length >= 3);
-    const loops = new THREE.ShapePath();
-    loops.subPaths = chains.filter((c) => c.closed).map((c) => {
-      const loop = new THREE.Path(c.pts);
-      loop.autoClose = true;
-      return loop;
-    });
-    (loops as any).userData = { style: { fillRule: 'evenodd' } };
-    addShapes(rgb, SVGLoader.createShapes(loops));
-    for (const c of chains) if (!c.closed) addShapes(rgb, [new THREE.Shape(c.pts)]);
+    const joined = new THREE.ShapePath();
+    joined.subPaths = chainsOf(lines).filter((c) => c.pts.length >= 3).map((c) => new THREE.Path(c.pts));
+    (joined as any).userData = { style: { fillRule: 'evenodd' } };
+    addShapes(rgb, SVGLoader.createShapes(joined));
   }
 
   // The pooled strokes, joined the same way and drawn as strips: a panel's forty edges are one

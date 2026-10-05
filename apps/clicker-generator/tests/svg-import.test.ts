@@ -19,7 +19,12 @@
 */
 import { DOMParser } from '@xmldom/xmldom';
 (globalThis as any).DOMParser = DOMParser;
-const { describeSvg, parseSvg } = await import('@vostok/trace');
+const trace = await import('@vostok/trace');
+const { describeSvg } = trace;
+// As the clicker reads every SVG: its geometry fills the rings non-zero, so filled parts are
+// filled the way a browser paints them.
+const parseSvg = (text: string, opts: Parameters<typeof trace.parseSvg>[1] = {}) =>
+  trace.parseSvg(text, { ...opts, fillAsPainted: true });
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail: string) => {
