@@ -294,6 +294,54 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   v.dispose();
 }
 
+/* ------------------------------------------------------------------ hidden parts */
+
+{
+  // A hidden part is not there: the pointer goes through it, and a picture frames what is drawn.
+  const v = createViewer(stage);
+  v.setParts(PARTS, true);
+  page.frame();
+  const onWhite = [420, 360] as const; // the small white part, framed
+  const picks: (number | null)[] = [];
+  v.onPartPick((i) => picks.push(i));
+  const shown = v.pickPart(...onWhite);
+  v.setPartVisible(2, false);
+  page.pointer('pointerdown', ...onWhite);
+  page.pointer('pointerup', ...onWhite);
+  check('hidden: a hidden part is not picked', shown === 2 && v.pickPart(...onWhite) !== 2 && picks.length === 1 && picks[0] !== 2,
+    `${shown}, then ${v.pickPart(...onWhite)}; a tap told ${picks.join()}`);
+  v.setPartVisible(2, true);
+  v.layer('top').visible = false;
+  v.setParts(PARTS.map((p, i) => (i === 2 ? { ...p, layer: 'top' } : p)));
+  page.frame();
+  check('hidden: nor is a part in a hidden layer', v.pickPart(...onWhite) !== 2, String(v.pickPart(...onWhite)));
+  v.layer('top').visible = true;
+
+  // The big red part hidden: the cover and the thumbnail frame the other two.
+  v.setParts(PARTS);
+  v.setPartVisible(0, false);
+  const shots: THREE.Vector3[] = [];
+  const render = v.renderer.render.bind(v.renderer);
+  v.renderer.render = (scene, camera) => {
+    shots.push(camera.position.clone());
+    render(scene, camera);
+  };
+  page.frame();
+  const box = new THREE.Box3();
+  for (const m of v.partMeshes().slice(1)) box.expandByObject(m);
+  const centre = box.getCenter(new THREE.Vector3());
+  const radius = box.getSize(new THREE.Vector3()).length() / 2;
+  shots.length = 0;
+  await v.renderCoverPng(64);
+  const coverAt = shots[0]!.distanceTo(centre);
+  check('hidden: the cover frames the parts that are drawn', near(coverAt, (radius / Math.sin(Math.PI / 8)) * 1.15, 1e-6), `${coverAt.toFixed(2)} mm out`);
+  shots.length = 0;
+  v.renderThumbnail(64);
+  const thumbAt = shots[0]!.distanceTo(centre);
+  check('hidden: and so does the thumbnail', near(thumbAt, radius / Math.sin(Math.PI / 8), 1e-6), `${thumbAt.toFixed(2)} mm out`);
+  v.dispose();
+}
+
 /* ------------------------------------------------------------------ report */
 
 console.log(`\nhooks: ${pass} passed, ${fails.length} failed`);

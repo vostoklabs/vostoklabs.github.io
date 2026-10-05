@@ -121,7 +121,8 @@ export interface Viewer {
   /** Replace one part's shape, without rebuilding the others or moving the camera: its colour,
    *  its place in the list and any offset or pose it has stay. */
   setPartGeometry(index: number, part: Pick<ViewerPart, 'positions' | 'indices' | 'stride'>): void;
-  /** Show or hide one part. */
+  /** Show or hide one part. A hidden part is not picked, and a cover or a thumbnail is framed
+   *  without it; so is a part in a layer the app has hidden. */
   setPartVisible(index: number, on: boolean): void;
   /** Called with the clicked part's index, or null when the click missed. */
   onPartPick(cb: (index: number | null, event: PointerEvent) => void): void;
@@ -591,13 +592,20 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     }
   }
 
+  /** Whether an object is drawn: it and every group it hangs in are visible. three's raycaster
+   *  and Box3 look at neither, so a hidden part is left out of picks and pictures here. */
+  function drawn(obj: THREE.Object3D): boolean {
+    for (let o: THREE.Object3D | null = obj; o; o = o.parent) if (!o.visible) return false;
+    return true;
+  }
+
   function castAt(clientX: number, clientY: number) {
     if (partMeshes.length === 0) return null;
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
-    return raycaster.intersectObjects(partMeshes, false)[0] ?? null;
+    return raycaster.intersectObjects(partMeshes.filter(drawn), false)[0] ?? null;
   }
 
   function pickIndexAt(clientX: number, clientY: number): number | null {
@@ -751,6 +759,22 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       : new MutationObserver(() => setTheme(readTheme()));
   themeObserver?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
+  const partBox = new THREE.Box3();
+  /** What a picture frames: every part that is drawn (`drawn`: one hidden with setPartVisible,
+   *  or in a hidden layer, is not) and the fold rig. Read once `root` and `rig` have their world
+   *  matrices; each part is measured as Box3.expandByObject measures it, without its outline. */
+  function pictureBox(): THREE.Box3 {
+    const box = new THREE.Box3();
+    for (const mesh of partMeshes) {
+      if (!drawn(mesh)) continue;
+      mesh.updateWorldMatrix(false, false);
+      if (mesh.geometry.boundingBox === null) mesh.geometry.computeBoundingBox();
+      box.union(partBox.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld));
+    }
+    if (rig.children.length) box.expandByObject(rig);
+    return box;
+  }
+
   /**
    * A cover image, deliberately NOT a screenshot of the viewport.
    *
@@ -789,9 +813,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
       // Both the flat parts and anything hierarchical (a fold rig), so a model that lives
       // only in the rig — which is every foldbox box — is framed rather than missed.
-      const box = new THREE.Box3();
-      if (partMeshes.length) box.expandByObject(root);
-      if (rig.children.length) box.expandByObject(rig);
+      const box = pictureBox();
       if (!box.isEmpty()) {
         const centre = box.getCenter(new THREE.Vector3());
         // Sphere radius, so the fit holds at any angle, and the frame is square, so the
@@ -864,8 +886,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
           // The flat parts and anything hierarchical (a fold rig), as the cover frames them.
           root.updateMatrixWorld(true);
           rig.updateMatrixWorld(true);
-          if (partMeshes.length) box.expandByObject(root);
-          if (rig.children.length) box.expandByObject(rig);
+          box.copy(pictureBox());
         }
         const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
         const radius = box.isEmpty() ? 1 : Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
