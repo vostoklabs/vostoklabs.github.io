@@ -235,6 +235,17 @@ for (const bucket of ['public', 'private']) {
   }
 }
 
+// First, and even when another count fails: in a tree several sessions share, someone else's
+// unfinished file must not hide the budgets this change has freed.
+if (under.length) {
+  console.log('\nBlocks: ground gained. Lower these budgets:\n');
+  for (const u of under) {
+    const file = u.bucket === 'private' ? 'scripts/budgets.private.json' : 'scripts/check-blocks.mjs';
+    console.log(`  ${u.app}.${u.kind}: ${u.max} -> ${u.have}   (${file})`);
+  }
+  console.log('');
+}
+
 if (over.length) {
   console.error('\nBlocks: an app re-writes something the shelf already has (or adds another copy of\none it does not have yet). A count went up.\n');
   for (const o of over) {
@@ -252,14 +263,6 @@ if (over.length) {
   process.exit(1);
 }
 
-if (under.length) {
-  console.log('\nBlocks: ground gained. Lower these budgets:\n');
-  for (const u of under) {
-    const file = u.bucket === 'private' ? 'scripts/budgets.private.json' : 'scripts/check-blocks.mjs';
-    console.log(`  ${u.app}.${u.kind}: ${u.max} -> ${u.have}   (${file})`);
-  }
-  console.log('');
-}
 const total = (bucket, kind) => [...counts[bucket].values()].reduce((n, c) => n + (c[kind] ?? 0), 0);
 console.log(
   `blocks ok (${privateApps().size} private apps) — published code: ${KINDS.map((k) => `${k} ${total('public', k)}`).join(', ')}` +

@@ -166,6 +166,13 @@ for (const bucket of ['public', 'private']) {
   }
 }
 
+// First, and even when another count fails: in a tree several sessions share, someone else's
+// unfinished file must not hide the budgets this change has freed.
+if (under.length) {
+  console.log('\nCopies: ground gained. Lower these budgets:\n');
+  for (const u of under) console.log(`  ${u.owner}: ${u.max} -> ${u.have}   (${u.bucket === 'public' ? 'scripts/check-copies.mjs' : 'scripts/budgets.private.json'})`);
+  console.log('');
+}
 if (over.length) {
   console.error('\nCopies: the same code now sits in more places than before.\n');
   const fresh = uncommitted();
@@ -181,11 +188,6 @@ if (over.length) {
   console.error('\nDelete the copy and import the block from the shelf (pnpm catalogue). If the shelf does not have');
   console.error('it, move ONE copy into the right package and import it from both places. Never raise a budget.\n');
   process.exit(1);
-}
-if (under.length) {
-  console.log('\nCopies: ground gained. Lower these budgets:\n');
-  for (const u of under) console.log(`  ${u.owner}: ${u.max} -> ${u.have}   (${u.bucket === 'public' ? 'scripts/check-copies.mjs' : 'scripts/budgets.private.json'})`);
-  console.log('');
 }
 const sum = (m) => [...m.values()].reduce((a, b) => a + b, 0);
 console.log(`copies ok — ${files.length} files; ${sum(counts.public)} copied lines in published code, ${sum(counts.private)} in private`);
