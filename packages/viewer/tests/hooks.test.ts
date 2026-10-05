@@ -256,6 +256,18 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   v.renderThumbnail(64, [tetra(0, 0, 0, 50, RED)]);
   check('thumbnail of other parts: drawn without the model, framed on them, then freed', !shots[0]!.model && v.root.visible
     && v.scene.getObjectsByProperty('type', 'Mesh').length === meshesBefore && shots[0]!.at.length() > 100, `camera ${shots[0]!.at.length().toFixed(1)} mm out`);
+
+  // A model that lives in a fold rig alone is framed too, as the cover frames it.
+  v.setParts([]);
+  const rig = new THREE.Group();
+  rig.add(new THREE.Mesh(new THREE.BoxGeometry(120, 80, 2), new THREE.MeshStandardMaterial()));
+  v.setFoldRig(rig);
+  shots.length = 0;
+  v.renderThumbnail(64);
+  const rigBox = new THREE.Box3().setFromObject(rig);
+  const rigDist = shots[0]!.at.distanceTo(rigBox.getCenter(new THREE.Vector3()));
+  const rigWant = rigBox.getSize(new THREE.Vector3()).length() / 2 / Math.sin(Math.PI / 8);
+  check('thumbnail of a fold rig: framed on the rig', near(rigDist, rigWant, 1e-6), `${rigDist.toFixed(2)} vs ${rigWant.toFixed(2)} mm`);
   v.dispose();
 }
 

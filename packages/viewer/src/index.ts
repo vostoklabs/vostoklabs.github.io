@@ -189,10 +189,10 @@ export interface Viewer {
   /**
    * A square picture, as a PNG data URL: of `parts` if given (a result the stage is not
    * showing, built for the picture and freed after it), otherwise of the model on the stage
-   * with every layer in its place. From the default three-quarter angle whatever the user has
-   * orbited to, so pictures side by side compare the models and not the camera. On a
-   * transparent background with `alpha`, on the stage's background without. No plate, no fold
-   * rig, no highlight. Null if the canvas cannot be read.
+   * (its parts with every layer in its place, and its fold rig). From the default three-quarter
+   * angle whatever the user has orbited to, so pictures side by side compare the models and not
+   * the camera. On a transparent background with `alpha`, on the stage's background without. No
+   * plate, no highlight. Null if the canvas cannot be read.
    */
   renderThumbnail(edge: number, parts?: ViewerPart[]): string | null;
   /** Escape hatches for generator-specific overlays. */
@@ -847,7 +847,6 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     selected = [];
     applyHighlight();
     buildPlate.object.visible = false;
-    rig.visible = false;
     try {
       withLayersInPlace(() => {
         const box = new THREE.Box3();
@@ -859,11 +858,15 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
           }
           scene.add(shot);
           root.visible = false;
+          rig.visible = false;
           shot.updateMatrixWorld(true);
           box.expandByObject(shot);
         } else {
+          // The flat parts and anything hierarchical (a fold rig), as the cover frames them.
           root.updateMatrixWorld(true);
+          rig.updateMatrixWorld(true);
           if (partMeshes.length) box.expandByObject(root);
+          if (rig.children.length) box.expandByObject(rig);
         }
         const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
         const radius = box.isEmpty() ? 1 : Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
