@@ -46,8 +46,11 @@ export function createObjWriter({ mtlFileName = 'model.mtl', materials = new Map
      The standalone .obj keeps it, and so does anything the user opens the OBJ with. A comment
      is not metadata, though, so on the embedded route the licence line also rides in the
      export `description` (mount.js). */
+  // The build id the .3mf carries, read as export3mf.js reads it: without assuming Vite, so a
+  // node script that imports this file still runs.
+  const env = import.meta.env ?? {};
   const lines = [
-    ...provenanceComment({ title: 'Keycap', generator: 'keycap-generator' }).split('\n'),
+    ...provenanceComment({ title: 'Keycap', generator: 'keycap-generator', buildId: env.VITE_BUILD_ID }).split('\n'),
     '# Units: millimetres. One `o` object per filament slot region.',
     `mtllib ${mtlFileName}`,
   ];

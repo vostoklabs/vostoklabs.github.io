@@ -2690,12 +2690,7 @@ export function mount(container, host) {
 
   $('saveProj')?.addEventListener('click', () => {
     if (host) { void saveToHost(); return; }
-    const blob = new Blob([JSON.stringify(collectState(), null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'keycap-project.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadFile(JSON.stringify(collectState(), null, 2), 'keycap-project.json', 'application/json');
     setStatus('Project saved ✓');
   });
 
