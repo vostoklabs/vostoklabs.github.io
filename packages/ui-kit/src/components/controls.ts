@@ -87,8 +87,8 @@ export function withAccess<T>(
  * updated before this runs, or values get clamped to the old range.
  *
  * A text field someone is typing in takes the value too (see `isSyncing`), or it would hand
- * the typed text back and the loaded value would be lost. So does a slider's or a stepper's
- * number box, or leaving it would commit the typed number over the loaded one.
+ * the typed text back and the loaded value would be lost. So does a number field, and a slider's
+ * or a stepper's number box, or leaving it would commit the typed number over the loaded one.
  *
  * Returns the keys that had to change to fit, so the caller can say so.
  */
@@ -121,9 +121,10 @@ let syncing = 0;
 /**
  * True while `syncControls` is pushing a state into its controls.
  *
- * `setValue` does not rewrite a text field, or a slider's or a stepper's number box, while it has
- * the focus, so a rebuild echoing the state back cannot replace what someone is typing. A load,
- * an undo or a preset is a new value on purpose: under `syncControls` the field takes it.
+ * `setValue` does not rewrite a text field, a number field, or a slider's or a stepper's number
+ * box, while it has the focus, so a rebuild echoing the state back cannot replace what someone is
+ * typing. A load, an undo or a preset is a new value on purpose: under `syncControls` the field
+ * takes it.
  */
 export function isSyncing(): boolean {
   return syncing > 0;

@@ -518,6 +518,10 @@ export interface NumberFieldOptions {
 
 export type NumberFieldHandle = HTMLElement & {
   setValue(value: number, notify?: boolean): void;
+  /** Same pair as every other `ValueRow` in the kit, so a number field can be handed to
+   *  `syncControls` with the rest of a controls map. */
+  getValue(): number;
+  setDisabled(disabled: boolean): void;
   readonly value: number;
   readonly field: HTMLInputElement;
 };
@@ -543,6 +547,12 @@ export function numberField(opts: NumberFieldOptions): NumberFieldHandle {
   }) as HTMLInputElement;
   input.value = String(opts.value);
   input.disabled = opts.disabled ?? false;
+  /** The text the field last wrote into itself, so `change` can tell it from typing. */
+  let shown = input.value;
+  const show = (v: number) => {
+    input.value = String(v);
+    shown = input.value;
+  };
 
   const clamp = (n: number) => {
     let v = n;
@@ -555,14 +565,20 @@ export function numberField(opts: NumberFieldOptions): NumberFieldHandle {
   const commit = () => {
     const parsed = parseFloat(input.value);
     if (!Number.isFinite(parsed)) {
-      input.value = String(current); // reject rubbish rather than storing NaN
+      show(current); // reject rubbish rather than storing NaN
       return;
     }
     current = clamp(parsed);
-    input.value = String(current);
+    show(current);
     opts.onInput?.(current);
   };
-  input.addEventListener('change', commit);
+  // Only typing is committed, as in `sliderRow`. After a load has replaced a half-typed number
+  // (see `setValue`), or Enter has committed and rewritten the field, leaving it can still fire
+  // `change` on the field's own text, which is already the value.
+  input.addEventListener('change', () => {
+    if (input.value === shown) return;
+    commit();
+  });
   input.addEventListener('keydown', (e) => {
     if ((e as KeyboardEvent).key === 'Enter') {
       e.preventDefault();
@@ -584,10 +600,18 @@ export function numberField(opts: NumberFieldOptions): NumberFieldHandle {
   Object.defineProperty(root, 'value', { get: () => current });
   Object.defineProperty(root, 'field', { get: () => input });
   root.setValue = (value, notify = false) => {
-    if (document.activeElement === input) return;
+    // Never fight a typist, except for a load: under `syncControls` the field takes the value,
+    // or leaving it would commit the typed number over the loaded one.
+    if (document.activeElement === input && !isSyncing()) return;
     current = clamp(value);
-    input.value = String(current);
+    show(current);
     if (notify) opts.onInput?.(current);
+  };
+  root.getValue = () => current;
+  root.setDisabled = (disabled: boolean) => {
+    root.classList.toggle('vl-control--disabled', disabled);
+    root.setAttribute('aria-disabled', String(disabled));
+    input.disabled = disabled;
   };
   return root;
 }
