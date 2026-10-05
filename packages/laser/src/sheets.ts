@@ -20,6 +20,8 @@ export const SHEET_PRESETS: SheetPreset[] = [
   { id: 'sheet-12x20', name: '12 × 20 in sheet', widthMm: 508, heightMm: 305, group: 'Sheets & blanks' },
   { id: 'sheet-a4', name: 'A4', widthMm: 297, heightMm: 210, group: 'Sheets & blanks' },
   { id: 'sheet-a3', name: 'A3', widthMm: 420, heightMm: 297, group: 'Sheets & blanks' },
+  { id: 'sheet-400x400', name: '400 × 400 mm', widthMm: 400, heightMm: 400, group: 'Sheets & blanks' },
+  { id: 'sheet-300x300', name: '300 × 300 mm', widthMm: 300, heightMm: 300, group: 'Sheets & blanks' },
   { id: 'sheet-300x200', name: '300 × 200 mm', widthMm: 300, heightMm: 200, group: 'Sheets & blanks' },
   { id: 'sheet-200x200', name: '200 × 200 mm', widthMm: 200, heightMm: 200, group: 'Sheets & blanks' },
   { id: 'sheet-100x100', name: '100 × 100 mm (slate coaster)', widthMm: 100, heightMm: 100, group: 'Sheets & blanks' },
@@ -48,6 +50,9 @@ export const MATERIALS: Material[] = [
   // `ply3` and a sheet labelled 6 mm is cut with 3 mm joints.
   { id: 'ply6', name: 'Basswood plywood 6 mm', thicknessMm: 6, kerfMm: 0.24, hex: '#c9a978' },
   { id: 'mdf3', name: 'MDF 3 mm', thicknessMm: 3, kerfMm: 0.2, hex: '#b09a7a' },
+  // Thick board, for parts that carry a load. Its kerf is a first number, as every one here
+  // is: a test cut is what settles it.
+  { id: 'mdf6', name: 'MDF 6 mm', thicknessMm: 6, kerfMm: 0.25, hex: '#b09a7a' },
   { id: 'acr-opaque3', name: 'Opaque acrylic 3 mm', thicknessMm: 3, kerfMm: 0.18, hex: '#d64550' },
   { id: 'acr-clear3', name: 'Clear acrylic 3 mm', thicknessMm: 3, kerfMm: 0.18, hex: '#bfe3ee' },
   { id: 'leatherette', name: 'Leatherette 1.4 mm', thicknessMm: 1.4, kerfMm: 0.1, hex: '#6b4a2f' },
