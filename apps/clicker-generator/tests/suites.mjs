@@ -46,6 +46,8 @@ const SUITES = {
   'svg-import': ['xmldom'],
   'switch-fit': ['manifold', 'env'],
   'text-sizing': ['manifold', 'fonts'],
+  // What every export writes, pinned (tests/golden/).
+  'golden/export-matrix': ['manifold', 'xmldom', 'env', 'fonts'],
 };
 
 const asked = process.argv.slice(2);
@@ -61,7 +63,7 @@ mkdirSync(cache, { recursive: true });
 const results = [];
 for (const [name, needs] of Object.entries(SUITES)) {
   if (asked.length && !asked.includes(name)) continue;
-  const outfile = join(cache, `${name}.mjs`);
+  const outfile = join(cache, `${name.replaceAll('/', '-')}.mjs`);
   const started = Date.now();
   console.log(`\n=== ${name}`);
   try {

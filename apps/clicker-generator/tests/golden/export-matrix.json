@@ -1,0 +1,1009 @@
+{
+  "text: two lines": {
+    "warnings": [
+      "Grown to 39 mm so the switch fits."
+    ],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 3600,
+        "tris": 7196,
+        "mesh": "12feb653c0fc2f79"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 1824,
+        "tris": 3616,
+        "mesh": "7ccd219ecba70a22"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 1302,
+        "tris": 2584,
+        "mesh": "11c9ac7099161793"
+      }
+    ],
+    "tris": 13396,
+    "bbox": [
+      -23.192,
+      -14.71,
+      -9.447,
+      23.18,
+      14.705,
+      12.29
+    ],
+    "volume": 14002.64,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "00aec578bd62e883",
+      "Metadata/model_settings.config": "c5e902b73951855e",
+      "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "55279106909bc280",
+    "mtl": "1a5c3f5bbf20d97d"
+  },
+  "text: three lines, tracked and leaded, keychain": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 5305,
+        "tris": 10606,
+        "mesh": "fd548261b45aef9c"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 3004,
+        "tris": 5956,
+        "mesh": "17f0f81c2872a968"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 2228,
+        "tris": 4440,
+        "mesh": "1dc4ea967c07b63b"
+      }
+    ],
+    "tris": 21002,
+    "bbox": [
+      -27.838,
+      -23.421,
+      -9.447,
+      27.813,
+      30.136,
+      12.29
+    ],
+    "volume": 30403.13,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "c39738ff7d935611",
+      "Metadata/model_settings.config": "c5e902b73951855e",
+      "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "df7a0be05e393f8e",
+    "mtl": "1a5c3f5bbf20d97d"
+  },
+  "text: Standard Bold, made bolder": {
+    "warnings": [
+      "The top was widened around the switch, so a plain patch shows on the design. Increase Size, or move the switch, to clear it.",
+      "Grown to 42 mm so the switch fits."
+    ],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 2529,
+        "tris": 5054,
+        "mesh": "ee2e4f25c5657737"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 844,
+        "tris": 1688,
+        "mesh": "533b330895de04de"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 1126,
+        "tris": 2232,
+        "mesh": "76d84a44ed3dec01"
+      }
+    ],
+    "tris": 8974,
+    "bbox": [
+      -24.663,
+      -13.656,
+      -9.447,
+      24.668,
+      13.649,
+      12.29
+    ],
+    "volume": 16699.17,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "1c3b38e261428de1",
+      "Metadata/model_settings.config": "c5e902b73951855e",
+      "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "bde5e7f2f1745f6d",
+    "mtl": "1a5c3f5bbf20d97d"
+  },
+  "blocks: ABCD in a row": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "block-0",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 3002,
+        "tris": 5988,
+        "mesh": "af953f3060de382b"
+      },
+      {
+        "name": "cap-0",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 1810,
+        "tris": 3616,
+        "mesh": "ab056d6747c6dcb4"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 22,
+        "tris": 44,
+        "mesh": "a24d9f9496740a86"
+      },
+      {
+        "name": "cap-1",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 2286,
+        "tris": 4568,
+        "mesh": "889300be256a3d4d"
+      },
+      {
+        "name": "top-color-1-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 498,
+        "tris": 1000,
+        "mesh": "1e78dd5d32843490"
+      },
+      {
+        "name": "cap-2",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 2340,
+        "tris": 4676,
+        "mesh": "4afd816560e74f68"
+      },
+      {
+        "name": "top-color-2-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 552,
+        "tris": 1100,
+        "mesh": "04228b08368851f9"
+      },
+      {
+        "name": "cap-3",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 2124,
+        "tris": 4244,
+        "mesh": "3041fc2f978b73fd"
+      },
+      {
+        "name": "top-color-3-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 336,
+        "tris": 672,
+        "mesh": "68fb0fc4eebe79f4"
+      }
+    ],
+    "tris": 25908,
+    "bbox": [
+      -44.966,
+      -11.898,
+      -9.73,
+      44.966,
+      11.898,
+      16.102
+    ],
+    "volume": 22107.8,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "9899b2150a8ccdd1",
+      "Metadata/model_settings.config": "b9f5e648b7a8eb20",
+      "Metadata/project_settings.config": "11e6dc9c202f9c2b",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "68d2e1ed0f95a6a9",
+    "mtl": "295f2c2e68781bc2"
+  },
+  "blocks: WASD, a symbol on W, open, knurled": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "block-0",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 10554,
+        "tris": 21092,
+        "mesh": "0c943eeab5193a2f"
+      },
+      {
+        "name": "cap-0",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 1808,
+        "tris": 3612,
+        "mesh": "4dc4be52f93c352f"
+      },
+      {
+        "name": "top-color-1-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 20,
+        "tris": 36,
+        "mesh": "ac193676b6237c32"
+      },
+      {
+        "name": "cap-1",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 1810,
+        "tris": 3616,
+        "mesh": "be3715aadedc0423"
+      },
+      {
+        "name": "top-color-3-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 22,
+        "tris": 44,
+        "mesh": "25c9884a4415025c"
+      },
+      {
+        "name": "cap-2",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 2656,
+        "tris": 5308,
+        "mesh": "59b9b8809cb52135"
+      },
+      {
+        "name": "top-color-4-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 868,
+        "tris": 1732,
+        "mesh": "e5b95cf835bd0822"
+      },
+      {
+        "name": "cap-3",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 2124,
+        "tris": 4244,
+        "mesh": "87ce00de419a3660"
+      },
+      {
+        "name": "top-color-5-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 336,
+        "tris": 672,
+        "mesh": "fe730566409542e3"
+      }
+    ],
+    "tris": 40356,
+    "bbox": [
+      -31.548,
+      -22.023,
+      -9.73,
+      31.548,
+      22.023,
+      16.102
+    ],
+    "volume": 19669.97,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "8c81e379e175a9db",
+      "Metadata/model_settings.config": "962b49f1909101aa",
+      "Metadata/project_settings.config": "11e6dc9c202f9c2b",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "117f3037a8e0c81c",
+    "mtl": "295f2c2e68781bc2"
+  },
+  "SVG on a circle": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 2375,
+        "tris": 4746,
+        "mesh": "29997af1955ae838"
+      },
+      {
+        "name": "top-color-2-0",
+        "group": "top",
+        "colour": "200,16,46",
+        "verts": 136,
+        "tris": 268,
+        "mesh": "dd46f2f04f1ca35a"
+      },
+      {
+        "name": "top-color-1-0",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 240,
+        "tris": 476,
+        "mesh": "681cd2bcc1054990"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "10,92,213",
+        "verts": 504,
+        "tris": 1012,
+        "mesh": "1c981140b06cf6d7"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 1188,
+        "tris": 2356,
+        "mesh": "2ccdfd345182229d"
+      }
+    ],
+    "tris": 8858,
+    "bbox": [
+      -27.728,
+      -27.728,
+      -9.447,
+      27.728,
+      27.728,
+      12.29
+    ],
+    "volume": 30254.21,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "a6d77a676d094af8",
+      "Metadata/model_settings.config": "7688e4457a8e9ebd",
+      "Metadata/project_settings.config": "d639441d3076f550",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "829bc7f36941cfea",
+    "mtl": "050bcdc073c21b3b"
+  },
+  "SVG on a star, keychain, on the A1 mini": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 2587,
+        "tris": 5170,
+        "mesh": "15a27fff79c2fe8e"
+      },
+      {
+        "name": "top-color-2-0",
+        "group": "top",
+        "colour": "200,16,46",
+        "verts": 136,
+        "tris": 268,
+        "mesh": "dd46f2f04f1ca35a"
+      },
+      {
+        "name": "top-color-1-0",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 240,
+        "tris": 476,
+        "mesh": "681cd2bcc1054990"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "10,92,213",
+        "verts": 504,
+        "tris": 1012,
+        "mesh": "1c981140b06cf6d7"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 1586,
+        "tris": 3156,
+        "mesh": "d121bfee45ec7832"
+      }
+    ],
+    "tris": 10082,
+    "bbox": [
+      -37.238,
+      -38.724,
+      -9.447,
+      37.248,
+      33.548,
+      12.29
+    ],
+    "volume": 42919.96,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "c67b72c6d1efbab1",
+      "Metadata/model_settings.config": "7688e4457a8e9ebd",
+      "Metadata/project_settings.config": "d639441d3076f550",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "b97305e352c0915e",
+    "mtl": "050bcdc073c21b3b"
+  },
+  "image: heart, four colours": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "2,3,2",
+        "verts": 1721,
+        "tris": 3438,
+        "mesh": "cb319acbb3bea673"
+      },
+      {
+        "name": "top-color-2-0",
+        "group": "top",
+        "colour": "241,152,170",
+        "verts": 126,
+        "tris": 248,
+        "mesh": "3b998941b92eb40d"
+      },
+      {
+        "name": "top-color-2-1",
+        "group": "top",
+        "colour": "241,152,170",
+        "verts": 128,
+        "tris": 252,
+        "mesh": "a8c1d7dd452365b4"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "2,3,2",
+        "verts": 128,
+        "tris": 252,
+        "mesh": "178507d384f28f60"
+      },
+      {
+        "name": "top-color-0-1",
+        "group": "top",
+        "colour": "2,3,2",
+        "verts": 126,
+        "tris": 248,
+        "mesh": "55d88375c6165eec"
+      },
+      {
+        "name": "top-color-0-2",
+        "group": "top",
+        "colour": "2,3,2",
+        "verts": 178,
+        "tris": 352,
+        "mesh": "90d95b8d6ab1f60c"
+      },
+      {
+        "name": "top-color-0-3",
+        "group": "top",
+        "colour": "2,3,2",
+        "verts": 334,
+        "tris": 668,
+        "mesh": "58278f77f65d0c89"
+      },
+      {
+        "name": "top-color-1-0",
+        "group": "top",
+        "colour": "234,35,38",
+        "verts": 872,
+        "tris": 1760,
+        "mesh": "49004104c88ac98d"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 1038,
+        "tris": 2056,
+        "mesh": "944c5a6b6252c06f"
+      }
+    ],
+    "tris": 9274,
+    "bbox": [
+      -20.452,
+      -18.897,
+      -9.447,
+      20.492,
+      18.935,
+      12.29
+    ],
+    "volume": 14373.56,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "0b5198b47d93d9a0",
+      "Metadata/model_settings.config": "1c07a99b65ee6b41",
+      "Metadata/project_settings.config": "c616a21fe3cc6971",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "d9104ff9726129a7",
+    "mtl": "fc2df1090903e6b5"
+  },
+  "icon: Lucide heart": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 2783,
+        "tris": 5558,
+        "mesh": "47bce0e8230d1673"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 524,
+        "tris": 1048,
+        "mesh": "6bd083496859d315"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 1172,
+        "tris": 2324,
+        "mesh": "3cd3fe72dbbbe01a"
+      }
+    ],
+    "tris": 8930,
+    "bbox": [
+      -26.241,
+      -26.241,
+      -9.447,
+      26.241,
+      26.241,
+      12.29
+    ],
+    "volume": 27048.78,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "ba506786af81a065",
+      "Metadata/model_settings.config": "c5e902b73951855e",
+      "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "4287e6e35509278f",
+    "mtl": "1a5c3f5bbf20d97d"
+  },
+  "icon on a rounded square, smaller design, offset": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 4032,
+        "tris": 8060,
+        "mesh": "57f0d671e624b36f"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "255,106,19",
+        "verts": 2600,
+        "tris": 5200,
+        "mesh": "5858841454761c02"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 756,
+        "tris": 1492,
+        "mesh": "7ee77bbc2b24f4c5"
+      }
+    ],
+    "tris": 14752,
+    "bbox": [
+      -22.733,
+      -22.733,
+      -9.447,
+      22.733,
+      22.733,
+      12.29
+    ],
+    "volume": 24453.75,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "27efa75f728345e2",
+      "Metadata/model_settings.config": "c5e902b73951855e",
+      "Metadata/project_settings.config": "91728eb2cddf0c63",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "4e83ed07d49fd64d",
+    "mtl": "fc984ca3189aafcc"
+  },
+  "text: two switches": {
+    "warnings": [
+      "Base widened so the switch fits."
+    ],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "247,247,245",
+        "verts": 5177,
+        "tris": 10350,
+        "mesh": "6405cd511f36d4c2"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "22,22,22",
+        "verts": 2036,
+        "tris": 4056,
+        "mesh": "937f656e25412a1a"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 1720,
+        "tris": 3420,
+        "mesh": "1761396ca75505ac"
+      }
+    ],
+    "tris": 17826,
+    "bbox": [
+      -33.873,
+      -25.388,
+      -9.447,
+      33.886,
+      25.381,
+      12.29
+    ],
+    "volume": 36099.41,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "00620e7507733bf7",
+      "Metadata/model_settings.config": "c5e902b73951855e",
+      "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "ec186a95870533b3",
+    "mtl": "1a5c3f5bbf20d97d"
+  },
+  "fit test strip": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "fit--0.20",
+        "group": "fit-0",
+        "colour": "247,247,245",
+        "verts": 2747,
+        "tris": 5490,
+        "mesh": "7c6e3d06d739a6d2"
+      },
+      {
+        "name": "fit--0.10",
+        "group": "fit-1",
+        "colour": "247,247,245",
+        "verts": 2331,
+        "tris": 4658,
+        "mesh": "2f4545fc268ac0ee"
+      },
+      {
+        "name": "fit-0.00",
+        "group": "fit-2",
+        "colour": "247,247,245",
+        "verts": 2805,
+        "tris": 5606,
+        "mesh": "beff99a63a4cccad"
+      },
+      {
+        "name": "fit-+0.10",
+        "group": "fit-3",
+        "colour": "247,247,245",
+        "verts": 2323,
+        "tris": 4642,
+        "mesh": "0f5b8f21b6135090"
+      },
+      {
+        "name": "fit-+0.20",
+        "group": "fit-4",
+        "colour": "247,247,245",
+        "verts": 2739,
+        "tris": 5474,
+        "mesh": "e00d3d0573a21cdb"
+      }
+    ],
+    "tris": 25870,
+    "bbox": [
+      -44.929,
+      -12.948,
+      0,
+      44.929,
+      5.948,
+      7.437
+    ],
+    "volume": 3341.83,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "3f0e9809500500bb",
+      "Metadata/model_settings.config": "804113d6808335e5",
+      "Metadata/project_settings.config": "335fd37335e77329",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "228a8b4b2c8818a9",
+    "mtl": "5cbc5c2eba3feeba"
+  },
+  "Model mode: skull, sliced": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-model",
+        "group": "top",
+        "colour": "255,106,19",
+        "verts": 2426,
+        "tris": 4848,
+        "mesh": "8e544a8487913bb5"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 8186,
+        "tris": 16352,
+        "mesh": "7a59f190fba90842"
+      }
+    ],
+    "tris": 21200,
+    "bbox": [
+      -17.002,
+      -17.282,
+      0,
+      17.002,
+      17.282,
+      45.35
+    ],
+    "volume": 22002.69,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "de033822f2a586e6",
+      "Metadata/model_settings.config": "0251f17e33ea8354",
+      "Metadata/project_settings.config": "cfb91d435cf2e073",
+      "Metadata/vostok_labs.txt": "8d605277fe1188c4"
+    },
+    "obj": "a52a29a8b512a9eb",
+    "mtl": "31dd38b8ba5c7ffc"
+  },
+  "Model mode: pumpkin, button": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-button",
+        "group": "top",
+        "colour": "255,106,19",
+        "verts": 3534,
+        "tris": 7064,
+        "mesh": "638a9260733070d8"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 15498,
+        "tris": 30976,
+        "mesh": "8a39da035fd28cac"
+      }
+    ],
+    "tris": 38040,
+    "bbox": [
+      -22.865,
+      -23,
+      0,
+      22.865,
+      23,
+      40.952
+    ],
+    "volume": 30842.49,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "8953aec00b4ee6c5",
+      "Metadata/model_settings.config": "439a86f13ccb3b64",
+      "Metadata/project_settings.config": "cfb91d435cf2e073",
+      "Metadata/vostok_labs.txt": "991debf63d3937df"
+    },
+    "obj": "f099cc323b76c350",
+    "mtl": "31dd38b8ba5c7ffc"
+  },
+  "Model mode: duck, on a stand": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "255,106,19",
+        "verts": 673,
+        "tris": 1342,
+        "mesh": "f2e6e630a94363a4"
+      },
+      {
+        "name": "top-model",
+        "group": "top",
+        "colour": "240,240,240",
+        "verts": 7891,
+        "tris": 15778,
+        "mesh": "23bfd82a2a85cec9"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 2028,
+        "tris": 4036,
+        "mesh": "320de5135d3717a3"
+      }
+    ],
+    "tris": 21156,
+    "bbox": [
+      -22,
+      -17.198,
+      -23.685,
+      22,
+      17.198,
+      32.621
+    ],
+    "volume": 27309.16,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "cee119b6ac6ea776",
+      "Metadata/model_settings.config": "c37492cd1c91e2a1",
+      "Metadata/project_settings.config": "cfb91d435cf2e073",
+      "Metadata/vostok_labs.txt": "a5a971bd75255541"
+    },
+    "obj": "942062f529d84166",
+    "mtl": "31dd38b8ba5c7ffc"
+  },
+  "Halloween pack: pumpkin shape round a traced design": {
+    "warnings": [],
+    "parts": [
+      {
+        "name": "top-base",
+        "group": "top",
+        "colour": "255,106,19",
+        "verts": 2813,
+        "tris": 5622,
+        "mesh": "028a02e640268561"
+      },
+      {
+        "name": "top-color-0-0",
+        "group": "top",
+        "colour": "4,3,2",
+        "verts": 172,
+        "tris": 340,
+        "mesh": "3b29d4b1c6d14820"
+      },
+      {
+        "name": "top-color-0-1",
+        "group": "top",
+        "colour": "4,3,2",
+        "verts": 174,
+        "tris": 344,
+        "mesh": "251a8d3f0cf70de0"
+      },
+      {
+        "name": "top-color-0-2",
+        "group": "top",
+        "colour": "4,3,2",
+        "verts": 354,
+        "tris": 704,
+        "mesh": "a58737c2fee22096"
+      },
+      {
+        "name": "top-color-0-3",
+        "group": "top",
+        "colour": "4,3,2",
+        "verts": 926,
+        "tris": 1856,
+        "mesh": "922e326a1cb73a8e"
+      },
+      {
+        "name": "top-color-1-0",
+        "group": "top",
+        "colour": "247,130,28",
+        "verts": 32,
+        "tris": 60,
+        "mesh": "e001d2f0556b2635"
+      },
+      {
+        "name": "top-color-1-1",
+        "group": "top",
+        "colour": "247,130,28",
+        "verts": 1192,
+        "tris": 2392,
+        "mesh": "28bcc2cebf664a6a"
+      },
+      {
+        "name": "base-body",
+        "group": "base",
+        "colour": "240,240,240",
+        "verts": 1566,
+        "tris": 3112,
+        "mesh": "541ca71edf2ed53b"
+      }
+    ],
+    "tris": 14430,
+    "bbox": [
+      -29.638,
+      -26.862,
+      -9.447,
+      29.302,
+      32.81,
+      12.29
+    ],
+    "volume": 32340.64,
+    "3mf": {
+      "[Content_Types].xml": "a1ed066344e85390",
+      "_rels/.rels": "465f67e7a55f044d",
+      "3D/3dmodel.model": "1167905e928d3917",
+      "Metadata/model_settings.config": "158314bc6882b783",
+      "Metadata/project_settings.config": "e6baf712bc3cf119",
+      "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
+    },
+    "obj": "eb5e6931b24fefa8",
+    "mtl": "a6ff67b6184ad317"
+  }
+}
