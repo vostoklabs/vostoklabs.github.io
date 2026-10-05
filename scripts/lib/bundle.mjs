@@ -12,10 +12,12 @@
   A re-export is followed only for the names asked of it, so importing one control from the
   kit's front door does not count the symbol catalog the same door also hands out: the bundler
   drops a module nothing uses, and the catalog is 190 KB that most apps never carry. A module
-  that is reached at all counts whole, every import in it included. So the answer is "can the
-  build contain it", not "does it": a branch the bundler drops, or a glob a build narrows (the
-  fold-up box keeps only the faces under its budget), still counts. A spare notice costs nothing;
-  a missing one is a licence not honoured. Type-only imports are skipped: the bundler erases them.
+  that is reached at all counts whole, every import in it included. Libraries go by the whole
+  module graph instead (`reach`), since a module the bundler keeps for its side effects keeps
+  what it imports too. Either way the answer is "can the build contain it", not "does it": a
+  branch the bundler drops, or a glob a build narrows (the fold-up box keeps only the faces under
+  its budget), still counts. A spare notice costs nothing; a missing one is a licence not
+  honoured. Type-only imports are skipped: the bundler erases them.
 
   A published app is walked through its published files only, so a public clone and the owner's
   checkout give the same answer for it. A private app is walked through everything on disk.
@@ -24,7 +26,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve, relative, sep } from 'node:path';
 import { builtinModules } from 'node:module';
-import { ROOT, rel, abs, blankComments, ignored, privateApps } from './source.mjs';
+import { rel, abs, blankComments, ignored, privateApps } from './source.mjs';
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-offline', 'dist-mw', 'offline', 'tests', 'test', 'makerlab', 'vendor']);
 const CODE = /\.(?:[cm]?[jt]sx?)$/;
@@ -48,7 +50,7 @@ function filesUnder(dir, out = []) {
 
 let privateSet = null;
 /** Whether git ignores a file of the apps or packages: one `git check-ignore` for all of them. */
-export function isPrivate(relPath) {
+function isPrivate(relPath) {
   if (!privateSet) {
     const candidates = [];
     for (const group of ['apps', 'packages']) {
@@ -196,7 +198,7 @@ function exportedNames(file, seen = new Set()) {
 }
 
 /** The workspace folder a repo path belongs to: `apps/<id>` or `packages/<name>`. */
-export const ownerOf = (relPath) => relPath.split('/').slice(0, 2).join('/');
+const ownerOf = (relPath) => relPath.split('/').slice(0, 2).join('/');
 
 const reached = new Map();
 /**
@@ -204,11 +206,11 @@ const reached = new Map();
  *
  *  - `files`: every repo file its imports reach by name, or that it carries in public/: code,
  *    styles, fonts, data. This is what an asset is carried by.
- *  - `graph`: every file of the module graph, a re-export nobody asks for included.
- *  - `libs`: each third-party package a file of the graph imports, with the workspace folders
- *    whose files import it. A library goes by the graph, not by name: a module the bundler
- *    keeps for its side effects keeps what it imports too, and a library's own top-level code
- *    usually counts as one. A library outside the graph cannot be in the bundle at all.
+ *  - `libs`: each third-party package a file of the module graph imports, with the workspace
+ *    folders whose files import it. The graph holds every module an import or re-export names,
+ *    asked for or not: a module the bundler keeps for its side effects keeps what it imports
+ *    too, and a library's own top-level code usually counts as one. A library outside the graph
+ *    cannot be in the bundle at all.
  *
  * `withPrivate` walks a published app's gitignored files too: what its private builds can carry,
  * which differs between checkouts and so is only ever compared, never written.
@@ -286,7 +288,7 @@ export function reach(appId, { withPrivate = false } = {}) {
 
   for (const f of filesUnder(abs(`apps/${appId}/src`))) if ((CODE.test(f) && !NOT_BUNDLED.test(f)) || STYLE.test(f)) visit(f, ALL);
   for (const f of filesUnder(abs(`apps/${appId}/public`))) if (allowed(f)) files.add(f);
-  const out = { files, graph, libs };
+  const out = { files, libs };
   reached.set(memo, out);
   return out;
 }
@@ -297,4 +299,3 @@ export function appIds() {
   return existsSync(appsDir) ? readdirSync(appsDir).filter((id) => existsSync(join(appsDir, id, 'package.json'))).sort() : [];
 }
 
-export { ROOT };

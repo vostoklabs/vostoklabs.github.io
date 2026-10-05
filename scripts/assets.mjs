@@ -7,11 +7,12 @@
   came from and the licence it ships under (scripts/lib/assets.mjs). `pnpm check:assets` holds
   every such file to a row.
 
-  The faces of @vostok/fonts are recorded by their own fetch (packages/fonts/scripts/fetch-fonts.mjs),
-  which reads each family's licence file upstream as it fetches; their rows are kept as they
-  are, and a file that no longer matches its row stays a failure until that fetch runs. Every
-  other asset is described by a rule below, from what the file says about itself and where it
-  was taken from. A copy of a file a row already claims needs no row of its own.
+  The faces of @vostok/fonts are recorded by their own fetch
+  (packages/fonts/scripts/fetch-fonts.mjs), which reads each family's licence file upstream as
+  it fetches; their rows are kept as they are, and a file that no longer matches its row stays a
+  failure until that fetch runs. Every other asset is described by a rule below, from what the
+  file says about itself and where it was taken from. A copy of a file a row already claims
+  needs no row of its own.
 
   A file no rule describes gets a row with the licence NOASSERTION, which the check refuses:
   give it a rule here, or remove it. A gitignored one is described by hand in
@@ -28,40 +29,46 @@ import { abs, rel } from './lib/source.mjs';
 import { assetKind, contradiction, embedded, fileHash, licencesNamedIn, readRegistry, writeRegistry } from './lib/assets.mjs';
 import { reservedFontNames } from '../packages/fonts/scripts/reserved-names.mjs';
 
-export const SCAN = 'scripts/assets.mjs';
+const SCAN = 'scripts/assets.mjs';
 
-/** The google/fonts commit the fonts are pinned to (packages/fonts/scripts/fetch-fonts.mjs). */
+/** The google/fonts commit the faces below were compared at, the one
+ *  packages/fonts/scripts/fetch-fonts.mjs pins. */
 const PIN = '9710da1eacb3be272583c3224dcb70f9da6eadbb';
 const googleFonts = (file, commit = PIN) => `https://github.com/google/fonts/blob/${commit}/${file}`;
 /** three.js r171, whose examples/fonts/ the vendored typefaces are byte for byte. */
 const THREE = '2898f5b1ba10b1e94174c0a62d072f5f7b80442c';
 
 /** The keycap generator's own faces, each the original file from google/fonts at the pin, byte
- *  for byte. Rajdhani is its Medium weight. */
+ *  for byte: its path there and its sha256. Rajdhani is its Medium weight. A file by the same
+ *  name with other bytes is not one of them. */
 const KEYCAP_FONTS = {
-  'anton.ttf': 'ofl/anton/Anton-Regular.ttf',
-  'arvo.ttf': 'ofl/arvo/Arvo-Regular.ttf',
-  'audiowide.ttf': 'ofl/audiowide/Audiowide-Regular.ttf',
-  'bebas-neue.ttf': 'ofl/bebasneue/BebasNeue-Regular.ttf',
-  'bungee.ttf': 'ofl/bungee/Bungee-Regular.ttf',
-  'chakra-petch.ttf': 'ofl/chakrapetch/ChakraPetch-Regular.ttf',
-  'lobster.ttf': 'ofl/lobster/Lobster-Regular.ttf',
-  'michroma.ttf': 'ofl/michroma/Michroma-Regular.ttf',
-  'orbitron.ttf': 'ofl/orbitron/Orbitron[wght].ttf',
-  'oswald.ttf': 'ofl/oswald/Oswald[wght].ttf',
-  'pacifico.ttf': 'ofl/pacifico/Pacifico-Regular.ttf',
-  'press-start-2p.ttf': 'ofl/pressstart2p/PressStart2P-Regular.ttf',
-  'rajdhani.ttf': 'ofl/rajdhani/Rajdhani-Medium.ttf',
-  'righteous.ttf': 'ofl/righteous/Righteous-Regular.ttf',
-  'russo-one.ttf': 'ofl/russoone/RussoOne-Regular.ttf',
-  'share-tech-mono.ttf': 'ofl/sharetechmono/ShareTechMono-Regular.ttf',
-  'titillium-web.ttf': 'ofl/titilliumweb/TitilliumWeb-Regular.ttf',
-  'vt323.ttf': 'ofl/vt323/VT323-Regular.ttf',
+  'anton.ttf': ['ofl/anton/Anton-Regular.ttf', 'a4ba3a92350ebb031da0cb47630ac49eb265082ca1bc0450442f4a83ab947cab'],
+  'arvo.ttf': ['ofl/arvo/Arvo-Regular.ttf', 'f41bd41471ec2db7140351bdde614da5341524503598ff7fe79f3c89c13b605e'],
+  'audiowide.ttf': ['ofl/audiowide/Audiowide-Regular.ttf', 'c7c0f2b0f6fad8c623e31772ce79f94a4edb9321ffce9fce978ea892d20ae730'],
+  'bebas-neue.ttf': ['ofl/bebasneue/BebasNeue-Regular.ttf', '08e4623805102d819f58601e46e345648846075e363b2ceb23313c2d1c83ec73'],
+  'bungee.ttf': ['ofl/bungee/Bungee-Regular.ttf', 'c4f5361ce120af3e6b9156d0bf379fa19cda2ea0cd18ac01fd99596c6bf66e3f'],
+  'chakra-petch.ttf': ['ofl/chakrapetch/ChakraPetch-Regular.ttf', '98fcd638baa5c81ff0316b7538ce330ee3b23b1302726de3526d5933a8ecf986'],
+  'lobster.ttf': ['ofl/lobster/Lobster-Regular.ttf', 'd6568e697fd50cedc0be04d8aae4127fe95add607e7bff954ca88604be80c205'],
+  'michroma.ttf': ['ofl/michroma/Michroma-Regular.ttf', 'b62301163788bc5b7f8fcac0b74b184e34e1827e577b499ecb724da065098f87'],
+  'orbitron.ttf': ['ofl/orbitron/Orbitron[wght].ttf', 'f42db2dd16e642258e35782916eceb1dcdbea06fb958d77ad71dc5963587e8fd'],
+  'oswald.ttf': ['ofl/oswald/Oswald[wght].ttf', '5b38c246e255a12f5712d640d56bcced0472466fc68983d2d0410ec0457c2817'],
+  'pacifico.ttf': ['ofl/pacifico/Pacifico-Regular.ttf', '5b6c0d5334a7bf77dea52b975c5a0c408878c0f7115ed5b6fb151f634b7bf701'],
+  'press-start-2p.ttf': ['ofl/pressstart2p/PressStart2P-Regular.ttf', '034c77f1f05ec89421e4a63f0e3a4ca1ecf852cc6d2bf611f126f275728e017d'],
+  'rajdhani.ttf': ['ofl/rajdhani/Rajdhani-Medium.ttf', '12ff7dcfe4c206e3875ac53b1762eab57de6a2fa7f5a86c26b97b88d6591eac2'],
+  'righteous.ttf': ['ofl/righteous/Righteous-Regular.ttf', '2ffb3fe5c27d7e6571210b800448c4e234e651b46c6b4426c1bb567e5341348a'],
+  'russo-one.ttf': ['ofl/russoone/RussoOne-Regular.ttf', 'bc0abcc660bd8b7ad3000ecb2898a27c58a29a50f7ec81652fa12e75148d09df'],
+  'share-tech-mono.ttf': ['ofl/sharetechmono/ShareTechMono-Regular.ttf', '9ceab1f87414829af259c0f537573ae03ef7dd3147c0b27a36a1a0beb6732677'],
+  'titillium-web.ttf': ['ofl/titilliumweb/TitilliumWeb-Regular.ttf', '7b6b4452c65cc8b8522e92e7d4d4c2e6d7675341ceafd041bb6bd30297517ea5'],
+  'vt323.ttf': ['ofl/vt323/VT323-Regular.ttf', 'cf4de751ada78ceac033dbe16a687742939995b77bc2a052ae17a4957958594d'],
 };
 
-/** Gentilis, the typeface still as three.js r171 shipped it in examples/fonts/: OFL-1.1, as the
- *  licence text it carries says. */
-const THREE_TYPEFACES = /^apps\/[^/]+\/src\/typefaces\/gentilis_(?:regular|bold)\.typeface\.json$/;
+/** Gentilis, the typeface still as three.js r171 shipped it in examples/fonts/, byte for byte
+ *  (its sha256): OFL-1.1, as the licence text it carries says. A file by the same name with other
+ *  bytes is not it. */
+const THREE_TYPEFACES = {
+  'gentilis_bold.typeface.json': 'c028fd9c4017e34f1bf46694e4c23479cd22b812d0308f5dfc7446412c41d88c',
+  'gentilis_regular.typeface.json': '7ed95f2faa30f59dbe7cfb145b97c42a6ba1188cd2eec01ca61485e8c83ee9de',
+};
 
 const one = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 const appOf = (path) => path.split('/').slice(0, 2).join('/');
@@ -109,9 +116,9 @@ function convertedFrom(path, buf) {
 }
 
 /**
- * What each known asset is. `match` picks its files (a copy of one, byte for byte, is claimed
- * with it), `id` names the row, `describe` fills it from the files' paths and the first file's
- * bytes. A file several rules match is in each of their rows.
+ * What each known asset is. `match` picks its files by path and sha256 (a copy of one, byte for
+ * byte, is claimed with it), `id` names the row, `describe` fills it from the files' paths and
+ * the first file's bytes. A file several rules match is in each of their rows.
  */
 const RULES = [
   {
@@ -198,10 +205,10 @@ const RULES = [
     }),
   },
   {
-    match: (p) => /^apps\/keycap-generator\/public\/fonts\/[^/]+\.ttf$/.test(p) && !!KEYCAP_FONTS[p.split('/').pop()],
+    match: (p, hash) => /^apps\/keycap-generator\/public\/fonts\/[^/]+\.ttf$/.test(p) && KEYCAP_FONTS[p.split('/').pop()]?.[1] === hash,
     id: (paths) => `font/keycap-${paths.find((p) => p.startsWith('apps/keycap-generator/')).split('/').pop().replace(/\.ttf$/, '')}`,
     describe: (paths, buf) => {
-      const file = KEYCAP_FONTS[paths.find((p) => p.startsWith('apps/keycap-generator/')).split('/').pop()];
+      const [file] = KEYCAP_FONTS[paths.find((p) => p.startsWith('apps/keycap-generator/')).split('/').pop()];
       const own = embedded(paths[0], buf);
       return {
         kind: 'font',
@@ -216,7 +223,7 @@ const RULES = [
     },
   },
   {
-    match: (p) => THREE_TYPEFACES.test(p),
+    match: (p, hash) => /^apps\/[^/]+\/src\/typefaces\/[^/]+\.typeface\.json$/.test(p) && THREE_TYPEFACES[p.split('/').pop()] === hash,
     id: (paths) => `typeface/${paths[0].split('/').pop().replace(/\.typeface\.json$/, '').replace(/_/g, '-')}`,
     describe: (paths, buf) => {
       const own = embedded(paths[0], buf);
@@ -303,7 +310,7 @@ export function writeAssets() {
   const rows = new Map();
   for (const [h, paths] of groups) {
     const buf = readFileSync(abs(paths[0]));
-    const rules = RULES.filter((rule) => paths.some((p) => rule.match(p)));
+    const rules = RULES.filter((rule) => paths.some((p) => rule.match(p, h)));
     if (!rules.length) {
       rows.set(`unknown/${paths[0]}`, {
         id: `unknown/${paths[0]}`,
