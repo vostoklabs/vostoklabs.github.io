@@ -58,6 +58,7 @@ docs/**
 # Local reference material and working output
 vendor/pmm-docs/
 **/renders/
+.scratch/
 
 # Local only, not published
 DEV_PLAN.md
