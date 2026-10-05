@@ -1,5 +1,5 @@
 // A tiny reactive store: one object of state, patched with set(), watched with subscribe().
-// No DOM, so a worker or a node test can use it too.
+// No DOM: a node test drives it as it is.
 //
 // Three generators carried this file, byte for byte, as their own `store/store.ts`.
 

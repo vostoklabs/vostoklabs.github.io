@@ -1,6 +1,6 @@
 // Perceptual color quantization over the foreground pixels: median-cut seed refined
 // by k-means in Oklab, so perceptually distinct colors stay separate (dark blue vs
-// black) and identical ones don't split. See src/image/colorspace.ts.
+// black) and identical ones don't split. See colorspace.ts.
 import type { RgbaImage } from './decode';
 import type { RGB } from './types';
 import { srgbToOklab, oklabToSrgb } from './colorspace';
