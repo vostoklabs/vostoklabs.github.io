@@ -8,6 +8,9 @@
      quoted, curly-quoted, after a colon or a comma, and lists with or without "and". It reads a
      font's own name table, and Google's API builds carry no declaration there: a face taken from
      the API still needs its family's OFL.txt read, which is how five shipped faces were found;
+   - the rare shapes a read of every OFL.txt in google/fonts turned up: a name wrapped onto a
+     second line, `Reserved Font Name is "Julee"`, the name before the term, escaped and angled
+     quotes, a quoted list whose quotes do not pair up, and a full stop inside the quotes;
    - the OFL's own text uses the term without declaring a name, and reads as none;
    - a name matches however it is spaced or cased: NovaMono is Nova Mono, and a PostScript name
      (LibreBaskerville-Regular) matches its family;
@@ -50,11 +53,27 @@ reads('with Reserved Font Name Rye. This Font Software is licensed under the SIL
 reads('with Reserved Font Name Lilita This Font Software is licensed under the SIL Open Font License, Version 1.1.', ['Lilita']);
 reads('with Reserved Font Names Foo, Bar and Baz.', ['Foo', 'Bar', 'Baz']);
 
+// The rare shapes, as their families' OFL.txt files write them
+reads('(astigma@astigmatic.com), with Reserved Font Names "Stint Ultra\nExpanded"\n\nThis Font Software is licensed', ['Stint Ultra Expanded']);
+reads('with Reserved Font Name Nanum, Naver Nanum, NanumGothic, Naver \nNanumGothic, NanumMyeongjo.\n\nThis Font Software', ['Nanum', 'Naver Nanum', 'NanumGothic', 'Naver NanumGothic', 'NanumMyeongjo']);
+reads('Copyright 2011 The Julee Project Authors (https://github.com/etunni/julee) with Reserved Font Name is "Julee"\n\nThis Font Software', ['Julee']);
+reads('All Rights Reserved.\n\n"Jomolhari" is a Reserved Font Name for this Font Software.\n\nThis Font Software is licensed under the SIL Open Font License, Version 1.0.', ['Jomolhari']);
+reads('copyright: "Copyright (c) 2011 by Omnibus-Type (www.omnibus-type.com), with Reserved Font Name \\"Sansita One\\"."', ['Sansita One']);
+reads('Copyright (c) <17/12/07>, <GREEK FONT SOCIETY> (<http://www.greekfontsociety.org>),\nwith Reserved Font Name <GFS Didot>.', ['GFS Didot']);
+reads("with Reserved Font Name 'Jeju Hallasan, 'Jeju Gothic, 'Jeju Myeongjo'.\n\nThis Font Software", ['Jeju Hallasan', 'Jeju Gothic', 'Jeju Myeongjo']);
+reads('with Reserved Font Names "Kanchenjunga", "Andika", and "SIL".', ['Kanchenjunga', 'Andika', 'SIL']);
+reads('with Reserved Font Name "News Cycle."\n\nThis Font Software', ['News Cycle']);
+// "is" and "are" are skipped only as words of the sentence, never as the start of a name.
+reads('with Reserved Font Name Are You Serious.', ['Are You Serious']);
+
 // Uses of the term that declare nothing, the licence's own full text among them
 reads('with no Reserved Font Name.', []);
 reads('Copyright (c) 2011 by Lars Berggren. All rights reserved.', []);
 reads('"Reserved Font Name" refers to any names specified as such after the\ncopyright statement(s).', []);
 reads('3) No Modified Version of the Font Software may use the Reserved Font\nName(s) unless explicit written permission is granted by the corresponding\nCopyright Holder.', []);
+// OFL 1.0, which two google/fonts families still use, words both differently.
+reads('"Reserved Font Name" refers to the Font Software name as seen by users and any other\nnames as specified after the copyright statement.', []);
+reads('2) No Modified Version of the Font Software may use the Reserved Font Name(s), in part\nor in whole, unless explicit written permission is granted by the Copyright Holder.', []);
 reads(readFileSync(`${DIR}/OFL.txt`, 'utf8'), []);
 
 // The five families that shipped as the API build, against the names that build carried
