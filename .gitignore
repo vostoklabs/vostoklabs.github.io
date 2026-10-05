@@ -21,6 +21,8 @@ CLAUDE.md
 CATALOGUE.md
 # Check budgets for apps that are not published.
 scripts/budgets.private.json
+# Asset registry rows for files that are not published.
+assets.private.json
 
 # Apps are private by default. A published app is re-included here.
 apps/*/

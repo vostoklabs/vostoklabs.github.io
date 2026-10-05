@@ -38,6 +38,8 @@
     "check:shelf": "node scripts/catalogue.mjs --check && node scripts/check-blocks.mjs && node scripts/check-layers.mjs && node scripts/check-copies.mjs",
     "gen:licenses": "node scripts/licenses.mjs",
     "check:licenses": "node scripts/licenses.mjs --check",
+    "gen:assets": "node scripts/assets.mjs",
+    "check:assets": "node scripts/check-assets.mjs",
     "build:offline": "node scripts/offline.mjs",
     "dev:penTopper": "pnpm --filter pen-topper dev",
     "build:penTopper": "pnpm --filter pen-topper build",

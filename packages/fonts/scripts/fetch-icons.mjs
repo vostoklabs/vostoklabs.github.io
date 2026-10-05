@@ -371,3 +371,8 @@ if (absent.length) {
   // in it, so print them rather than swallowing it.
   console.log(`  dropped, not in the served font: ${absent.join(', ')}`);
 }
+
+// The font's row in the asset registry (assets.json), described by scripts/assets.mjs.
+const { writeAssets } = await import(new URL('../../../scripts/assets.mjs', import.meta.url).href);
+writeAssets();
+console.log('assets.json        updated');

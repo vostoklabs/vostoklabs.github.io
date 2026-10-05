@@ -81,6 +81,11 @@ jobs:
           pnpm check:licenses
           pnpm check:notices
 
+      # Every font, typeface, symbol, pattern and model file is claimed by a row of assets.json
+      # under an allowed licence (invariant #6), and says nothing inside that contradicts it.
+      - name: Asset licences
+        run: pnpm check:assets
+
       - name: Typecheck every package and app
         run: pnpm typecheck
 

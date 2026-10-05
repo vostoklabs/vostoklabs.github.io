@@ -94,3 +94,8 @@ writeFileSync(`${here}../data/pattern-monster-index.json`, JSON.stringify({ ...m
 const modes = {};
 for (const t of tiles) modes[t.mode] = (modes[t.mode] ?? 0) + 1;
 console.log(`kept ${tiles.length} of ${index.length} tiles (${JSON.stringify(modes)}), data ${Math.round(JSON.stringify(tiles).length / 1024)} KB, index ${Math.round(JSON.stringify(tiles.map(({ paths, ...r }) => r)).length / 1024)} KB`);
+
+// The set's row in the asset registry (assets.json), described by scripts/assets.mjs.
+const { writeAssets } = await import(new URL('../../../scripts/assets.mjs', import.meta.url).href);
+writeAssets();
+console.log('assets.json updated');

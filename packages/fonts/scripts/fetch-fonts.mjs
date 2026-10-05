@@ -13,6 +13,8 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { coverageOf, coverageTests, latinExtBOf } from '../src/coverage.ts';
 import { reservedFontNames, reservedNameIn } from './reserved-names.mjs';
+import { recordAssets, fileHash } from '../../../scripts/lib/assets.mjs';
+import { writeAssets } from '../../../scripts/assets.mjs';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FONTS_DIR = path.join(APP, 'src', 'fonts');
@@ -896,3 +898,32 @@ await writeFile(path.join(FONTS_DIR, 'CREDITS.md'), credits);
 
 console.log(`\nRegistry: ${rows.length} fonts (${rows.filter((r) => r.curated).length} curated front cards).`);
 console.log('Wrote src/registry.ts, src/fonts.css, src/fonts/CREDITS.md');
+
+// The asset registry's rows for these faces (assets.json), with each family's licence as read
+// above and how the face ships, then every other asset row (scripts/assets.mjs). Only after a
+// clean run: a face that failed keeps the row it had, and the asset check names it.
+if (failed.length) {
+  console.log('\nassets.json is not updated while a face fails.');
+} else {
+  const blob = (file, commit) => `https://github.com/google/fonts/blob/${commit}/${file}`;
+  recordAssets('packages/fonts/scripts/fetch-fonts.mjs', results.map(({ slug, family }) => {
+    const buf = readFileSync(path.join(FONTS_DIR, `${slug}.ttf`));
+    const spec = UPSTREAM[slug];
+    return {
+      id: `font/${slug}`,
+      kind: 'font',
+      files: { [`packages/fonts/src/fonts/${slug}.ttf`]: fileHash(`packages/fonts/src/fonts/${slug}.ttf`, buf) },
+      licence: family.licence,
+      copyright: nameOf(parse(buf), 'copyright').replace(/\s+/g, ' ').trim(),
+      reservedNames: family.reserved,
+      shipsAs: spec && !spec.cut ? 'original' : 'cut',
+      source: spec
+        ? { url: blob(spec.file, spec.commit ?? PINNED), commit: spec.commit ?? PINNED }
+        : { url: specimen(MAP[slug][0]), commit: null },
+      licenceUrl: blob(family.file, family.commit),
+      notice: [`packages/fonts/src/fonts/${family.licence === 'OFL-1.1' ? 'OFL.txt' : 'LICENSE-APACHE-2.0.txt'}`],
+    };
+  }));
+  const { unknown } = writeAssets();
+  console.log(`Wrote assets.json${unknown.length ? ` (${unknown.length} file(s) no rule describes: see pnpm gen:assets)` : ''}`);
+}
