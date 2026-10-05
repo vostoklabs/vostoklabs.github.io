@@ -54,8 +54,6 @@ export const knobs = {
   fontsLoaded: new Set<string>(),
   /** Faces that cannot write the text typed into them. */
   cantWrite: new Set<string>(),
-  /** How long the startup picture takes to decode, ms. */
-  sampleImageMs: 0,
 };
 
 /** Every trace made, so the worker can name a build after the design it came from. */
@@ -72,7 +70,7 @@ export function reset() {
   seen.modelPanel = null;
   seen.sdkExports.length = 0;
   seen.pro = null;
-  Object.assign(knobs, { makerlab: false, coverMs: 0, imageTraceThrows: null, svgTraceThrows: null, fontMs: {}, sampleImageMs: 0 });
+  Object.assign(knobs, { makerlab: false, coverMs: 0, imageTraceThrows: null, svgTraceThrows: null, fontMs: {} });
   knobs.fontFails = new Set();
   knobs.fontsLoaded = new Set(['helvetiker-regular', 'helvetiker-bold']);
   knobs.cantWrite = new Set();
@@ -205,16 +203,7 @@ export const plateWarnings = () => [] as string[];
 export const allShapes = () => [];
 export const findShape = () => null;
 export const loadPackShapes = async () => {};
-export const SAMPLES = [
-  {
-    name: 'Vostok Labs',
-    src: 'sample.png',
-    load: async () => {
-      if (knobs.sampleImageMs) await wait(knobs.sampleImageMs);
-      return { width: 4, height: 4, data: new Uint8ClampedArray(64) };
-    },
-  },
-];
+export const SAMPLES = [{ name: 'Vostok Labs', src: 'sample.png', load: loadFileToImage }];
 export const SVG_SAMPLES: { name: string; src: string }[] = [];
 export const LUCIDE_ICONS = [{ name: 'circle', node: [] }];
 export const buildSvg = () => '<svg/>';

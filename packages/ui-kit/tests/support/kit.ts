@@ -6,8 +6,9 @@
   because they are what a mount test is testing. Its chrome is not: a toast, the licence nudge, a
   dialog are recorded in `kit` for the test to read back, and a control is a bare element.
 
-  Only what some app's mount test needs is here. An app whose mount imports something missing
-  fails to bundle, naming it, and the answer is to add it here, once, for every app.
+  Of the chrome, only what some app's mount test needs is here. An app whose mount imports
+  something missing fails to bundle, naming it, and the answer is to add it here, once, for
+  every app.
 */
 import { FakeElement } from './dom';
 
