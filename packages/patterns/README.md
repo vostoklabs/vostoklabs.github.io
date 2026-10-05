@@ -2,8 +2,9 @@
 
 Repeating patterns as laser geometry. A pattern is maths — a tile or a field — and the engine
 fills any shape with it and hands back what the laser does: holes to **cut** out (with the web
-between them guaranteed), lines to **score**, regions to **engrave**. Pure TypeScript, no
-dependencies, millimetres, Y up, the same `Shapes = Ring[][]` contract as `@vostok/laser`.
+between them guaranteed), lines to **score**, regions to **engrave**. Pure TypeScript on the
+shape maths of `@vostok/shapes`, millimetres, Y up, the same `Shapes = Ring[][]` contract as
+`@vostok/laser`.
 
 ```ts
 import { fillShape, patternById, circle } from '@vostok/patterns';

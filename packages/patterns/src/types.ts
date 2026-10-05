@@ -1,6 +1,6 @@
-// The pattern engine's vocabulary. Millimetres, Y up, the same ring contract as @vostok/laser
-// (`Ring` is structurally the export package's `CutRing`), but nothing here imports either — a
-// pattern is maths, and the package has to drop into any tool, laser or not.
+// The pattern engine's vocabulary. Millimetres, Y up, on the shapes of @vostok/shapes: the same
+// ring contract the laser engine cuts and the 3D apps extrude. Nothing here imports a machine —
+// a pattern is maths, and the package has to drop into any tool, laser or not.
 //
 // Two kinds of pattern. A TILED one describes one period cell and the engine repeats it; a
 // FIELD one draws straight into a box (rays about a centre, a spiral, random stipple). Both
@@ -8,22 +8,9 @@
 // things: a closed shape it can cut out or fill, a line it can score, and a line it may cut
 // THROUGH without the sheet falling apart.
 
-export type Pt = [number, number];
-/** A closed polygon, implicitly closed, either winding. */
-export type Ring = Pt[];
-/** An open run of points. */
-export type Polyline = Pt[];
-/** One island: its outer ring first, holes after. */
-export type Island = Ring[];
-/** Islands of rings — the same shape as @vostok/laser's `Shapes`. */
-export type Shapes = Island[];
+import type { Box, Island, Polyline, Pt, Ring, Shapes } from '@vostok/shapes';
 
-export interface Box {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
+export type { Box, Island, Polyline, Pt, Ring, Shapes };
 
 export interface PatternGeometry {
   /** Closed shapes. As a CUT they are holes and the web between them must survive; as an

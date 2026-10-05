@@ -43,6 +43,7 @@ const LAYERS = [
   ['packages/plates/src/index.ts', 'ui'], // the front door also hands out the picker
   ['packages/patterns/src/ui/', 'ui'], // the pattern picker
   ['packages/patterns/', 'core'],
+  ['packages/shapes/', 'core'], // shape maths: rings and islands in mm
   ['packages/fonts/', 'core'],
   ['packages/manifold/', 'core'],
   ['packages/manifold-noeval/', 'core'],

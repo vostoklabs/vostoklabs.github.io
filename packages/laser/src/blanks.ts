@@ -3,7 +3,7 @@
 //
 // Default sizes and holes: a 60 × 20 tag with a 4 mm hole 2 mm from the edge, a 2 mm
 // jump-ring hole on an earring, and so on. Defaults, not rules.
-import type { CutRing } from '@vostok/export';
+import type { Ring as CutRing } from '@vostok/shapes';
 import { circleRing, roundedRectRing, teardropRing, dogTagRing, signedArea, type Pt, type Box } from './rings';
 
 export type HoleSide = 'none' | 'top' | 'left' | 'right';

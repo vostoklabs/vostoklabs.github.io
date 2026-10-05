@@ -49,6 +49,7 @@ packages/*/
 !packages/manifold-noeval/
 !packages/patterns/
 !packages/plates/
+!packages/shapes/
 !packages/trace/
 !packages/symbols/
 !packages/ui-kit/
@@ -95,6 +96,8 @@ apps/foldbox/README.internal.md
 !packages/fonts/tests/**
 !packages/patterns/tests/
 !packages/patterns/tests/**
+!packages/shapes/tests/
+!packages/shapes/tests/**
 !packages/laser/tests/
 !packages/laser/tests/**
 packages/laser/tests/silhouettes.test.mjs

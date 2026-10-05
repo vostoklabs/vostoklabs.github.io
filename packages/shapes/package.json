@@ -1,0 +1,18 @@
+{
+  "name": "@vostok/shapes",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Shape maths: rings and islands in millimetres, Y up. Area, bounds, point-in-shape, distances, transforms, simplifying, nesting rings into islands, the widest point inside a shape, and the basic outlines. Pure TypeScript, no dependencies; the laser and pattern engines build on it.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "esbuild tests/pins.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/pins.test.mjs --log-level=error && node node_modules/.cache/pins.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

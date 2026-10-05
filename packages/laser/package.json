@@ -25,6 +25,7 @@
     "@vostok/export": "workspace:*",
     "@vostok/fonts": "workspace:*",
     "@vostok/manifold": "workspace:*",
+    "@vostok/shapes": "workspace:*",
     "@vostok/trace": "workspace:*",
     "d3-contour": "^4.0.2",
     "manifold-3d": "^3.0.1",

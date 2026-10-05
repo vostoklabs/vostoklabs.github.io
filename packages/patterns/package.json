@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "The repeating-pattern engine: procedural tiles and fields (Japanese, Islamic, lattices, living hinges, radial, engrave fills) plus SVG tile import, filled into any shape and emitted as laser cut-outs, score lines or engraved regions. Pure TypeScript, no dependencies, millimetres, Y up.",
+  "description": "The repeating-pattern engine: procedural tiles and fields (Japanese, Islamic, lattices, living hinges, radial, engrave fills) plus SVG tile import, filled into any shape and emitted as laser cut-outs, score lines or engraved regions. Pure TypeScript on the shape maths of @vostok/shapes, millimetres, Y up.",
   "exports": {
     ".": "./src/index.ts",
     "./library": "./src/library/index.ts",
@@ -12,6 +12,7 @@
     "./ui": "./src/ui/index.ts"
   },
   "dependencies": {
+    "@vostok/shapes": "workspace:*",
     "@vostok/ui-kit": "workspace:*"
   },
   "scripts": {

@@ -1,12 +1,12 @@
 // The engine's own vocabulary. Nothing here knows about a document, a store or a sheet —
 // those belong to whichever app is composing on top of it.
-import type { CutRing } from '@vostok/export';
+import type { Ring } from '@vostok/shapes';
 
 /** What the laser does to a shape. Colour and job order live in `ops.ts`. */
 export type Op = 'cut' | 'score' | 'engrave';
 
 /** Islands of rings in millimetres, Y up: one entry per island, its outer ring first. */
-export type Shapes = CutRing[][];
+export type Shapes = Ring[][];
 
 /**
  * A keyring hole described as a property of the shape it sits on, so it can be dragged along
