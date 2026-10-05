@@ -1,6 +1,6 @@
 # @vostok/fonts
 
-The shared font set for every generator that puts type on a model: 152 bundled
+The shared font set for every generator that puts type on a model: 256 bundled
 faces, the opentype loader, and the text→contours layout.
 
 Used by the **name keychain** and the **magnet generator**'s Text source.

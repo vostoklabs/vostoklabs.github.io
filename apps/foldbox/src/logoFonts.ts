@@ -12,8 +12,8 @@ import { FONTS } from '../../../packages/fonts/src/registry';
  *  Not a taste judgement — a budget. This app goes to MakerLab as a ZIP and the
  *  developer guide asks for 10 MB or less, or the SDK handshake can miss its 10 s
  *  timeout (`makerlab/pack.mjs` warns above that figure). The whole library is
- *  251 faces / 36.6 MB of TTF, which a zip cannot carry; under 149 KB it is 185
- *  faces / 13.0 MB, about 6.5 MB compressed.
+ *  256 faces / 37.1 MB of TTF, which a zip cannot carry; under 149 KB it is 190
+ *  faces / 13.5 MB, about 6.8 MB compressed.
  *
  *  What the cut actually removes is the fonts that carry a script this app has no
  *  use for — Gaegu is 3.0 MB of Korean, DotGothic16 1.9 MB of Japanese — plus a
