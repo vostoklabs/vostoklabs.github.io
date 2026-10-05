@@ -73,25 +73,39 @@ edit('index.html', (s) =>
     ),
 );
 
-edit('src/main.ts', (s) =>
-  s
-    // These three collide with the template (and with each other across apps) if missed.
-    .replace("storageKey: 'template-quality-callout'", `storageKey: '${id}-quality-callout'`)
-    .replace("themeStorageKey: 'template-theme'", `themeStorageKey: '${id}-theme'`)
-    .replace("generator: 'generator-template'", `generator: '${id}'`)
-    // Provenance + what the user sees in their Downloads folder.
-    .replace("application: 'Vostok Labs Generator Template'", `application: 'Vostok Labs ${title}'`)
-    .replace("title: 'Tag',", `title: '${title}',`)
-    .replace("}, 'tag.3mf');", `}, '${id}.3mf');`)
-    .replace("downloadJSON('tag-project.json'", `downloadJSON('${id}-project.json'`)
-    .replace("title: 'Generator Template help'", `title: '${title} help'`)
-    // Both of them: the header and the credit strip pinned at the panel's foot carry the name.
-    .replaceAll("title: 'My Generator',", `title: '${title}',`)
-    .replace(
-      "description: 'One line on what it makes and who it is for.',",
-      `description: ${JSON.stringify(description)},`,
-    )
-    .replaceAll('tpl-', `${prefix}-`),
+edit(
+  'src/main.ts',
+  (s) =>
+    s
+      // These three collide with the template (and with each other across apps) if missed.
+      .replace("storageKey: 'template-quality-callout'", `storageKey: '${id}-quality-callout'`)
+      .replace("themeStorageKey: 'template-theme'", `themeStorageKey: '${id}-theme'`)
+      .replace("generator: 'generator-template'", `generator: '${id}'`)
+      // Provenance + what the user sees in their Downloads folder.
+      .replace("application: 'Vostok Labs Generator Template'", `application: 'Vostok Labs ${title}'`)
+      .replace("title: 'Tag',", `title: '${title}',`)
+      .replace("}, 'tag.3mf');", `}, '${id}.3mf');`)
+      .replace("'tag-project.json'", `'${id}-project.json'`)
+      .replace("title: 'Generator Template help'", `title: '${title} help'`)
+      // Both of them: the header and the credit strip pinned at the panel's foot carry the name.
+      .replaceAll("title: 'My Generator',", `title: '${title}',`)
+      .replace(
+        "description: 'One line on what it makes and who it is for.',",
+        `description: ${JSON.stringify(description)},`,
+      )
+      .replaceAll('tpl-', `${prefix}-`),
+  [
+    "'template-quality-callout'",
+    "'template-theme'",
+    "generator: 'generator-template'",
+    "'Vostok Labs Generator Template'",
+    "title: 'Tag',",
+    "'tag.3mf'",
+    "'tag-project.json'",
+    "'Generator Template help'",
+    "'My Generator'",
+    "'One line on what it makes and who it is for.'",
+  ],
 );
 
 edit('src/style.css', (s) => s.replaceAll('tpl-', `${prefix}-`));
@@ -176,10 +190,17 @@ function copyDir(from, to) {
   }
 }
 
-function edit(relative, fn) {
+/** Rewrite one file of the new app. `gone` lists template text the edit must have replaced: a
+ *  `.replace()` whose target the template no longer contains changes nothing and says nothing,
+ *  which is how every scaffolded app came to save its project as `tag-project.json`. */
+function edit(relative, fn, gone = []) {
   const path = join(appDir, relative);
-  const before = readFileSync(path, 'utf8');
-  writeFileSync(path, fn(before));
+  const after = fn(readFileSync(path, 'utf8'));
+  const left = gone.filter((text) => after.includes(text));
+  if (left.length) {
+    throw new Error(`apps/${id}/${relative}: the template changed, so these were not renamed: ${left.join(', ')}. Update scripts/new-generator.mjs.`);
+  }
+  writeFileSync(path, after);
 }
 
 function titleCase(value) {
