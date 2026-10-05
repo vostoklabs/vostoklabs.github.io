@@ -20,6 +20,10 @@ export const seen = {
   screen: [] as ClickerPart[],
   /** Every 3MF the browser path wrote: its parts, its file name and its options (cover, credit). */
   downloads: [] as { parts: ClickerPart[]; name: string; opts: Record<string, unknown> }[],
+  /** Every 3MF made in memory for a desktop host: its parts and options. */
+  built: [] as { parts: ClickerPart[]; opts: Record<string, unknown> }[],
+  /** The parts of every OBJ made for the MakerLab host. */
+  objs: [] as ClickerPart[][],
   /** What each cover drawing shows: the name of the part on screen when the picture was taken. */
   covers: [] as string[],
   /** createUi's callbacks: the controls a scenario presses. */
@@ -60,6 +64,8 @@ export const traces: string[] = [];
 export function reset() {
   seen.screen = [];
   seen.downloads.length = 0;
+  seen.built.length = 0;
+  seen.objs.length = 0;
   seen.covers.length = 0;
   seen.ui = null;
   seen.state = null;
@@ -177,13 +183,15 @@ export async function openSvgPreview() {
 
 /* ----------------------------------------------------------------- the writers */
 
-export function buildThreeMF() {
+export function buildThreeMF(parts: ClickerPart[], opts: Record<string, unknown> = {}) {
+  seen.built.push({ parts, opts });
   return new Uint8Array(0);
 }
 export function downloadThreeMF(parts: ClickerPart[], name: string, opts: Record<string, unknown> = {}) {
   seen.downloads.push({ parts, name, opts });
 }
-export function buildObjMtl() {
+export function buildObjMtl(parts: ClickerPart[]) {
+  seen.objs.push(parts);
   return { obj: '', mtl: '' };
 }
 export const objToArrayBuffer = () => new ArrayBuffer(0);

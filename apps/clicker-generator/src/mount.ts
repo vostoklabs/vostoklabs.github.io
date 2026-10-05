@@ -34,7 +34,7 @@ import { createUi, type UiState } from './ui/ui';
 import { loadFileToImage, parseSvg, processImage, type RgbaImage, type SvgOptions } from '@vostok/trace';
 import { runWizard } from './ui/wizard';
 import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
-import { shownBuild } from './export/shownBuild';
+import { shownBuild, type Shown } from './export/shownBuild';
 import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
 import { buildObjMtl, objToArrayBuffer } from './export/objExport';
 import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from './geometry/stemFit';
@@ -339,6 +339,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       || designHolds > 0 || modelMode.isLoading(),
     tilesPending: () => debouncedFitStrip.pending(),
   });
+  /** The parts on screen right now, by the tracker's own two sources. */
+  const shownParts = () => (store.get().fitTestActive ? fitStripParts : latestParts);
   /** Work under way that ends in a design build without a debounce in front of it: a font
    *  loading, a project opening. Export waits for it. */
   let designHolds = 0;
@@ -465,10 +467,49 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     return btoa(s);
   }
 
-  /** The two cover sizes a 3MF carries: the card image, and the list-row thumbnail. A failed
-   *  capture is not a failed export — it just means this file has no cover. */
-  async function coverImages() {
-    const coverPng = (await viewer.renderCoverPng()) ?? undefined;
+  /** What a file is made of, read at one moment: the build on screen, what it is called and whose
+   *  shape it is. */
+  interface Exportable extends Shown {
+    fileBase: string;
+    source: { sourceModel?: string };
+  }
+  function exportable(shown: Shown): Exportable {
+    return {
+      ...shown,
+      fileBase: shown.fitTest ? 'clicker-stem-fit-test' : designFileBase(),
+      // Read with the parts, not after the cover is drawn: a mode switch meanwhile must not
+      // strip a cut model's credit from the file.
+      source: shown.fitTest ? {} : modelExportOpts(),
+    };
+  }
+
+  /** How many covers an export draws before it gives up on one. */
+  const COVER_TRIES = 3;
+
+  /**
+   * `file`, with a cover drawn from the build in it.
+   *
+   * A cover is a picture of the viewer, taken after the build has landed. A build that lands
+   * while it is being taken (an edit made after Export was pressed) would put its picture on the
+   * file of the build before it, so once the picture is in, the build on screen is checked. If
+   * it changed, the newer build is what gets exported, read afresh, and drawn again. One that
+   * keeps changing under the camera goes without a cover rather than with another build's. A
+   * failed capture is not a failed export either: that file just has no cover.
+   */
+  async function withCover(file: Exportable): Promise<Exportable & { png?: Uint8Array }> {
+    for (let tries = 0; tries < COVER_TRIES; tries++) {
+      const png = (await viewer.renderCoverPng()) ?? undefined;
+      if (!png || shownParts() === file.parts) return { ...file, png };
+      const newer = await onScreen.settled();
+      if (!newer) return file;
+      file = exportable(newer);
+    }
+    return file;
+  }
+
+  /** The two cover sizes a 3MF carries, from the cover drawn for it: the card image, and the
+   *  list-row thumbnail. */
+  async function coverImages(coverPng: Uint8Array | undefined) {
     if (!coverPng) return {};
     return { coverPng, coverSmallPng: await shrinkPng(coverPng, 128) };
   }
@@ -849,23 +890,19 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // licence nudge all come with it.
       const shown = await onScreen.settled();
       if (!shown) return;
-      const { parts, fitTest } = shown;
-      const fileBase = fitTest ? 'clicker-stem-fit-test' : designFileBase();
-      // Read with the parts, not after the cover is drawn: a mode switch meanwhile must not
-      // strip a cut model's credit from the file.
-      const source = fitTest ? {} : modelExportOpts();
+      const file = exportable(shown);
       if (MAKERLAB && mlReady() && mlCan('export')) {
         // Embedded path: hand the host an OBJ (one `o` object per colour region) plus an MTL
         // carrying those colours.
         const status = (msg: string) => store.set({ status: msg });
         status('Sending to MakerLab…');
         try {
-          const { obj, mtl } = buildObjMtl(parts, 'clicker.mtl');
           // The same framed cover the downloaded 3MF gets. This used to be a bare
           // `canvas.toDataURL()` with no render in front of it — it survived only because the
           // renderer keeps its drawing buffer, and it handed MakerWorld the whole viewport:
           // build plate, grid, and the model wherever the user had last dragged it.
-          const png = await viewer.renderCoverPng();
+          const { parts, fitTest, fileBase, png } = await withCover(file);
+          const { obj, mtl } = buildObjMtl(parts, 'clicker.mtl');
           const coverImage = png ? 'data:image/png;base64,' + bytesToBase64(png) : '';
           const result = await sdkExport({
             artifacts: [
@@ -896,9 +933,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // With a host the file goes to the host's own export path rather than the browser's
         // download bar.
         try {
+          const { parts, fileBase, source, png } = await withCover(file);
           const name = `${fileBase}.3mf`;
           const { indexed } = await host.exportToLibrary(
-            { name, bytes: buildThreeMF(parts, { ...(await coverImages()), ...source }) },
+            { name, bytes: buildThreeMF(parts, { ...(await coverImages(png)), ...source }) },
             { designer: 'Clicker Generator' },
           );
           store.set({ status: indexed ? 'Exported to your library ✓' : `Exported as ${name} ✓` });
@@ -921,7 +959,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // Standalone / public path: direct browser download + license reminder.
         // The cover goes in the file, so a folder of orders shows what each one is instead of
         // forty identical 3MF icons.
-        downloadThreeMF(parts, `${fileBase}.3mf`, { ...(await coverImages()), ...source });
+        const { parts, fileBase, source, png } = await withCover(file);
+        downloadThreeMF(parts, `${fileBase}.3mf`, { ...(await coverImages(png)), ...source });
         // First download on the page: the full licence window. Later ones: the corner reminder.
         licenseAfterExport();
       }

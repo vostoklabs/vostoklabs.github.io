@@ -143,8 +143,9 @@ function watch<T>(p: Promise<T>) {
   return state;
 }
 
-/** The clicker, mounted afresh and settled on its startup sample. `prepare` sets the scene first. */
-async function fresh(prepare?: () => void) {
+/** The clicker, mounted afresh and settled on its startup sample. `prepare` sets the scene first;
+ *  `host` stands in for a desktop app the clicker is mounted inside. */
+async function fresh(prepare?: () => void, host?: object) {
   reset();
   resetKit();
   FakeWorker.reset();
@@ -164,7 +165,7 @@ async function fresh(prepare?: () => void) {
   FakeWorker.onStart = (w) => w.reply({ type: 'ready' });
   prepare?.();
   setMakerlab(knobs.makerlab);
-  const unmount = mount(new FakeElement('div') as unknown as HTMLElement);
+  const unmount = mount(new FakeElement('div') as unknown as HTMLElement, host as Parameters<typeof mount>[1]);
   await clock.advance(50);
   return unmount;
 }
@@ -445,6 +446,76 @@ const press = () => watch<void>(ui().onExport());
   ui().onFitTestExit();
   await clock.advance(10);
   check('the fit test closed while its tiles are still building: Export goes ahead with the design', exp.done && written()[0] === 'built:image:cc=4|w=40|st=0', describe(exp));
+  finish(unmount);
+}
+
+/* ================================================================= the cover */
+
+/* A cover is a picture of the viewer. Here it is taken when its drawing is done, `coverMs` after
+   it starts, as a viewer that waits for a frame would take it, and it carries the name of the
+   part that was on screen then. */
+const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder().decode(png) : undefined);
+
+{
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(200);
+  knobs.coverMs = 400;
+  const exp = press();
+  await clock.advance(40);
+  ui().onWidth(50); // an edit made after Export was pressed, landing while the cover is drawn
+  await clock.advance(1500);
+  const file = seen.downloads[0];
+  check('an edit that lands while the cover is drawn: the cover shows the build the file holds', exp.done && !!file && coverIn(file.opts.coverPng) === file.parts[0].name, `file ${shown(file?.parts[0].name)}, cover of ${shown(coverIn(file?.opts.coverPng))}`);
+  check('…which is the newer build, the one on screen', file?.parts[0].name === 'built:image:cc=4|w=50|st=0' && onScreen() === file?.parts[0].name, `${describe(exp)}; screen ${shown(onScreen())}`);
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(200);
+  knobs.coverMs = 400;
+  const exp = press();
+  for (let mm = 41; mm <= 52; mm++) {
+    await clock.advance(150);
+    ui().onWidth(mm); // edits landing faster than a cover can be drawn
+  }
+  await clock.advance(3000);
+  const file = seen.downloads[0];
+  check('a build that keeps changing while its cover is drawn: Export still finishes, after three drawings', exp.done && seen.covers.length === 3, `${describe(exp)} after ${seen.covers.length} drawings`);
+  check('…and the file has no cover rather than another build\'s', !!file && file.opts.coverPng === undefined, `cover of ${shown(coverIn(file?.opts.coverPng))}`);
+  finish(unmount);
+}
+
+{
+  const library: unknown[] = [];
+  const host = { exportToLibrary: async (file: unknown) => (library.push(file), { indexed: true }) };
+  const unmount = await fresh(undefined, host);
+  ui().onWidth(40);
+  await clock.advance(200);
+  knobs.coverMs = 400;
+  const exp = press();
+  await clock.advance(40);
+  ui().onWidth(50);
+  await clock.advance(1500);
+  const file = seen.built[0];
+  check('inside a desktop host: the cover saved with the file shows the build the file holds', exp.done && library.length === 1 && !!file && coverIn(file.opts.coverPng) === file.parts[0].name, `file ${shown(file?.parts[0].name)}, cover of ${shown(coverIn(file?.opts.coverPng))}`);
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh(() => (knobs.makerlab = true));
+  ui().onWidth(40);
+  await clock.advance(200);
+  knobs.coverMs = 400;
+  const exp = press();
+  await clock.advance(40);
+  ui().onWidth(50);
+  await clock.advance(1500);
+  const sent = seen.sdkExports[0]?.artifacts?.[0];
+  const cover = sent ? new TextDecoder().decode(Buffer.from(String(sent.coverImage).replace('data:image/png;base64,', ''), 'base64')) : undefined;
+  check('in MakerLab: the cover sent with the model shows the build in it', exp.done && seen.objs.length === 1 && cover === seen.objs[0][0].name, `model ${shown(seen.objs[0]?.[0].name)}, cover of ${shown(cover)}`);
   finish(unmount);
 }
 
