@@ -1,5 +1,8 @@
 // Inline SVG icons (lucide-style strokes, taken from the clicker's shipped markup).
 // No icon font, no external requests.
+// Drawn from Lucide (ISC) and Feather (MIT); `github` is the Octicons mark (MIT). Their licences
+// sit beside this file and scripts/third-party-notices.mjs puts them in every app's notices: an
+// icon from any other source needs its licence added in both places.
 
 const stroke = (inner: string, size = 16) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;

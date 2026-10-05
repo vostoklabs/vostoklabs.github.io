@@ -68,7 +68,7 @@
 
     { "name": "Filament colours", "category": "print3d", "use": ["filamentRow", "paletteRow"], "with": ["FILAMENTS", "colorChip", "contrastRatio", "luminance"], "for": "Rows of common PLA/PETG colours plus a custom colour, one row per part, and a contrast check between two colours." },
 
-    { "name": "Interface icons", "category": "asset", "use": ["ICONS"], "with": ["svgEl", "svgPathEl"], "licence": "ISC (stroke icons drawn from Lucide)", "for": "The small icons on buttons and menus, inline SVG. Interface only: never part of a customer's export." },
+    { "name": "Interface icons", "category": "asset", "use": ["ICONS"], "with": ["svgEl", "svgPathEl"], "licence": "ISC and MIT: stroke icons drawn from Lucide (ISC) and Feather (MIT), the GitHub mark from Octicons (MIT); licence texts beside icons.ts", "for": "The small icons on buttons and menus, inline SVG. Interface only: never part of a customer's export." },
     { "name": "Symbol set: Tabler + Fluent", "category": "asset", "use": ["SYMBOL_CATALOG"], "with": ["POPULAR_SYMBOL_IDS"], "licence": "MIT (Tabler Icons filled; Microsoft Fluent Emoji High Contrast); licence texts beside the data", "for": "The symbols customers can place in their designs through the Symbol library." }
   ],
   "internal": {

@@ -32,9 +32,11 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CHECK = process.argv.includes('--check');
 
-/** Not generators: the hub is the site, kit-demo is the component gallery. Neither
- *  bundles a font, and neither produces a file anyone exports. */
-const SKIP = new Set(['hub', 'kit-demo', 'generator-template']);
+/** Never distributed, so there is no copy for a notice to travel with: kit-demo is the component
+ *  gallery and the template is what `pnpm new:generator` copies, and the deploy publishes neither.
+ *  An app made from the template gets its own file. The hub is not here: it is the site itself,
+ *  deployed at its root, and it bundles the kit's font and icons like every app does. */
+const SKIP = new Set(['kit-demo', 'generator-template']);
 
 const YEAR = 2026;
 
@@ -133,14 +135,21 @@ function fontCopyrights() {
 function licenceTexts() {
   const dir = joinPath(ROOT, 'packages', 'fonts', 'src', 'fonts');
   const LF = (t) => t.split('\r\n').join('\n');
-  const ofl = LF(readFileSync(joinPath(dir, 'OFL.txt'), 'utf8'));
-  const at = ofl.indexOf('SIL OPEN FONT LICENSE Version 1.1');
-  if (at < 0) throw new Error('OFL.txt: cannot find the licence body');
-  // Back up to the divider line above the title, so the body starts cleanly.
-  const oflBody = ofl.slice(ofl.lastIndexOf('\n', at - 2) + 1).trim();
+  const oflBody = oflParts(joinPath(dir, 'OFL.txt')).body;
   const apache = LF(readFileSync(joinPath(dir, 'LICENSE-APACHE-2.0.txt'), 'utf8')).trim();
   if (!/Apache License/.test(apache)) throw new Error('LICENSE-APACHE-2.0.txt looks wrong');
   return { oflBody, apache };
+}
+
+/** An OFL.txt in its two parts: the family's own copyright notice, and the licence from its
+ *  divider down. */
+function oflParts(file) {
+  const ofl = readFileSync(file, 'utf8').split('\r\n').join('\n');
+  const at = ofl.indexOf('SIL OPEN FONT LICENSE Version 1.1');
+  if (at < 0) throw new Error(`${file}: cannot find the licence body`);
+  // Back up to the divider line above the title, so the body starts cleanly.
+  const start = ofl.lastIndexOf('\n', at - 2) + 1;
+  return { notice: ofl.slice(0, start).split(/\n\s*This Font Software/)[0].trim(), body: ofl.slice(start).trim() };
 }
 
 // ─────────────────────────────── runtime libraries ───────────────────────────────
@@ -188,6 +197,19 @@ function workspacePkg(name) {
     if (j.name === name) return j;
   }
   return null;
+}
+
+/** Whether an app bundles one of our packages: as its own dependency, or as a dependency of
+ *  another of ours that it depends on. */
+function dependsOn(pkg, name) {
+  const seen = new Set();
+  const reaches = (deps) => Object.keys(deps ?? {}).some((d) => {
+    if (d === name) return true;
+    if (!d.startsWith('@vostok/') || seen.has(d)) return false;
+    seen.add(d);
+    return reaches(workspacePkg(d)?.dependencies);
+  });
+  return reaches(pkg.dependencies);
 }
 
 /** Runtime deps worth naming: the ones whose code is in the shipped bundle.
@@ -358,9 +380,9 @@ function usesSymbolCatalog(appDir) {
 
 /** A licence file, indented two spaces like the rest of this file. The Fluent copy is indented
  *  upstream; its common indent comes off first, so the text reads as one block. */
-function indentedLicence(name) {
-  const file = joinPath(SYMBOLS_DIR, name);
-  if (!existsSync(file)) throw new Error(`packages/ui-kit/src/symbols/${name} is missing`);
+function indentedLicence(name, dir = SYMBOLS_DIR) {
+  const file = joinPath(dir, name);
+  if (!existsSync(file)) throw new Error(`${file} is missing`);
   const lines = readFileSync(file, 'utf8').split('\r\n').join('\n').replace(/^\n+|\s+$/g, '').split('\n');
   const common = Math.min(...lines.filter((l) => l.trim()).map((l) => l.length - l.trimStart().length));
   return lines.map((l) => `  ${l.slice(common)}`.trimEnd()).join('\n');
@@ -394,10 +416,50 @@ ${indentedLicence('tabler-icons.LICENSE.txt')}
 `;
 }
 
+const KIT_DIR = joinPath(ROOT, 'packages', 'ui-kit', 'src');
+
+/** The kit's own interface: the face its stylesheet sets every control in, and its icons
+ *  (`icons.ts`). Every app that uses the kit bundles both, and neither comes from an npm
+ *  dependency, so the walk in `libsFor` cannot see them. The OFL text is printed here unless the
+ *  font appendix already carries it. */
+function kitSection(number, fontAppendix) {
+  const fontDir = joinPath(KIT_DIR, 'fonts');
+  const files = readdirSync(fontDir).filter((f) => f.endsWith('.woff2')).sort();
+  if (!files.length) throw new Error('packages/ui-kit/src/fonts holds no .woff2: the kit section needs updating');
+  const { notice, body } = oflParts(joinPath(fontDir, 'OFL.txt'));
+  const indent = (text) => text.split('\n').map((l) => `  ${l}`.trimEnd()).join('\n');
+  return `
+
+${number}. INTERFACE FONT AND ICONS
+${'-'.repeat(60)}
+
+  The typeface and the icons of the app's own controls. Neither is part of a
+  file you export.
+
+  Chakra Petch, Google Fonts' build of its Latin characters
+  (${files.join(', ')})
+${indent(notice)}
+  Licensed under the SIL Open Font License 1.1${fontAppendix ? ' (full text in Appendix B)' : ' (full text below)'}
+
+  Interface icons, drawn from Lucide and from Feather, the set Lucide grew out
+  of: Lucide under the ISC licence and Feather under the MIT licence, both in
+  full below as Lucide ships them. The GitHub mark is GitHub's own, from its
+  Octicons, under the MIT licence below them.
+  https://lucide.dev
+  https://feathericons.com
+  https://github.com/primer/octicons
+
+${indentedLicence('lucide.LICENSE.txt', KIT_DIR)}
+
+${indentedLicence('octicons.LICENSE.txt', KIT_DIR)}
+${fontAppendix ? '' : `\n${indent(body)}\n`}`;
+}
+
 export function noticesText(appName, pkg, appDir) {
   const bundlesFonts = !!pkg.dependencies?.['@vostok/fonts'];
   const bundlesPatterns = !!pkg.dependencies?.['@vostok/patterns'];
   const bundlesSymbols = usesSymbolCatalog(appDir);
+  const bundlesKit = dependsOn(pkg, '@vostok/ui-kit');
   const fonts = bundlesFonts ? fontLines() : [];
   const { lines: libs, texts: libTexts } = libsFor(appDir, pkg);
   const patternSection = bundlesPatterns ? patternTilesSection(bundlesFonts ? 3 : 1) : '';
@@ -423,7 +485,9 @@ ${ICON_NOTICE}
     : '';
   const facesNumber = symbolNumber + (bundlesSymbols ? 1 : 0);
   const appFaces = appTypefacesSection(appDir, facesNumber);
-  const libHeading = `${facesNumber + (appFaces ? 1 : 0)}. RUNTIME LIBRARIES`;
+  const kitNumber = facesNumber + (appFaces ? 1 : 0);
+  const kit = bundlesKit ? kitSection(kitNumber, bundlesFonts) : '';
+  const libHeading = `${kitNumber + (kit ? 1 : 0)}. RUNTIME LIBRARIES`;
   return `THIRD-PARTY NOTICES
 ${'='.repeat(60)}
 
@@ -436,7 +500,7 @@ licences it is used under. It ships with every distribution of the app.
 Nothing here restricts what you may do with a file you EXPORT from this
 generator — see the application's own licence for that.
 
-${fontSections}${patternSection}${symbolSection}${appFaces}
+${fontSections}${patternSection}${symbolSection}${appFaces}${kit}
 
 ${libHeading}
 ${'-'.repeat(60)}
@@ -473,9 +537,10 @@ for (const id of readdirSync(appsDir)) {
   if (!existsSync(pkgPath)) continue;
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
   // Any third-party runtime dependency is something to declare — not just the font
-  // package. The clicker bundles Lucide (ISC), which wants its notice carried too.
+  // package. The clicker bundles Lucide (ISC), which wants its notice carried too. The kit's own
+  // font and icons count as well: an app with no third-party dependency still bundles them.
   const thirdParty = Object.keys(pkg.dependencies ?? {}).filter((d) => !d.startsWith('@vostok/'));
-  if (!thirdParty.length) continue;
+  if (!thirdParty.length && !dependsOn(pkg, '@vostok/ui-kit')) continue;
 
   const publicDir = join(appsDir, id, 'public');
   const out = join(publicDir, 'THIRD-PARTY-NOTICES.txt');
