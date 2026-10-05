@@ -51,10 +51,12 @@ import {
   sampleGrid,
   uploadCta,
   fontChooser,
+  createStore,
+  readProjectFile,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
+import { downloadFile } from '@vostok/export';
 import type { RegionSet } from './types';
-import { createStore } from './store/store';
 import { loadFileToImage, loadUrlToImage, type RgbaImage } from './image/decode';
 import { processImage } from './image/pipeline';
 import { parseSvg } from './image/logo';
@@ -604,8 +606,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     hostOwnsProjects: Boolean(host?.registerProject),
     formats: [{ id: '3mf', label: '3MF' }],
     onExport: (format) => exportModel(format),
-    onSave: saveProject,
-    onLoad: loadProject,
+    onSave: saveToHostOrDownload,
+    onLoad: openFromHostOrFile,
     onHelp: showHelp,
     themeStorageKey: 'magnet-generator-theme',
   });
@@ -2790,26 +2792,19 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     if (arrivingWith) void openProject(arrivingWith);
   }
 
-  function saveProject() {
+  function saveToHostOrDownload() {
     if (host) { void saveToHost(); return; }
-    const project = buildProject();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(project)], { type: 'application/json' }));
-    a.download = 'magnet-project.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadFile(JSON.stringify(buildProject()), 'magnet-project.json', 'application/json');
   }
 
-  async function loadProject(file?: File) {
+  async function openFromHostOrFile(file?: File) {
     // On the desktop the kit's Load button hands us nothing and expects the host's own
     // picker to be opened instead — there is no file input in that story.
     if (host) { void openFromHost(); return; }
     if (!file) return;
-    try {
-      await applyProject(JSON.parse(await file.text()));
-    } catch {
-      toast('Could not load that project file', { kind: 'error' });
-    }
+    // applyProject runs inside the kit's guard, so a file it cannot use (no settings) gets the
+    // same "not a project file" toast as one that is not JSON at all.
+    await readProjectFile(file, applyProject);
   }
 
   /** Applies a parameter blob to the live UI. Shared by both load paths. */
