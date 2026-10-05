@@ -1,15 +1,12 @@
 /*
   The keycap's SVG import: describe → choose → apply → parse.
 
-  Run from the repo root:
+  Part of pnpm test. By hand, from the repo root:
 
     node_modules/.bin/esbuild apps/keycap-generator/tests/svg-import.test.js \
       --bundle --platform=node --format=esm \
-      --alias:@xmldom/xmldom=./apps/clicker-generator/node_modules/@xmldom/xmldom \
-      --outfile=apps/keycap-generator/.svg-import-test.mjs \
-
-  (xmldom is the clicker's dev dependency; the alias borrows it rather than adding a second copy.)
-      && node apps/keycap-generator/.svg-import-test.mjs
+      --outfile=apps/keycap-generator/tests/.svg-import.test.mjs \
+      && node apps/keycap-generator/tests/.svg-import.test.mjs
 */
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 globalThis.DOMParser = DOMParser;

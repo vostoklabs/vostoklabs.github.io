@@ -2,7 +2,7 @@
   The free Fit test preview: the ladder maths, the label text, the tab/label layout maths, and
   the real Manifold-backed piece builder (tab + flipped stem, unioned into one watertight body).
 
-  Run from the repo root:
+  Part of pnpm test. By hand, from the repo root:
 
     node_modules/.bin/esbuild apps/keycap-generator/tests/fit-test.test.js \
       --bundle --platform=node --format=esm --external:manifold-3d \

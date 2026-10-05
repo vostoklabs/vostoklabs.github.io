@@ -2,7 +2,7 @@
   Proves applyStemClearance (../src/stemClearance.js) against the REAL authored stems shipped in
   public/keycaps/**, using the REAL manifold-3d WASM build (no mocking of Manifold).
 
-  Run from the repo root:
+  Part of pnpm test. By hand, from the repo root:
 
     node_modules/.bin/esbuild apps/keycap-generator/tests/stem-clearance.test.js \
       --bundle --platform=node --format=esm --external:manifold-3d \
