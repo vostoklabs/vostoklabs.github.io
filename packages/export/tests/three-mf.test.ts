@@ -15,8 +15,11 @@
   Paste it in the same commit, and say in the commit message what changed in the file.
 */
 import { createHash } from 'node:crypto';
-import { unzipSync } from 'fflate';
-import { buildThreeMF, type ExportMeta, type ExportPart, type RGB } from '../src/index';
+import { unzipSync, strFromU8 } from 'fflate';
+import {
+  buildThreeMF, buildStl, buildObj, buildObjMtl, exportPartOf,
+  type ExportMeta, type ExportPart, type RGB,
+} from '../src/index';
 
 let pass = 0;
 const fails: string[] = [];
@@ -87,6 +90,7 @@ const CASES: Record<string, [ExportPart[], ExportMeta]> = {
   process: [ONE_GROUP, { ...META, process: { initial_layer_print_height: '0.12', wall_loops: ['2', '3'] } }],
   'two groups': [TWO_GROUPS, { ...META, title: 'Golden & <co> "x"', plateSize: [355, 346] }],
   'no parts': [[], META],
+  'source model': [ONE_GROUP, { ...META, sourceModel: 'dragon & <co>.stl' }],
 };
 
 /* ------------------------------------------------------------------ the golden */
@@ -161,6 +165,14 @@ const GOLDEN: Record<string, Record<string, string>> = {
     'Metadata/project_settings.config': 'bd7879159992c427',
     'Metadata/vostok_labs.txt': 'a3cc714246fb7238',
   },
+  'source model': {
+    '[Content_Types].xml': 'a1ed066344e85390',
+    '_rels/.rels': '465f67e7a55f044d',
+    '3D/3dmodel.model': 'f7a95bf5d14bd46c',
+    'Metadata/model_settings.config': '5b4bbbe9fe11f12d',
+    'Metadata/project_settings.config': '8bc45ad392059413',
+    'Metadata/vostok_labs.txt': '9b121fae3e3153be',
+  },
 };
 
 const entriesOf = (bytes: Uint8Array): Record<string, string> =>
@@ -177,6 +189,65 @@ for (const [name, [parts, meta]] of Object.entries(CASES)) {
   const want = GOLDEN[name] ?? {};
   check(`${name}: the same entries, in the same order`, JSON.stringify(Object.keys(got)) === JSON.stringify(Object.keys(want)));
   for (const entry of Object.keys(want)) check(`${name}: ${entry} unchanged`, got[entry] === want[entry]);
+}
+
+/* ------------------------------------------------------------------ the options */
+
+const same = (a: Record<string, string>, b: Record<string, string> | undefined) => JSON.stringify(a) === JSON.stringify(b);
+const textOf = (bytes: Uint8Array, entry: string) => strFromU8(unzipSync(bytes)[entry]!);
+
+// sourceModel: the mark stops claiming the shape, and nothing else in the file moves.
+{
+  const bytes = buildThreeMF(...CASES['source model']!);
+  const model = textOf(bytes, '3D/3dmodel.model');
+  const text = textOf(bytes, 'Metadata/vostok_labs.txt');
+  check('sourceModel: the model is named, escaped, as its creator\'s', model.includes('The shape is from dragon &amp; &lt;co&gt;.stl and belongs to its creator.'));
+  check('sourceModel: no copyright or CC licence is claimed over it', !model.includes('©') && !model.includes('CC BY-NC-ND') && !text.includes('CC BY-NC-ND'));
+  check('sourceModel: the text file names it too', text.includes('This file was made from an uploaded model: dragon & <co>.stl.'));
+  const plain = actual['one group']!;
+  const sourced = actual['source model']!;
+  check(
+    'sourceModel: only the model metadata and the text file change',
+    Object.keys(plain).every((e) => (e === '3D/3dmodel.model' || e === 'Metadata/vostok_labs.txt' ? plain[e] !== sourced[e] : plain[e] === sourced[e])),
+  );
+}
+
+// Positions as any array of numbers: Float64 copies of Float32 values write the same file.
+const as64 = (parts: ExportPart[]): ExportPart<Float64Array>[] => parts.map((p) => ({ ...p, positions: Float64Array.from(p.positions) }));
+check('Float64 positions: the same 3MF entries', same(entriesOf(buildThreeMF(as64(ONE_GROUP), META)), GOLDEN['one group']));
+check('Float64 positions: the same 3MF entries, two groups', same(entriesOf(buildThreeMF(as64(TWO_GROUPS), CASES['two groups']![1])), GOLDEN['two groups']));
+check('Float64 positions: the same STL', Buffer.from(buildStl(as64(TWO_GROUPS))).equals(Buffer.from(buildStl(TWO_GROUPS))));
+check('Float64 positions: the same OBJ', buildObj(as64(TWO_GROUPS)) === buildObj(TWO_GROUPS));
+check('Float64 positions: the same OBJ + MTL', JSON.stringify(buildObjMtl(as64(TWO_GROUPS))) === JSON.stringify(buildObjMtl(TWO_GROUPS)));
+{
+  // 1.00005 rounds up to 1.0001 at the file's four decimals; as a Float32 it is 1.0000499..., which
+  // rounds down. Written from a Float64Array it must arrive as 1.0001: the writer keeps the precision.
+  const at = (positions: ArrayLike<number>) => textOf(
+    buildThreeMF([{ name: 'p', color: [1, 2, 3], positions, indices: new Uint32Array([0, 1, 2]) }], META),
+    '3D/3dmodel.model',
+  );
+  const xyz = [1.00005, 0, 0, 2, 0, 0, 1.5, 1, 0];
+  check('Float64 positions: written at full precision', at(Float64Array.from(xyz)).includes('<vertex x="1.0001" y="0" z="0"/>'));
+  check('Float32 positions: rounded as before', at(Float32Array.from(xyz)).includes('<vertex x="1" y="0" z="0"/>'));
+}
+
+// exportPartOf: a manifold mesh, as a part.
+{
+  const t = tetra(1.5, -2.25, 0.5, 4);
+  const mesh = { numProp: 3, vertProperties: t.positions, triVerts: t.indices };
+  const p = exportPartOf(mesh, { name: 'n', color: [9, 8, 7], group: 'g', extruder: 2 });
+  check('exportPartOf: at numProp 3 the mesh arrays are used, not copied', p.positions === mesh.vertProperties && p.indices === mesh.triVerts);
+  check('exportPartOf: carries name, colour, group and slot', p.name === 'n' && p.color.join() === '9,8,7' && p.group === 'g' && p.extruder === 2);
+
+  // The same parts with two extra floats per vertex: de-strided, they write the same file.
+  const strided = ONE_GROUP.map((q) => {
+    const n = q.positions.length / 3;
+    const vertProperties = new Float32Array(n * 5);
+    for (let i = 0; i < n; i++) vertProperties.set([q.positions[i * 3]!, q.positions[i * 3 + 1]!, q.positions[i * 3 + 2]!, 1000 + i, -7], i * 5);
+    return exportPartOf({ numProp: 5, vertProperties, triVerts: q.indices }, { name: q.name, color: q.color });
+  });
+  check('exportPartOf: past numProp 3 only the xyz are kept', strided.every((q, i) => Buffer.from(q.positions.buffer).equals(Buffer.from(ONE_GROUP[i]!.positions.buffer))));
+  check('exportPartOf: a de-strided mesh writes the same 3MF', same(entriesOf(buildThreeMF(strided, META)), GOLDEN['one group']));
 }
 
 /* ------------------------------------------------------------------ report */
