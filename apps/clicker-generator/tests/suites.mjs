@@ -46,8 +46,9 @@ const SUITES = {
   'svg-import': ['xmldom'],
   'switch-fit': ['manifold', 'env'],
   'text-sizing': ['manifold', 'fonts'],
-  // What every export writes, pinned (tests/golden/).
+  // What every export writes, and every model file reads as, pinned (tests/golden/).
   'golden/export-matrix': ['manifold', 'xmldom', 'env', 'fonts'],
+  'golden/readers': [],
 };
 
 const asked = process.argv.slice(2);

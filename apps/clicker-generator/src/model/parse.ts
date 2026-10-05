@@ -6,6 +6,10 @@
 // names are dropped: a clicker is cut from the shape, and every object in the file is part of
 // the shape the user meant.
 import { strFromU8, unzipSync } from 'fflate';
+import { modelFormatOf, type ModelFormat } from '@vostok/export/read';
+
+// Which files Model mode opens, by their extension, is the shelf's model reader's answer.
+export { modelFormatOf, type ModelFormat };
 
 export interface RawModel {
   /** xyz per vertex, mm. */
@@ -14,15 +18,8 @@ export interface RawModel {
   indices: Uint32Array;
 }
 
-export type ModelFormat = 'stl' | 'obj' | '3mf';
-
 /** The formats Model mode opens, by extension. */
 export const MODEL_EXTENSIONS = ['stl', '3mf', 'obj'] as const;
-
-export function modelFormatOf(name: string): ModelFormat | null {
-  const ext = name.toLowerCase().split('.').pop() ?? '';
-  return ext === 'stl' || ext === 'obj' || ext === '3mf' ? ext : null;
-}
 
 export function parseModel(bytes: ArrayBuffer, name: string): RawModel {
   const format = modelFormatOf(name) ?? sniff(bytes);

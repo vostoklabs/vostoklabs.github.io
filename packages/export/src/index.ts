@@ -18,6 +18,10 @@ import { zipSync, strToU8 } from 'fflate';
 import { BRAND } from '@vostok/brand';
 import { BAMBU_BASE, BAMBU_FILAMENT, BAMBU_IDENTITY } from './bambuProfile.generated';
 
+// The reader lives in its own module (also `@vostok/export/read`), so a worker that only reads
+// models does not carry the writers and the Bambu profile.
+export { readModel, modelFormatOf, type ModelFormat, type ModelMesh } from './read';
+
 export type RGB = [number, number, number];
 
 /** The one part shape everything speaks: the same object the viewer takes. */
