@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
-  pnpm --filter @vostok/symbols fetch-symbols              the two drawn sets, then Material's flags
-  pnpm --filter @vostok/symbols fetch-symbols --material   Material's flags only (no network)
+  pnpm --filter @vostok/symbols fetch-symbols              the two drawn sets, then Material
+  pnpm --filter @vostok/symbols fetch-symbols --material   Material only (no network)
 
   Writes the library's data:
 
@@ -10,10 +10,11 @@
     data/fluent-emoji-high-contrast.json      the same for Fluent Emoji, High Contrast style
     data/fluent-emoji-high-contrast.outlines.json
     data/tabler-icons.LICENSE.txt, data/fluent-emoji.LICENSE.txt   read from upstream at the pin
+    data/material-symbols-rounded.outlines.json   every Material glyph's outline, from the icon font
     src/material-solid.ts                     which Material glyphs print as one solid blob
 
-  Every file comes from a pinned commit, so a re-run gives the same bytes, and the lists below
-  are hand-picked and append-only: a symbol a saved design names never disappears. `pnpm
+  Every file comes from a pinned commit or file, so a re-run gives the same bytes, and the lists
+  below are hand-picked and append-only: a symbol a saved design names never disappears. `pnpm
   gen:assets` then describes the data files, and `pnpm check:assets` holds them to that row.
 
   An outline is stored clean. Each SVG's paths are filled by their own rule and then unioned
@@ -21,9 +22,15 @@
   silhouette: islands that never overlap, holes inside their island. The 3D apps extrude it and
   the laser apps cut it as it is, with no fill rule left to guess.
 
-  Material Symbols stays in @vostok/fonts, the font the text engine already reads; this only
-  measures its glyphs. `src/material-solid.ts` records the font's sha256 and the test fails when
-  the font changes until this runs again.
+  Material Symbols' names stay in @vostok/fonts, beside the font the text engine reads. A glyph
+  there is drawn with overlapping contours, and with contours doubled against each other, which
+  the font's non-zero fill makes sense of; each is unioned by that rule here, the way the font
+  draws it, and stored like the other two sets. The outlines and `src/material-solid.ts` record
+  the font's sha256, and the test fails when the font changes until this runs again.
+
+  Rounding to the stored grid can close a gap, fold a thin spike flat or push two edges across
+  each other, so every outline is held to the islands contract (src/contract.ts) as it is written
+  and mended where it breaks it (`onGrid`).
 */
 
 import { build } from 'esbuild';
@@ -88,13 +95,23 @@ async function get(url, asJson = false) {
   }
 }
 
-// The library's own code does the encoding and the measuring, so the data and the runtime agree.
+// The library's own code does the encoding, the measuring and the checking, so the data and the
+// runtime agree; the text engine's own flattening reads the font.
 const tmp = `${pkg}/node_modules/.cache`;
 mkdirSync(tmp, { recursive: true });
 const entry = `${tmp}/fetch-entry.ts`;
-writeFileSync(entry, `export { encodeOutline, decodeOutline, toSymbolFrame } from '${pkg}/src/outline.ts';\nexport { isSolidShape } from '${pkg}/src/solid.ts';\nexport { glyphShapes } from '${pkg}/src/glyph.ts';\n`);
+writeFileSync(entry, [
+  `export { encodeOutline, decodeOutline, toSymbolFrame, signedArea, OUTLINE_BOX } from '${pkg}/src/outline.ts';`,
+  `export { isSolidShape } from '${pkg}/src/solid.ts';`,
+  `export { contractProblems, islandsOfRings } from '${pkg}/src/contract.ts';`,
+  `export { pathCommandsToPolygons } from '@vostok/fonts/textLayout';`,
+].join('\n'));
 await build({ entryPoints: [entry], outfile: `${tmp}/fetch-lib.mjs`, bundle: true, platform: 'node', format: 'esm', logLevel: 'error' });
 const lib = await import(`${pathToFileURL(`${tmp}/fetch-lib.mjs`).href}?t=${Date.now()}`);
+
+const requireLaser = createRequire(`${pkg}/../laser/package.json`);
+const wasm = await (await import(pathToFileURL(requireLaser.resolve('manifold-3d/manifold.js')).href)).default();
+wasm.setup();
 
 /** The index file: its head as ordinary JSON, then one symbol to a line, so a pick added later
  *  is a one-line diff. */
@@ -104,16 +121,11 @@ function indexJson(head, fields, rows) {
 }
 
 if (!MATERIAL_ONLY) await drawnSets();
-await materialFlags();
+await material();
 
 // ───────────────────────────── Tabler and Fluent ─────────────────────────────
 
 async function drawnSets() {
-  const requireLaser = createRequire(`${pkg}/../laser/package.json`);
-  const Module = (await import(pathToFileURL(requireLaser.resolve('manifold-3d/manifold.js')).href)).default;
-  const wasm = await Module();
-  wasm.setup();
-
   const tree = await get(`https://api.github.com/repos/${FLUENT.repo}/git/trees/${FLUENT.commit}?recursive=1`, true);
   if (tree.truncated) throw new Error('the Fluent tree came back truncated');
   const fluentSvg = (folder) => tree.tree.find((x) => x.path.startsWith(`assets/${folder}/`) && x.path.includes('/High Contrast/') && x.path.endsWith('.svg'))?.path;
@@ -149,8 +161,7 @@ async function drawnSets() {
     for (const pick of s.picks) {
       const it = await s.read(pick);
       const shapes = lib.toSymbolFrame(silhouette(wasm, it.svg, it.label));
-      const d = lib.encodeOutline(simplify(shapes, 0.0005));
-      if (!d) throw new Error(`${s.set}:${it.name} has nothing to draw`);
+      const d = onGrid(simplify(shapes, 0.0005), `${s.set}:${it.name}`);
       const back = lib.decodeOutline(d);
       outlines[it.name] = d;
       rows.push([it.name, it.label, pick[1], terms(it.label, it.words), lib.isSolidShape(back) ? 1 : 0]);
@@ -229,16 +240,23 @@ function silhouette(wasm, svg, what) {
   });
 }
 
-/** Ramer–Douglas–Peucker on every ring of the shapes, `tol` in the symbol frame. */
-function simplify(shapes, tol) {
+/** Ramer–Douglas–Peucker on every ring of the shapes, `tol` in the symbol frame. With
+ *  `keepFrame` a point on the shapes' bounding box always stays, so the outline still spans its
+ *  frame exactly. */
+function simplify(shapes, tol, keepFrame = false) {
+  const all = shapes.flat(2);
+  const [minX, maxX, minY, maxY] = [0, 0, 1, 1].map((k, n) => (n % 2 ? Math.max : Math.min)(...all.map((p) => p[k])));
+  const onFrame = ([x, y]) => keepFrame && (x === minX || x === maxX || y === minY || y === maxY);
   const ring = (r) => {
     if (r.length < 5) return r;
     let far = 0, fd = -1;
     for (let i = 1; i < r.length; i++) { const d = Math.hypot(r[i][0] - r[0][0], r[i][1] - r[0][1]); if (d > fd) { fd = d; far = i; } }
     const keep = new Uint8Array(r.length);
     keep[0] = keep[far] = 1;
+    r.forEach((p, i) => { if (onFrame(p)) keep[i] = 1; });
     const pts = [...r, r[0]];
-    const stack = [[0, far], [far, pts.length - 1]];
+    const marks = [...keep.keys()].filter((i) => keep[i]).concat(pts.length - 1);
+    const stack = marks.slice(1).map((e, i) => [marks[i], e]);
     while (stack.length) {
       const [s, e] = stack.pop();
       const [ax, ay] = pts[s], [bx, by] = pts[e];
@@ -253,6 +271,75 @@ function simplify(shapes, tol) {
     return r.filter((_, i) => keep[i]);
   };
   return shapes.map((island) => island.map(ring));
+}
+
+/**
+ * Shapes in the symbol frame as stored path data that keeps the islands contract
+ * (src/contract.ts) and spans its frame. An outline rounding leaves clean is written as it
+ * rounds. One it breaks is unioned again on the grid by the Positive rule (outers count, holes
+ * cut, overlaps merge), each ring that meets itself at a point is split there, and the islands
+ * are gathered afresh, until what manifold hands back sits on the grid and keeps the contract.
+ */
+function onGrid(shapes, what) {
+  const BOX = lib.OUTLINE_BOX;
+  let d = lib.encodeOutline(shapes);
+  for (let pass = 0; ; pass++) {
+    if (!d) throw new Error(`${what} has nothing to draw`);
+    const back = lib.decodeOutline(d);
+    const problems = lib.contractProblems(back);
+    if (!problems.length && spansFrame(back)) return d;
+    if (pass === 6) throw new Error(`${what} breaks the islands contract or its frame: ${problems.map((p) => p.at).join('; ')}`);
+    if (!problems.length) {
+      // A sliver too thin to keep (a contour drawn twice a hair out of register) held the frame
+      // wider than what was kept: frame what was kept.
+      d = lib.encodeOutline(lib.toSymbolFrame(back));
+      continue;
+    }
+    // One-shot node process: the glue's per-call leak (see @vostok/manifold) dies with it.
+    const cs = new wasm.CrossSection(back.flat(), 'Positive');
+    const loops = cs.toPolygons().flatMap((r) => simpleLoops(r.map((p) => [Math.round(p[0] * BOX), Math.round(p[1] * BOX)])));
+    cs.delete();
+    d = lib.encodeOutline(lib.islandsOfRings(loops.map((l) => l.map(([x, y]) => [x / BOX, y / BOX]))));
+  }
+}
+
+/** Whether stored shapes span their frame: the longest side the whole box, centred to half a
+ *  unit of it. */
+function spansFrame(shapes) {
+  const pts = shapes.flat(2).map(([x, y]) => [Math.round(x * lib.OUTLINE_BOX), Math.round(y * lib.OUTLINE_BOX)]);
+  const [x0, x1, y0, y1] = [0, 0, 1, 1].map((k, n) => (n % 2 ? Math.max : Math.min)(...pts.map((p) => p[k])));
+  return Math.max(x1 - x0, y1 - y0) === lib.OUTLINE_BOX && Math.abs(x0 + x1) <= 1 && Math.abs(y0 + y1) <= 1;
+}
+
+/** A ring on the grid that meets itself at a point, as the simple loops it is made of: a corner
+ *  lying on another of its edges becomes a corner of that edge too, and the ring is cut at every
+ *  point it passes twice. Loops that enclose nothing go. */
+function simpleLoops(ring) {
+  const same = (p, q) => p[0] === q[0] && p[1] === q[1];
+  const pts = [];
+  ring.forEach((a, i) => {
+    const b = ring[(i + 1) % ring.length];
+    if (!pts.length || !same(pts[pts.length - 1], a)) pts.push(a);
+    const on = ring.filter((p) => !same(p, a) && !same(p, b) && (b[0] - a[0]) * (p[1] - a[1]) === (b[1] - a[1]) * (p[0] - a[0])
+      && Math.min(a[0], b[0]) <= p[0] && p[0] <= Math.max(a[0], b[0]) && Math.min(a[1], b[1]) <= p[1] && p[1] <= Math.max(a[1], b[1]));
+    pts.push(...on.sort((p, q) => Math.hypot(p[0] - a[0], p[1] - a[1]) - Math.hypot(q[0] - a[0], q[1] - a[1])));
+  });
+  const loops = [];
+  const path = [];
+  const at = new Map();
+  for (const p of pts) {
+    const key = `${p[0]},${p[1]}`;
+    const first = at.get(key);
+    if (first !== undefined) {
+      const loop = path.splice(first);
+      for (const q of loop) at.delete(`${q[0]},${q[1]}`);
+      loops.push(loop);
+    }
+    at.set(key, path.length);
+    path.push(p);
+  }
+  loops.push(path);
+  return loops.filter((l) => l.length >= 3 && lib.signedArea(l) !== 0);
 }
 
 // SVG path data → rings, curves flattened to within `tol`.
@@ -339,26 +426,52 @@ function arc(out, x1, y1, rx, ry, phiDeg, fa, fs, x2, y2, tol) {
   }
 }
 
-// ───────────────────────────── Material's flags ─────────────────────────────
+// ───────────────────────────── Material ─────────────────────────────
 
-async function materialFlags() {
-  const requireFonts = createRequire(`${pkg}/../fonts/package.json`);
-  const opentype = requireFonts('opentype.js');
-  const ttfPath = `${pkg}/../fonts/src/fonts/icon-fallback.ttf`;
-  const ttf = readFileSync(ttfPath);
+async function material() {
+  const opentype = createRequire(`${pkg}/../fonts/package.json`)('opentype.js');
+  const ttf = readFileSync(`${pkg}/../fonts/src/fonts/icon-fallback.ttf`);
   const font = opentype.parse(ttf.buffer.slice(ttf.byteOffset, ttf.byteOffset + ttf.byteLength));
   const icons = readFileSync(`${pkg}/../fonts/src/icons.ts`, 'utf8');
   const rows = [...icons.matchAll(/^ {2}\["([^"]+)","[^"]*","\\u\{([0-9a-f]+)\}"/gm)];
   if (rows.length < 1000) throw new Error(`only ${rows.length} rows read from @vostok/fonts' icons.ts: its shape changed`);
-  const solid = rows.filter(([, , cp]) => lib.isSolidShape(lib.glyphShapes(font, String.fromCodePoint(parseInt(cp, 16))))).map(([, id]) => id);
   const sha = createHash('sha256').update(ttf).digest('hex');
+  const outlines = {};
+  const solid = [];
+  for (const [, id, cp] of rows) {
+    const glyph = font.charToGlyph(String.fromCodePoint(parseInt(cp, 16)));
+    // The contours as the text engine reads them, each curve in eight steps, filled the way the
+    // font fills them: non-zero, so contours that overlap merge, and a contour drawn twice cancels
+    // or stays by its windings.
+    const contours = glyph && glyph.index !== 0 ? lib.pathCommandsToPolygons(glyph.getPath(0, 0, 100).commands).filter((c) => c.length >= 3) : [];
+    const cs = new wasm.CrossSection(contours, 'NonZero');
+    const { min, max } = cs.bounds();
+    const k = 1 / Math.max(max[0] - min[0], max[1] - min[1]);
+    const rings = cs.toPolygons().map((r) => r.map((p) => [(p[0] - (min[0] + max[0]) / 2) * k, (p[1] - (min[1] + max[1]) / 2) * k]));
+    cs.delete();
+    const d = onGrid(simplify(lib.islandsOfRings(rings), 0.0005, true), `material:${id}`);
+    outlines[id] = d;
+    if (lib.isSolidShape(lib.decodeOutline(d))) solid.push(id);
+  }
+
+  const head = JSON.stringify({
+    $comment: 'Written by packages/symbols/scripts/fetch-symbols.mjs from the icon font of @vostok/fonts, the file whose sha256 is below; do not edit by hand.',
+    licence: 'Apache-2.0',
+    box: lib.OUTLINE_BOX,
+    font: { file: 'packages/fonts/src/fonts/icon-fallback.ttf', sha256: sha },
+  }).replace(/}$/, '');
+  // One glyph to a line: there are 1,487, and a re-run that moves a few is then a few-line diff.
+  const body = Object.entries(outlines).map(([id, d]) => `${JSON.stringify(id)}:${JSON.stringify(d)}`).join(',\n');
+  writeFileSync(`${pkg}/data/material-symbols-rounded.outlines.json`, `${head},"outlines":{\n${body}\n}}\n`);
+
   const lines = [];
   for (let k = 0; k < solid.length; k += 6) lines.push(`  ${solid.slice(k, k + 6).map((id) => `'${id}'`).join(', ')},`);
   writeFileSync(`${pkg}/src/material-solid.ts`, `// Written by scripts/fetch-symbols.mjs; do not edit by hand.
 //
-// The Material Symbols glyphs that print as one solid blob (isSolidShape), measured on the icon
-// font of @vostok/fonts whose sha256 is below. The test measures every glyph again and fails
-// when the font or the rule has changed until the script runs again.
+// The Material Symbols glyphs that print as one solid blob (isSolidShape), measured on their
+// stored outlines (data/material-symbols-rounded.outlines.json), made from the icon font of
+// @vostok/fonts whose sha256 is below. The test measures every outline again and fails when the
+// font or the rule has changed until the script runs again.
 
 export const MATERIAL_FONT_SHA256 = '${sha}';
 
@@ -366,5 +479,5 @@ export const MATERIAL_SOLID: readonly string[] = [
 ${lines.join('\n')}
 ];
 `);
-  console.log(`material: ${solid.length} of ${rows.length} glyphs are one solid blob`);
+  console.log(`material: ${rows.length} glyphs, ${solid.length} one solid blob, outlines ${body.length} bytes`);
 }

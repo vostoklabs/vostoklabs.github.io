@@ -19,7 +19,8 @@ export type Shapes = Ring[][];
 /** The longest side of a stored outline, in its own integer units. */
 export const OUTLINE_BOX = 1000;
 
-function signedArea(ring: Ring): number {
+/** Positive when the ring winds anticlockwise, Y up. */
+export function signedArea(ring: Ring): number {
   let a = 0;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += ring[j]![0] * ring[i]![1] - ring[i]![0] * ring[j]![1];
   return a / 2;

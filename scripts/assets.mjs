@@ -198,6 +198,21 @@ const RULES = [
     }),
   },
   {
+    // @vostok/symbols' Material outlines: every glyph of the symbol font above, filled by its own
+    // non-zero rule and stored as outlines by the symbols' fetch-symbols script.
+    match: (p) => p === 'packages/symbols/data/material-symbols-rounded.outlines.json',
+    id: () => 'symbols/material-symbols-rounded',
+    describe: () => ({
+      kind: 'symbols',
+      licence: 'Apache-2.0',
+      copyright: 'Google LLC',
+      shipsAs: 'converted',
+      source: { url: 'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@1', commit: null },
+      licenceUrl: 'https://github.com/google/material-design-icons/blob/master/LICENSE',
+      notice: ['packages/fonts/src/fonts/LICENSE-APACHE-2.0.txt'],
+    }),
+  },
+  {
     match: (p) => /^packages\/patterns\/data\/pattern-monster(?:-index)?\.json$/.test(p),
     id: () => 'patterns/pattern-monster',
     describe: () => ({

@@ -14,10 +14,10 @@ import type { Ring, Shapes } from './outline';
     - it fills at least 62 % of its convex hull (spiky or spidery shapes do not);
     - it is not a sliver (aspect under 3:1).
 
-  Measured on islands, never on raw font contours. Material Symbols' filled glyphs draw some
-  contours twice, wound against each other; read raw, the copy is a hole the size of the glyph,
-  and only 17 of 1,487 glyphs passed. Islands made by `islandsFromContours` (@vostok/laser/rings)
-  have those pairs cancelled, and the stored Tabler and Fluent outlines never had them.
+  Measured on clean islands (contract.ts), never on raw font contours. Material Symbols' filled
+  glyphs draw some contours twice, wound against each other, and lay others over each other;
+  read raw, a copy is a hole the size of the glyph and an overlap a second piece, and only 17 of
+  1,487 glyphs passed. Every set is stored as the union of its drawing, so none of that is left.
 */
 
 function area(ring: Ring): number {

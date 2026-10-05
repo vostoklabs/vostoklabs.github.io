@@ -8,8 +8,9 @@ import { MATERIAL_SOLID } from './material-solid';
   scheme, one set of categories and one search.
 
     material:<name>   Material Symbols Rounded, filled (Apache-2.0). The font and its names stay
-                      in @vostok/fonts, where the text engine reads them; a Material symbol can
-                      also be typed into text as its character (`char`).
+                      in @vostok/fonts, where the text engine reads them, and the outlines made
+                      from it are stored here; a Material symbol can also be typed into text as
+                      its character (`char`).
     tabler:<name>     Tabler Icons, filled set (MIT), stored here as outlines.
     fluent:<name>     Microsoft Fluent Emoji, High Contrast style (MIT), stored here as outlines.
 

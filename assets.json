@@ -5605,7 +5605,7 @@
       "files": {
         "apps/laser-studio/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3",
         "packages/symbols/data/fluent-emoji-high-contrast.json": "e6637f511ed4bd002bd7bf3728b27c5baebe2dd58f0e77e756c4313c91f616d3",
-        "packages/symbols/data/fluent-emoji-high-contrast.outlines.json": "c091a4538e79e12550fddcac5f7f446afd97e98e0cc1d4dc0840456b30957a7f",
+        "packages/symbols/data/fluent-emoji-high-contrast.outlines.json": "b0706b6cf2362d7d37d8c848caa55032e285080776ae71022032e57602c0e3c5",
         "packages/ui-kit/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3"
       },
       "licence": "MIT",
@@ -5622,12 +5622,31 @@
       "writtenBy": "scripts/assets.mjs"
     },
     {
+      "id": "symbols/material-symbols-rounded",
+      "kind": "symbols",
+      "files": {
+        "packages/symbols/data/material-symbols-rounded.outlines.json": "8d3eb301c111dac3a54c69a361c29a28ece9772578971eaf46092a112212e66e"
+      },
+      "licence": "Apache-2.0",
+      "copyright": "Google LLC",
+      "shipsAs": "converted",
+      "source": {
+        "url": "https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@1",
+        "commit": null
+      },
+      "licenceUrl": "https://github.com/google/material-design-icons/blob/master/LICENSE",
+      "notice": [
+        "packages/fonts/src/fonts/LICENSE-APACHE-2.0.txt"
+      ],
+      "writtenBy": "scripts/assets.mjs"
+    },
+    {
       "id": "symbols/tabler-icons-filled",
       "kind": "symbols",
       "files": {
         "apps/laser-studio/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3",
         "packages/symbols/data/tabler-icons-filled.json": "06f43b0bb00eb9c685c0333b904a3809f9211a0d71ec26662adb2fd8aefcf819",
-        "packages/symbols/data/tabler-icons-filled.outlines.json": "08ba5df09d93c44ae5cfd092f599c50ce24c52f1dd3a8faebeca67d1f1a58b1b",
+        "packages/symbols/data/tabler-icons-filled.outlines.json": "9e6c0e586ace20126f319f03b916351abb922ed8209a2633c610cef0fdf74a4b",
         "packages/ui-kit/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3"
       },
       "licence": "MIT",

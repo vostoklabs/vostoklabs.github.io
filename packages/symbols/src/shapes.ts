@@ -1,18 +1,19 @@
-import { FALLBACK_FONT_ID, getFont } from '@vostok/fonts';
-import { glyphShapes } from './glyph';
-import { symbolById } from './library';
+import { symbolById, type SymbolSetId } from './library';
 import { decodeOutline, outlinePath, scaleShapes, type Shapes } from './outline';
 
 /*
   A symbol as shapes: one call for every set, the same shapes for the tile a customer picks from
   and for the file they export.
 
-  The drawn sets' outlines are loaded the first time one is asked for (they are most of the
-  library's weight, and most pages never draw one); a Material symbol is read from the icon font
-  @vostok/fonts already serves for text.
+  Every set is stored as outlines that keep the islands contract (contract.ts), loaded the first
+  time one of its symbols is asked for: they are most of the library's weight, and most pages
+  never draw one. Material's are made from the icon font @vostok/fonts serves for text, each
+  glyph filled the way the font fills it; read from the font as it stands, a glyph handed out
+  overlapping contours and contours doubled against each other.
 */
 
-const OUTLINES: Record<'tabler' | 'fluent', () => Promise<Record<string, string>>> = {
+const OUTLINES: Record<SymbolSetId, () => Promise<Record<string, string>>> = {
+  material: () => import('../data/material-symbols-rounded.outlines.json').then((m) => m.default.outlines as Record<string, string>),
   tabler: () => import('../data/tabler-icons-filled.outlines.json').then((m) => m.default.outlines as Record<string, string>),
   fluent: () => import('../data/fluent-emoji-high-contrast.outlines.json').then((m) => m.default.outlines as Record<string, string>),
 };
@@ -26,14 +27,10 @@ function unitShapes(id: string): Promise<Shapes> {
   if (!entry) return Promise.reject(new Error(`Unknown symbol ${id}`));
   let work = cache.get(entry.id);
   if (!work) {
-    if (entry.set === 'material') {
-      work = getFont(FALLBACK_FONT_ID).then((font) => glyphShapes(font, entry.char!));
-    } else {
-      const set = entry.set;
-      let data = loaded.get(set);
-      if (!data) loaded.set(set, (data = OUTLINES[set]()));
-      work = data.then((all) => decodeOutline(all[entry.name] ?? ''));
-    }
+    const set = entry.set;
+    let data = loaded.get(set);
+    if (!data) loaded.set(set, (data = OUTLINES[set]()));
+    work = data.then((all) => decodeOutline(all[entry.name] ?? ''));
     cache.set(entry.id, work);
     work.catch(() => cache.delete(entry.id));
   }
@@ -42,7 +39,8 @@ function unitShapes(id: string): Promise<Shapes> {
 
 /**
  * A symbol as closed shapes, centred on the origin, Y up, its longest side `size` (millimetres,
- * or 1 by default). Islands: an outer ring then its holes. Older ids resolve too
+ * or 1 by default). Islands: an outer ring, anticlockwise, then its holes, clockwise; no ring
+ * crosses itself or another, and no island lies on another (contract.ts). Older ids resolve too
  * (`resolveSymbolId`). A new list every call, so a caller may change it.
  */
 export async function symbolShapes(id: string, size = 1): Promise<Shapes> {

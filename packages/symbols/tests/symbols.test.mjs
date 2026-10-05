@@ -1,8 +1,9 @@
-// @vostok/symbols: the library, its search, its shapes, its stored data and its old-code tables.
+// @vostok/symbols: the library, its search, its shapes, its stored data and its old-code tables,
+// and every symbol of every set held to the islands contract (src/contract.ts).
 //
 // Run: node packages/symbols/tests/symbols.test.mjs   (esbuild bundles the TS source). Part of
-// `pnpm test`, so CI runs it. The Material font is read from disk here; under node the package's
-// font URL table is empty, so Material shapes are measured through `glyphShapes` directly.
+// `pnpm test`, so CI runs it. Areas are measured in manifold, through the link pnpm makes for
+// @vostok/laser, which depends on it; the Material font is read from disk.
 import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -16,9 +17,11 @@ mkdirSync(tmp, { recursive: true });
 const entry = `${tmp}/test-entry.ts`;
 writeFileSync(entry, [
   `export * from '${pkg}/src/index.ts';`,
-  `export { encodeOutline, decodeOutline } from '${pkg}/src/outline.ts';`,
-  `export { glyphShapes } from '${pkg}/src/glyph.ts';`,
+  `export { encodeOutline, decodeOutline, signedArea } from '${pkg}/src/outline.ts';`,
+  `export { contractProblems } from '${pkg}/src/contract.ts';`,
   `export { MATERIAL_SOLID, MATERIAL_FONT_SHA256 } from '${pkg}/src/material-solid.ts';`,
+  `export { pathCommandsToPolygons } from '@vostok/fonts/textLayout';`,
+  `export { csOf } from '${pkg}/../manifold/src/index.ts';`,
 ].join('\n'));
 const outfile = `${tmp}/symbols-test-${process.pid}.mjs`;
 await build({
@@ -102,28 +105,109 @@ await S.symbolShapes('nope').catch((e) => { unknown = e.message; });
 check('an unknown id rejects', /Unknown symbol/.test(unknown));
 
 // ── the stored data ──
+const material = all.filter((e) => e.set === 'material');
+const materialFile = JSON.parse(readFileSync(`${pkg}/data/material-symbols-rounded.outlines.json`, 'utf8'));
+for (const [file, names] of [
+  ['fluent-emoji-high-contrast', fluentIndex.symbols.map((r) => r[0])],
+  ['tabler-icons-filled', tablerIndex.symbols.map((r) => r[0])],
+  ['material-symbols-rounded', material.map((e) => e.name)],
+]) {
+  const outlines = JSON.parse(readFileSync(`${pkg}/data/${file}.outlines.json`, 'utf8')).outlines;
+  const bad = names.filter((name) => !outlines[name] || S.encodeOutline(S.decodeOutline(outlines[name])) !== outlines[name]);
+  check(`${file}: every outline decodes and encodes back to itself`, !bad.length, bad.join(' '));
+}
 for (const [file, index] of [['fluent-emoji-high-contrast', fluentIndex], ['tabler-icons-filled', tablerIndex]]) {
   const outlines = JSON.parse(readFileSync(`${pkg}/data/${file}.outlines.json`, 'utf8')).outlines;
-  const bad = index.symbols.filter(([name]) => !outlines[name] || S.encodeOutline(S.decodeOutline(outlines[name])) !== outlines[name]);
-  check(`${file}: every outline decodes and encodes back to itself`, !bad.length, bad.map((r) => r[0]).join(' '));
   const wrong = index.symbols.filter(([name, , , , solid]) => !!solid !== S.isSolidShape(S.decodeOutline(outlines[name])));
   check(`${file}: the stored solid flags are what the rule measures`, !wrong.length, wrong.map((r) => r[0]).join(' '));
   check(`${file}: pinned to a commit, under MIT`, /^[0-9a-f]{40}$/.test(index.source.commit) && index.licence === 'MIT');
 }
 
-// ── Material: the font, the duplicate contours and the solid list ──
+// ── Material: outlines made from the icon font, and the solid list ──
 const opentype = createRequire(`${pkg}/../fonts/package.json`)('opentype.js');
 const ttf = readFileSync(`${pkg}/../fonts/src/fonts/icon-fallback.ttf`);
-check('the solid list was measured on this icon font', createHash('sha256').update(ttf).digest('hex') === S.MATERIAL_FONT_SHA256, 'run pnpm --filter @vostok/symbols fetch-symbols --material');
+const ttfSha = createHash('sha256').update(ttf).digest('hex');
+check('the Material outlines and solid list were made from this icon font', materialFile.font.sha256 === ttfSha && S.MATERIAL_FONT_SHA256 === ttfSha, 'run pnpm --filter @vostok/symbols fetch-symbols --material');
+check('…under Apache-2.0, as the font is', materialFile.licence === 'Apache-2.0');
 const font = opentype.parse(ttf.buffer.slice(ttf.byteOffset, ttf.byteOffset + ttf.byteLength));
-const favorite = S.glyphShapes(font, '\u{e87d}');
-check('the heart glyph is one island despite its coincident contours', favorite.length === 1 && favorite[0].length === 1);
+const favorite = await S.symbolShapes('material:favorite');
+check('the heart glyph is one island, its doubled contours gone', favorite.length === 1 && favorite[0].length === 1);
 check('…so it counts as solid', S.isSolidShape(favorite));
-check('a face with eyes and mouth is not solid', !S.isSolidShape(S.glyphShapes(font, S.symbolById('material:mood').char)));
-const measured = S.searchSymbols('', { sets: ['material'] }).filter((e) => S.isSolidShape(S.glyphShapes(font, e.char))).map((e) => e.name);
+check('a face with eyes and mouth is not solid', !S.isSolidShape(await S.symbolShapes('material:mood')));
+const measured = [];
+for (const e of material) if (S.isSolidShape(await S.symbolShapes(e.id))) measured.push(e.name);
 const stored = new Set(S.MATERIAL_SOLID);
 check('the stored Material solid list is what the rule measures', measured.length === stored.size && measured.every((n) => stored.has(n)), `${measured.length} measured, ${stored.size} stored`);
 check('…and far more than the 17 the raw contours let through', stored.size > 100, String(stored.size));
+const hidden = ['cloud', 'chess_knight', 'badge', 'bug_report', 'build', 'church'];
+check('glyphs whose overlapping contours read as extra pieces count as solid', hidden.every((n) => stored.has(n)), hidden.filter((n) => !stored.has(n)).join(' '));
+
+// ── every symbol of every set keeps the islands contract ──
+const manifold = await (await import(pathToFileURL(`${pkg}/../laser/node_modules/manifold-3d/manifold.js`).href)).default();
+manifold.setup();
+/** What manifold makes of rings, freed once measured. */
+const measure = (rings, rule, fn) => {
+  const cs = S.csOf(manifold, rings, rule);
+  try {
+    return fn(cs);
+  } finally {
+    cs.delete();
+  }
+};
+/** The rings a tile draws: `symbolPath`'s data read back, Y up again. */
+const tileRings = (d) => d.split('Z').filter(Boolean).map((r) => r.slice(1).split('L').map((p) => {
+  const [x, y] = p.split(' ').map(Number);
+  return [x, -y];
+}));
+/** A glyph as the font fills it (each curve in eight steps, as the text engine reads it), in the
+ *  symbol frame of that fill. */
+const fontRings = (char) => {
+  const contours = S.pathCommandsToPolygons(font.charToGlyph(char).getPath(0, 0, 100).commands).filter((c) => c.length >= 3);
+  const { min, max } = measure(contours, 'NonZero', (cs) => cs.bounds());
+  const k = 1 / Math.max(max[0] - min[0], max[1] - min[1]);
+  return contours.map((r) => r.map(([x, y]) => [(x - (min[0] + max[0]) / 2) * k, (y - (min[1] + max[1]) / 2) * k]));
+};
+const broken = {};
+const offFrame = [];
+const notTile = [];
+const notFont = [];
+for (const e of all) {
+  const shapes = await S.symbolShapes(e.id);
+  for (const p of S.contractProblems(shapes)) (broken[p.rule] ??= []).push(`${e.id} (${p.at})`);
+  // On the stored grid: the longest side the whole box, centred to half a unit of it.
+  const b = bbox(shapes);
+  const [x0, x1, y0, y1] = [b.minX, b.maxX, b.minY, b.maxY].map((v) => Math.round(v * 1000));
+  if (Math.max(x1 - x0, y1 - y0) !== 1000 || Math.abs(x0 + x1) > 1 || Math.abs(y0 + y1) > 1) offFrame.push(e.id);
+  // What a consumer taking the islands one by one fills, against what the tile fills (non-zero).
+  const tile = tileRings(await S.symbolPath(e.id));
+  const islands = shapes.flat().reduce((sum, r) => sum + S.signedArea(r), 0);
+  const filled = measure(tile, 'NonZero', (cs) => cs.area());
+  if (Math.abs(islands - filled) > 1e-6) notTile.push(`${e.id} ${islands.toFixed(4)} vs ${filled.toFixed(4)}`);
+  if (e.set !== 'material') continue;
+  // The stored outline against the glyph as the font fills it: no further from it, measured along
+  // its outline, than a thousandth of the symbol's size.
+  const perimeter = shapes.flat().reduce((sum, r) => sum + r.reduce((s, p, i) => s + Math.hypot(r[(i + 1) % r.length][0] - p[0], r[(i + 1) % r.length][1] - p[1]), 0), 0);
+  const apart = measure(fontRings(e.char), 'NonZero', (f) => measure(tile, 'NonZero', (t) => {
+    const a = f.subtract(t);
+    const c = t.subtract(f);
+    const area = a.area() + c.area();
+    a.delete();
+    c.delete();
+    return area;
+  }));
+  if (apart > 0.001 * perimeter) notFont.push(`${e.id} ${(apart / perimeter).toExponential(1)}`);
+}
+const listed = (list) => `${list.length}: ${list.slice(0, 6).join(', ')}`;
+check(`every symbol (${all.length}) sits on the stored grid`, !broken.grid, listed(broken.grid ?? []));
+check('…winds its outers anticlockwise and its holes clockwise', !broken.winding, listed(broken.winding ?? []));
+check('…has no ring that encloses nothing', !broken['zero-area'], listed(broken['zero-area'] ?? []));
+check('…has no ring that crosses, runs along or touches itself', !broken['self-intersection'], listed(broken['self-intersection'] ?? []));
+check('…has no two rings that cross or run along each other', !broken.crossing, listed(broken.crossing ?? []));
+check('…keeps each hole inside its own outer, and holes apart', !broken.hole, listed(broken.hole ?? []));
+check('…keeps its islands apart', !broken.overlap, listed(broken.overlap ?? []));
+check('…is centred, its longest side 1', !offFrame.length, listed(offFrame));
+check('…fills, island by island, exactly what its tile fills', !notTile.length, listed(notTile));
+check('every Material symbol is the glyph as the font fills it, to a thousandth', !notFont.length, listed(notFont));
 
 // ── old codes ──
 const fa = S.FONT_AWESOME_TWINS;
