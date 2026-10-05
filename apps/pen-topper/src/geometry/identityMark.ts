@@ -35,8 +35,8 @@
   silently does not exist. Only a volume check catches that.)
 
   Two tiers, as in the clicker: a hardcoded one that survives someone copying the
-  source, and a secret one keyed to a build-time seed that only the deployed site
-  has. They occupy different fraction bands so they never collide.
+  source, and a secret one keyed to a build-time seed, placed only when a build is
+  given it. They occupy different fraction bands so they never collide.
 
   The seed and the generator are the shelf's (@vostok/watermark); the zone is ours.
 */
@@ -108,8 +108,8 @@ function constellation(seed: string, zone: MarkZone, count: number, band: readon
   return out;
 }
 
-/** Every void to subtract from the body: the always-on tier, plus the deployed
- *  site's tier when a build seed is present. */
+/** Every void to subtract from the body: the always-on tier, plus the seeded
+ *  tier when a build seed is present. */
 export function identityVoids(zone: MarkZone): MarkVoid[] {
   return [
     ...constellation(HARDCODED_SEED, zone, 4, BANDS.hardcoded),

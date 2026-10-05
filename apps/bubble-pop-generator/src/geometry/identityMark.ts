@@ -1,12 +1,12 @@
 // Covert model-identity mark for the bubble pop generator. A deterministic
 // constellation of tiny voids buried in the always-solid back region of the
-// magnet body — invisible on prints and normal previews, but demonstrable in any
+// body — invisible on prints and normal previews, but demonstrable in any
 // slicer's section/layer view. The constellation is derived from a build-time
-// secret (VITE_MARK_SEED, a GitHub Actions secret), so the mechanism can be
-// public while the actual signature stays private and provable.
+// secret (VITE_MARK_SEED), so the mechanism can be public while the actual
+// signature stays private and provable.
 //
-// Dev builds (no seed) add only the always-on hardcoded tier; the deployed site
-// marks with the secret constellation too.
+// A build without the seed places only the always-on hardcoded tier; a build
+// given the seed adds the secret constellation too.
 //
 // Safe zone: voids live in the back-face band (z = 0.4..1.6 mm above the flat
 // back) at a radius proportional to the silhouette. Pockets are subtracted from
@@ -22,7 +22,7 @@ import { markSeed, polarVoids, type PolarVoid } from '@vostok/watermark';
  *  wall), d the sphere's diameter, all mm; thetaDeg in degrees. */
 export type MarkVoid = PolarVoid;
 
-/** Read the build-time secret. Empty (dev / node test) → marking disabled. */
+/** Read the build-time secret. Empty (no seed given, or a node test) → the secret tier is off. */
 export const getMarkSeed = markSeed;
 
 /** Deterministic 5-void constellation for a seed. Same seed → same voids forever.

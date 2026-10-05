@@ -15,7 +15,8 @@
   GATE, so the constellation keeps its shape relative to the one feature every hook has.
 
   Two tiers, as in the clicker and the pen topper: a hardcoded one that survives someone
-  copying the source, and a secret one keyed to a build-time seed only the deployed site has.
+  copying the source, and a secret one keyed to a build-time seed, placed only when a build is
+  given it.
 
   The seed and the generator are the shelf's (@vostok/watermark); the zone is ours.
 */
@@ -89,8 +90,8 @@ function constellation(seed: string, zone: MarkZone, count: number, band: readon
   return out;
 }
 
-/** Every void to subtract from the hook: the always-on tier, plus the deployed site's tier
- *  when a build seed is present. */
+/** Every void to subtract from the hook: the always-on tier, plus the seeded tier when a
+ *  build seed is present. */
 export function identityVoids(zone: MarkZone): MarkVoid[] {
   return [
     ...constellation(HARDCODED_SEED, zone, 4, BANDS.hardcoded),

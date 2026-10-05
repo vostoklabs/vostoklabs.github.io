@@ -1,11 +1,11 @@
 // Covert model-identity mark. A deterministic constellation of tiny voids buried in
 // the always-solid ring around switch #0's socket — invisible on prints and normal
 // previews, but demonstrable in any slicer's section/layer view. The constellation is
-// derived from a build-time secret (VITE_MARK_SEED, a GitHub Actions secret), so the
-// mechanism can be public while the actual signature stays private and provable.
+// derived from a build-time secret (VITE_MARK_SEED), so the mechanism can be public
+// while the actual signature stays private and provable.
 //
-// Dev builds (no seed) add NO voids, so local geometry is identical to pre-feature
-// builds; the deployed site always marks.
+// A build without the seed still places the hardcoded tier below; the secret
+// constellation is added only when a build is given the seed.
 //
 // The seed, the generator and the polar sampler are the shelf's (@vostok/watermark);
 // the bands below are this generator's own.
@@ -17,11 +17,11 @@ import { markSeed, polarVoids, type PolarVoid } from '@vostok/watermark';
  *  rotated with the switch at build time. */
 export type MarkVoid = PolarVoid;
 
-/** Read the build-time secret. Empty (dev / node test) → marking disabled. */
+/** Read the build-time secret. Empty (no seed given, or a node test) → the secret tier is off. */
 export const getMarkSeed = markSeed;
 
 /** Deterministic 5-void constellation for a seed. Same seed → same voids forever, so
- *  every model from the public site shares one fingerprint ("made by my generator").
+ *  every model built with that seed shares one fingerprint ("made by my generator").
  *  Radii/angles/depths stay inside the always-solid socket ring; angles ≥ 25° apart. */
 export function markVoids(seed: string): MarkVoid[] {
   return polarVoids(seed, {
