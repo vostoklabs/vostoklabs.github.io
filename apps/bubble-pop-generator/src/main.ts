@@ -23,10 +23,10 @@ import {
   collapsibleSection,
   chip,
   bareIconButton,
+  createStore,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 
-import { createStore } from './store/store';
 import { loadFileToImage, loadUrlToImage, type RgbaImage } from './image/decode';
 import { processImage } from './image/pipeline';
 import { SAMPLES } from './image/sample';
