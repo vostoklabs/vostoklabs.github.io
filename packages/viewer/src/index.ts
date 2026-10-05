@@ -13,10 +13,14 @@ import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { themeColorHex } from '@vostok/ui-kit';
 import { createBuildPlate, type BuildPlate } from '@vostok/plates/three';
 import { loadPlateChoice, type PlateChoice } from '@vostok/plates';
+import {
+  COVER_DIR, FLOOR_GAP, FAR, NEAR, coverDistance, floorGapFor, followOutDistance, frameDistance, presetPosition, seatOf,
+  type ViewPreset,
+} from './framing';
 
 // `setPlate` takes this, so an app that calls it needs to be able to name it without
 // taking its own dependency on @vostok/plates just for a type.
-export type { PlateChoice };
+export type { PlateChoice, ViewPreset };
 
 export type RGB = [number, number, number];
 
@@ -30,8 +34,6 @@ export interface ViewerPart {
   /** Filament colour, 0-255. */
   color: RGB;
 }
-
-export type ViewPreset = 'iso' | 'front' | 'back' | 'top' | 'bottom' | 'left' | 'right';
 
 export interface ViewerOptions {
   /** Camera distance = model radius * this + `framePad`. */
@@ -113,37 +115,6 @@ export interface Viewer {
   /** Where the model group sits, so overlays can follow it. */
   readonly root: THREE.Group;
   dispose(): void;
-}
-
-// The floor sits BELOW the model's bottom face (z = 0) so the solid bottom occludes
-// it cleanly — coplanar at z = 0 causes z-fighting.
-//
-// How far below cannot be a constant, which is what it used to be. Depth-buffer
-// precision falls off as the SQUARE of the viewing distance, so a gap that is ample
-// on a keycap is beneath the buffer's notice on a carton blank lying on a build
-// plate: at 40 mm the buffer resolves 0.001 mm, at 400 mm only 0.095 mm. A flat
-// blank sitting 0.06 mm above the plate therefore lands in the same depth bucket as
-// the plate, and the plate's speckle texture and grid lines punch straight through
-// it. `floorGapFor` keeps the gap ahead of the buffer instead.
-const FLOOR_GAP = 0.06;
-const NEAR = 0.1;
-const FAR = 5000;
-
-/** Cover framing: how much air round the model's bounding sphere, and the fixed
- *  three-quarter direction the cover is shot from (Z up, the same quarter the 'iso'
- *  preset uses, so a cover looks like the view the user has been working in). */
-const COVER_PAD = 1.15;
-const COVER_DIR = new THREE.Vector3(1, -1, 0.75).normalize();
-
-/** Smallest depth difference the 24-bit buffer can still tell apart at distance `z`. */
-function depthResolution(z: number): number {
-  return (z * z * (FAR - NEAR)) / (NEAR * FAR * 16777216);
-}
-
-/** Twelve depth buckets of clearance, and never less than the old constant — so
- *  every model small enough to have been fine already is left exactly as it was. */
-function floorGapFor(dist: number): number {
-  return Math.max(FLOOR_GAP, depthResolution(dist) * 12);
 }
 
 function readTheme(): string {
@@ -298,7 +269,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       controls.target.set(0, 0, size.z / 2);
       camera.position
         .copy(controls.target)
-        .add(offset.setLength(radius * FRAME_MUL + FRAME_PAD));
+        .add(offset.setLength(frameDistance(radius, FRAME_MUL, FRAME_PAD)));
       controls.update();
     }
   }
@@ -347,11 +318,10 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     root.position.set(0, 0, 0);
     root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root);
-    const centre = box.getCenter(new THREE.Vector3());
-    if (anchor) root.position.set(-anchor[0], -anchor[1], -anchor[2]);
-    else root.position.set(-centre.x, -centre.y, -box.min.z);
+    const seat = seatOf(box, anchor);
+    root.position.copy(seat.offset);
     lastSize = box.getSize(new THREE.Vector3());
-    lastCentre = centre.clone().add(root.position);
+    lastCentre = seat.centre;
 
     const radius = Math.max(lastSize.x, lastSize.y, lastSize.z);
     if (refit || framedRadius === 0) {
@@ -372,19 +342,17 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     // only while the model is actually outgrowing the frame. Every intermediate
     // value of a slider drag gets a proportional correction instead of one lurch,
     // and a user who deliberately zoomed in keeps their close-up until the model
-    // genuinely needs more room.
-    if (radius > framedRadius) {
-      const offset = camera.position.clone().sub(controls.target);
-      const needed = radius * FRAME_MUL + FRAME_PAD;
-      // Only a camera that is still roughly at the framing distance follows the frame out.
-      // A user who has zoomed in on a detail has said where they want to look: a rebuild
-      // that grows the model leaves them there, however much longer the chain gets — the
-      // camera leaping out to frame a chain they were not looking at was the jump.
-      const wasFramed = framedRadius === 0 || offset.length() >= (framedRadius * FRAME_MUL + FRAME_PAD) * 0.85;
-      if (wasFramed && offset.length() < needed) {
-        camera.position.copy(controls.target).add(offset.setLength(needed));
-        controls.update();
-      }
+    // genuinely needs more room (`followOutDistance`).
+    const offset = camera.position.clone().sub(controls.target);
+    const to = followOutDistance(
+      offset.length(),
+      framedRadius === 0 ? null : frameDistance(framedRadius, FRAME_MUL, FRAME_PAD),
+      frameDistance(radius, FRAME_MUL, FRAME_PAD),
+      radius > framedRadius,
+    );
+    if (to !== null) {
+      camera.position.copy(controls.target).add(offset.setLength(to));
+      controls.update();
     }
     framedRadius = radius;
   }
@@ -392,21 +360,8 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   /** Point the camera at the model from a preset angle, at a fitting distance. */
   function setView(preset: ViewPreset) {
     const radius = Math.max(lastSize.x, lastSize.y, lastSize.z);
-    const dist = radius * FRAME_MUL + FRAME_PAD;
-    const c = lastCentre;
-    // Face-on views keep a few degrees of tilt: dead-on would put the view axis
-    // parallel to camera.up (Z) and leave the roll undefined.
-    const tilt = dist * 0.08;
-    switch (preset) {
-      case 'front': camera.position.set(c.x, c.y - dist, c.z + tilt); break;
-      case 'back': camera.position.set(c.x, c.y + dist, c.z + tilt); break;
-      case 'left': camera.position.set(c.x - dist, c.y, c.z + tilt); break;
-      case 'right': camera.position.set(c.x + dist, c.y, c.z + tilt); break;
-      case 'top': camera.position.set(c.x, c.y - tilt, c.z + dist); break;
-      case 'bottom': camera.position.set(c.x, c.y + tilt, c.z - dist); break;
-      default: camera.position.set(c.x + dist, c.y - dist, c.z + dist * 0.75 - lastSize.z / 2);
-    }
-    controls.target.copy(c);
+    presetPosition(preset, lastCentre, lastSize, frameDistance(radius, FRAME_MUL, FRAME_PAD), camera.position);
+    controls.target.copy(lastCentre);
     controls.update();
     framedRadius = radius;
   }
@@ -615,8 +570,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
         // Sphere radius, so the fit holds at any angle, and the frame is square, so the
         // vertical FOV governs both directions.
         const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
-        const dist = (radius / Math.sin((camera.fov * Math.PI) / 360)) * COVER_PAD;
-        camera.position.copy(centre).addScaledVector(COVER_DIR, dist);
+        camera.position.copy(centre).addScaledVector(COVER_DIR, coverDistance(radius, camera.fov));
         camera.lookAt(centre);
       }
       camera.aspect = 1;

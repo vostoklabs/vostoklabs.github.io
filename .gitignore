@@ -111,6 +111,8 @@ packages/laser/tests/silhouettes.test.mjs
 !packages/trace/tests/**
 !packages/symbols/tests/
 !packages/symbols/tests/**
+!packages/viewer/tests/
+!packages/viewer/tests/**
 # What the suites write while they run
 **/tests/.*
 
