@@ -13,6 +13,8 @@ import {
   modeBar,
   stagePanel,
   stageStatus,
+  diagnosticsList,
+  assertExportable,
   button,
   slider,
   sliderRow,
@@ -1276,7 +1278,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // 5. RESULTS
   // ---------------------------------------------------------------------------
   const readout = el('div', { className: 'fb-readout' });
-  const diagnostics = el('div', { className: 'fb-diagnostics' });
+  const diagnostics = diagnosticsList();
 
   // Boxes eat far more paper than anyone predicts — a mailer's blank is L + 4H wide
   // before it is anything else — so "does not fit" is the normal state, not the edge
@@ -1393,27 +1395,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       ),
     );
 
-    diagnostics.replaceChildren(
-      ...r.diagnostics.map((d) =>
-        el('div', { className: `fb-diag fb-diag--${d.level}` }, [
-          el('div', { className: 'fb-diag__msg', text: d.message }),
-          ...(d.fix ? [el('div', { className: 'fb-diag__fix', text: d.fix })] : []),
-        ]),
-      ),
-    );
+    diagnostics.set(r.diagnostics);
   }
 
   function updateStatus(r: SolveResult, ms: number): void {
-    const worst = r.diagnostics.find((d) => d.level === 'error');
-    if (worst) {
-      status.set(worst.message, 'error');
-      return;
-    }
-    const warn = r.diagnostics.find((d) => d.level === 'warning');
-    status.set(
+    // The worst problem and how many there are; the blank and the sheet when there is none.
+    status.setDiagnostics(
+      r.diagnostics,
       `${r.netSizeMm[0].toFixed(0)} × ${r.netSizeMm[1].toFixed(0)} mm blank · ` +
         `${r.rotated ? 'fits turned 90°' : 'fits'} ${sheetById(r.params.sheetId).name.replace(/\s*\(.*\)$/, '')}`,
-      warn ? 'warn' : 'idle',
     );
     void ms;
   }
@@ -1937,11 +1927,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     exportNote: exportNote(params.makeMode),
     onExport: async (format) => {
       if (!result) return toast('Nothing to export yet', { kind: 'warn' });
-      if (result.diagnostics.some((d) => d.level === 'error')) {
-        return toast('Fix the problems in Results first: this box would not fold.', {
-          kind: 'error',
-        });
-      }
+      // A box with an error would not fold: refused in that error's own words, which the
+      // export panel shows.
+      assertExportable(result.diagnostics);
       const name = `${styleMeta(params.style).name} ${params.lengthMm}x${params.widthMm}x${params.heightMm}`;
 
       if (MAKERLAB) {
@@ -2315,7 +2303,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // panel are not built at all — `printSection` becomes the top of the column.
         ...(CUT ? [cutUI!.makeMode, cutUI!.cutSection] : []),
         printSection,
-        section({ title: 'Does it fit?', body: [readout, diagnostics] }),
+        section({ title: 'Does it fit?', body: [readout, diagnostics.root] }),
         // LAST, under the answer rather than over it. "Cutting detail" is dash size,
         // kerf and fold mode — set once and rarely touched — and it is now always
         // expanded, so leaving it above "Does it fit?" pushed the one readout people

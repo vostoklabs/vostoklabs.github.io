@@ -162,8 +162,7 @@ body {
 
 /* No margin-top: `.vl-section__body` is a flex column with a 12px row gap already,
    and a margin on top of a gap is how one row ends up 20px from its neighbour while
-   every other row in the column is 12. Same reason `.fb-fit` and `.fb-diagnostics`
-   below carry none. */
+   every other row in the column is 12. Same reason `.fb-fit` below carries none. */
 .fb-note {
   margin: 0;
   color: var(--muted);
@@ -239,7 +238,7 @@ body {
 
 /* The one alert in the app that has to be unmissable: the blank does not fit the
    sheet, which is the normal state on A4 and the thing that stops a person dead.
-   A tint plus a hairline, not a bar — see `.fb-diag`. `color-mix` against `--panel`
+   A tint plus a hairline, not a bar — see `.vl-diag` in the kit. `color-mix` against `--panel`
    rather than a hex, so it lands correctly in both themes and follows a palette
    change; `--text` stays the body colour, because `--red` as text is unreadable on
    the light panel. */
@@ -329,42 +328,6 @@ body {
 
 .fb-stat--bad .fb-stat__value {
   color: var(--red);
-}
-
-.fb-diagnostics {
-  display: grid;
-  gap: var(--space-2);
-}
-
-/* No coloured left rule. Three bar colours over a stack of cards turned the results
-   panel into a barcode, and the bar was the only thing carrying the severity — which
-   made it decoration doing a job. The card is a quiet panel; the ONE thing that needs
-   to shout (the blank does not fit) is `.fb-alert` below, and it shouts with a tint
-   rather than by adding a fourth stripe. */
-.fb-diag {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-s);
-  background: var(--panel-2);
-}
-
-.fb-diag__msg {
-  color: var(--text);
-  font-size: var(--fs-body);
-  line-height: 1.45;
-}
-
-.fb-diag__fix {
-  margin-top: var(--space-1);
-  color: var(--muted);
-  font-size: var(--fs-body);
-  line-height: 1.45;
-}
-
-/* Info is reference, not an alarm: at body size its explanation ran to three lines in
-   the default state. Warnings and errors keep the body size — they are the ones that
-   have to be read. */
-.fb-diag--info .fb-diag__fix {
-  font-size: var(--fs-small);
 }
 
 /* The style picker carries eight options, which is more than the shared source-card

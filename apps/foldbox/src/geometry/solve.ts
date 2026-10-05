@@ -6,7 +6,8 @@
 // can cut is around 70 mm. Every incumbent lets the user find that out at the end.
 // Here it is in the status line the whole time.
 
-import type { Artwork, BoxParams, Diagnostic, Machine, Net, Poly, Sheet, SolveResult, Stock } from '../types';
+import type { Diagnostic } from '@vostok/ui-kit';
+import type { Artwork, BoxParams, Machine, Net, Poly, Sheet, SolveResult, Stock } from '../types';
 import { MACHINES, SHEETS, STOCKS } from '../types';
 import { buildNet, placeNet } from './net';
 import { TRADE_INSET, buildStyle, insideDims, styleMeta } from './styles';

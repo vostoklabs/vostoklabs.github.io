@@ -18,6 +18,10 @@ export {
   type WorkerClientOptions,
   type AnswerOptions,
 } from './build-loop';
+// What a build found: the type, and the rule that an error stops the export. DOM-free like the
+// build loop, which runs it inside `settled()` when given `diagnose`.
+export { assertExportable, ExportBlockedError, type Diagnostic, type DiagnosticLevel } from './diagnostics';
+export { diagnosticsList, type DiagnosticsList } from './components/diagnostics-list';
 export {
   licenseNudge,
   openCommercialModal,

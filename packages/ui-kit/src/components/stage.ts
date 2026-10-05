@@ -15,6 +15,7 @@
 //                 hint while a mode is active; don't show both at once
 import { el } from '../dom';
 import { svgEl } from '../icons';
+import type { Diagnostic } from '../diagnostics';
 
 // --------------------------------------------------------------- mode bar --
 
@@ -348,6 +349,15 @@ export type StatusKind = 'idle' | 'busy' | 'warn' | 'error';
 export interface StageStatus {
   root: HTMLElement;
   set(text: string, kind?: StatusKind): void;
+  /**
+   * What a build found: the worst error or warning in its colour, and how many there are when
+   * there is more than one. Notes are left to `diagnosticsList()`; with no error or warning the
+   * line reads `ok`, the app's own summary of the build.
+   *
+   * It takes the whole list on purpose. There is no way to hand it one warning, so it cannot
+   * show the first of several and say nothing of the rest, which is what six generators did.
+   */
+  setDiagnostics(list: readonly Diagnostic[], ok: string): void;
 }
 
 /** Bottom-left one-liner: what the generator is doing, or warning about. A live region, so a
@@ -358,12 +368,20 @@ export function stageStatus(initial = ''): StageStatus {
     text: initial,
     attrs: { role: 'status', 'aria-live': 'polite' },
   });
+  const set = (text: string, kind: StatusKind = 'idle') => {
+    root.textContent = text;
+    root.className =
+      'vl-stage-status' + (kind === 'idle' ? '' : ` vl-stage-status--${kind}`);
+  };
   return {
     root,
-    set(text, kind = 'idle') {
-      root.textContent = text;
-      root.className =
-        'vl-stage-status' + (kind === 'idle' ? '' : ` vl-stage-status--${kind}`);
+    set,
+    setDiagnostics(list, ok) {
+      const problems = list.filter((d) => d.level !== 'info');
+      const worst = problems.find((d) => d.level === 'error') ?? problems[0];
+      if (!worst) return set(ok);
+      const count = problems.length > 1 ? `${problems.length} problems · ` : '';
+      set(count + worst.message, worst.level === 'error' ? 'error' : 'warn');
     },
   };
 }

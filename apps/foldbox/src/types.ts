@@ -13,6 +13,7 @@
 // to cut around.
 
 import type { PlateChoice } from '@vostok/viewer';
+import type { Diagnostic } from '@vostok/ui-kit';
 
 /** A point in net (layout) coordinates: millimetres, Y-up, origin bottom-left. */
 export type Pt = [number, number];
@@ -744,14 +745,6 @@ export const DEFAULT_PARAMS: BoxParams = {
   perfCutMm: 2.0,
   perfGapMm: 4.0,
 };
-
-/** A problem the user has to fix, in the user's language, with what to do about it. */
-export interface Diagnostic {
-  level: 'error' | 'warning' | 'info';
-  code: string;
-  message: string;
-  fix?: string;
-}
 
 export interface SolveResult {
   net: Net;

@@ -781,6 +781,46 @@ details.vl-section--collapsible[open] > summary {
   border-color: color-mix(in srgb, var(--red) 45%, var(--line));
 }
 
+/* ----------------------------------------------- diagnostics: every one, listed */
+/* `diagnosticsList()`: what a build found, one quiet card each, in the product panel.
+
+   No coloured rule per level. Three bar colours over a stack of cards turned the results panel
+   into a barcode, and the bar was the only thing carrying the severity, which made it
+   decoration doing a job. The level is said where it matters: the status line carries the worst
+   one in its colour, and an export refused by an error says that error's words. */
+.vl-diagnostics {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vl-diag {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-s);
+  background: var(--panel-2);
+}
+
+.vl-diag__msg {
+  color: var(--text);
+  font-size: var(--fs-body);
+  line-height: 1.45;
+}
+
+.vl-diag__fix {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--fs-body);
+  line-height: 1.45;
+}
+
+/* A note is reference, not an alarm: at body size its explanation ran to three lines.
+   Warnings and errors keep the body size; they are the ones that have to be read. */
+.vl-diag--info .vl-diag__fix {
+  font-size: var(--fs-small);
+}
+
 /* ---------- Font picker ---------- */
 
 /*

@@ -80,6 +80,8 @@ import {
   stepper,
   stageHandle,
   stageStatus,
+  diagnosticsList,
+  buildLoop,
   settingsRail,
   appShell,
   designShell,
@@ -93,6 +95,7 @@ import {
   svgEl,
   themeColor,
   type CatalogSymbol,
+  type Diagnostic,
   type FontPickerFont,
   type ListRowHandle,
   type SvgImportChoice,
@@ -1162,6 +1165,66 @@ app.append(
         button({ label: 'Warning', onClick: () => stageLine.set('Letters are thinner than the nozzle.', 'warn') }),
         button({ label: 'Error', onClick: () => stageLine.set('The outline crosses itself.', 'error') }),
       ),
+    ),
+  ),
+);
+
+/* ---------- Diagnostics ---------- */
+/* What a build found, three ways. The "build" is a real buildLoop whose result is the list, so
+   Download is refused through settled() exactly as it is in an app. */
+const ONE_OF_EACH: Diagnostic[] = [
+  {
+    level: 'warning',
+    message: 'The letters are 0.6 mm wide in places, thinner than two lines of a 0.4 mm nozzle.',
+    fix: 'Pick a bolder font, or make the text bigger.',
+  },
+  {
+    level: 'error',
+    message: 'The text runs off the plate: it is 268 mm long and the A1 mini plate is 180 mm.',
+    fix: 'Make the text smaller, or pick a bigger plate.',
+  },
+  { level: 'info', message: 'The letters print in a second colour.', fix: 'Pause at layer 12 to swap filament, or print with an AMS.' },
+];
+let demoFound = ONE_OF_EACH;
+const diagLine = stageStatus('Building…');
+const diagList = diagnosticsList();
+const diagLoop = buildLoop({
+  run: () => demoFound,
+  diagnose: (found) => found,
+  onResult: (found) => {
+    diagLine.setDiagnostics(found, 'Ready · 2 parts');
+    diagList.set(found);
+  },
+});
+function showFound(found: Diagnostic[]): void {
+  demoFound = found;
+  diagLoop.request();
+}
+showFound(ONE_OF_EACH);
+
+app.append(
+  entry(
+    'diagnosticsList() · stageStatus().setDiagnostics() · buildLoop({ diagnose })',
+    'Diagnostics',
+    'What a build found about the model. The status line carries the worst problem and how many ' +
+      'there are; the list carries every one, with what to do about it; and Download refuses while ' +
+      'an error stands, in that error’s own words, because settled() refuses it. Notes stay in the ' +
+      'list. The buttons change what the build found.',
+    el('div', { className: 'kit-stage kit-stage--short' }, [diagLine.root]),
+    el('div', { className: 'kit-sidebar-frame' }, [
+      section({ title: 'Checks', body: [diagList.root] }),
+      exportPanel({
+        formats: [{ id: '3mf', label: '3MF' }],
+        onExport: async (id) => {
+          await diagLoop.settled();
+          toast(`Exported demo.${id}`, { kind: 'ok' });
+        },
+      }),
+    ]),
+    buttonRow(
+      button({ label: 'One of each', onClick: () => showFound(ONE_OF_EACH) }),
+      button({ label: 'Fix the error', onClick: () => showFound(ONE_OF_EACH.filter((d) => d.level !== 'error')) }),
+      button({ label: 'All clear', onClick: () => showFound([]) }),
     ),
   ),
 );

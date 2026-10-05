@@ -199,6 +199,8 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--radius-m);
 }
+/* Just the bottom of a stage, for a demo that only needs the status line. */
+.kit-stage--short { block-size: 140px; }
 /* The "model": a lid and a base on a plate, drawn by the page where the viewer's canvas would be.
    The base is 100 px tall and 200 px wide because the cut grip is placed on it in px. */
 .kit-model {

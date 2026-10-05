@@ -21,6 +21,7 @@
   Nothing here touches the DOM, so a worker can import this module on its own:
   `import { answerRequests } from '@vostok/ui-kit/build-loop'`.
 */
+import { assertExportable, type Diagnostic } from './diagnostics';
 
 /* ----------------------------------------------------------------- build loop */
 
@@ -43,6 +44,12 @@ export interface BuildLoopOptions<R> {
   onError?: (error: Error) => void;
   /** Nothing is running or waiting any more. Clear the busy state. */
   onIdle?: () => void;
+  /**
+   * The diagnostics a result carries. With this, `settled()` refuses a result that has an
+   * error-level one, with `ExportBlockedError` in that error's own words, so every export that
+   * awaits it is guarded without remembering to be. The preview still gets the result.
+   */
+  diagnose?: (result: R) => readonly Diagnostic[];
 }
 
 export interface BuildLoop<R> {
@@ -53,7 +60,8 @@ export interface BuildLoop<R> {
   flush(): void;
   /**
    * The result that matches the settings as they are now. Waits for a pending or running
-   * build, and rejects if that build failed or nothing has been built.
+   * build, and rejects if that build failed, nothing has been built, or (with `diagnose`) the
+   * result carries an error.
    *
    * Every export path awaits this. An exporter handed `latest` instead is the bug this module
    * exists to remove.
@@ -93,6 +101,18 @@ export class BuildTimeoutError extends Error {
 
 const asError = (e: unknown): Error => (e instanceof Error ? e : new Error(String(e)));
 
+/** What an export of this result is refused with, or null. A `diagnose` that throws refuses too,
+ *  rather than escaping while `settled()` callers are being answered and leaving them waiting. */
+function refusal<R>(result: R, diagnose: BuildLoopOptions<R>['diagnose']): Error | null {
+  if (!diagnose) return null;
+  try {
+    assertExportable(diagnose(result));
+    return null;
+  } catch (e) {
+    return asError(e);
+  }
+}
+
 export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running = false;
@@ -105,8 +125,12 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
   let disposed = false;
   let waiters: { resolve: (r: R) => void; reject: (e: Error) => void }[] = [];
 
-  const outcome = (): { ok: true; value: R } | { ok: false; error: Error } =>
-    error ? { ok: false, error } : latest !== null ? { ok: true, value: latest } : { ok: false, error: new NothingBuiltError() };
+  const outcome = (): { ok: true; value: R } | { ok: false; error: Error } => {
+    if (error) return { ok: false, error };
+    if (latest === null) return { ok: false, error: new NothingBuiltError() };
+    const refused = refusal(latest, opts.diagnose);
+    return refused ? { ok: false, error: refused } : { ok: true, value: latest };
+  };
 
   const settleWaiters = () => {
     const list = waiters;
