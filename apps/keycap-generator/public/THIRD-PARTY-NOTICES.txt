@@ -267,7 +267,7 @@ generator — see the application's own licence for that.
   fflate 0.8.3 — MIT
   lucide 1.25.0 — ISC
   manifold-3d 3.5.1 — Apache-2.0
-  three 0.169.0 — MIT
+  three 0.171.0 — MIT
   three-mesh-bvh 0.7.8 — MIT
 
 
@@ -570,7 +570,7 @@ Apache License
    limitations under the License.
 
 
---- three 0.169.0 ---
+--- three 0.171.0 ---
 
 The MIT License
 
