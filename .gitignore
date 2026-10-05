@@ -50,6 +50,7 @@ packages/*/
 !packages/patterns/
 !packages/plates/
 !packages/trace/
+!packages/symbols/
 !packages/ui-kit/
 !packages/viewer/
 !packages/watermark/
@@ -105,6 +106,8 @@ packages/laser/tests/silhouettes.test.mjs
 !packages/watermark/tests/**
 !packages/trace/tests/
 !packages/trace/tests/**
+!packages/symbols/tests/
+!packages/symbols/tests/**
 # What the suites write while they run
 **/tests/.*
 

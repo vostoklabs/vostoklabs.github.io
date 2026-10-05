@@ -325,11 +325,12 @@ ${mit}
 `;
 }
 
-/** The kit's own symbol set, `packages/ui-kit/src/symbols/catalog.json`: Fluent Emoji (High
- *  Contrast) and Tabler Icons (filled), both MIT, licence texts beside the data. Every app
- *  depends on the kit, so the dependency cannot say who bundles the set; an app carries this
- *  section when its imports reach the catalog, or a copy of it, by name. */
-const SYMBOLS_DIR = joinPath(ROOT, 'packages', 'ui-kit', 'src', 'symbols');
+/** The drawn symbol sets: Fluent Emoji (High Contrast) and Tabler Icons (filled), both MIT, in
+ *  @vostok/symbols and in the kit's older catalog. Every app depends on the kit, so the
+ *  dependency cannot say who bundles them; an app carries this section when its imports reach
+ *  their data (the asset registry's `symbols` rows), or a copy of it. The licence texts are the
+ *  ones the symbols fetch read upstream at its pinned commits. */
+const SYMBOLS_DIR = joinPath(ROOT, 'packages', 'symbols', 'data');
 
 /** A licence file, indented two spaces like the rest of this file. The Fluent copy is indented
  *  upstream; its common indent comes off first, so the text reads as one block. */

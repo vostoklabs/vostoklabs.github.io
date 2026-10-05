@@ -622,6 +622,22 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/symbols:
+    dependencies:
+      '@vostok/fonts':
+        specifier: workspace:*
+        version: link:../fonts
+      '@vostok/laser':
+        specifier: workspace:*
+        version: link:../laser
+    devDependencies:
+      esbuild:
+        specifier: ^0.24.2
+        version: 0.24.2
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/trace:
     dependencies:
       d3-contour:

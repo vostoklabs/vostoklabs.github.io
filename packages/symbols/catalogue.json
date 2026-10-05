@@ -1,0 +1,8 @@
+{
+  "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
+  "blocks": [
+    { "name": "Symbols: Material + Tabler + Fluent", "category": "asset", "use": ["listSymbols", "searchSymbols", "symbolById"], "with": ["SYMBOL_SETS", "SYMBOL_CATEGORIES", "resolveSymbolId"], "licence": "Apache-2.0 (Google Material Symbols, read from @vostok/fonts); MIT (Tabler Icons filled; Microsoft Fluent Emoji High Contrast), licence texts beside the data", "for": "Every symbol a customer can put in a design, three sets under one id (material:, tabler:, fluent:), one set of categories and one search; older ids still resolve. Shown through the Symbol chooser." },
+    { "name": "Symbol shapes", "category": "engine", "use": ["symbolShapes"], "with": ["symbolPath", "outlinePath", "isSolidShape"], "for": "Any symbol of the library as closed shapes in millimetres (islands, centred, Y up), its drawing from the same shapes, and whether it prints as one solid blob." },
+    { "name": "Old symbol codes", "category": "behaviour", "use": ["fontAwesomeTwin", "lucideTwin"], "with": ["FONT_AWESOME_TWINS", "LUCIDE_TWINS"], "for": "What older codes become in the symbol library: Name Keychain's Font Awesome characters, and the Lucide names the clicker and keycap shortlist." }
+  ]
+}

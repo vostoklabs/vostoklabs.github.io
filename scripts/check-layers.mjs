@@ -48,6 +48,7 @@ const LAYERS = [
   ['packages/manifold-noeval/', 'core'],
   ['packages/watermark/', 'core'],
   ['packages/trace/', 'core'], // a picture or an SVG file into shapes
+  ['packages/symbols/', 'core'],
   ['packages/laser/src/ops.ts', 'connector'],
   ['packages/laser/src/sheets.ts', 'connector'],
   ['packages/laser/src/burn.ts', 'connector'],

@@ -5584,6 +5584,8 @@
       "kind": "symbols",
       "files": {
         "apps/laser-studio/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3",
+        "packages/symbols/data/fluent-emoji-high-contrast.json": "782de334ce0e52ba8cc921f264428fe41c48e1817c4f7733f19dfb0fc1a7c09d",
+        "packages/symbols/data/fluent-emoji-high-contrast.outlines.json": "8ea746b58e9b0506a85dab1cef4f73d9a360593ac0dd7cb90882cda622ab7d45",
         "packages/ui-kit/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3"
       },
       "licence": "MIT",
@@ -5591,11 +5593,11 @@
       "shipsAs": "converted",
       "source": {
         "url": "https://github.com/microsoft/fluentui-emoji",
-        "commit": null
+        "commit": "1ffb34c752ecf5d402f04cfb4b392c77f57c54bc"
       },
-      "licenceUrl": "https://github.com/microsoft/fluentui-emoji/blob/main/LICENSE",
+      "licenceUrl": "https://github.com/microsoft/fluentui-emoji/blob/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/LICENSE",
       "notice": [
-        "packages/ui-kit/src/symbols/fluent-emoji.LICENSE.txt"
+        "packages/symbols/data/fluent-emoji.LICENSE.txt"
       ],
       "writtenBy": "scripts/assets.mjs"
     },
@@ -5604,6 +5606,8 @@
       "kind": "symbols",
       "files": {
         "apps/laser-studio/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3",
+        "packages/symbols/data/tabler-icons-filled.json": "02b53e4c45a8bd22f62bd7f99e2c6dcc16b5647bdb879ffe21592088ba022e45",
+        "packages/symbols/data/tabler-icons-filled.outlines.json": "4e5926e9518df28b533763153def2167756026140bafc9d7f33a520c19cc0379",
         "packages/ui-kit/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3"
       },
       "licence": "MIT",
@@ -5611,11 +5615,11 @@
       "shipsAs": "converted",
       "source": {
         "url": "https://github.com/tabler/tabler-icons",
-        "commit": null
+        "commit": "bbed884d15354b5cebf2493371f20dc2d5e83eaf"
       },
-      "licenceUrl": "https://github.com/tabler/tabler-icons/blob/main/LICENSE",
+      "licenceUrl": "https://github.com/tabler/tabler-icons/blob/bbed884d15354b5cebf2493371f20dc2d5e83eaf/LICENSE",
       "notice": [
-        "packages/ui-kit/src/symbols/tabler-icons.LICENSE.txt"
+        "packages/symbols/data/tabler-icons.LICENSE.txt"
       ],
       "writtenBy": "scripts/assets.mjs"
     },

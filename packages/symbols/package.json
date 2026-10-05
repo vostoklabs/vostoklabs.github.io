@@ -1,0 +1,23 @@
+{
+  "name": "@vostok/symbols",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "One symbol library: Material Symbols (from @vostok/fonts), Tabler Icons filled and Fluent Emoji High Contrast, with one search, and every symbol as a drawing and as closed shapes in millimetres.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node tests/symbols.test.mjs",
+    "fetch-symbols": "node scripts/fetch-symbols.mjs"
+  },
+  "dependencies": {
+    "@vostok/fonts": "workspace:*",
+    "@vostok/laser": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

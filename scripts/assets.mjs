@@ -35,6 +35,10 @@ const SCAN = 'scripts/assets.mjs';
  *  packages/fonts/scripts/fetch-fonts.mjs pins. */
 const PIN = '9710da1eacb3be272583c3224dcb70f9da6eadbb';
 const googleFonts = (file, commit = PIN) => `https://github.com/google/fonts/blob/${commit}/${file}`;
+/** The commits the symbol sets were fetched at: packages/symbols/scripts/fetch-symbols.mjs pins
+ *  the same two. */
+const FLUENT_EMOJI = '1ffb34c752ecf5d402f04cfb4b392c77f57c54bc';
+const TABLER_ICONS = 'bbed884d15354b5cebf2493371f20dc2d5e83eaf';
 /** three.js r171, whose examples/fonts/ the vendored typefaces are byte for byte. */
 const THREE = '2898f5b1ba10b1e94174c0a62d072f5f7b80442c';
 
@@ -165,29 +169,32 @@ const RULES = [
     }),
   },
   {
-    match: (p) => p === 'packages/ui-kit/src/symbols/catalog.json',
+    // The kit catalog's Fluent drawings are the SVG files at this commit, byte for byte, and
+    // @vostok/symbols' outlines were made from the same files by its fetch-symbols script.
+    match: (p) => p === 'packages/ui-kit/src/symbols/catalog.json' || /^packages\/symbols\/data\/fluent-emoji-high-contrast(?:\.outlines)?\.json$/.test(p),
     id: () => 'symbols/fluent-emoji-high-contrast',
     describe: () => ({
       kind: 'symbols',
       licence: 'MIT',
       copyright: 'Microsoft Corporation',
       shipsAs: 'converted',
-      source: { url: 'https://github.com/microsoft/fluentui-emoji', commit: null },
-      licenceUrl: 'https://github.com/microsoft/fluentui-emoji/blob/main/LICENSE',
-      notice: ['packages/ui-kit/src/symbols/fluent-emoji.LICENSE.txt'],
+      source: { url: 'https://github.com/microsoft/fluentui-emoji', commit: FLUENT_EMOJI },
+      licenceUrl: `https://github.com/microsoft/fluentui-emoji/blob/${FLUENT_EMOJI}/LICENSE`,
+      notice: ['packages/symbols/data/fluent-emoji.LICENSE.txt'],
     }),
   },
   {
-    match: (p) => p === 'packages/ui-kit/src/symbols/catalog.json',
+    // The same for Tabler's filled drawings, at the commit of its v3.49.0 release.
+    match: (p) => p === 'packages/ui-kit/src/symbols/catalog.json' || /^packages\/symbols\/data\/tabler-icons-filled(?:\.outlines)?\.json$/.test(p),
     id: () => 'symbols/tabler-icons-filled',
     describe: () => ({
       kind: 'symbols',
       licence: 'MIT',
       copyright: 'Paweł Kuna',
       shipsAs: 'converted',
-      source: { url: 'https://github.com/tabler/tabler-icons', commit: null },
-      licenceUrl: 'https://github.com/tabler/tabler-icons/blob/main/LICENSE',
-      notice: ['packages/ui-kit/src/symbols/tabler-icons.LICENSE.txt'],
+      source: { url: 'https://github.com/tabler/tabler-icons', commit: TABLER_ICONS },
+      licenceUrl: `https://github.com/tabler/tabler-icons/blob/${TABLER_ICONS}/LICENSE`,
+      notice: ['packages/symbols/data/tabler-icons.LICENSE.txt'],
     }),
   },
   {
