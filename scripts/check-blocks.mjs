@@ -24,8 +24,9 @@
   - `fonts`: fonts loaded by the app itself (FontFace, three.js font loaders). Fonts come from
     `@vostok/fonts`, so every font the customer sees is one the licence check has cleared.
   - `worker`: a worker started without `workerClient()`, i.e. hand-rolled request plumbing.
-  - `project`: save/load written by hand. Saving is `downloadFile()` (`@vostok/export`), reading
-    is `readProjectFile()` (`@vostok/ui-kit`).
+  - `project`: save/load written by hand, as a named function or inline (a JSON blob for a
+    download link, a FileReader's result parsed as JSON). Saving is `downloadFile()`
+    (`@vostok/export`), reading is `readProjectFile()` (`@vostok/ui-kit`).
   - `store`: a hand-written state store. The kit's is `createStore()` ("State store").
 
   **Ratcheted per app**, like `check:ui`: a count may go down, never up, and when one falls the
@@ -52,11 +53,11 @@ const BUDGET = {
   foldbox: { shadow: 4, fonts: 1 },
   'house-number': { shadow: 2, worker: 1 },
   hub: { shadow: 1 },
-  'keycap-generator': { shadow: 8, viewer: 1, fileformat: 4, fonts: 7 },
+  'keycap-generator': { shadow: 8, viewer: 1, fileformat: 4, fonts: 7, project: 2 },
   'keychain-carabiner': { shadow: 2, worker: 1 },
   'laser-studio': { shadow: 12, worker: 1, project: 2 },
   'magnet-generator': { shadow: 15, viewer: 1, fileformat: 3, worker: 1 },
-  'name-keychain': { shadow: 4, viewer: 1, fileformat: 3, worker: 1 },
+  'name-keychain': { shadow: 4, viewer: 1, fileformat: 3, worker: 1, project: 2 },
   'pen-topper': { shadow: 1, worker: 1 },
 };
 
@@ -120,6 +121,36 @@ const PATTERNS = {
   store: /\b(?:function\s+|(?:const|let)\s+)createStore\b/g,
 };
 
+/*
+  `project` written inline, with no function to name it: a JSON blob or data URL made for a
+  download link, or a FileReader's result parsed as JSON. A hit inside a save/load function that
+  PATTERNS.project already counted is that function's body, not a second copy, so it is skipped.
+  (`JSON.parse(await file.text())` is left out: the font loaders read typeface JSON that way.)
+*/
+const PROJECT_INLINE =
+  /\bnew\s+Blob\s*\(\s*\[\s*JSON\.stringify\b|\bdata:application\/json\b|\bJSON\.parse\(\s*(?:String\(\s*)?\(?[\w$.?!]+(?:\s+as\s+\w+\))?\.result\b/g;
+
+/** The [start, end) of each body following a PATTERNS.project match, by brace matching. */
+function namedProjectBodies(src) {
+  const bodies = [];
+  for (const m of src.matchAll(PATTERNS.project)) {
+    let i = src.indexOf('{', m.index);
+    if (i < 0) continue;
+    const start = i;
+    for (let depth = 0; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) break;
+    }
+    bodies.push([start, i + 1]);
+  }
+  return bodies;
+}
+
+const inlineProject = (src) => {
+  const bodies = namedProjectBodies(src);
+  return [...src.matchAll(PROJECT_INLINE)].filter((m) => !bodies.some(([a, b]) => m.index >= a && m.index < b)).length;
+};
+
 /** A definition whose value is a function, or any const for an UPPER_CASE name. */
 const DEFINITION = /\bfunction\*?\s+([A-Za-z_$][\w$]*)\s*[(<]|\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(async\s*)?(function\b|\([^()]*(?:\([^()]*\)[^()]*)*\)\s*(?::\s*[^=]+)?=>|[A-Za-z_$][\w$]*\s*=>)?/g;
 
@@ -153,6 +184,7 @@ const bump = (app, kind, file, n, detail = '') => {
 for (const { file, app } of FILES) {
   const src = blankComments(read(file));
   for (const [kind, re] of Object.entries(PATTERNS)) bump(app, kind, file, (src.match(re) ?? []).length);
+  bump(app, 'project', file, inlineProject(src));
   if (!/\bworkerClient\b/.test(src)) bump(app, 'worker', file, (src.match(/\bnew\s+Worker\s*\(/g) ?? []).length);
 
   const shadows = [];

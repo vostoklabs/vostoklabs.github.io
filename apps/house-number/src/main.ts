@@ -7,12 +7,12 @@ import {
   appShell, topbarLinks, generatorHeader, qualityCallout, section, collapsibleSection, sampleGrid,
   sliderRow, toggleSwitch, segmentedControl, fontChooser, sidebarFooter, stageStatus,
   filamentRow, contrastRatio, syncControls,
-  toast, dialog, licenseAfterExport, el,
+  toast, dialog, licenseAfterExport, el, readProjectFile,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
 import { mountPlatePicker, plateSize, loadPlateChoice } from '@vostok/plates';
-import { downloadThreeMF, type ExportPart } from '@vostok/export';
+import { downloadFile, downloadThreeMF, type ExportPart } from '@vostok/export';
 import {
   FONTS, curatedFonts, getFont, importFontFiles, toPickerFont, fontSupportsText,
   getHorizontalContours, getVerticalContours,
@@ -859,27 +859,14 @@ const footer = sidebarFooter({
 
     licenseAfterExport();
   },
-  onSave: () => {
-    const blob = new Blob([JSON.stringify(params, null, 2)], { type: 'application/json' });
-    const a = el('a', { attrs: { href: URL.createObjectURL(blob), download: 'house-number.json' } }) as HTMLAnchorElement;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  },
-  onLoad: (file?: File) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        params = coerceSettings(JSON.parse(String(reader.result)));
-        showSettings();
-        triggerRebuild(true);
-        toast('Project loaded', { kind: 'ok' });
-      } catch {
-        toast('That file is not a saved sign', { kind: 'error' });
-      }
-    };
-    reader.readAsText(file);
-  },
+  onSave: () => downloadFile(JSON.stringify(params, null, 2), 'house-number.json', 'application/json'),
+  onLoad: (file?: File) =>
+    file && readProjectFile(file, (data) => {
+      params = coerceSettings(data);
+      showSettings();
+      triggerRebuild(true);
+      toast('Project loaded', { kind: 'ok' });
+    }),
   onHelp: () => dialog({
     title: 'House & office numbers',
     content:

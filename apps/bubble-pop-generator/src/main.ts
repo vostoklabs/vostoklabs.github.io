@@ -24,7 +24,9 @@ import {
   chip,
   bareIconButton,
   createStore,
+  readProjectFile,
 } from '@vostok/ui-kit';
+import { downloadFile } from '@vostok/export';
 import { BRAND } from '@vostok/brand';
 
 import { loadFileToImage, loadUrlToImage, type RgbaImage } from './image/decode';
@@ -937,36 +939,26 @@ const footer = sidebarFooter({
     downloadThreeMF(latestParts, `bubble-pop-${stem}-${Math.round(s().fitSizeMm)}mm.3mf`);
     licenseAfterExport();
   },
-  onSave: () => {
-    const blob = new Blob([JSON.stringify({ settings: s(), palette: store.get().palette }, null, 2)], {
-      type: 'application/json',
-    });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'bubble-pop-project.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  },
+  onSave: () =>
+    downloadFile(
+      JSON.stringify({ settings: s(), palette: store.get().palette }, null, 2),
+      'bubble-pop-project.json',
+      'application/json',
+    ),
   onLoad: (file?: File) => {
     // The kit's Load button hands a desktop host nothing, expecting the host's own picker.
     // This generator is web-only, so there is nothing to fall back to — just don't read undefined.
     if (!file) return;
-    const r = new FileReader();
-    r.onload = () => {
-      try {
-        const data = JSON.parse(r.result as string);
-        if (data.settings) patch(data.settings);
-        if (data.palette) store.set({ palette: data.palette });
-        renderShapeGallery();
-        renderSourcePanel();
-        renderPalette();
-        scheduleRebuild(0);
-        toast('Project loaded.', { kind: 'ok' });
-      } catch {
-        toast('Invalid project file', { kind: 'error' });
-      }
-    };
-    r.readAsText(file);
+    void readProjectFile(file, (raw) => {
+      const data = raw as { settings?: Partial<Settings>; palette?: PaletteEntry[] };
+      if (data.settings) patch(data.settings);
+      if (data.palette) store.set({ palette: data.palette });
+      renderShapeGallery();
+      renderSourcePanel();
+      renderPalette();
+      scheduleRebuild(0);
+      toast('Project loaded.', { kind: 'ok' });
+    });
   },
   onHelp: () =>
     dialog({
