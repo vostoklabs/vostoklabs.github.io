@@ -119,7 +119,7 @@ Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allur
 
   MIT License
 
-  Copyright (c) GitHub Inc.
+  Copyright (c) 2026 GitHub Inc.
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
