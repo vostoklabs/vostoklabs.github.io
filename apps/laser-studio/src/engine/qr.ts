@@ -376,7 +376,7 @@ function topLeftCell(ring: CutRing, cell: number): [number, number] {
 
 // ------------------------------------------------------------------ gridToRings --
 
-// Ported from an internal tool. Its original note:
+// Why edges and not marching squares or one path per module:
 //
 //   Marching squares would chamfer every corner, and a QR module is a square; emitting one path
 //   per module is what the styled QR libraries do, and at laser scale that is thousands of
