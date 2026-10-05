@@ -2,9 +2,10 @@
 // and variable faces down to what a model needs (see UPSTREAM), then regenerates the font
 // registry, the @font-face CSS and fonts/CREDITS.md from the files on disk.
 //
-// Idempotent: a face already on disk, and already cut, costs no network. Each face's `subsets`
-// is read from its own cmap with src/coverage.ts, the same sets `isFontSupported` checks text
-// against. Needs Node 22.18 or later, which loads that file as TypeScript.
+// Idempotent: a face already on disk, and already cut, is not fetched again. Its family's
+// licence file is read on every run, from node_modules/.cache after the first. Each face's
+// `subsets` is read from its own cmap with src/coverage.ts, the same sets `isFontSupported`
+// checks text against. Needs Node 22.18 or later, which loads that file as TypeScript.
 import { writeFile, readFile, readdir, access, mkdir } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -352,7 +353,8 @@ const UPSTREAM = {
  *  variable font comes from the commit at which its own static Regular was last there.
  *
  *  The list is every face from the API whose licence file (OFL.txt in its google/fonts folder)
- *  declares a Reserved Font Name. A face added from the API later needs the same check. */
+ *  declares a Reserved Font Name. A face added from the API later gets the same check on every
+ *  run: `download` reads its family's licence file and refuses a face named with a reserved name. */
 const ORIGINALS = {
   'abril-fatface': 'ofl/abrilfatface/AbrilFatface-Regular.ttf',
   'aldrich': 'ofl/aldrich/Aldrich-Regular.ttf',
@@ -483,17 +485,34 @@ async function fetchTtfUrl(slug) {
   return reg.ttf;
 }
 
-/** A face from the API, fetched only when it is not on disk. */
+/** A face from the API, fetched only when it is not on disk, and checked against its family's
+ *  licence on every run, on disk or not.
+ *
+ *  The API serves Google's own Latin build of a family, which is a Modified Version under the
+ *  OFL and may not carry a Reserved Font Name. Its name table holds no declaration to read (the
+ *  API builds leave it out), so the family's licence file in google/fonts is read instead, at
+ *  the pinned commit. A family with neither an ofl/ nor an apache/ folder is refused too: its
+ *  licence is not established. */
 async function download(slug) {
   const dest = path.join(FONTS_DIR, `${slug}.ttf`);
-  if (existsSync(dest)) return { slug, status: 'exists' };
   try {
-    const r = await fetch(await fetchTtfUrl(slug));
-    if (!r.ok) throw new Error(`ttf HTTP ${r.status}`);
-    const buf = Buffer.from(await r.arrayBuffer());
-    if (buf.length < 1000) throw new Error(`too small (${buf.length}b)`);
+    const dir = MAP[slug][0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    const family = await familyLicence([`ofl/${dir}`, `apache/${dir}`]);
+    const have = existsSync(dest);
+    let buf;
+    if (have) {
+      buf = readFileSync(dest);
+    } else {
+      const r = await fetch(await fetchTtfUrl(slug));
+      if (!r.ok) throw new Error(`ttf HTTP ${r.status}`);
+      buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length < 1000) throw new Error(`too small (${buf.length}b)`);
+    }
+    const clash = reservedNameIn(FACE_NAMES.map((k) => nameOf(parse(buf), k)), family.reserved);
+    if (clash) throw new Error(`the API build is a Modified Version and ${family.file} reserves "${clash}": take the original from ORIGINALS instead`);
+    if (have) return { slug, status: 'exists', family };
     await writeFile(dest, buf);
-    return { slug, status: 'ok', note: kb(buf.length) };
+    return { slug, status: 'ok', note: kb(buf.length), family };
   } catch (e) {
     return { slug, status: 'FAIL', error: e.message };
   }
@@ -551,11 +570,14 @@ function codePointsOf(font) {
   return Object.keys(map).map(Number).filter((cp) => map[cp] > 0);
 }
 const nameOf = (font, key) => font.names[key]?.en ?? '';
+/** The names a face is called by: family, full, PostScript and typographic family. */
+const FACE_NAMES = ['fontFamily', 'fullName', 'postScriptName', 'preferredFamily'];
 
 /** What is wrong with `buf` as the file UPSTREAM describes for `spec`, or null when it is that
  *  file: covering everything it is here for and, for a cut face, holding nothing past the cut,
- *  without hinting, static, and not named with a Reserved Font Name its licence declares. */
-function problemWith(buf, spec) {
+ *  without hinting, static, and not named with a Reserved Font Name its licence declares
+ *  (`familyReserved`, from the family's OFL.txt, or the declaration in the file itself). */
+function problemWith(buf, spec, familyReserved = []) {
   const font = parse(buf);
   const cps = codePointsOf(font);
   const has = new Set(cps);
@@ -569,9 +591,8 @@ function problemWith(buf, spec) {
   if (tables.fvar) return 'is variable';
   // A cut is a Modified Version under the OFL, which may not carry a Reserved Font Name. The
   // name follows the copyright line, which some files keep in the licence field instead.
-  const reserved = reservedFontNames(`${nameOf(font, 'copyright')}\n${nameOf(font, 'license')}`);
-  const names = ['fontFamily', 'fullName', 'postScriptName', 'preferredFamily'].map((k) => nameOf(font, k));
-  const clash = reservedNameIn(names, reserved);
+  const reserved = [...familyReserved, ...reservedFontNames(`${nameOf(font, 'copyright')}\n${nameOf(font, 'license')}`)];
+  const clash = reservedNameIn(FACE_NAMES.map((k) => nameOf(font, k)), reserved);
   if (clash) return `is named with the Reserved Font Name "${clash}"`;
   return null;
 }
@@ -579,18 +600,40 @@ function problemWith(buf, spec) {
 const PINNED = GOOGLE_FONTS.split('/').pop();
 
 /** The original file from google/fonts at `commit` (the pinned one unless a spec names its own),
- *  downloaded once into node_modules/.cache. */
+ *  downloaded once into node_modules/.cache. A file the commit does not have is remembered as
+ *  missing too, since a commit never changes; the error carries the HTTP status. */
 async function fetchUpstream(file, commit = PINNED) {
   if (!/^(ofl|apache)\//.test(file)) throw new Error(`${file}: only ofl/ and apache/ are cleared for bundling`);
   const cached = path.join(APP, 'node_modules', '.cache', 'google-fonts', commit, file.replace(/\//g, '__'));
+  const missing = (status) => Object.assign(new Error(`${file}: HTTP ${status}`), { status });
   if (existsSync(cached)) return readFileSync(cached);
+  if (existsSync(`${cached}.missing`)) throw missing(404);
   const base = GOOGLE_FONTS.replace(PINNED, commit);
   const r = await fetch(`${base}/${file.split('/').map(encodeURIComponent).join('/')}`);
-  if (!r.ok) throw new Error(`${file}: HTTP ${r.status}`);
-  const buf = Buffer.from(await r.arrayBuffer());
   await mkdir(path.dirname(cached), { recursive: true });
+  if (r.status === 404) await writeFile(`${cached}.missing`, '');
+  if (!r.ok) throw missing(r.status);
+  const buf = Buffer.from(await r.arrayBuffer());
   await writeFile(cached, buf);
   return buf;
+}
+
+/** A family's licence at `commit`, from the first of `folders` that google/fonts has: OFL-1.1
+ *  under ofl/, with the names its OFL.txt reserves, or Apache-2.0 under apache/. */
+async function familyLicence(folders, commit = PINNED) {
+  for (const folder of folders) {
+    const ofl = folder.startsWith('ofl/');
+    const file = `${folder}/${ofl ? 'OFL.txt' : 'LICENSE.txt'}`;
+    let text;
+    try {
+      text = (await fetchUpstream(file, commit)).toString('utf8');
+    } catch (e) {
+      if (e.status === 404) continue;
+      throw e;
+    }
+    return { licence: ofl ? 'OFL-1.1' : 'Apache-2.0', file, commit, reserved: ofl ? reservedFontNames(text) : [] };
+  }
+  throw new Error(`google/fonts has no ${folders.join(' or ')} at ${commit.slice(0, 7)}: the licence is not established`);
 }
 
 const WEIGHT_NAMES = { 100: 'Thin', 200: 'ExtraLight', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold', 900: 'Black' };
@@ -694,26 +737,33 @@ async function makeFace(spec) {
 }
 
 /** A face from UPSTREAM: made again only when the file on disk is missing or not the one the
- *  recipe makes, and written only once it passes. */
+ *  recipe makes, and written only once it passes. Its family's licence file is read first, at
+ *  the face's own commit, so a cut is checked against the names that file reserves. */
 async function upstream(slug) {
   const spec = UPSTREAM[slug];
   const dest = path.join(FONTS_DIR, `${slug}.ttf`);
+  let family;
+  try {
+    family = await familyLicence([spec.file.split('/').slice(0, 2).join('/')], spec.commit);
+  } catch (e) {
+    return { slug, status: 'FAIL', error: e.message };
+  }
   const before = existsSync(dest) ? readFileSync(dest) : null;
   let why = 'not on disk';
   try {
-    if (before) why = problemWith(before, spec);
+    if (before) why = problemWith(before, spec, family.reserved);
     // A face shipped whole has to be the very file: a copy cut elsewhere is a Modified Version.
     if (before && !why && !spec.cut && !before.equals(await fetchUpstream(spec.file, spec.commit))) why = 'not the original file';
   } catch {
     why = 'unreadable';
   }
-  if (!why) return { slug, status: 'exists' };
+  if (!why) return { slug, status: 'exists', family };
   try {
     const buf = await makeFace(spec);
-    const still = problemWith(buf, spec);
+    const still = problemWith(buf, spec, family.reserved);
     if (still) throw new Error(`the new file ${still}`);
     await writeFile(dest, buf);
-    return { slug, status: 'ok', note: `${why}: ${before ? kb(before.length) : 'none'} -> ${kb(buf.length)}` };
+    return { slug, status: 'ok', note: `${why}: ${before ? kb(before.length) : 'none'} -> ${kb(buf.length)}`, family };
   } catch (e) {
     return { slug, status: 'FAIL', error: e.message };
   }
