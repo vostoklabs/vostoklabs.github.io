@@ -40,19 +40,27 @@ const LICENCE_FILE = {
   'Apache-2.0': 'LICENSE-APACHE-2.0.txt',
 };
 
-/* The typeface JSONs each app also bundles. They are three.js example fonts, not .ttf files,
-   so there is no name table to read; their attribution is stated here and the MgOpen notice is
-   read from the app's own `src/typefaces/LICENSE` so it ships verbatim. The clicker is not here:
-   it takes its fonts from @vostok/fonts, and its THIRD-PARTY-NOTICES.txt carries its typefaces. */
+/* The typeface JSONs each app also bundles. They are not .ttf files, so there is no name table to
+   read; their attribution is stated here (each file carries its own copyright and licence too,
+   which THIRD-PARTY-NOTICES.txt prints). The licences are the two texts beside the credits. The
+   clicker is not here: it takes its fonts from @vostok/fonts, and its THIRD-PARTY-NOTICES.txt
+   carries its typefaces. */
 const APPS = [
   {
     id: 'keycap-generator',
     typefaces: [
-      { shownAs: 'Helvetiker, Optimer, Gentilis (regular and bold)', file: 'helvetiker_*, optimer_*, gentilis_*',
-        origin: 'three.js example fonts, derived from the MgOpen family', holder: 'MAGENTA Ltd, 2004',
-        licence: 'MgOpen licence (below)' },
+      { shownAs: 'Roboto, Roboto Bold', file: 'roboto_*',
+        origin: 'Roboto 2.137 from google/fonts, converted by `scripts/typefaces.mjs`', holder: 'Google Inc., 2011',
+        licence: 'Apache-2.0 (`LICENSE-APACHE-2.0.txt`)' },
+      { shownAs: 'Libertinus Sans, Libertinus Sans Bold', file: 'libertinus_sans_*',
+        origin: 'Libertinus Sans 7.051 from google/fonts, converted by `scripts/typefaces.mjs`',
+        holder: 'The Libertinus Sans Project Authors, 2025', licence: 'OFL-1.1 (`OFL.txt`)' },
+      { shownAs: 'Gentilis, Gentilis Bold', file: 'gentilis_*',
+        origin: 'three.js example fonts', holder: 'SIL International, 2003-2008',
+        licence: 'OFL-1.1 (`OFL.txt`), Reserved Font Names "Gentium" and "SIL"' },
       { shownAs: 'Droid Sans, Droid Sans Bold, Droid Sans Mono, Droid Serif, Droid Serif Bold', file: 'droid/*',
-        origin: 'three.js example fonts, converted from the Droid family', holder: 'Google Inc., 2008',
+        origin: 'Android 1.6\'s Droid fonts, converted by `scripts/typefaces.mjs`',
+        holder: 'Google Corporation, 2007; The Android Open Source Project, 2005-2008',
         licence: 'Apache-2.0 (`LICENSE-APACHE-2.0.txt`)' },
     ],
   },
@@ -111,7 +119,6 @@ for (const app of APPS) {
     rows.push({ family, licence, holder, marks, page: specimen(family) });
   }
 
-  const mgopen = readFileSync(path.join(REPO, 'apps', app.id, 'src', 'typefaces', 'LICENSE'), 'utf8').trim();
   const ofl = rows.filter((r) => r.licence === 'OFL-1.1').length;
   const apache = rows.filter((r) => r.licence === 'Apache-2.0').length;
 
@@ -141,18 +148,12 @@ ${rows.map((r) => `| ${r.family} | ${r.licence} | ${r.holder} | ${r.marks || 'â€
 ## Built-in typefaces (\`src/typefaces/*.typeface.json\`)
 
 Outline fonts the app draws with three.js. They are not in this folder because they are
-bundled into the script, and their attribution is here because the licence requires the
+bundled into the script, and their attribution is here because their licences require the
 notice to accompany every copy.
 
 | Shown in the app as | Files | Origin | Copyright | Licence |
 | --- | --- | --- | --- | --- |
 ${app.typefaces.map((t) => `| ${t.shownAs} | \`${t.file}\` | ${t.origin} | ${t.holder} | ${t.licence} |`).join('\n')}
-
-### MgOpen licence
-
-\`\`\`
-${mgopen}
-\`\`\`
 
 ## Fonts you import yourself
 

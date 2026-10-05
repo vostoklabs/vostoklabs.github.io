@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TTFLoader } from 'three/examples/jsm/loaders/TTFLoader.js';
-// Vendored rather than imported from `three/examples/fonts/`: three stopped shipping that
-// folder after 0.171, so the old imports break on any newer version. See typefaces/README.md.
-import helvetikerRegular from './typefaces/helvetiker_regular.typeface.json';
-import helvetikerBold from './typefaces/helvetiker_bold.typeface.json';
-import optimerBold from './typefaces/optimer_bold.typeface.json';
-import optimerRegular from './typefaces/optimer_regular.typeface.json';
+// The app's own files rather than imports from `three/examples/fonts/`, which three stopped
+// shipping after 0.171. Roboto, Libertinus Sans and Droid are converted from their font files by
+// scripts/typefaces.mjs; Gentilis is three's. See typefaces/README.md.
+import robotoRegular from './typefaces/roboto_regular.typeface.json';
+import robotoBold from './typefaces/roboto_bold.typeface.json';
+import libertinusSansRegular from './typefaces/libertinus_sans_regular.typeface.json';
+import libertinusSansBold from './typefaces/libertinus_sans_bold.typeface.json';
 import gentilisRegular from './typefaces/gentilis_regular.typeface.json';
 import gentilisBold from './typefaces/gentilis_bold.typeface.json';
 import droidSansRegular from './typefaces/droid/droid_sans_regular.typeface.json';
@@ -21,11 +22,13 @@ const ttfLoader = new TTFLoader();
 
 export const FONT_OPTIONS = [];
 
+// Roboto and Libertinus Sans keep the ids of the faces they replaced (Helvetiker and Optimer), so
+// a saved design that names one still finds it.
 const BUILT_IN_FONTS = [
-  ['helvetiker-regular', 'Helvetiker', helvetikerRegular],
-  ['helvetiker-bold', 'Helvetiker Bold', helvetikerBold],
-  ['optimer-regular', 'Optimer', optimerRegular],
-  ['optimer-bold', 'Optimer Bold', optimerBold],
+  ['helvetiker-regular', 'Roboto', robotoRegular],
+  ['helvetiker-bold', 'Roboto Bold', robotoBold],
+  ['optimer-regular', 'Libertinus Sans', libertinusSansRegular],
+  ['optimer-bold', 'Libertinus Sans Bold', libertinusSansBold],
   ['gentilis-regular', 'Gentilis', gentilisRegular],
   ['gentilis-bold', 'Gentilis Bold', gentilisBold],
   ['droid-sans-regular', 'Droid Sans', droidSansRegular],

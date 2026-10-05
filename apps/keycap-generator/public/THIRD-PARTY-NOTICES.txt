@@ -17,19 +17,15 @@ generator — see the application's own licence for that.
 
   Converted to three.js's typeface format; the outlines are the fonts' own.
 
-  Droid Sans Bold: Digitized data copyright © 2006, Google Corporation.
-  Droid Sans Mono: Digitized data copyright © 2006, Google Corporation.
-  Droid Sans: Digitized data copyright © 2006, Google Corporation.
-  Droid Serif Bold: Digitized data copyright © 2006, Google Corporation.
-  Droid Serif: Digitized data copyright © 2006, Google Corporation.
+  Droid Sans Bold: Digitized data copyright © 2007, Google Corporation.
+  Droid Sans Mono: Digitized data copyright © 2007, Google Corporation.
+  Droid Sans: Digitized data copyright © 2007, Google Corporation.
+  Droid Serif Bold: Digitized data copyright © 2007, Google Corporation.
+  Droid Serif: Digitized data copyright © 2007, Google Corporation.
+  Roboto Bold: Copyright 2011 Google Inc. All Rights Reserved.
+  Roboto: Copyright 2011 Google Inc. All Rights Reserved.
 
-  This font software is the valuable property of Ascender Corporation and/or its suppliers and its use by you is covered under the terms of a license agreement. This font software is licensed to you by Ascender Corporation for your personal or business use on up to five personal computers. You may not use this font software on more than five personal computers unless you have obtained a license from Ascender to do so. Except as specifically permitted by the license, you may not copy this font software.
-
-  If you have any questions, please review the license agreement you received with this font software, and/or contact Ascender Corporation.
-
-  Contact Information:
-  Ascender Corporation
-  Web http://www.ascendercorp.com/
+  Licensed under the Apache License, Version 2.0
 
   Gentilis Bold: Copyright (c) SIL International, 2003-2008.
   Gentilis: Copyright (c) SIL International, 2003-2008.
@@ -78,24 +74,10 @@ generator — see the application's own licence for that.
   DISCLAIMER
   THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.
 
-  Helvetiker Bold: Copyright (c) Magenta ltd, 2004.
-  Helvetiker: Copyright (c) Μagenta ltd, 2004
-  Optimer Bold: Copyright (c) Magenta Ltd., 2004.
-  Optimer: Copyright (c) Magenta Ltd., 2004
+  Libertinus Sans Bold: Copyright 2025 The Libertinus Sans Project Authors (https://github.com/googlefonts/libertinus)
+  Libertinus Sans Regular: Copyright 2025 The Libertinus Sans Project Authors (https://github.com/googlefonts/libertinus)
 
-  Copyright (c) 2004 by MAGENTA Ltd. All Rights Reserved.
-
-  Permission is hereby granted, free of charge, to any person obtaining a copy of the fonts accompanying this license ("Fonts") and associated documentation files (the "Font Software"), to reproduce and distribute the Font Software, including without limitation the rights to use, copy, merge, publish, distribute, and/or sell copies of the Font Software, and to permit persons to whom the Font Software is furnished to do so, subject to the following conditions:
-
-  The above copyright and this permission notice shall be included in all copies of one or more of the Font Software typefaces.
-
-  The Font Software may be modified, altered, or added to, and in particular the designs of glyphs or characters in the Fonts may be modified and additional glyphs or characters may be added to the Fonts, only if the fonts are renamed to names not containing the word "MgOpen", or if the modifications are accepted for inclusion in the Font Software itself by the each appointed Administrator.
-
-  This License becomes null and void to the extent applicable to Fonts or Font Software that has been modified and is distributed under the "MgOpen" name.
-
-  The Font Software may be sold as part of a larger software package but no copy of one or more of the Font Software typefaces may be sold by itself.
-
-  THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL MAGENTA OR PERSONS OR BODIES IN CHARGE OF ADMINISTRATION AND MAINTENANCE OF THE FONT SOFTWARE BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.
+  This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
 
 
 2. INTERFACE FONT AND ICONS

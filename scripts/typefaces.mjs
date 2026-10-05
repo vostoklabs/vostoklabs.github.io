@@ -19,8 +19,8 @@
   ── the conversion ────────────────────────────────────────────────────────────────
   The outlines are scaled to the format's units, 1000 to 0.72 em (100,000 / (72 × unitsPerEm) per
   font unit, the scale three's own typefaces use, so text sizes and the clicker's line pitch stay
-  what they were) and rounded to whole units; only the characters in KEEP are kept. Apache-2.0
-  asks that a changed file say so: each file's `conversion` field does.
+  what they were) and rounded to whole units; only the characters of the face's set (SETS) are
+  kept. Apache-2.0 asks that a changed file say so: each file's `conversion` field does.
 
   ── licences ──────────────────────────────────────────────────────────────────────
   A source is accepted as Apache-2.0 or OFL-1.1 only, as recorded here AND as its own name table
@@ -54,16 +54,17 @@ const ANDROID_AT = '8f4b5a561813ee8c22d2b8e73c33299471d4a3f3';
 /** How a commit is known, where it has a name. */
 const TAGS = { [ANDROID_AT]: 'tag android-1.6_r1' };
 
-/** Where each face comes from. `licenceFile` is read at the same commit, for an OFL face. */
+/** Where each face comes from. `licenceFile` is read at the same commit, for an OFL face. `set`
+ *  names what a face keeps when that is not the common set (see SETS). */
 const SOURCES = {
   'roboto-regular': { repo: GOOGLE_FONTS, commit: ROBOTO_AT, file: 'apache/roboto/Roboto-Regular.ttf', licence: 'Apache-2.0',
     sha256: '79e851404657dac2106b3d22ad256d47824a9a5765458edb72c9102a45816d95' },
   'roboto-bold': { repo: GOOGLE_FONTS, commit: ROBOTO_AT, file: 'apache/roboto/Roboto-Bold.ttf', licence: 'Apache-2.0',
     sha256: '7d0b991ee3e0be7af01ad7ea8cd2beea6c00a25e679a0226b6737f079aafff86' },
   'libertinus-sans-regular': { repo: GOOGLE_FONTS, commit: FONTS_PIN, file: 'ofl/libertinussans/LibertinusSans-Regular.ttf', licence: 'OFL-1.1',
-    licenceFile: 'ofl/libertinussans/OFL.txt', sha256: '2d261d21add710a08b2ffbd89072d7fd2f29a19582e872da4b8f8f6d622cd78b' },
+    licenceFile: 'ofl/libertinussans/OFL.txt', sha256: '2d261d21add710a08b2ffbd89072d7fd2f29a19582e872da4b8f8f6d622cd78b', set: 'optimer' },
   'libertinus-sans-bold': { repo: GOOGLE_FONTS, commit: FONTS_PIN, file: 'ofl/libertinussans/LibertinusSans-Bold.ttf', licence: 'OFL-1.1',
-    licenceFile: 'ofl/libertinussans/OFL.txt', sha256: '92e1e56b0d949241c400e3bca9a772a5318d3b49de7c5f7ccff0413d1a4cc339' },
+    licenceFile: 'ofl/libertinussans/OFL.txt', sha256: '92e1e56b0d949241c400e3bca9a772a5318d3b49de7c5f7ccff0413d1a4cc339', set: 'optimer' },
   'droid-sans-regular': { repo: ANDROID, commit: ANDROID_AT, file: 'data/fonts/DroidSans.ttf', licence: 'Apache-2.0',
     sha256: '4e2371bc0e4cf6983342e150412f140da79d674c9be0b56458401f581072ecd3' },
   'droid-sans-bold': { repo: ANDROID, commit: ANDROID_AT, file: 'data/fonts/DroidSans-Bold.ttf', licence: 'Apache-2.0',
@@ -119,12 +120,36 @@ const KEEP = new Set([
   0x2126, 0xfeff, 0xfffc, 0xfffd,
 ]);
 
-/** What the conversion changes, as each file and SOURCES.md say it. */
-const CONVERSION = 'the outlines are scaled to 1000 units per 0.72 em and rounded to whole units, and only '
-  + 'Latin, Greek, Cyrillic, punctuation and common symbols are kept. The outlines are otherwise the font\'s own.';
-
 /** Every face made here writes all of these: printable ASCII and the Latin-1 letters. */
 const REQUIRED = [...range(0x20, 0x7e), ...range(0xc0, 0xff).filter((cp) => cp !== 0xd7 && cp !== 0xf7)];
+
+/** The symbols keyboards print on keys. */
+const KEY_SYMBOLS = Array.from('←↑→↓↖↘⇞⇟⇱⇲⇤⇥⇧⇪⌃⌘⌥⌫⌦⌧⎋⏎↵⏏␣▲▼◀▶⬅⬆⬇➡', (ch) => ch.codePointAt(0));
+
+/** Every character the Optimer files had beyond Latin-1 and Latin Extended-A: the modern Greek
+ *  alphabet with ϕ, and some punctuation. */
+const OPTIMER = [0x386, ...range(0x388, 0x38a), 0x38c, ...range(0x38e, 0x3a1), ...range(0x3a3, 0x3ce), 0x3d5,
+  ...Array.from('—‘’“”•…‧‰™≈≤≥', (ch) => ch.codePointAt(0))];
+
+const greekOrCyrillicLetter = (cp) => /^(?=\p{L})[\p{Script=Greek}\p{Script=Cyrillic}]$/u.test(String.fromCodePoint(cp));
+
+/** What a face keeps, what it must have, and how its file says what it keeps. A face keeps the
+ *  common set unless its source names another. */
+const SETS = {
+  common: { keep: KEEP, required: REQUIRED, kept: 'Latin, Greek, Cyrillic, punctuation and common symbols' },
+  // Libertinus Sans has Optimer's place, and ids, in the keycap. Optimer had no Cyrillic and only
+  // the modern Greek alphabet, and the keycap's Roboto and Droid write both, so Libertinus drops
+  // the Greek and Cyrillic letters Optimer did not have, and must keep every character it did.
+  optimer: {
+    keep: new Set([...KEEP, ...KEY_SYMBOLS].filter((cp) => !greekOrCyrillicLetter(cp) || OPTIMER.includes(cp))),
+    required: [...REQUIRED, ...range(0xa0, 0x17f), ...OPTIMER],
+    kept: 'Latin, punctuation, common and key symbols, and Optimer\'s Greek letters (Optimer is the face this replaces)',
+  },
+};
+
+/** What the conversion changes, as each file and SOURCES.md say it. */
+const conversionOf = (set) => 'the outlines are scaled to 1000 units per 0.72 em and rounded to whole units, and only '
+  + `${set.kept} are kept. The outlines are otherwise the font's own.`;
 
 // ---------------------------------------------------------------- fetching
 
@@ -204,10 +229,11 @@ function extent(commands) {
 function typeface(font, source, copyright) {
   const scale = 100000 / (72 * font.unitsPerEm);
   const r = (v) => Math.round(v * scale);
+  const set = SETS[source.set ?? 'common'];
   const glyphs = {};
   const box = { xMin: Infinity, yMin: Infinity, xMax: -Infinity, yMax: -Infinity };
   const map = font.tables.cmap.glyphIndexMap;
-  for (const cp of Object.keys(map).map(Number).filter((c) => KEEP.has(c) && map[c] > 0).sort((a, b) => a - b)) {
+  for (const cp of Object.keys(map).map(Number).filter((c) => set.keep.has(c) && map[c] > 0).sort((a, b) => a - b)) {
     const glyph = font.glyphs.get(map[cp]);
     const commands = glyph.path.commands;
     const e = extent(commands);
@@ -223,7 +249,7 @@ function typeface(font, source, copyright) {
       o: outlineOf(commands, scale),
     };
   }
-  const missing = REQUIRED.filter((cp) => !glyphs[String.fromCodePoint(cp)]);
+  const missing = set.required.filter((cp) => !glyphs[String.fromCodePoint(cp)]);
   if (missing.length) throw new Error(`${source.file} lacks ${String.fromCodePoint(...missing)}`);
 
   const style = nameOf(font, 'fontSubfamily');
@@ -245,7 +271,7 @@ function typeface(font, source, copyright) {
     cssFontStyle: /italic/i.test(style) ? 'italic' : 'normal',
     original_font_information: info,
     conversion: `Converted by Vostok Labs to three.js typeface JSON from ${path.posix.basename(source.file)} `
-      + `(${source.repo} at ${source.commit}, sha256 ${source.sha256}): ${CONVERSION}`,
+      + `(${source.repo} at ${source.commit}, sha256 ${source.sha256}): ${conversionOf(set)}`,
   };
 }
 
@@ -278,8 +304,11 @@ for (const id of new Set(Object.values(OUTPUTS).flatMap((files) => Object.values
 for (const [app, files] of Object.entries(OUTPUTS)) {
   const dir = path.join(REPO, 'apps', app, 'src', 'typefaces');
   const rows = [];
+  /** The files that keep another set than the common one, by set. */
+  const others = new Map();
   for (const [file, id] of Object.entries(files)) {
     const { source, font, copyright } = loaded.get(id);
+    if (source.set) others.set(source.set, [...(others.get(source.set) ?? []), `\`${file}\``]);
     const data = typeface(font, source, copyright);
     const text = `${JSON.stringify(data)}\n`;
     mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
@@ -302,8 +331,8 @@ rather than editing these files.
 | --- | --- | --- | --- | --- | --- |
 ${rows.join('\n')}
 
-What the conversion changes: ${CONVERSION}
-
+What the conversion changes: ${conversionOf(SETS.common)}
+${[...others].map(([set, list]) => `\n${list.join(' and ')} ${list.length > 1 ? 'keep' : 'keeps'} less: only ${SETS[set].kept}.\n`).join('')}
 Each file says so in its \`conversion\` field, and carries the font's own name table, with its
 copyright and licence, in \`original_font_information\`.
 `);
