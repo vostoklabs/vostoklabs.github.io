@@ -10,7 +10,7 @@ Used by the **name keychain** and the **magnet generator**'s Text source.
 | Path | What it is |
 |---|---|
 | `src/fonts/*.ttf` | The faces themselves, plus `icon-fallback.ttf` for missing glyphs |
-| `src/registry.ts` | Generated: id / label / category / curated / subsets / bytes |
+| `src/registry.ts` | Generated: id / label / category / curated / subsets / latinExtB / bytes |
 | `src/coverage.ts` | What each `subsets` name means, as a character set, and what a character needs |
 | `src/fonts.css` | Generated: `@font-face` rules, family `VL-<id>` — **HTML previews only** |
 | `src/textLayout.ts` | opentype path commands → 2D polygon contours, Y-up |
@@ -44,8 +44,10 @@ A face's `subsets` are measured from its own cmap against the character sets in
 `src/coverage.ts`, never copied from the font API: Google Fonts' subset names
 (`latin`, `latin-ext`, `cyrillic`, `cyrillic-ext`, `greek`, `vietnamese`, `korean`,
 `japanese`, `chinese-simplified`, `armenian`, `georgian`) plus `kana`, for hiragana
-and katakana without the kanji. `isFontSupported` checks text against the same sets,
-and `fontScripts` turns them into the alphabet names the kit's font list filters by.
+and katakana without the kanji. Latin Extended-B (U+0180–024F) has no name: faces cover it
+too unevenly, so each file's letters from it are listed as `latinExtB` and text is checked
+against them letter by letter. `isFontSupported` checks text against the same sets, and
+`fontScripts` turns them into the alphabet names the kit's font list filters by.
 `pnpm --filter @vostok/fonts test` fails when the registry and the files disagree.
 
 ## Adding a font

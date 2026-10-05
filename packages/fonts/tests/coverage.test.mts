@@ -3,9 +3,11 @@
 
   What a face covers is measured from its file, never copied from a description of the family
   (src/coverage.ts). What this guards:
-   - registry.ts says what each file on disk holds: `subsets` measured again from every cmap,
-     and `bytes`. A registry that over-claims keeps the missing-glyph mark quiet while the model
-     comes out with "?" in it;
+   - registry.ts says what each file on disk holds: `subsets` and `latinExtB` measured again
+     from every cmap, and `bytes`. A registry that over-claims keeps the missing-glyph mark quiet
+     while the model comes out with "?" in it;
+   - Latin Extended-B is checked letter by letter, not as part of `latin-ext`: the Libre
+     Baskerville original has every Latin Extended-A letter and still lacks ƚ and Ɂ;
    - the common CJK sets decode to their published sizes. A runtime that decoded them
      differently would move every Korean, Japanese and Chinese answer at once;
    - what a string needs, and each face's answer, for every alphabet the package carries:
@@ -18,7 +20,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { FONTS, getRequiredSubsets, isFontSupported, fontScripts, parseFont, UNCOVERED } from '../src/index';
-import { coverageOf, coverageTests } from '../src/coverage';
+import { coverageOf, coverageTests, latinExtBOf, runsHold, LATIN_EXT_B } from '../src/coverage';
 import { importFontBuffer, toPickerFont } from '../src/import';
 
 // cwd, not `import.meta.url`: esbuild bundles this into node_modules/.cache.
@@ -59,6 +61,8 @@ for (const f of FONTS) {
   const map: Record<number, number> = parseFont(buf).tables.cmap.glyphIndexMap;
   const measured = coverageOf((cp) => !!map[cp]);
   if (!same(measured, f.subsets)) wrong.push(`${f.id} says ${f.subsets.join(',')} but holds ${measured.join(',')}`);
+  const extB = latinExtBOf((cp) => !!map[cp]);
+  if (extB !== f.latinExtB) wrong.push(`${f.id} says Latin Extended-B ${f.latinExtB} but holds ${extB}`);
   if (f.bytes !== buf.byteLength) wrong.push(`${f.id} says ${f.bytes} bytes but is ${buf.byteLength}`);
 }
 ok(!wrong.length, `registry.ts matches the files (run fetch-fonts): ${wrong.slice(0, 5).join('; ')}`);
@@ -72,6 +76,8 @@ needs('Hello, Café!', []);
 needs('Привет Ёё', ['cyrillic']);
 needs('Қазақ', ['cyrillic-ext', 'cyrillic']);
 needs('Żółć', ['latin-ext']);
+needs('Știință', [LATIN_EXT_B, 'latin-ext']);
+needs('ƚ Ɂ ƒ', [LATIN_EXT_B]);
 needs('Γειά', ['greek']);
 needs('Բարեւ', ['armenian']);
 needs('გამარჯობა', ['georgian']);
@@ -105,6 +111,21 @@ ok(setting('Բարեւ') === 'handjet', `Armenian is flagged on every face but t
 ok(setting('გამარჯობა') === '', `Georgian is flagged on every face (${setting('გამარჯობა')})`);
 answers('rubik-one', ['Привет Ёё'], ['Γειά']);
 answers('comic-relief', ['Привет Ёё', 'Γειά'], ['안녕']);
+
+// Latin Extended-B, letter by letter. The Libre Baskerville original holds every Latin
+// Extended-A letter, Romanian's Ș and Ț and most of the block, but not ƚ or Ɂ; Aldrich holds
+// only ƒ of it.
+answers('libre-baskerville', ['Żółć', 'Știință', 'Ǎǎ Ǒǒ'], ['ƚ', 'Ɂ', 'Știință ƚ']);
+answers('aldrich', ['ƒ'], ['Știință', 'ƚ']);
+ok(FONTS.every((f) => typeof f.latinExtB === 'string'), 'every face in the registry carries its Latin Extended-B letters');
+// The runs round-trip: every code point of the block reads back as held or not, as measured.
+const held = new Set([0x180, 0x181, 0x183, 0x185, 0x186, 0x187, 0x24f]);
+const runs = latinExtBOf((cp) => held.has(cp));
+ok(runs === 'ƀƁƃƅ-Ƈɏ', `runs are written as runs (${runs})`);
+let roundTrip = true;
+for (let cp = 0x17f; cp <= 0x250; cp++) if (runsHold(runs, cp) !== held.has(cp)) roundTrip = false;
+ok(roundTrip, 'and read back exactly');
+ok(isFontSupported({ id: 'hand-made', label: 'Hand-made', category: 'Custom', curated: false, subsets: ['latin', 'latin-ext'] }, 'Știință'), 'a face without the measurement is not flagged for the block');
 
 // The alphabets a picker filters by, in their fixed order
 const scripts = (id: string, want: string[]) => {

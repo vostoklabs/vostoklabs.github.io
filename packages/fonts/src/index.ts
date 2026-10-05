@@ -18,7 +18,7 @@ export { ICONS, ICON_CATEGORIES, searchIcons, iconById, iconByChar, type IconCho
 export { POPULAR_IDS, POPULAR, QUICK_PICKS, SYMBOL_GROUPS, searchGroup, type SymbolGroup } from './symbolGroups';
 
 import { FONTS, type FontChoice } from './registry';
-import { requirementOf, SCRIPTS } from './coverage';
+import { requirementOf, runsHold, LATIN_EXT_B, SCRIPTS } from './coverage';
 // What a face covers and what a string needs, measured on the same character sets.
 export { UNCOVERED } from './coverage';
 
@@ -99,8 +99,9 @@ export const curatedFonts = (): FontChoice[] => FONTS.filter((f) => f.curated);
  * `subsets` (`cyrillic`, `korean`, `kana`, `japanese`...), or two joined by `|` when either will
  * do: a Han character in both the Japanese and the Chinese set needs
  * `japanese|chinese-simplified`. `UNCOVERED` stands for a character no bundled face has: a CJK
- * one past the common set the files are cut to, or Hangul typed as separate jamo. Basic Latin,
- * Latin-1 and punctuation need nothing.
+ * one past the common set the files are cut to, or Hangul typed as separate jamo. `latin-ext-b`
+ * stands for a Latin Extended-B letter, which a face must hold itself (`FontChoice.latinExtB`).
+ * Basic Latin, Latin-1 and punctuation need nothing.
  */
 export function getRequiredSubsets(text: string): string[] {
   const needs = new Set<string>();
@@ -127,7 +128,19 @@ export function isFontSupported(font: FontChoice, text: string): boolean {
   const imported = customFonts.get(font.id);
   if (imported) return cmapCovers(imported, text);
   if (!font.subsets) return true;
-  return getRequiredSubsets(text).every((need) => need.split('|').some((name) => font.subsets.includes(name)));
+  return getRequiredSubsets(text).every((need) =>
+    need === LATIN_EXT_B ? holdsLatinExtB(font, text) : need.split('|').some((name) => font.subsets.includes(name)));
+}
+
+/** Every Latin Extended-B letter of `text` is one the face's file was measured to hold. A face
+ *  without that measurement, made somewhere other than the registry, is not flagged for them. */
+function holdsLatinExtB(font: FontChoice, text: string): boolean {
+  if (font.latinExtB === undefined) return true;
+  for (const char of text) {
+    const cp = char.codePointAt(0)!;
+    if (requirementOf(cp) === LATIN_EXT_B && !runsHold(font.latinExtB, cp)) return false;
+  }
+  return true;
 }
 
 /** The alphabets `font` writes, for a person to filter by: any of 'Latin', 'Cyrillic', 'Greek',

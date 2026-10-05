@@ -121,18 +121,56 @@ export function coverageOf(has: (codePoint: number) => boolean): CoverageName[] 
   return COVERAGE_NAMES.filter((name) => all[name].every(has));
 }
 
+/** Latin Extended-B, U+0180–024F: Romanian's Ș and Ț, pinyin's tone marks, African letters,
+ *  the Croatian digraphs. Faces cover it too unevenly for one name to stand for it, from none
+ *  of it to all of it and rarely the same way twice, and a face with every Latin Extended-A
+ *  letter can still lack ƚ or Ɂ. So each file is measured letter by letter (`latinExtBOf`),
+ *  and what a letter of the block needs is that very letter. */
+export const LATIN_EXT_B = 'latin-ext-b';
+const EXT_B_FIRST = 0x180;
+const EXT_B_LAST = 0x24f;
+
+/** The Latin Extended-B letters a face holds, given a lookup into its cmap, as runs of
+ *  characters: "ƀ-ǃǅ-ɏ" is ƀ to ǃ and ǅ to ɏ. A hyphen is not in the block, so it only joins. */
+export function latinExtBOf(has: (codePoint: number) => boolean): string {
+  let out = '';
+  for (let cp = EXT_B_FIRST; cp <= EXT_B_LAST; cp++) {
+    if (!has(cp)) continue;
+    let end = cp;
+    while (end < EXT_B_LAST && has(end + 1)) end++;
+    out += String.fromCodePoint(cp);
+    if (end === cp + 1) out += String.fromCodePoint(end);
+    else if (end > cp + 1) out += `-${String.fromCodePoint(end)}`;
+    cp = end;
+  }
+  return out;
+}
+
+/** Whether runs written by `latinExtBOf` hold `cp`. */
+export function runsHold(runs: string, cp: number): boolean {
+  const chars = Array.from(runs, (c) => c.codePointAt(0)!);
+  for (let i = 0; i < chars.length; i++) {
+    const from = chars[i]!;
+    const to = chars[i + 1] === 0x2d ? chars[(i += 2)]! : from;
+    if (cp >= from && cp <= to) return true;
+  }
+  return false;
+}
+
 /**
  * What one character needs from a face, or undefined for one that every face is taken to have
  * (Basic Latin, Latin-1, punctuation). A Han character either the Japanese or the Chinese set
  * holds needs `japanese|chinese-simplified`: either one will do.
  *
  * The alphabets are tested by block: a face that has the alphabet is taken to have the rest of
- * its block. CJK is tested character by character, because the files are cut to the common set
- * and a rarer character is missing from every one of them.
+ * its block. Latin Extended-B is the exception (`LATIN_EXT_B`), and so is CJK, tested character
+ * by character because the files are cut to the common set and a rarer character is missing
+ * from every one of them.
  */
 export function requirementOf(cp: number): string | undefined {
   if (cp < 0x100) return undefined;
-  if (cp <= 0x24f) return 'latin-ext';
+  if (cp < EXT_B_FIRST) return 'latin-ext';
+  if (cp <= EXT_B_LAST) return LATIN_EXT_B;
   if (cp >= 0x370 && cp <= 0x3ff) return 'greek';
   if ((cp >= 0x400 && cp <= 0x45f) || cp === 0x490 || cp === 0x491) return 'cyrillic';
   if (cp >= 0x460 && cp <= 0x52f) return 'cyrillic-ext';
