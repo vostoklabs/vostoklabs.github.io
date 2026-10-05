@@ -323,6 +323,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let latestParts: ClickerPart[] = [];
   let assetsReady = false;
   let defaultClickerLoaded = false;
+  /** Design builds sent to the worker and not answered yet; it answers each, in order, with
+   *  `parts` or `error`. Counting down on every `error` can only undercount, which at worst
+   *  lowers a spinner early, never leaves one stuck. */
+  let designBuildsInFlight = 0;
+  /** The spinner, lowered by a path that ends without building anything, unless a design build
+   *  is still running: that build's answer lowers it. Loading a project raises it first, and a
+   *  project with nothing to build (an SVG design without its SVG, a model without its model)
+   *  used to leave it spinning over the stage for good. */
+  const notBuilding = (): { building?: false } => (designBuildsInFlight > 0 ? {} : { building: false });
 
   // Vector states
   let currentSvgText = '';
@@ -929,10 +938,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ status: 'Project saved ✓' });
     },
     onLoadProject: (file) => {
-      void readProjectFile(file, applyProject, PROJECT_FILE).then((loaded) => {
+      let applying = false;
+      const apply = (data: unknown) => {
+        applying = true;
+        return applyProject(data);
+      };
+      void readProjectFile(file, apply, PROJECT_FILE).then((loaded) => {
         // Not a project the clicker can open: the kit's toast says so. A file that failed
-        // half way through applying must not leave "Loading project…" up behind it.
-        if (loaded === null) store.set({ building: false, status: '' });
+        // half way through applying must not leave "Loading project…" up behind it. One
+        // refused before applying changed nothing, so it leaves the screen as it is, a build
+        // still running included.
+        if (loaded === null && applying) store.set({ ...notBuilding(), status: '' });
       });
     },
     onOpenFromHost: () => void openFromHost(),
@@ -1238,7 +1254,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     store,
     viewer,
     // `worker` is created further down; this only runs once it exists.
-    post: (msg, transfer) => worker.postMessage(msg, transfer ?? []),
+    post: (msg, transfer) => {
+      if (msg.type === 'buildModel') designBuildsInFlight++;
+      worker.postMessage(msg, transfer ?? []);
+    },
     // A result card's build: correlated like a batch run's, so the viewport never sees it.
     buildDetached: (params) => {
       const requestId = `m${++buildSeq}`;
@@ -1793,6 +1812,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           resolve?.({ parts: msg.parts, warnings: msg.warnings ?? [] });
           break;
         }
+        designBuildsInFlight = Math.max(0, designBuildsInFlight - 1);
         latestParts = msg.parts;
         latestSwitchPlacements = msg.switchPlacements ?? [];
         if (msg.modelMeta) modelMode.onParts(msg.modelMeta, msg.warnings ?? []);
@@ -1886,6 +1906,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         modelMode.onModelInfo(msg.info);
         break;
       case 'error':
+        // An error does not say which request failed (see `designBuildsInFlight`).
+        designBuildsInFlight = Math.max(0, designBuildsInFlight - 1);
         // A model that failed to open is the user's file, not a crash: the controller says so
         // in words and forgets it.
         if (modelMode.onError(msg.message)) {
@@ -1903,6 +1925,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   };
   worker.onerror = (e) => {
+    designBuildsInFlight = 0;
     store.set({ building: false, status: 'Worker failed: ' + e.message });
     console.error(e);
   };
@@ -2159,7 +2182,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
     } else if (s.importMode === 'svg') {
       if (!currentSvgText) {
-        store.set({ status: 'Upload an SVG file first.' });
+        store.set({ ...notBuilding(), status: 'Upload an SVG file first.' });
         return;
       }
       try {
@@ -2411,6 +2434,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     } else {
       store.set({ building: true, status: 'Building clicker…' });
     }
+    designBuildsInFlight++;
     if (isBlocks) {
       worker.postMessage({ type: 'buildBlocks', regions, params });
     } else {
@@ -2803,7 +2827,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             sample: null,
           });
         } else {
-          store.set({ status: 'This project did not keep its model. Upload it again to carry on.' });
+          store.set({ ...notBuilding(), status: 'This project did not keep its model. Upload it again to carry on.' });
         }
         return;
       }
