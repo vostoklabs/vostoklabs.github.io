@@ -50,6 +50,7 @@
  */
 import * as THREE from 'three';
 import { csOf, ringsOf, extrude } from '@vostok/manifold';
+import { signedArea, bboxOf } from '@vostok/laser/rings';
 
 const MITER_LIMIT = 4;             // generous headroom above Clipper2's min (2) for a 90° corner
 const NESTED_MARGIN_MM = 0.02;      // a contour must sit this far inside another to count as its hole
@@ -99,16 +100,6 @@ const CORE_TRANSIENT_REL = 0.06;    // a step-to-step relative width change abov
 
 // ---------------------------------------------------------------- 2D polygon helpers
 
-function signedArea(poly) {
-  let a = 0;
-  for (let i = 0; i < poly.length; i++) {
-    const [x1, y1] = poly[i];
-    const [x2, y2] = poly[(i + 1) % poly.length];
-    a += x1 * y2 - x2 * y1;
-  }
-  return a / 2;
-}
-
 /** Manifold's `toPolygons()` winds a hole opposite its parent outline; a hole treated as its
  *  OWN standalone filled shape (which is what we do to offset it) needs to be CCW/positive-area
  *  regardless of which way it came wound. */
@@ -116,20 +107,11 @@ function ensureCCW(poly) {
   return signedArea(poly) < 0 ? poly.slice().reverse() : poly;
 }
 
-function bboxOf(poly) {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const [x, y] of poly) {
-    if (x < minX) minX = x; if (x > maxX) maxX = x;
-    if (y < minY) minY = y; if (y > maxY) maxY = y;
-  }
-  return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
-}
-
 /** Split one Z-slice's polygons into the outer boundary/boundaries and whichever polygons sit
  *  well inside one of them (a hole). A female socket's slice is [outer, hole]; a male stub's is
  *  just its own outline(s), with `holes` empty. */
 function classifySlice(polys) {
-  const items = polys.map((poly) => ({ poly, area: Math.abs(signedArea(poly)), bbox: bboxOf(poly) }));
+  const items = polys.map((poly) => ({ poly, area: Math.abs(signedArea(poly)), bbox: bboxOf([[poly]]) }));
   items.sort((a, b) => b.area - a.area);
   const outer = items[0] || null;
   const holes = outer
@@ -266,7 +248,7 @@ function detectCoreZRange(man0, zMin, zMax, kind) {
     const f = (i + 0.5) / CORE_SCAN_COUNT;
     const z = zMin + f * zSpan;
     const t = primaryTarget(classifySlice(slicePolys(man0, z)), kind);
-    samples.push({ z, w: t ? Math.max(t.bbox.w, t.bbox.h) : null });
+    samples.push({ z, w: t ? Math.max(t.bbox.maxX - t.bbox.minX, t.bbox.maxY - t.bbox.minY) : null });
   }
   const relStep = (a, b) => (a.w == null || b.w == null ? Infinity : Math.abs(b.w - a.w) / Math.max(a.w, b.w, 1e-6));
 
@@ -304,7 +286,10 @@ function processStem(api, mesh, tolMM) {
   const socketVotes = probes.filter((p) => p.holes.length > 0).length;
   const kind = socketVotes * 2 >= probes.length ? 'socket' : 'stub';
 
-  const primaryBoxes = probes.map((p) => { const t = primaryTarget(p, kind); return t ? t.bbox : null; });
+  const primaryBoxes = probes.map((p) => {
+    const t = primaryTarget(p, kind);
+    return t ? { w: t.bbox.maxX - t.bbox.minX, h: t.bbox.maxY - t.bbox.minY } : null;
+  });
   const validBoxes = primaryBoxes.filter(Boolean);
   const isConstant = validBoxes.length === primaryBoxes.length && validBoxes.every((b) => (
     Math.abs(b.w - validBoxes[0].w) < BAND_CONST_EPS_MM && Math.abs(b.h - validBoxes[0].h) < BAND_CONST_EPS_MM
@@ -459,4 +444,4 @@ export function applyStemClearance(api, baseStemGeometry, tolMM) {
 }
 
 // Exported for the test file's own direct checks of the pure 2D pieces.
-export const _internal = { signedArea, ensureCCW, bboxOf, classifySlice, splitComponents };
+export const _internal = { ensureCCW, classifySlice, splitComponents };
