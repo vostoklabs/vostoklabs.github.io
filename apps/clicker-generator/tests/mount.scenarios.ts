@@ -392,6 +392,7 @@ const press = () => watch<void>(ui().onExport());
   await clock.advance(300);
   check('Model mode, its sample still downloading: Export waits for it', waited, describe(exp));
   check('…and writes the model\'s cut, the one on screen', written()[0] === 'model:slice|size=40|st=0' && written()[0] === onScreen(), `${describe(exp)}; screen ${shown(onScreen())}`);
+  check('…saying whose shape it is', seen.downloads[0]?.opts.sourceModel === 'Skull', String(seen.downloads[0]?.opts.sourceModel));
   finish(unmount);
 }
 
@@ -404,6 +405,7 @@ const press = () => watch<void>(ui().onExport());
   const exp = press();
   await clock.advance(300);
   check('Model mode, its sample fails to download while Export waits: Export is answered', exp.done, `${describe(exp)}; status "${status()}"`);
+  check('…and the picture still on screen is not credited to a model', written()[0] === 'default-sample' && seen.downloads[0]?.opts.sourceModel === undefined, `${describe(exp)}, credited to ${seen.downloads[0]?.opts.sourceModel}`);
   finish(unmount);
 }
 
@@ -522,10 +524,37 @@ const press = () => watch<void>(ui().onExport());
   await clock.advance(200);
   worker.failIf = (msg) => (msg.type === 'importModel' ? 'That file has no triangles' : null);
   ui().onModelFile(new File([new Uint8Array(16)], 'broken.stl'));
+  await clock.advance(1); // the file is read, and on its way to the worker
   const exp = press();
   await clock.advance(200);
-  check('a model that fails to open: Export is answered', exp.done, describe(exp));
+  check('a model that fails to open while Export waits: Export is answered', exp.done, describe(exp));
   check('…and the status says why', status() === 'Could not open that model: That file has no triangles', status());
+  check('…and the picture still on screen is not credited to a model', written()[0] === 'built:image:cc=4|w=40|st=0' && seen.downloads[0]?.opts.sourceModel === undefined, `${describe(exp)}, credited to ${seen.downloads[0]?.opts.sourceModel}`);
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onModelFile(new File([new Uint8Array(16)], 'figure.stl'));
+  await clock.advance(100);
+  check('Model mode: an uploaded model is cut', onScreen() === 'model:slice|size=60|st=0', shown(onScreen()));
+  worker.failIf = (msg) => (msg.type === 'importModel' ? 'That file has no triangles' : null);
+  ui().onModelFile(new File([new Uint8Array(16)], 'broken.stl'));
+  await clock.advance(100); // read, sent, and refused by the worker
+  const exp = press();
+  await clock.advance(10);
+  check('another model that then fails to open: Export writes the cut still on screen, credited to its own model', written()[0] === 'model:slice|size=60|st=0' && seen.downloads[0]?.opts.sourceModel === 'figure.stl', `${describe(exp)}, credited to ${seen.downloads[0]?.opts.sourceModel}`);
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onImportMode('model');
+  await clock.advance(100);
+  ui().onImportMode('image'); // back to the picture
+  const exp = press();
+  await clock.advance(300);
+  check('back from Model mode to the picture: Export writes the picture, credited to no model', written()[0] === 'built:image:cc=4|w=35|st=0' && seen.downloads[0]?.opts.sourceModel === undefined, `${describe(exp)}, credited to ${seen.downloads[0]?.opts.sourceModel}`);
   finish(unmount);
 }
 

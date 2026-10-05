@@ -322,6 +322,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let switchColumnMm = 17;
   let regionSet: RegionSet | null = null;
   let latestParts: ClickerPart[] = [];
+  /** The model `latestParts` were cut from, by name, or null when they were not cut from one.
+   *  Set with them, so the file's credit follows the parts and not the mode. */
+  let latestModel: string | null = null;
   let assetsReady = false;
   let defaultClickerLoaded = false;
   /** What Export exports: the build on screen, once it has landed (export/shownBuild.ts). Every
@@ -444,11 +447,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
 
   /** A clicker cut from an uploaded model says whose shape it is (threemfExport's `sourceModel`).
-   *  Not for the fit test, which is ours alone. */
+   *  Not for the fit test, which is ours alone. Asked of the parts on screen, not of the mode:
+   *  in Model mode, a model that failed to open leaves the design from before it on screen, a
+   *  picture that is ours to claim, or the cut of the model before, which is not. */
   function modelExportOpts(): { sourceModel?: string } {
-    const s = store.get();
-    if (s.importMode !== 'model' || s.fitTestActive) return {};
-    return { sourceModel: modelMode.snapshot()?.name ?? 'an uploaded model' };
+    if (store.get().fitTestActive || latestModel === null) return {};
+    return { sourceModel: latestModel };
   }
 
   /** Base64 without a FileReader round trip. Chunked because `String.fromCharCode(...bytes)`
@@ -1865,6 +1869,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           break;
         }
         latestParts = msg.parts;
+        // Only a Model-mode build reports `modelMeta`.
+        latestModel = msg.modelMeta ? modelMode.snapshot()?.name ?? 'an uploaded model' : null;
         latestSwitchPlacements = msg.switchPlacements ?? [];
         if (msg.modelMeta) modelMode.onParts(msg.modelMeta, msg.warnings ?? []);
         // A design build that was already in flight when the fit test opened. It is still the
@@ -2020,6 +2026,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         triVerts: new Uint32Array(p.triVerts),
       }));
       latestParts = parts;
+      latestModel = null;
       onScreen.shown();
       viewer.setParts(parts, false);
       viewer.setView(store.get().view);
@@ -3030,6 +3037,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         showParts: (parts) => {
           exitFitTest();
           latestParts = parts;
+          latestModel = null; // a batch row is built like a picture, never cut from a model
           onScreen.shown();
           viewer.setParts(parts, false);
           viewer.setView(store.get().view);
