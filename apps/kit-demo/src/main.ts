@@ -102,6 +102,7 @@ import {
   type SvgImportPart,
   type SymbolTransform,
 } from '@vostok/ui-kit';
+import { openSymbolChooser, symbolDrawing } from '@vostok/ui-kit/symbols';
 import './demo.css';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -933,6 +934,25 @@ const shapePickerButton = symbolPickerButton({
   },
 });
 
+/* The symbol picker over the whole library. It hands back the symbol as shapes; the page draws
+   the pick from the same library, as an app's preview would. */
+const chosenArt = el('span', { className: 'kit-chosen-symbol', attrs: { 'aria-hidden': 'true' } });
+const chosenText = el('p', { className: 'vl-hint', text: 'Nothing picked yet.' });
+const chooseSymbolButton = button({
+  label: 'Choose a symbol',
+  icon: ICONS.plus,
+  emphasis: 'secondary',
+  onClick: () =>
+    openSymbolChooser({
+      anchor: chooseSymbolButton,
+      onPick: async (choice) => {
+        chosenArt.replaceChildren(await symbolDrawing(choice.id));
+        const holes = choice.shapes.reduce((n, island) => n + island.length - 1, 0);
+        chosenText.textContent = `${choice.label} (${choice.id}): ${choice.shapes.length} piece${choice.shapes.length === 1 ? '' : 's'}, ${holes} hole${holes === 1 ? '' : 's'}`;
+      },
+    }),
+});
+
 /* Symbols in a line of text: the field, the library and the inspector together. The page keeps
    which drawing each symbol character stands for and how it is placed; the three blocks own none
    of it. */
@@ -1058,6 +1078,14 @@ app.append(
       'symbol font, or, as here and in the clicker’s base shapes, one SVG path per item, drawn ' +
       'in currentColor so it follows the theme.',
     panel(row(shapePickerButton), shapeChoice),
+  ),
+  entry(
+    'openSymbolChooser()',
+    'Symbol chooser',
+    'THE symbol picker: Material Symbols, Tabler Icons and Fluent Emoji in one window, with one set ' +
+      'of categories and one search. The pick comes back as closed shapes, centred and one unit ' +
+      'across, ready to scale, cut or extrude, and the tiles are drawn from those same shapes.',
+    panel(row(chooseSymbolButton), el('div', { className: 'kit-chosen' }, [chosenArt, chosenText])),
   ),
   entry(
     'symbolTextField() · openSymbolLibrary() · symbolInspector()',

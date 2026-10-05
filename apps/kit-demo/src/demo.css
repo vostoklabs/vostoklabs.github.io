@@ -175,6 +175,22 @@ body {
 }
 
 /* The page's own drawing of a line of text with symbols in it, as an app's preview would show it. */
+.kit-chosen {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.kit-chosen-symbol {
+  display: inline-flex;
+  inline-size: 48px;
+  block-size: 48px;
+  flex: none;
+  color: var(--text);
+}
+.kit-chosen-symbol svg {
+  inline-size: 100%;
+  block-size: 100%;
+}
 .kit-symbol-preview {
   margin: 0;
   min-block-size: 1.4em;

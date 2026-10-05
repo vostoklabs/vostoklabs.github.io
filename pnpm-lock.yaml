@@ -674,6 +674,9 @@ importers:
       '@vostok/brand':
         specifier: workspace:*
         version: link:../../config
+      '@vostok/symbols':
+        specifier: workspace:*
+        version: link:../symbols
     devDependencies:
       typescript:
         specifier: ^5.7.2

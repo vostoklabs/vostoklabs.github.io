@@ -319,6 +319,9 @@ export { keyMap, type KeyMapOptions, type KeyMapHandle } from './components/key-
 export { symbolTextField, type SymbolTextFieldOptions, type SymbolTextFieldHandle } from './components/symbol-text-field';
 export { symbolInspector, type SymbolInspectorOptions, type SymbolInspectorHandle } from './components/symbol-inspector';
 export { openSymbolLibrary, type SymbolLibraryEntry, type SymbolLibraryOptions, type SymbolLibraryHandle } from './components/symbol-library';
+// THE symbol picker, the window above over every set on the shelf, is its own entry,
+// `@vostok/ui-kit/symbols`: it brings the symbol library and the icon font, which only the apps that
+// open it should carry.
 export { SYMBOL_CATALOG, POPULAR_SYMBOL_IDS, type CatalogSymbol } from './symbols/catalog';
 export {
   SYMBOL_FIRST, SYMBOL_LAST, isSymbolChar, hasSymbol, codePointCount, nextSymbolChar, placeSymbol, shiftSymbol,

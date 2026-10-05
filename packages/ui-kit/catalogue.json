@@ -31,8 +31,9 @@
     { "name": "Sample tiles", "category": "ui", "use": ["sampleGrid", "thumbGrid"], "with": ["thumbTile"], "for": "Square picture tiles to start from a sample, in a grid." },
     { "name": "SVG wizard", "category": "ui", "use": ["openSvgImport"], "with": ["svgImportDefaults", "svgPartLabel", "flattenSvgStyles"], "for": "The SVG import window: shows the file and what the tracer made of it, and lets the user choose parts, colours and outline or fill." },
     { "name": "Font chooser", "category": "ui", "use": ["fontChooser"], "with": ["fontCards", "fontPicker"], "for": "THE font block: recommended font cards, \"Browse all\" library, style chips, import a font, and warnings when a font cannot write the text. fontCards and fontPicker are its parts." },
-    { "name": "Symbol picker", "category": "ui", "use": ["symbolPickerButton"], "with": ["openSymbolPicker"], "for": "A button that opens a searchable grid of symbols from the Material Symbols font." },
-    { "name": "Symbol library", "category": "ui", "use": ["openSymbolLibrary"], "for": "The large symbol window over the Tabler and Fluent sets: categories, search, popular first." },
+    { "name": "Symbol chooser", "category": "ui", "use": ["openSymbolChooser"], "with": ["symbolDrawing"], "for": "THE symbol picker: every symbol set on the shelf (Material, Tabler, Fluent) in one window with categories and search, handing back the symbol as shapes ready to cut or extrude." },
+    { "name": "Symbol picker (Material only)", "category": "ui", "use": ["symbolPickerButton"], "with": ["openSymbolPicker"], "for": "The older drawer of Material Symbols glyphs, or of any items with a path each (the clicker's base shapes). For symbols, use the Symbol chooser." },
+    { "name": "Symbol library", "category": "ui", "use": ["openSymbolLibrary"], "for": "The large symbol window the Symbol chooser opens: categories, search, async tiles, an import button. Give it your own list only for something that is not a symbol of the shelf." },
     { "name": "Symbol text field", "category": "ui", "use": ["symbolTextField"], "with": ["SYMBOL_FIRST", "SYMBOL_LAST", "isSymbolChar", "hasSymbol", "codePointCount", "nextSymbolChar", "placeSymbol", "shiftSymbol"], "for": "A text field that holds symbols as inline tokens beside the letters, plus the rules for where a symbol may sit." },
     { "name": "Symbol inspector", "category": "ui", "use": ["symbolInspector"], "for": "One placed symbol's own controls, folded under its name." },
     { "name": "Undo/redo buttons", "category": "ui", "use": ["historyControls"], "for": "The undo, refresh and redo buttons. The history itself is still each app's own." },
@@ -70,7 +71,7 @@
     { "name": "Filament colours", "category": "print3d", "use": ["filamentRow", "paletteRow"], "with": ["FILAMENTS", "colorChip", "contrastRatio", "luminance"], "for": "Rows of common PLA/PETG colours plus a custom colour, one row per part, and a contrast check between two colours." },
 
     { "name": "Interface icons", "category": "asset", "use": ["ICONS"], "with": ["svgEl", "svgPathEl"], "licence": "ISC and MIT: stroke icons drawn from Lucide (ISC) and Feather (MIT), the GitHub mark from Octicons (MIT); licence texts beside icons.ts", "for": "The small icons on buttons and menus, inline SVG. Interface only: never part of a customer's export." },
-    { "name": "Symbol set: Tabler + Fluent", "category": "asset", "use": ["SYMBOL_CATALOG"], "with": ["POPULAR_SYMBOL_IDS"], "licence": "MIT (Tabler Icons filled; Microsoft Fluent Emoji High Contrast); licence texts beside the data", "for": "The symbols customers can place in their designs through the Symbol library." }
+    { "name": "Symbol set: Tabler + Fluent", "category": "asset", "use": ["SYMBOL_CATALOG"], "with": ["POPULAR_SYMBOL_IDS"], "licence": "MIT (Tabler Icons filled; Microsoft Fluent Emoji High Contrast); licence texts beside the data", "for": "The 75 symbols the clicker's library traces from SVG. The same drawings, and more, are in the symbol library (@vostok/symbols); this goes when the clicker moves onto it." }
   ],
   "internal": {
     "why": "Version stamp read by the kit itself.",
