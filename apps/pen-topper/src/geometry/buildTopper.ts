@@ -1,8 +1,8 @@
 import type { BuildParams, PartMesh } from '../types';
 import type { LineBox } from '@vostok/fonts/textLayout';
 import { csOf, ringsOf, extrude, withScope, type Keep } from '@vostok/manifold';
-import { boreFor, gripFor, HEX_CORNER_FACTOR } from '../state';
-import { snapLayers } from './noAms';
+import { boreFor, gripFor, HEX_CORNER_FACTOR, ROOF_CAP } from '../state';
+import { bandHeights } from './noAms';
 import { identityVoids } from './identityMark';
 
 /*
@@ -137,15 +137,9 @@ function fillHoles(wasm: any, cs: any, keep: Keep): any {
   return keep(csOf(wasm, outers, 'Positive'));
 }
 
-/** Where the truncated peak is cut off, as a multiple of the bore radius. The full
- *  point would be at sqrt(2); stopping at 1.18 leaves a bridge of 0.47r — about
- *  2.4 mm on a ballpoint — which any printer spans without thinking, and costs
- *  1.2 mm off the collar's height plus the knife edge that would otherwise sit on
- *  top of it. */
-const ROOF_CAP = 1.18;
-
 /**
- * The bore's cross-section: a circle capped with a 45-degree roof, truncated.
+ * The bore's cross-section: a circle capped with a 45-degree roof, truncated at
+ * `ROOF_CAP`.
  *
  * The tangent points sit at +/-45 degrees, so the roof lines leave the circle
  * exactly where its own overhang reaches 45 and would meet at r*sqrt(2) above
@@ -497,14 +491,12 @@ export function buildProfiles(
     thickness is the pencil topper people recognise, and asking someone to discover
     "set plate thickness to 13.3" first would be asking them to find the object by
     accident. The slider still moves; it just cannot go under the floor.
+
+    `bandHeights` holds that floor and snaps the bands to whole layers for a manual
+    swap. The pause readout reads the same function, so the layer it tells someone to
+    swap at is the one these parts are stacked on.
   */
-  const requestedT = params.plateThickness;
-  const snapped = params.printMode === 'noams'
-    ? snapLayers(inBody ? Math.max(requestedT, collarH) : requestedT, params.haloThickness, params.layerHeight)
-    : { base: inBody ? Math.max(requestedT, collarH) : requestedT, halo: params.haloThickness };
-  const plateT = snapped.base;
-  const haloT = snapped.halo;
-  const letterZ = plateT + (hasHalo ? haloT : 0);
+  const { plateT, haloT, letterZ } = bandHeights(params);
 
   // --- Glyphs -------------------------------------------------------------
   let glyphsCS: any;

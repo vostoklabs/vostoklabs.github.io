@@ -418,6 +418,14 @@ export const DEFAULT_SETTINGS: TopperSettings = {
   layerHeight: 0.2,
 };
 
+/** Where the round bore's truncated peak is cut off, as a multiple of the bore radius.
+ *  The full point would be at sqrt(2); stopping at 1.18 leaves a bridge of 0.47r — about
+ *  2.4 mm on a ballpoint — which any printer spans without thinking, and costs
+ *  1.2 mm off the collar's height plus the knife edge that would otherwise sit on
+ *  top of it. Kept here, beside `minPlateThickness`, because the block's height is
+ *  measured from the same roof the builder cuts. */
+export const ROOF_CAP = 1.18;
+
 /**
  * The least the plate can be for the chosen pen path, in mm.
  *
@@ -431,10 +439,9 @@ export function minPlateThickness(
 ): number {
   if (s.penPath === 'collar') return 1.5;
   const r = boreFor(s) / 2;
-  // Matches ROOF_CAP in buildTopper: bed -> centre -> truncated roof -> one wall.
-  // Matches ROOF_CAP in buildTopper for a round bore; a hex hole tops out at its
-  // own vertex, so it needs no cap above the radius.
-  return r + s.wallThickness + r * (s.holeShape === 'hex' ? 1 : 1.18) + s.wallThickness;
+  // Bed -> centre -> truncated roof -> one wall. A hex hole tops out at its own
+  // vertex, so it needs no cap above the radius.
+  return r + s.wallThickness + r * (s.holeShape === 'hex' ? 1 : ROOF_CAP) + s.wallThickness;
 }
 
 /** The widest the hole gets, in mm: across the relief slots. Everything that has to

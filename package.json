@@ -20,7 +20,7 @@
     "dev:magnet": "pnpm --filter magnet-generator dev",
     "build:magnet": "pnpm --filter magnet-generator build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm --filter @vostok/ui-kit test && pnpm --filter @vostok/fonts test && pnpm --filter @vostok/export check && pnpm --filter @vostok/patterns test && node packages/laser/tests/csg2d.test.mjs && node packages/laser/tests/glyph-islands.test.mjs && node packages/manifold/tests/manifold.test.mjs && pnpm --filter house-number check && pnpm --filter house-number check:build",
+    "test": "pnpm --filter @vostok/ui-kit test && pnpm --filter @vostok/fonts test && pnpm --filter @vostok/export check && pnpm --filter @vostok/patterns test && node packages/laser/tests/csg2d.test.mjs && node packages/laser/tests/glyph-islands.test.mjs && node packages/manifold/tests/manifold.test.mjs && pnpm --filter house-number check && pnpm --filter house-number check:build && pnpm --filter pen-topper test",
     "test:clicker": "esbuild apps/clicker-generator/tests/fit-controls.test.ts --bundle --platform=node --format=esm --external:manifold-3d --outfile=apps/clicker-generator/.fit-test.mjs --log-level=error && node apps/clicker-generator/.fit-test.mjs",
     "dev:housenumber": "pnpm --filter house-number dev",
     "build:housenumber": "pnpm --filter house-number build",

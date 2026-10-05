@@ -79,7 +79,7 @@ import {
 } from './state';
 import { QUICK_PICKS, SYMBOL_GROUPS, searchGroup } from './symbols';
 import { MAX_NAMES, parseNames, setFileName, batchToParts, platesOf, batchWarnings } from './batch';
-import { noAmsPauses } from './geometry/noAms';
+import { pauseText } from './geometry/noAms';
 import type { BatchResult, GeometryResponse, PartMesh } from './types';
 
 /**
@@ -379,7 +379,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     plateThickness: sliderRow({
       label: 'Plate thickness', min: 1.5, max: 10, step: 0.2, value: settings.plateThickness, unit: 'mm',
       help: 'A topper takes more handling than a keychain, so it wants more plate. With the hole inside the name, this cannot go below what the hole needs.',
-      onInput: (v) => { settings.plateThickness = v; refreshPath(); refreshPauses(); triggerRebuild(); },
+      onInput: (v) => { settings.plateThickness = v; refreshPath(); triggerRebuild(); },
     }),
     textThickness: sliderRow({
       label: 'Letter height', min: 0.4, max: 3, step: 0.1, value: settings.textThickness, unit: 'mm',
@@ -657,6 +657,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       ? `Block held at ${floor.toFixed(1)} mm — the least that fits a ${boreFor(settings).toFixed(1)} mm hole with ${settings.wallThickness.toFixed(1)} mm walls.`
       : '';
     pathNote.classList.toggle('hidden', !clamped);
+    // The swap heights stand on that block, so they move whenever it does.
+    refreshPauses();
   }
 
   const mountControl = segmentedControl<string>({
@@ -698,7 +700,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       { value: 'raised', label: 'Raised' },
       { value: 'engraved', label: 'Engraved' },
     ],
-    onChange: (v) => { settings.style = v; syncVisibility(); triggerRebuild(); },
+    onChange: (v) => { settings.style = v; syncVisibility(); refreshPauses(); triggerRebuild(); },
   });
 
   const shapeControl = segmentedControl<PlateShape>({
@@ -775,15 +777,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   const pauseReadout = el('p', { className: 'vl-hint pt-pauses' });
   function refreshPauses() {
-    const pauses = noAmsPauses(settings);
-    if (settings.printMode !== 'noams') {
-      pauseReadout.textContent = 'Each colour lands on its own filament slot automatically.';
-    } else if (pauses.length === 0) {
-      pauseReadout.textContent = 'Add a second colour with raised letters to use manual swaps.';
-    } else {
-      pauseReadout.textContent =
-        'Pause and swap filament at: ' + pauses.map((p) => `${p.z.toFixed(1)} mm → ${p.label}`).join(', ') + '.';
-    }
+    pauseReadout.textContent = pauseText(settings);
   }
 
   const socketReadout = el('p', { className: 'vl-hint pt-socket-readout' });

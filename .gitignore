@@ -81,6 +81,8 @@ apps/foldbox/README.internal.md
 !apps/clicker-generator/tests/**
 !apps/keycap-generator/tests/
 !apps/keycap-generator/tests/**
+!apps/pen-topper/tests/
+!apps/pen-topper/tests/**
 !packages/ui-kit/tests/
 !packages/ui-kit/tests/**
 !packages/fonts/tests/
