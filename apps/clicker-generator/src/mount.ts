@@ -2209,16 +2209,21 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
     if (s.importMode === 'image') {
       if (!originalImage) return;
-      store.set({ building: true, status: 'Removing background & tracing…' });
-      regionSet = processImage(cloneImage(originalImage), s.colorCount, {
-        removeBg: s.removeBg,
-        smoothing: s.smoothing,
-        // The artwork's printed size, so the tracer's minimum feature is a real millimetre
-        // rather than a fraction of whatever the uploaded file's pixel dimensions happened
-        // to be. A bigger cap keeps finer detail, which is what it should do.
-        designMm: s.capWidthMm * (s.designScale ?? 1),
-        customColors: s.colorMode === 'limited' ? s.limitedColors : undefined,
-      });
+      try {
+        store.set({ building: true, status: 'Removing background & tracing…' });
+        regionSet = processImage(cloneImage(originalImage), s.colorCount, {
+          removeBg: s.removeBg,
+          smoothing: s.smoothing,
+          // The artwork's printed size, so the tracer's minimum feature is a real millimetre
+          // rather than a fraction of whatever the uploaded file's pixel dimensions happened
+          // to be. A bigger cap keeps finer detail, which is what it should do.
+          designMm: s.capWidthMm * (s.designScale ?? 1),
+          customColors: s.colorMode === 'limited' ? s.limitedColors : undefined,
+        });
+      } catch (e: any) {
+        traceFailed('Error: ' + e.message);
+        return;
+      }
     } else if (s.importMode === 'svg') {
       if (!currentSvgText) {
         store.set({ ...notBuilding(), status: 'Upload an SVG file first.' });

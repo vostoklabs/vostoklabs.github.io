@@ -287,6 +287,21 @@ const press = () => watch<void>(ui().onExport());
   finish(unmount);
 }
 
+{
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(200);
+  check('image mode: the picture is traced and built', onScreen() === 'built:image:cc=4|w=40|st=0', shown(onScreen()));
+  knobs.imageTraceThrows = 'Array buffer allocation failed';
+  ui().onColorCount(3);
+  await clock.advance(300);
+  const refused = press();
+  await clock.advance(10);
+  check('a picture whose trace throws: Export refuses rather than writing the picture before it', refused.error?.message === 'Error: Array buffer allocation failed', describe(refused));
+  check('…and the busy state comes down, with the status saying why', seen.state?.building === false && status() === 'Error: Array buffer allocation failed', `building ${seen.state?.building}; status "${status()}"`);
+  finish(unmount);
+}
+
 /* ======================================== Export waits for what is still on its way to a build */
 
 {
