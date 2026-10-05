@@ -16,6 +16,12 @@ import { markFaceFor, markInsetMm, placeMarks, type MarkProblem } from './marks'
 
 export const SHEET_MARGIN_MM = 5;
 
+/** The smallest and largest length, width and height a box may take, mm. */
+export interface SizeLimits {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
 export function machineById(id: string): Machine {
   return MACHINES.find((m) => m.id === id) ?? (MACHINES[0] as Machine);
 }
@@ -118,17 +124,23 @@ function largestCube(p: BoxParams, sheet: Sheet, margin: number): number {
  *  fit, here is the same box that does" is worth more than any amount of advice.
  *
  *  Bisection rather than arithmetic: blank size is affine in the dimensions but the
- *  clamps inside the builders are not, and a solve is cheap. */
-export function fitToSheet(input: BoxParams): Pick<BoxParams, 'lengthMm' | 'widthMm' | 'heightMm'> {
+ *  clamps inside the builders are not, and a solve is cheap.
+ *
+ *  `limits` keeps every answer inside the range the size controls can show (length,
+ *  width, height). Without it a fit below a slider's end was clamped up by the slider
+ *  afterwards, and a flat box that fitted came back too big for the plate. */
+export function fitToSheet(input: BoxParams, limits?: SizeLimits): Pick<BoxParams, 'lengthMm' | 'widthMm' | 'heightMm'> {
   const p: BoxParams = { ...input, caliperMm: effectiveCaliper(input) };
   const sheet = sheetById(p.sheetId);
   const availW = sheet.widthMm - 2 * SHEET_MARGIN_MM;
   const availH = sheet.heightMm - 2 * SHEET_MARGIN_MM;
+  const [minL, minW, minH] = limits?.min ?? [8, 8, 4];
+  const [maxL, maxW, maxH] = limits?.max ?? [Infinity, Infinity, Infinity];
 
   const at = (s: number): Pick<BoxParams, 'lengthMm' | 'widthMm' | 'heightMm'> => ({
-    lengthMm: Math.max(8, Math.round(p.lengthMm * s)),
-    widthMm: Math.max(8, Math.round(p.widthMm * s)),
-    heightMm: Math.max(4, Math.round(p.heightMm * s)),
+    lengthMm: Math.min(maxL, Math.max(minL, Math.round(p.lengthMm * s))),
+    widthMm: Math.min(maxW, Math.max(minW, Math.round(p.widthMm * s))),
+    heightMm: Math.min(maxH, Math.max(minH, Math.round(p.heightMm * s))),
   });
   const fits = (dims: ReturnType<typeof at>): boolean => {
     const { net } = rawNet({ ...p, ...dims });

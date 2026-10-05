@@ -57,7 +57,7 @@ import {
   type StyleId,
 } from './types';
 import { OP_COLOR } from './export/paths';
-import { solve, fitToSheet, machineById, sheetById, stockById } from './geometry/solve';
+import { solve, fitToSheet, machineById, sheetById, stockById, type SizeLimits } from './geometry/solve';
 import { logoFaces } from './geometry/marks';
 import { readText, svgArtwork, textArtwork } from './ui/artwork';
 import { openSvgWizard } from './ui/svgWizard';
@@ -91,6 +91,9 @@ import {
   sheetThicknessMm,
   tucksInside,
 } from './export/printable';
+
+/** What the Length, Width and Height sliders offer, mm; "Resize to fit" keeps to it too. */
+const SIZE_LIMITS: SizeLimits = { min: [20, 20, 8], max: [260, 260, 200] };
 
 /**
  * Builds the generator into `container` and returns its teardown.
@@ -444,8 +447,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }),
     length: sliderRow({
       label: 'Length',
-      min: 20,
-      max: 260,
+      min: SIZE_LIMITS.min[0],
+      max: SIZE_LIMITS.max[0],
       step: 1,
       value: params.lengthMm,
       format: lenFormat,
@@ -454,8 +457,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }),
     width: sliderRow({
       label: 'Width',
-      min: 20,
-      max: 260,
+      min: SIZE_LIMITS.min[1],
+      max: SIZE_LIMITS.max[1],
       step: 1,
       value: params.widthMm,
       format: lenFormat,
@@ -464,8 +467,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }),
     height: sliderRow({
       label: 'Height',
-      min: 8,
-      max: 200,
+      min: SIZE_LIMITS.min[2],
+      max: SIZE_LIMITS.max[2],
       step: 1,
       value: params.heightMm,
       format: lenFormat,
@@ -1283,11 +1286,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     label: 'Resize to fit',
     className: 'fb-fit',
     onClick: () => {
-      const dims = fitToSheet(params);
+      // Searched inside the sliders' own range, so the size that fits is one they can show.
+      const dims = fitToSheet(params, SIZE_LIMITS);
       params = { ...params, ...dims };
       showParams();
       triggerRebuild(true);
-      // What the sliders took, which is what gets built: a fit beyond a slider's range stops at its end.
       toast(`Resized to ${params.lengthMm} × ${params.widthMm} × ${params.heightMm} mm`, { kind: 'ok' });
     },
   });
