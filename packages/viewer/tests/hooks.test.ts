@@ -9,6 +9,7 @@
 */
 import * as THREE from 'three';
 import { installPage } from './support/page';
+import { PARTS, RED, tetra } from './support/parts';
 
 const page = installPage();
 const { createViewer } = await import('../src/index');
@@ -24,15 +25,6 @@ const check = (name: string, ok: boolean, detail = '') => {
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps;
 const stage = page.stage as unknown as HTMLElement;
 
-const tetra = (x: number, y: number, z: number, s: number, color: [number, number, number], extra: Partial<ViewerPart> = {}): ViewerPart => ({
-  name: `t${x}`,
-  color,
-  positions: new Float32Array([x, y, z, x + s, y, z, x, y + s, z, x, y, z + s]),
-  indices: new Uint32Array([0, 2, 1, 0, 1, 3, 1, 2, 3, 0, 3, 2]),
-  ...extra,
-});
-const RED: [number, number, number] = [200, 10, 10];
-const PARTS = [tetra(-10, -5, 0, 20, RED), tetra(-2, -2, 1, 6.5, [20, 200, 30]), tetra(4, 4, 2, 3, [250, 250, 250])];
 /** The selection outlines: edge lines drawn last (the plate's grid is line segments too). */
 const outlinesOf = (v: ReturnType<typeof createViewer>) => v.scene.getObjectsByProperty('type', 'LineSegments').filter((l) => l.renderOrder === 999);
 const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) => (m.material as THREE.MeshStandardMaterial).emissiveIntensity);
@@ -42,10 +34,10 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
 {
   const v = createViewer(stage);
   const canvas = page.canvas();
-  check('default: the renderer is asked for what it always was', JSON.stringify(canvas.contextAttributes) === JSON.stringify({
-    alpha: true, depth: true, stencil: false, antialias: true, premultipliedAlpha: true, preserveDrawingBuffer: true,
-    powerPreference: 'default', failIfMajorPerformanceCaveat: false,
-  }), JSON.stringify(canvas.contextAttributes));
+  // What the viewer decides, not three's whole request, which is three's to change.
+  const asked = canvas.contextAttributes!;
+  check('default: the renderer asks for antialiasing, a kept drawing buffer and no stencil',
+    asked.antialias === true && asked.preserveDrawingBuffer === true && asked.stencil !== true, JSON.stringify(asked));
   check('default: no stencil, an opaque clear, no local clipping, ACES tone mapping, a room environment',
     !v.hasStencil && v.renderer.getClearAlpha() === 1 && !v.renderer.localClippingEnabled && v.renderer.toneMapping === THREE.ACESFilmicToneMapping && !!v.scene.environment);
   check('default: its canvas is put in the stage', (page.stage.children as unknown[]).includes(v.renderer.domElement));
@@ -76,6 +68,14 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   const before = page.log.length;
   v.dispose();
   check('forceContextLoss: dispose hands the context back', page.log.slice(before).includes('WEBGL_lose_context.loseContext()'));
+}
+{
+  // A context that cannot give a stencil buffer reports so, whatever it was asked for.
+  page.limitContext({ stencil: false });
+  const v = createViewer(stage, { stencil: true });
+  check('stencil: asked for but not given, and reported not given', page.canvas().contextAttributes!.stencil === true && !v.hasStencil);
+  v.dispose();
+  page.limitContext({});
 }
 {
   const own = document.createElement('canvas');
@@ -229,7 +229,7 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   const render = v.renderer.render.bind(v.renderer);
   v.renderer.render = (scene, camera) => {
     const plate = scene.children.some((o) => o.renderOrder === -1 && o.visible);
-    shots.push({ at: camera.position.clone(), bg: scene.background, w: v.renderer.domElement.width, plate, model: v.root.visible });
+    shots.push({ at: camera.position.clone(), bg: (scene as THREE.Scene).background, w: v.renderer.domElement.width, plate, model: v.root.visible });
     render(scene, camera);
   };
   const viewDir = v.camera.position.clone().sub(v.controls.target).normalize();

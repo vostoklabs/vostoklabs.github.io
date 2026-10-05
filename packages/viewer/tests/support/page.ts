@@ -93,10 +93,17 @@ class Element extends Target {
 /** Every WebGL call, as one line: the method and its arguments, constants by name. */
 export type GLLog = string[];
 
+/** What a WebGL context reports for an attribute it was not asked about: the spec's defaults. */
+const CONTEXT_DEFAULTS: Record<string, unknown> = {
+  alpha: true, depth: true, stencil: false, antialias: true, premultipliedAlpha: true, preserveDrawingBuffer: false,
+  powerPreference: 'default', failIfMajorPerformanceCaveat: false, desynchronized: false, xrCompatible: false,
+};
+
 class Canvas extends Element {
   gl: ReturnType<typeof fakeGL> | null = null;
+  /** What the context was asked for. */
   contextAttributes: Record<string, unknown> | null = null;
-  constructor(public log: GLLog) {
+  constructor(public log: GLLog, private limits: () => Record<string, unknown>) {
     super('canvas', 300, 150);
   }
   getContext(type: string, attrs: Record<string, unknown> = {}) {
@@ -104,7 +111,9 @@ class Canvas extends Element {
     if (type !== 'webgl2') return null;
     if (!this.gl) {
       this.contextAttributes = { ...attrs };
-      this.gl = fakeGL(this, attrs, this.log);
+      // What it reports is what it gave: every attribute, the ones asked for as asked unless
+      // the page cannot give them (`Page.limitContext`), the rest at their defaults.
+      this.gl = fakeGL(this, { ...CONTEXT_DEFAULTS, ...attrs, ...this.limits() }, this.log);
     }
     return this.gl.context;
   }
@@ -131,7 +140,8 @@ function fake2d() {
 
 /* ------------------------------------------------------------------ WebGL 2 */
 
-/** A WebGL 2 context that answers like a real one and records what it is asked to do. */
+/** A WebGL 2 context that answers like a real one and records what it is asked to do. `attrs`:
+ *  the attributes it was made with, which it reports. */
 function fakeGL(canvas: Canvas, attrs: Record<string, unknown>, log: GLLog) {
   const byName = new Map<string, number>();
   const names = new Map<number, string>();
@@ -262,6 +272,9 @@ export interface Page {
   pointer(type: string, x: number, y: number, extra?: Record<string, unknown>): void;
   /** The listeners on the window, for checking that dispose() takes its own away. */
   window: Target;
+  /** What the contexts made from now on give, whatever they are asked: `{ stencil: false }` is
+   *  a GPU or browser with no stencil buffer to give. `{}` puts it back. */
+  limitContext(limits: Record<string, unknown>): void;
 }
 
 export function installPage(): Page {
@@ -272,11 +285,12 @@ export function installPage(): Page {
   const body = new Element('body');
   const win = new Target();
   const doc: any = new Target();
+  let limits: Record<string, unknown> = {};
   doc.documentElement = html;
   doc.body = body;
   doc.createElement = (tag: string) => {
     if (tag === 'canvas') {
-      const c = new Canvas(log);
+      const c = new Canvas(log, () => limits);
       c.ownerDocument = doc;
       canvases.push(c);
       return c;
@@ -356,5 +370,8 @@ export function installPage(): Page {
       glCanvas().dispatchEvent({ type, clientX: x, clientY: y, button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse', shiftKey: false, preventDefault() {}, stopPropagation() {}, ...extra });
     },
     window: win,
+    limitContext(next) {
+      limits = { ...next };
+    },
   };
 }
