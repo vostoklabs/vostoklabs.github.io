@@ -187,6 +187,11 @@ const describe = (exp: { done: boolean; error?: Error }) =>
   !exp.done ? 'still waiting' : exp.error ? `refused: ${exp.error.message}` : `wrote ${shown(written().join(', ') || 'nothing')}`;
 /** Export, as its button presses it, with its state readable at any time. */
 const press = () => watch<void>(ui().onExport());
+/** Without moving time, let promises settle until `ready()` holds: a file being read is real I/O,
+ *  which takes node however many turns it takes. One that never gets there fails its checks. */
+async function until(ready: () => boolean) {
+  for (let turn = 0; turn < 100 && !ready(); turn++) await clock.settle();
+}
 
 
 /* ================================================================= edits, then Export */
@@ -358,7 +363,7 @@ const press = () => watch<void>(ui().onExport());
   knobs.fontMs.pacifico = 150;
   const project = { version: 3, settings: { importMode: 'text', currentText: 'Loaded', currentFontId: 'pacifico', capWidthMm: 44 } };
   ui().onLoadProject(new File([JSON.stringify(project)], 'clicker-project.json'));
-  await clock.advance(0); // the file is read, and its settings start to land
+  await until(() => status() === 'Loading project…'); // the file is read; its settings start to land
   const exp = press();
   await clock.advance(100);
   const waited = !exp.done;
@@ -377,7 +382,7 @@ const press = () => watch<void>(ui().onExport());
     model: { name: 'figure.stl', data: Buffer.from(deflateSync(new Uint8Array(16))).toString('base64') },
   };
   ui().onLoadProject(new File([JSON.stringify(project)], 'clicker-project.json'));
-  await clock.advance(0);
+  await until(() => status() === 'Loading project…');
   const exp = press(); // while the project's font loads; its model is read after it
   await clock.advance(400);
   check('a Model-mode project with its model inside: Export waits for the model to be cut', exp.done && written()[0] === 'model:slice|size=50|st=0', describe(exp));
@@ -595,7 +600,7 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   await clock.advance(200);
   worker.failIf = (msg) => (msg.type === 'importModel' ? 'That file has no triangles' : null);
   ui().onModelFile(new File([new Uint8Array(16)], 'broken.stl'));
-  await clock.advance(1); // the file is read, and on its way to the worker
+  await until(() => status() === 'Reading broken.stl…'); // read, and on its way to the worker
   const exp = press();
   await clock.advance(200);
   check('a model that fails to open while Export waits: Export is answered', exp.done, describe(exp));
@@ -654,7 +659,7 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   ui().onImportMode('model');
   await clock.advance(200); // the sample is cut, and its cards are in the worker
   ui().onModelFile(new File([new Uint8Array(16)], 'figure.stl')); // read in behind them
-  await clock.advance(10);
+  await until(() => status() === 'Reading figure.stl…');
   const exp = press();
   await clock.advance(1500);
   check('a result card that fails while a new model loads: the new model still opens, and is cut', onScreen() === 'model:slice|size=60|st=0', `screen ${shown(onScreen())}; status "${status()}"`);
