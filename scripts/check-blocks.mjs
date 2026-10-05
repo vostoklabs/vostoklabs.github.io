@@ -47,17 +47,17 @@ import { ROOT, rel, appSourceFiles, read, blankComments, ignored, uncommitted, p
   Written 2026-10-04, the day the check went in.
 */
 const BUDGET = {
-  'bubble-pop-generator': { shadow: 14, viewer: 1, fileformat: 5, worker: 1, store: 1 },
-  'clicker-generator': { shadow: 27, viewer: 1, fileformat: 8, fonts: 3, worker: 1, project: 2, store: 1 },
-  foldbox: { shadow: 5, fonts: 1, project: 2 },
-  'house-number': { shadow: 6, worker: 1 },
+  'bubble-pop-generator': { shadow: 14, viewer: 1, fileformat: 5, worker: 1 },
+  'clicker-generator': { shadow: 16, viewer: 1, fileformat: 8, fonts: 3, worker: 1 },
+  foldbox: { shadow: 4, fonts: 1 },
+  'house-number': { shadow: 2, worker: 1 },
   hub: { shadow: 1 },
   'keycap-generator': { shadow: 8, viewer: 1, fileformat: 4, fonts: 7 },
-  'keychain-carabiner': { shadow: 5, worker: 1, project: 2 },
+  'keychain-carabiner': { shadow: 2, worker: 1 },
   'laser-studio': { shadow: 12, worker: 1, project: 2 },
-  'magnet-generator': { shadow: 15, viewer: 1, fileformat: 3, worker: 1, project: 2, store: 1 },
-  'name-keychain': { shadow: 5, viewer: 1, fileformat: 3, worker: 1 },
-  'pen-topper': { shadow: 3, worker: 1, project: 2 },
+  'magnet-generator': { shadow: 15, viewer: 1, fileformat: 3, worker: 1 },
+  'name-keychain': { shadow: 4, viewer: 1, fileformat: 3, worker: 1 },
+  'pen-topper': { shadow: 1, worker: 1 },
 };
 
 /** Shelf names too generic to mean "a copy of that block" when an app defines them. */
