@@ -2,8 +2,9 @@
 // UI thread never blocks.
 import Module from 'manifold-3d';
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
+import { answerRequests } from '@vostok/ui-kit/build-loop';
 import { buildMagnet } from '../geometry/buildMagnet';
-import type { GeometryRequest, GeometryResponse } from '../types';
+import type { GeometryRequest, GeometryResult } from '../types';
 
 type Wasm = Awaited<ReturnType<typeof Module>>;
 
@@ -20,28 +21,10 @@ async function getModule(): Promise<Wasm> {
   return modulePromise;
 }
 
-function post(msg: GeometryResponse, transfer: Transferable[] = []) {
-  (self as unknown as Worker).postMessage(msg, transfer);
-}
-
-self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
-  try {
-    const wasm = await getModule();
-    const msg = e.data;
-
-    if (msg.type === 'buildMagnet') {
-      const { parts, warnings, magnet } = buildMagnet(wasm, msg.regions, msg.outline, msg.params);
-      const transfer: Transferable[] = [];
-      for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
-      post({ type: 'parts', parts, warnings, magnet }, transfer);
-      return;
-    }
-  } catch (err) {
-    post({
-      type: 'error',
-      message: err instanceof Error ? (err.stack ?? err.message) : String(err),
-    });
-  }
-};
-
-post({ type: 'ready' });
+// One reply per build, matched to it by id. The WASM loads inside the first build, so a load
+// failure fails that build, and reaches the status line, instead of only the console.
+answerRequests<GeometryRequest, GeometryResult>(
+  async (msg) => buildMagnet(await getModule(), msg.regions, msg.outline, msg.params),
+  // The meshes' buffers move to the main thread rather than being copied.
+  { transfer: ({ parts }) => parts.flatMap((p) => [p.vertProperties.buffer, p.triVerts.buffer]) },
+);

@@ -413,7 +413,9 @@ export interface MagnetReport {
 export type GeometryRequest =
   | { type: 'buildMagnet'; regions: BuildRegion[]; outline: Ring[]; params: MagnetBuildParams };
 
-export type GeometryResponse =
-  | { type: 'ready' }
-  | { type: 'parts'; parts: MagnetPart[]; warnings: string[]; magnet: MagnetReport }
-  | { type: 'error'; message: string };
+/** The geometry worker's answer to a build. A build that fails rejects instead. */
+export interface GeometryResult {
+  parts: MagnetPart[];
+  warnings: string[];
+  magnet: MagnetReport;
+}

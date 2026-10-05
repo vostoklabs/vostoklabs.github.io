@@ -54,6 +54,8 @@ import {
   createStore,
   readProjectFile,
   markProject,
+  buildLoop,
+  workerClient,
   type ProjectShape,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
@@ -72,9 +74,8 @@ import { DEFAULT_PREPROCESS, type PreprocessParams } from './types';
 import type {
   BuildRegion,
   GeometryRequest,
-  GeometryResponse,
+  GeometryResult,
   MagnetBuildParams,
-  MagnetPart,
   MagnetPlacement,
   MagnetPlacementEntry,
   MagnetReport,
@@ -329,7 +330,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *  still loaded silently re-laid-out the text instead. One variable decides. */
   let activeSource: ImportMode | null = null;
   let regionSet: RegionSet | null = null;
-  let latestParts: MagnetPart[] = [];
   let refitNext = true;
   let firstBuildDone = false;
   /** Which magnet the pad and the stage drag act on. */
@@ -839,8 +839,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     row.classList.add('mg-flash');
     setTimeout(() => row.classList.remove('mg-flash'), 1200);
   };
+  /** The parts a click on the model picks from: the current design's newest build, as shown. */
+  const shownParts = () => loop.latest?.parts ?? [];
   const regionIndices = (regionIdx: number): number[] =>
-    latestParts.map((p, i) => ({ p, i })).filter(({ p }) => p.name.startsWith(`inlay-${regionIdx}-`)).map(({ i }) => i);
+    shownParts().map((p, i) => ({ p, i })).filter(({ p }) => p.name.startsWith(`inlay-${regionIdx}-`)).map(({ i }) => i);
 
   viewer.onPartPick((index, clientX, clientY) => {
     const mode = store.get().editMode;
@@ -852,7 +854,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       viewer.clearHighlight();
       return;
     }
-    const part = latestParts[index];
+    const part = shownParts()[index];
     if (!part) return;
     const m = part.name.match(/^inlay-(\d+)/);
     const regionIdx = m ? Number(m[1]) : -1;
@@ -1099,69 +1101,59 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---------------------------------------------------------------------------
   // Geometry worker
   // ---------------------------------------------------------------------------
-  const worker = new Worker(new URL('./workers/geometry.worker.ts', import.meta.url), { type: 'module' });
-  cleanups.push(() => worker.terminate());
+  // Each request carries an id and gets its own reply, so a reply always reaches the build that
+  // asked for it, and a worker that dies fails that build instead of leaving "Building…" up. The
+  // next build starts a fresh worker.
+  const worker = workerClient<GeometryRequest, GeometryResult>(
+    () => new Worker(new URL('./workers/geometry.worker.ts', import.meta.url), { type: 'module' }),
+  );
 
-  /** One build at a time; parameter changes during a build collapse into a single
-   *  follow-up. Dragging a slider must never queue 40 CSG jobs. */
-  let buildInFlight = false;
-  let buildDirty = false;
-  let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
+  /** One build at a time, from the settings as they are when it starts; parameter changes
+   *  during a build collapse into a single follow-up. Dragging a slider must never queue 40 CSG
+   *  jobs. Export awaits `loop.settled()`: the build of what the controls show now. */
+  const loop = buildLoop<GeometryResult>({
+    run: () => worker.call(buildRequest()),
+    debounceMs: 90,
+    onStart: () =>
+      store.set({ building: true, status: s().productType === 'slider' ? 'Building slider…' : 'Building magnet…' }),
+    onResult: (built) => {
+      viewer.setParts(built.parts, refitNext);
+      refitNext = false;
+      store.set({
+        building: false,
+        hasParts: built.parts.length > 0,
+        status: '',
+        warnings: built.warnings ?? [],
+        report: built.magnet,
+        selectedRegions: store.get().selectedRegions.filter((r) => r < s().palette.length),
+      });
+      syncExtrudePanel();
+      syncMagnetHandles();
+      // Another build is already wanted; this one is not the model the user settles on.
+      if (loop.busy) return;
+      if (!firstBuildDone) {
+        firstBuildDone = true;
+        resetHistory();
+      }
+      maybeOfferWizard();
+    },
+    onError: (err) => {
+      store.set({ building: false, status: 'Error: ' + err.message.split('\n')[0] });
+      console.error('[geometry worker]', err);
+    },
+  });
+  cleanups.push(() => {
+    loop.dispose();
+    worker.dispose();
+  });
 
-  function scheduleRebuild(delay = 90) {
-    if (rebuildTimer) clearTimeout(rebuildTimer);
-    rebuildTimer = setTimeout(() => {
-      rebuildTimer = null;
-      rebuild();
-    }, delay);
+  /** Queue a rebuild of the design. There is nothing to build until a source has been traced. */
+  function scheduleRebuild() {
+    if (regionSet && regionSet.regions.length > 0) loop.request();
   }
 
-  worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
-    const msg = e.data;
-    switch (msg.type) {
-      case 'ready':
-        void loadDefaultImage();
-        break;
-      case 'parts': {
-        buildInFlight = false;
-        latestParts = msg.parts;
-        viewer.setParts(msg.parts, refitNext);
-        refitNext = false;
-        store.set({
-          building: false,
-          hasParts: msg.parts.length > 0,
-          status: '',
-          warnings: msg.warnings ?? [],
-          report: msg.magnet,
-          selectedRegions: store.get().selectedRegions.filter((r) => r < s().palette.length),
-        });
-        syncExtrudePanel();
-        syncMagnetHandles();
-        if (buildDirty) {
-          buildDirty = false;
-          rebuild();
-        } else {
-          if (!firstBuildDone) {
-            firstBuildDone = true;
-            resetHistory();
-          }
-          maybeOfferWizard();
-        }
-        break;
-      }
-      case 'error':
-        buildInFlight = false;
-        buildDirty = false;
-        store.set({ building: false, status: 'Error: ' + msg.message.split('\n')[0] });
-        console.error('[geometry worker]', msg.message);
-        break;
-    }
-  };
-  worker.onerror = (e) => {
-    buildInFlight = false;
-    store.set({ building: false, status: 'Worker failed: ' + e.message });
-    console.error(e);
-  };
+  // The first model, from the default sample. Its build is what starts the worker.
+  void loadDefaultImage();
 
   // ---------------------------------------------------------------------------
   // Image pipeline: source -> regions -> worker
@@ -1272,6 +1264,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
 
     if (!regionSet || regionSet.regions.length === 0) {
+      // No design now, and nothing builds until a trace finds one. The model on screen is the
+      // previous design's: export must not ship it as this one, and a build of it still running
+      // is dropped when it lands.
+      loop.invalidate();
       store.set({ building: false, status: 'No shape found in that image.' });
       return;
     }
@@ -1295,15 +1291,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // Colour-count and smoothing changes re-trace too, so this can't be limited
     // to new imports.
     store.set({ settings: { ...cur, palette, componentColors: {} }, selectedRegions: [] });
-    rebuild();
+    // At once: a new trace is one change, not a burst, so the edit debounce has nothing to save.
+    loop.request();
+    loop.flush();
   }
 
-  function rebuild() {
-    if (!regionSet || regionSet.regions.length === 0) return;
-    if (buildInFlight) {
-      buildDirty = true;
-      return;
-    }
+  /** The worker request for the design and settings as they are when a build starts. */
+  function buildRequest(): GeometryRequest {
+    // A queued build can outlive its design: a re-trace since found no shape.
+    if (!regionSet || regionSet.regions.length === 0) throw new Error('No shape found in that image.');
     const v = s();
 
     const regions: BuildRegion[] = [];
@@ -1353,20 +1349,28 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       sliderArrayOffset: v.sliderArrayOffset,
     };
 
-    buildInFlight = true;
-    store.set({ building: true, status: v.productType === 'slider' ? 'Building slider…' : 'Building magnet…' });
     // Slider overrides magnetCount from sliderLayout.
     if (v.productType === 'slider') params.magnetCount = v.sliderLayout;
-    const msg: GeometryRequest = { type: 'buildMagnet', regions, outline: regionSet.outline, params };
-    worker.postMessage(msg);
+    return { type: 'buildMagnet', regions, outline: regionSet.outline, params };
   }
 
   const debounce = (fn: () => void, ms: number) => {
     let t: ReturnType<typeof setTimeout> | undefined;
-    return () => {
+    const call = () => {
       clearTimeout(t);
-      t = setTimeout(fn, ms);
+      t = setTimeout(() => {
+        t = undefined;
+        fn();
+      }, ms);
     };
+    /** Run a call still waiting out its delay, now. */
+    call.flush = () => {
+      if (t === undefined) return;
+      clearTimeout(t);
+      t = undefined;
+      fn();
+    };
+    return call;
   };
   const debouncedReprocess = debounce(() => reprocess(), 250);
 
@@ -1374,7 +1378,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // Export (single path — invariant 8)
   // ---------------------------------------------------------------------------
   async function exportModel(formatId: string) {
-    if (latestParts.length === 0) throw new Error('Nothing to export yet');
+    // The build of what the controls show now. Edits that re-trace the design (colours,
+    // smoothing, background, text, font) wait out their own debounce, and text its font, before
+    // they ask for a build, so those run first. `settled()` then waits for the build, and refuses,
+    // with its reason, when it failed, rather than hand over the model from before it.
+    debouncedReprocess.flush();
+    debouncedTextRebuild.flush();
+    await textTrace;
+    const { parts } = await loop.settled();
     const v = s();
     const prefix = v.productType === 'slider' ? 'slider' : 'magnet';
     const stem = `${prefix}-${Math.round(v.fitSizeMm)}mm`;
@@ -1384,14 +1395,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // With a host the file goes to the host's own export path rather than the browser's
       // download bar.
       const { indexed } = await host.exportToLibrary(
-        { name: `${stem}.3mf`, bytes: buildThreeMF(latestParts) },
+        { name: `${stem}.3mf`, bytes: buildThreeMF(parts) },
         { designer: 'Fridge Magnet Generator' },
       );
       toast(indexed ? 'Exported to your library' : `Exported as ${stem}.3mf`, { kind: 'ok' });
       return;
     }
 
-    downloadThreeMF(latestParts, `${stem}.3mf`);
+    downloadThreeMF(parts, `${stem}.3mf`);
 
     // Licence nudges are a web-only thing; the ui-kit no-ops them inside a desktop host.
     licenseAfterExport();
@@ -1402,9 +1413,18 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---------------------------------------------------------------------------
   type ImportMode = 'image' | 'svg' | 'text';
 
+  /** The newest text re-trace. It loads its font before it asks for a build, so export waits for
+   *  it as well as for the build. */
+  let textTrace: Promise<void> = Promise.resolve();
+
   /** Make text the design's source (or re-trace it after an edit). Loads the font
    *  once and keeps it, so typing doesn't refetch a .ttf on every keystroke. */
-  async function applyTextSource(takeOver = false) {
+  function applyTextSource(takeOver = false): Promise<void> {
+    textTrace = traceText(takeOver);
+    return textTrace;
+  }
+
+  async function traceText(takeOver: boolean) {
     const v = s();
     if (!v.text.trim()) {
       store.set({ status: 'Type something to put on the magnet.' });
