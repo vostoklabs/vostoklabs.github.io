@@ -102,6 +102,9 @@ const KNOWN = new Set([
   // Meant: the real-mount suite bundles mount.ts with './ui/ui' and the other heavy panels
   // swapped for stand-ins (mount.test.mjs, `replaced`), so the registry never loads in it.
   'apps/clicker-generator/tests/mount.scenarios.ts -> ../src/mount',
+  // Meant: the export matrix pins text, letter blocks and the fit test's labels, so it draws
+  // letters through the code it pins; tests/suites.mjs puts the glob stand-in in place.
+  'apps/clicker-generator/tests/golden/export-matrix.test.ts -> ../../src/image/letter.ts',
 ]);
 
 /* Exceptions inside private files are listed privately (scripts/budgets.private.json,
