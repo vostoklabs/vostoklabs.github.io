@@ -21,32 +21,57 @@ interface ElProps {
   on?: Partial<Record<keyof HTMLElementEventMap, (e: Event) => void>>;
 }
 
+/**
+ * Make an element with its class, attributes, listeners and children in one call.
+ *
+ * The short form `el(tag, className, text)` makes a plain element with a class and its text, the
+ * shape of the small helper several files had each written for themselves.
+ */
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
-  props: ElProps = {},
-  children: (Node | string)[] = [],
+  props?: ElProps,
+  children?: (Node | string)[],
+): HTMLElementTagNameMap[K];
+export function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className: string | null | undefined,
+  text?: string | number | null,
+): HTMLElementTagNameMap[K];
+export function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  props: ElProps | string | null = {},
+  children: (Node | string)[] | string | number | null = [],
 ): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
-  if (props.className) node.className = props.className;
-  if (props.text !== undefined) node.textContent = props.text;
-  if (props.attrs) {
-    for (const [k, v] of Object.entries(props.attrs)) {
-      // `style` goes through the CSSOM, never `setAttribute`. A `style-src` policy with no
-      // 'unsafe-inline' refuses a style ATTRIBUTE set from script, and reports it only in the
-      // console: every filament swatch and colour chip rendered transparent, because `--swatch`
-      // never landed. Assigning `cssText` is a
-      // CSSOM write, which the directive does not cover.
-      if (k === 'style') node.style.cssText = v;
-      else node.setAttribute(k, v);
+  // Each argument is read for what it is, so one form can never swallow the other's half.
+  if (typeof props === 'string' || props === null) {
+    if (props) node.className = props;
+  } else {
+    if (props.className) node.className = props.className;
+    if (props.text !== undefined) node.textContent = props.text;
+    if (props.attrs) {
+      for (const [k, v] of Object.entries(props.attrs)) {
+        // `style` goes through the CSSOM, never `setAttribute`. A `style-src` policy with no
+        // 'unsafe-inline' refuses a style ATTRIBUTE set from script, and reports it only in the
+        // console: every filament swatch and colour chip rendered transparent, because `--swatch`
+        // never landed. Assigning `cssText` is a
+        // CSSOM write, which the directive does not cover.
+        if (k === 'style') node.style.cssText = v;
+        else node.setAttribute(k, v);
+      }
+    }
+    if (props.on) {
+      for (const [k, fn] of Object.entries(props.on)) {
+        if (fn) node.addEventListener(k, fn as EventListener);
+      }
     }
   }
-  if (props.on) {
-    for (const [k, fn] of Object.entries(props.on)) {
-      if (fn) node.addEventListener(k, fn as EventListener);
+  if (typeof children === 'string' || typeof children === 'number') {
+    node.append(String(children));
+  } else {
+    for (const child of children ?? []) {
+      node.append(typeof child === 'string' ? document.createTextNode(child) : child);
     }
-  }
-  for (const child of children) {
-    node.append(typeof child === 'string' ? document.createTextNode(child) : child);
   }
   return node;
 }

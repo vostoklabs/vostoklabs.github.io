@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "esbuild tests/build-loop.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/build-loop.test.mjs --log-level=error && node node_modules/.cache/build-loop.test.mjs && esbuild tests/store.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/store.test.mjs --log-level=error && node node_modules/.cache/store.test.mjs"
+    "test": "esbuild tests/build-loop.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/build-loop.test.mjs --log-level=error && node node_modules/.cache/build-loop.test.mjs && esbuild tests/store.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/store.test.mjs --log-level=error && node node_modules/.cache/store.test.mjs && esbuild tests/dom.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/dom.test.mjs --log-level=error && node node_modules/.cache/dom.test.mjs"
   },
   "dependencies": {
     "@vostok/brand": "workspace:*"
