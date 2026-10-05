@@ -21,12 +21,14 @@ import {
   segmentedControl,
   selectField,
   setFieldOptions,
+  syncControls,
   textField,
   fontPicker as kitFontPicker,
   dropZone,
   symbolPickerButton,
   toast,
   dialog,
+  readProjectFile,
   changelogButton,
   closeAllDialogs,
   closeAllDrawers,
@@ -34,6 +36,7 @@ import {
   bindExternalLinks,
   el,
   type DesktopHost,
+  type ValueRow,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
@@ -426,7 +429,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       value: params.units,
       onChange: (u) => {
         params = { ...params, units: u };
-        syncControls();
+        showParams();
       },
     }),
     basis: segmentedControl<'inside' | 'outside'>({
@@ -1282,9 +1285,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onClick: () => {
       const dims = fitToSheet(params);
       params = { ...params, ...dims };
-      syncControls();
+      showParams();
       triggerRebuild(true);
-      toast(`Resized to ${dims.lengthMm} × ${dims.widthMm} × ${dims.heightMm} mm`, { kind: 'ok' });
+      // What the sliders took, which is what gets built: a fit beyond a slider's range stops at its end.
+      toast(`Resized to ${params.lengthMm} × ${params.widthMm} × ${params.heightMm} mm`, { kind: 'ok' });
     },
   });
 
@@ -2089,10 +2093,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // Also true in the MakerLab embed, where nobody owns them: the sandbox has downloads off,
     // so Save would produce nothing. The kit then draws Help and the theme toggle only.
     hostOwnsProjects: MAKERLAB || Boolean(host?.registerProject),
-    onSave: () => downloadJSON(`${params.style}-box.json`, params),
+    onSave: () => downloadFile(JSON.stringify(params, null, 2), `${params.style}-box.json`, 'application/json'),
     onLoad: (file?: File) =>
       file &&
-      loadJSON(file, (data) => {
+      readProjectFile(file, (data) => {
         applyParams(data);
         toast('Project loaded', { kind: 'ok' });
       }),
@@ -2377,62 +2381,85 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     });
   }
 
-  function syncControls(): void {
-    controls.units.setValue(params.units);
-    controls.basis.setValue(params.dimBasis);
-    controls.length.setValue(params.lengthMm);
-    controls.width.setValue(params.widthMm);
-    controls.height.setValue(params.heightMm);
-    controls.lidHeight.setValue(params.lidHeightMm);
-    controls.lidPlay.setValue(params.lidPlayMm);
-    controls.tuckDepth.setValue(params.tuckDepthMm);
-    controls.thumbNotch.setValue(params.thumbNotch);
-    if (CUT) controls.glueTab!.setValue(params.glueTabMm);
-    controls.handle.setValue(params.handle);
-    controls.handleHeight.setValue(params.handleHeightMm);
-    controls.window.setValue(params.window);
-    controls.windowScale.setValue(params.windowScale);
-    controls.windowRadius.setValue(params.windowRadiusMm);
+  /**
+   * Put `params` on every control and keep only what the controls can show. Load project, the
+   * host's project list, the units switch and "Resize to fit" all end here.
+   *
+   * The kit's `syncControls` does the one-to-one fields and writes each control's clamped,
+   * stepped value back into `params` (each caller has just made a new one), so a file saying
+   * `lengthMm: 400` builds the 260 mm the slider shows rather than 400 behind it. The rest is
+   * by hand below, and clamps the same way where its control can.
+   */
+  function showParams(): void {
+    syncControls(params, {
+      units: controls.units,
+      dimBasis: controls.basis,
+      lengthMm: controls.length,
+      widthMm: controls.width,
+      heightMm: controls.height,
+      lidHeightMm: controls.lidHeight,
+      lidPlayMm: controls.lidPlay,
+      tuckDepthMm: controls.tuckDepth,
+      // `selectField` is typed as any string; these three offer only their setting's values.
+      tuckLock: controls.tuckLock as ValueRow<BoxParams['tuckLock']>,
+      thumbNotch: controls.thumbNotch,
+      handle: controls.handle,
+      handleHeightMm: controls.handleHeight,
+      window: controls.window,
+      windowScale: controls.windowScale,
+      windowRadiusMm: controls.windowRadius,
+      hangEnd: controls.hangEnd as ValueRow<BoxParams['hangEnd']>,
+      hangHole: controls.hangHole as ValueRow<BoxParams['hangHole']>,
+      lidWings: controls.lidWings,
+      logo: logoControls.kind,
+      logoScale: logoControls.scale,
+      logoText,
+      hangTabHeightMm: controls.hangTabHeight,
+      roofPitchDeg: controls.roofPitch,
+      sheetLayers: printControls.sheetLayers,
+      hingeLayers: printControls.hingeLayers,
+      flapLayers: printControls.flapLayers,
+      hingeWidthMm: printControls.hingeWidth,
+    });
     if (CUT) {
-      controls.filmInsert!.setValue(params.filmInsert);
-      controls.filmMargin!.setValue(params.filmMarginMm);
+      const ui = cutUI!;
+      syncControls(params, {
+        glueTabMm: controls.glueTab!,
+        filmInsert: controls.filmInsert!,
+        filmMarginMm: controls.filmMargin!,
+        caliperMm: ui.caliper,
+        kerfMm: ui.kerf,
+        perfAuto: ui.perfAuto,
+        perfCutMm: ui.perfCut,
+        perfGapMm: ui.perfGap,
+        makeMode: ui.makeMode,
+      });
     }
+    // 0 means the default of two, which the slider shows; only a real count is the slider's to clamp.
     controls.dividerCols.setValue(params.dividerCols || 2);
+    if (params.dividerCols) params.dividerCols = controls.dividerCols.getValue();
     controls.dividerRows.setValue(params.dividerRows || 2);
-    const htSel = controls.hangTab.querySelector('select');
-    if (htSel) htSel.value = params.hangTab;
-    const heSel = controls.hangEnd.querySelector('select');
-    if (heSel) heSel.value = params.hangEnd;
-    const hhSel = controls.hangHole.querySelector('select');
-    if (hhSel) hhSel.value = params.hangHole;
-    const wfSel = controls.windowFace.querySelector('select');
-    if (wfSel) wfSel.value = params.windowFace;
-    controls.lidWings.setValue(params.lidWings);
-    logoControls.kind.setValue(params.logo);
-    logoControls.scale.setValue(params.logoScale);
+    if (params.dividerRows) params.dividerRows = controls.dividerRows.getValue();
+    // Both pickers hold strings.
     logoControls.rotation.setValue(String(params.logoRotation) as '0' | '90' | '180' | '270');
-    logoText.setValue(params.logoText);
+    params.logoRotation = Number(logoControls.rotation.getValue()) as BoxParams['logoRotation'];
+    printControls.layerHeight.setValue(String(params.layerHeightMm));
+    params.layerHeightMm = Number(printControls.layerHeight.getValue());
+    // Not read back: their lists follow the style and still hold the last style's here, so a
+    // value the new style offers could be lost. `syncVisibility` re-lists them on the rebuild
+    // that follows, and the solver ignores a value the style does not offer.
+    controls.hangTab.setValue(params.hangTab);
+    controls.windowFace.setValue(params.windowFace);
+    // One setting, two lists: sheets of card and build plates. `setValue` ignores an id its
+    // list does not have.
+    for (const f of [...(cutUI ? [cutUI.sheetField] : []), plateField]) f.setValue(params.sheetId);
     // `false`: this is reflecting state that already changed, not making a choice.
     fontPicker.setValue(params.logoFont, false);
     fontPicker.setSample(params.logoText.trim() || 'Your word');
     logoName.textContent = params.logoSvg ? 'Logo from the saved project' : '';
-    controls.hangTabHeight.setValue(params.hangTabHeightMm);
-    controls.roofPitch.setValue(params.roofPitchDeg);
-    if (CUT) {
-      const ui = cutUI!;
-      ui.caliper.setValue(params.caliperMm);
-      setFieldOptions(ui.foldMode, foldModeOptions(params.machineId), params.foldMode);
-      ui.kerf.setValue(params.kerfMm);
-      ui.perfCut.setValue(params.perfCutMm);
-      ui.perfGap.setValue(params.perfGapMm);
-      ui.makeMode.setValue(params.makeMode);
-    }
-    for (const f of [...(cutUI ? [cutUI.sheetField] : []), plateField]) {
-      const sel = f.querySelector('select');
-      if (sel && [...sel.options].some((o) => o.value === params.sheetId)) sel.value = params.sheetId;
-    }
-    const lhSel = printControls.layerHeight.querySelector('select');
-    if (lhSel) lhSel.value = String(params.layerHeightMm);
+    // Last: re-listing the fold modes for the machine can settle `foldMode` through the
+    // field's own change handler, which replaces `params`.
+    if (CUT) setFieldOptions(cutUI!.foldMode, foldModeOptions(params.machineId), params.foldMode);
     refreshSheetRows();
   }
 
@@ -2443,7 +2470,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *  and the host's project browser — come through here, so they cannot drift apart. */
   function applyParams(data: unknown): void {
     params = printOnly({ ...DEFAULT_PARAMS, ...(data as Partial<BoxParams>) });
-    syncControls();
+    showParams();
     styleCards.setValue(params.style);
     describeStyle(params);
     // A project carries its logo with it — the words and the face id, or the SVG source
@@ -2463,28 +2490,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     } catch {
       return undefined;
     }
-  }
-
-  function downloadJSON(name: string, data: unknown): void {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(
-      new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
-    );
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  function loadJSON(file: File, apply: (data: unknown) => void): void {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        apply(JSON.parse(reader.result as string));
-      } catch {
-        toast('Invalid project file', { kind: 'error' });
-      }
-    };
-    reader.readAsText(file);
   }
 
   void mode;
