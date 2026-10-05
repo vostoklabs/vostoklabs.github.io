@@ -314,6 +314,8 @@ const MAP = {
   // ----- plain faces for Latin, Greek and Cyrillic alike. Fetched from google/fonts and cut to
   // those alphabets, a variable file fixed at its Regular: see UPSTREAM. -----
   'roboto': ['Roboto', 'Clean'],
+  // Another weight, outside the library: see WEIGHTS.
+  'roboto-bold': ['Roboto Bold', 'Clean'],
   'noto-sans': ['Noto Sans', 'Clean'],
   'noto-serif': ['Noto Serif', 'Serif'],
   'noto-sans-mono': ['Noto Sans Mono', 'Mono'],
@@ -355,11 +357,21 @@ const UPSTREAM = {
   'rubik-one': { file: 'ofl/rubikone/RubikOne-Regular.ttf', for: ['cyrillic'] },
   'comic-relief': { file: 'ofl/comicrelief/ComicRelief-Bold.ttf', for: ['cyrillic', 'greek'] },
   'roboto': { file: 'ofl/roboto/Roboto[wdth,wght].ttf', cut: true, pin: { wdth: 100, wght: 400 }, for: ['cyrillic', 'greek'] },
+  'roboto-bold': { file: 'ofl/roboto/Roboto[wdth,wght].ttf', family: 'Roboto', cut: true, pin: { wdth: 100, wght: 700 }, for: ['cyrillic', 'greek'] },
   'noto-sans': { file: 'ofl/notosans/NotoSans[wdth,wght].ttf', cut: true, pin: { wdth: 100, wght: 400 }, for: ['cyrillic', 'greek'] },
   'noto-serif': { file: 'ofl/notoserif/NotoSerif[wdth,wght].ttf', cut: true, pin: { wdth: 100, wght: 400 }, for: ['cyrillic', 'greek'] },
   'noto-sans-mono': { file: 'ofl/notosansmono/NotoSansMono[wdth,wght].ttf', cut: true, pin: { wdth: 100, wght: 400 }, for: ['cyrillic', 'greek'] },
   'libertinus-sans': { file: 'ofl/libertinussans/LibertinusSans-Regular.ttf', cut: true, for: ['cyrillic', 'greek'] },
 };
+
+/** Other weights of a family the library lists, for an app that draws with one by name: the
+ *  clicker's "Standard Bold" is Roboto Bold. Each lives in fonts/weights/, outside the library's
+ *  glob, so no picker offers it and an app carries its file only once it imports
+ *  `@vostok/fonts/weights`. Fetched, cut, checked and recorded like every other face. */
+const WEIGHTS = new Set(['roboto-bold']);
+/** Where a face's file lives, and the same path from the repo root. */
+const fileOf = (slug) => path.join(FONTS_DIR, ...(WEIGHTS.has(slug) ? ['weights'] : []), `${slug}.ttf`);
+const repoPathOf = (slug) => `packages/fonts/src/fonts/${WEIGHTS.has(slug) ? 'weights/' : ''}${slug}.ttf`;
 
 /** Faces whose licence reserves their name. OFL 3 lets no Modified Version use a Reserved Font
  *  Name, and the font API serves Google's own Latin cut of each family, which is a Modified
@@ -509,7 +521,7 @@ async function fetchTtfUrl(slug) {
  *  the pinned commit. A family with neither an ofl/ nor an apache/ folder is refused too: its
  *  licence is not established. */
 async function download(slug) {
-  const dest = path.join(FONTS_DIR, `${slug}.ttf`);
+  const dest = fileOf(slug);
   try {
     const dir = MAP[slug][0].toLowerCase().replace(/[^a-z0-9]/g, '');
     const family = await familyLicence([`ofl/${dir}`, `apache/${dir}`]);
@@ -758,7 +770,7 @@ async function makeFace(spec) {
  *  the face's own commit, so a cut is checked against the names that file reserves. */
 async function upstream(slug) {
   const spec = UPSTREAM[slug];
-  const dest = path.join(FONTS_DIR, `${slug}.ttf`);
+  const dest = fileOf(slug);
   let family;
   try {
     family = await familyLicence([spec.file.split('/').slice(0, 2).join('/')], spec.commit);
@@ -779,6 +791,7 @@ async function upstream(slug) {
     const buf = await makeFace(spec);
     const still = problemWith(buf, spec, family.reserved);
     if (still) throw new Error(`the new file ${still}`);
+    await mkdir(path.dirname(dest), { recursive: true });
     await writeFile(dest, buf);
     return { slug, status: 'ok', note: `${why}: ${before ? kb(before.length) : 'none'} -> ${kb(buf.length)}`, family };
   } catch (e) {
@@ -826,11 +839,11 @@ const present = new Set(files.map((f) => f.replace('.ttf', '')));
  *  All 241 faces are ~33 MB of TTF, too heavy to ship, so the fold-up box picks a subset.
  *  Before this it shipped a hand-written list of eight. With the size on the record it can say
  *  "every face under 120 KB" in one line and keep up with the library on its own. */
-const bytesOf = (slug) => statSync(path.join(FONTS_DIR, `${slug}.ttf`)).size;
+const bytesOf = (slug) => statSync(fileOf(slug)).size;
 /** What the file covers, from its own cmap: the coverage names in src/coverage.ts, and the
  *  Latin Extended-B letters it holds, which no coverage name stands for. */
 const coverageOfFace = (slug) => {
-  const has = new Set(codePointsOf(parse(readFileSync(path.join(FONTS_DIR, `${slug}.ttf`)))));
+  const has = new Set(codePointsOf(parse(readFileSync(fileOf(slug)))));
   return { subsets: coverageOf((cp) => has.has(cp)), latinExtB: latinExtBOf((cp) => has.has(cp)) };
 };
 
@@ -847,9 +860,15 @@ for (const slug of present) {
 }
 rows.sort((a, b) => a.label.localeCompare(b.label));
 
+const weightRows = [...WEIGHTS]
+  .filter((slug) => existsSync(fileOf(slug)))
+  .map((slug) => ({ id: slug, label: MAP[slug][0], category: MAP[slug][1], curated: false, ...coverageOfFace(slug), bytes: bytesOf(slug) }));
+
 const ts = `// AUTO-GENERATED by scripts/fetch-fonts.mjs — do not edit by hand.
 export interface FontChoice { id: string; label: string; category: string; curated: boolean; /** What the file covers, read from its cmap: names from coverage.ts (Google Fonts' subset names, and \`kana\`). */ subsets: string[]; /** The Latin Extended-B letters (U+0180–024F) the file holds, as runs ("ƀ-ǃǅ-ɏ"): faces cover that block too unevenly for a name, so text is checked against it letter by letter. Absent for a face injected at runtime, which answers from its own cmap. */ latinExtB?: string; /** TTF size on disk, bytes. Absent for a face injected at RUNTIME — the keychain and the pen topper both let someone drop their own font in, and that one never came from this registry. */ bytes?: number; }
 export const FONTS: FontChoice[] = ${JSON.stringify(rows, null, 2)};
+/** Other weights of the families above, each in fonts/weights/: loaded by id once an app imports \`@vostok/fonts/weights\`, never listed in a picker. */
+export const WEIGHTS: FontChoice[] = ${JSON.stringify(weightRows, null, 2)};
 `;
 await writeFile(path.join(APP, 'src', 'registry.ts'), ts);
 
@@ -893,6 +912,18 @@ ${Object.entries(UPSTREAM)
   .map(([slug, spec]) => `| ${MAP[slug][0]} | ${[...spec.for.map((n) => KEPT[n] ?? n), ...(spec.pin ? [`fixed at ${Object.entries(spec.pin).map(([a, v]) => `${a} ${v}`).join(', ')}`] : [])].join('; ')} | \`${spec.file}\` |`)
   .join('\n')}
 
+## Other weights
+
+These sit in \`weights/\`, outside the library: another weight of a family above, for an app
+that draws with it by name. Each is cut from the same original the same way, and no picker lists
+it.
+
+| Font | Kept | Original (google/fonts) |
+| --- | --- | --- |
+${weightRows
+  .map(({ id }) => `| ${MAP[id][0]} | ${[...UPSTREAM[id].for.map((n) => KEPT[n] ?? n), `fixed at ${Object.entries(UPSTREAM[id].pin).map(([a, v]) => `${a} ${v}`).join(', ')}`].join('; ')} | \`${UPSTREAM[id].file}\` |`)
+  .join('\n')}
+
 ## Icon fallback
 
 \`icon-fallback.ttf\` is **Material Symbols Rounded**, instanced at \`FILL=1\` and subset to the
@@ -922,12 +953,12 @@ if (failed.length) {
 } else {
   const blob = (file, commit) => `https://github.com/google/fonts/blob/${commit}/${file}`;
   recordAssets('packages/fonts/scripts/fetch-fonts.mjs', results.map(({ slug, family }) => {
-    const buf = readFileSync(path.join(FONTS_DIR, `${slug}.ttf`));
+    const buf = readFileSync(fileOf(slug));
     const spec = UPSTREAM[slug];
     return {
       id: `font/${slug}`,
       kind: 'font',
-      files: { [`packages/fonts/src/fonts/${slug}.ttf`]: fileHash(`packages/fonts/src/fonts/${slug}.ttf`, buf) },
+      files: { [repoPathOf(slug)]: fileHash(repoPathOf(slug), buf) },
       licence: family.licence,
       // A file whose name table holds no copyright takes the notice its family's OFL.txt opens with.
       copyright: (nameOf(parse(buf), 'copyright') || family.copyright).replace(/\s+/g, ' ').trim(),

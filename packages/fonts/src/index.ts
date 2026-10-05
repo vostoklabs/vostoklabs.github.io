@@ -19,6 +19,7 @@ export { POPULAR_IDS, POPULAR, QUICK_PICKS, SYMBOL_GROUPS, searchGroup, type Sym
 
 import { FONTS, type FontChoice } from './registry';
 import { requirementOf, runsHold, LATIN_EXT_B, SCRIPTS } from './coverage';
+import { addedFontUrls, parsedFonts as fontCache } from './cache';
 // What a face covers and what a string needs, measured on the same character sets.
 export { UNCOVERED } from './coverage';
 
@@ -47,11 +48,10 @@ const fontUrlById: Record<string, string> = Object.entries(fontUrls).reduce(
 );
 
 /** Get the URL for a given font ID so the app can inject its own @font-face or use it directly. */
-export const getFontUrl = (fontId: string): string | undefined => fontUrlById[fontId];
+export const getFontUrl = (fontId: string): string | undefined => fontUrlById[fontId] ?? addedFontUrls.get(fontId);
 
 /** Fonts imported by the user at runtime, parsed and held in memory. */
 const customFonts = new Map<string, any>();
-const fontCache = new Map<string, any>();
 
 /** Parse a .ttf/.otf the user supplied. Kept here so apps never need to depend
  *  on opentype directly — the package owns the one copy. */
@@ -68,7 +68,7 @@ export function registerCustomFont(fontId: string, parsed: any): void {
 async function loadFont(fontId: string): Promise<any> {
   const custom = customFonts.get(fontId);
   if (custom) return custom;
-  const url = fontUrlById[fontId];
+  const url = fontUrlById[fontId] ?? addedFontUrls.get(fontId);
   if (!url) {
     if (fontId.startsWith('custom-')) {
       throw new Error('Custom font is missing. Please import the .ttf/.otf file again.');
@@ -88,6 +88,42 @@ export async function getFont(fontId: string): Promise<any> {
     fontCache.set(fontId, f);
   }
   return f;
+}
+
+/** Loads and parses every face named, so `loadedFont` can hand each over without waiting. For
+ *  code that has to draw synchronously: preload at start, then read. */
+export async function preloadFonts(fontIds: readonly string[]): Promise<void> {
+  await Promise.all(fontIds.map((id) => getFont(id)));
+}
+
+/** The parsed face for `fontId` when it has been loaded already this session (by `getFont`,
+ *  `preloadFonts` or an import), else undefined. Never fetches. */
+export const loadedFont = (fontId: string): any => fontCache.get(fontId);
+
+/**
+ * Declares each face to the document, from the same file `getFont` reads the outlines from, so
+ * HTML can show text in it, and returns the function that takes them away again (for a host
+ * that clears the page and mounts the app afresh: `document.fonts` outlives it). A face this
+ * build has no file for is skipped.
+ *
+ * For an app that shows a few faces in the DOM without `@vostok/fonts/fonts.css`. That sheet
+ * declares every face, and a build that inlines its assets then carries each twice, once for the
+ * sheet and once for the outlines. A face added through the FontFace API is not a stylesheet, so
+ * a host whose policy is `style-src 'self'` (which refuses an inline `<style>`) lets it through,
+ * and it still loads lazily, the first time something is drawn in it.
+ */
+export function installFontFaces(fontIds: readonly string[], opts: { display?: FontDisplay } = {}): () => void {
+  const faces: FontFace[] = [];
+  for (const id of fontIds) {
+    const url = getFontUrl(id);
+    if (!url) continue;
+    const face = new FontFace(fontFamilyFor(id), `url("${url}")`, { display: opts.display ?? 'block' });
+    document.fonts.add(face);
+    faces.push(face);
+  }
+  return () => {
+    for (const face of faces) document.fonts.delete(face);
+  };
 }
 
 /** Fonts shown as instant cards; the rest live behind "Browse all fonts". */
@@ -150,8 +186,7 @@ export function fontScripts(font: FontChoice): string[] {
   return SCRIPTS.filter(([, names]) => names.some((name) => font.subsets?.includes(name))).map(([script]) => script);
 }
 
-/** The icon fallback font, used when a glyph is missing from the chosen face. */
-export const FALLBACK_FONT_ID = 'icon-fallback';
+export { FALLBACK_FONT_ID } from './cache';
 
 // A font the user brings: one import path for every generator (see import.ts).
 export { importFontBuffer, importFontFiles, toPickerFont, fontSupportsText, type ImportedFonts } from './import';

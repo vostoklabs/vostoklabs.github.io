@@ -3156,3 +3156,22 @@ export const FONTS: FontChoice[] = [
     "bytes": 128164
   }
 ];
+/** Other weights of the families above, each in fonts/weights/: loaded by id once an app imports `@vostok/fonts/weights`, never listed in a picker. */
+export const WEIGHTS: FontChoice[] = [
+  {
+    "id": "roboto-bold",
+    "label": "Roboto Bold",
+    "category": "Clean",
+    "curated": false,
+    "subsets": [
+      "cyrillic",
+      "cyrillic-ext",
+      "greek",
+      "latin",
+      "latin-ext",
+      "vietnamese"
+    ],
+    "latinExtB": "ƏƒƠơƯưǰǺ-ǿȘ-țȷ",
+    "bytes": 80520
+  }
+];

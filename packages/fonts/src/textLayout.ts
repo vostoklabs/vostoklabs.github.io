@@ -21,8 +21,10 @@ export interface LayoutResult {
 
 const EMPTY_BOX: LineBox = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
-/** Convert opentype.js path commands into polygon contours (Y flipped for Z-up). */
-export function pathCommandsToPolygons(commands: any[], decimalPlaces = 3): number[][][] {
+/** Convert opentype.js path commands into polygon contours (Y flipped for Z-up). Each curve is
+ *  flattened into `segments` straight steps; 8, the default, is what every outline has been
+ *  drawn with. */
+export function pathCommandsToPolygons(commands: any[], decimalPlaces = 3, segments = 8): number[][][] {
   const polygons: number[][][] = [];
   let currentPolygon: number[][] = [];
 
@@ -36,7 +38,6 @@ export function pathCommandsToPolygons(commands: any[], decimalPlaces = 3): numb
     } else if (c.type === 'Q') {
       const p0 = currentPolygon[currentPolygon.length - 1];
       if (p0) {
-        const segments = 8;
         for (let i = 1; i <= segments; i++) {
           const t = i / segments;
           const x = (1 - t) * (1 - t) * p0[0]! + 2 * (1 - t) * t * c.x1 + t * t * c.x;
@@ -47,7 +48,6 @@ export function pathCommandsToPolygons(commands: any[], decimalPlaces = 3): numb
     } else if (c.type === 'C') {
       const p0 = currentPolygon[currentPolygon.length - 1];
       if (p0) {
-        const segments = 8;
         for (let i = 1; i <= segments; i++) {
           const t = i / segments;
           const x = Math.pow(1 - t, 3) * p0[0]! + 3 * Math.pow(1 - t, 2) * t * c.x1 + 3 * (1 - t) * t * t * c.x2 + Math.pow(t, 3) * c.x;
@@ -96,6 +96,7 @@ function layoutLine(
   xStart: number,
   yBaseline: number,
   letterSpacing: number,
+  segments?: number,
 ): { contours: number[][][]; width: number } {
   const scale = size / font.unitsPerEm;
   const fbScale = fallbackFont ? size / fallbackFont.unitsPerEm : scale;
@@ -119,7 +120,7 @@ function layoutLine(
 
     const activeScale = isFb ? fbScale : scale;
     const path = g.getPath(x, yBaseline, size);
-    contours.push(...pathCommandsToPolygons(path.commands));
+    contours.push(...pathCommandsToPolygons(path.commands, 3, segments));
 
     let adv = (g.advanceWidth || 0) * activeScale;
     if (i < chars.length - 1 && !isFb) {
@@ -176,6 +177,9 @@ export interface HorizontalOptions {
    * of a large one.
    */
   vAlign?: 'top' | 'middle' | 'bottom';
+  /** Straight steps per curve of each glyph; 8 when absent. More steps follow a curve closer, at
+   *  the cost of more points. */
+  segments?: number;
 }
 
 /**
@@ -214,10 +218,10 @@ export function getHorizontalContours(
     const w2 = measureLine(font, fallbackFont, text2, line2Size, letterSpacing);
     const leftFirst = placement === 'left';
     line1Contours = layoutLine(
-      font, fallbackFont, text, textSize, leftFirst ? gap + w2 + sep : gap, 0, letterSpacing,
+      font, fallbackFont, text, textSize, leftFirst ? gap + w2 + sep : gap, 0, letterSpacing, opts.segments,
     ).contours;
     line2Contours = layoutLine(
-      font, fallbackFont, text2, line2Size, leftFirst ? gap : gap + w1 + sep, 0, letterSpacing,
+      font, fallbackFont, text2, line2Size, leftFirst ? gap : gap + w1 + sep, 0, letterSpacing, opts.segments,
     ).contours;
 
     /*
@@ -260,7 +264,7 @@ export function getHorizontalContours(
      */
     const stackedAbove = line2On && placement === 'above';
     const y1 = line2On && !stackedAbove ? -dy / 2 : 0;
-    const l1 = layoutLine(font, fallbackFont, text, textSize, gap, y1, letterSpacing);
+    const l1 = layoutLine(font, fallbackFont, text, textSize, gap, y1, letterSpacing, opts.segments);
     line1Contours = l1.contours;
 
     if (line2On) {
@@ -281,7 +285,7 @@ export function getHorizontalContours(
         x2 = gap + (align === 'center' ? delta / 2 : delta);
       }
       const y2 = stackedAbove ? 0 : dy / 2;
-      line2Contours = layoutLine(font, fallbackFont, text2, line2Size, x2, y2, letterSpacing).contours;
+      line2Contours = layoutLine(font, fallbackFont, text2, line2Size, x2, y2, letterSpacing, opts.segments).contours;
 
       if (stackedAbove) {
         const b1 = bboxOf(line1Contours);
@@ -330,6 +334,7 @@ export function getVerticalContours(
   textSize: number,
   lineSpacing: number,
   letterSpacing: number,
+  opts: { segments?: number } = {},
 ): LayoutResult {
   const chars = Array.from(text);
 
@@ -354,7 +359,7 @@ export function getVerticalContours(
       const fbG = fallbackFont.charToGlyph(char);
       if (fbG && fbG.index !== 0) g = fbG;
     }
-    const glyphPoly = pathCommandsToPolygons(g.getPath(0, 0, textSize).commands);
+    const glyphPoly = pathCommandsToPolygons(g.getPath(0, 0, textSize).commands, 3, opts.segments);
 
     // Centre this character on X, drop it by i steps on Y.
     const cb = bboxOf(glyphPoly);

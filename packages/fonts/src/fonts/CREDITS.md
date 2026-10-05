@@ -295,6 +295,16 @@ with a Reserved Font Name.
 | Noto Sans Mono | Cyrillic; Greek; fixed at wdth 100, wght 400 | `ofl/notosansmono/NotoSansMono[wdth,wght].ttf` |
 | Libertinus Sans | Cyrillic; Greek | `ofl/libertinussans/LibertinusSans-Regular.ttf` |
 
+## Other weights
+
+These sit in `weights/`, outside the library: another weight of a family above, for an app
+that draws with it by name. Each is cut from the same original the same way, and no picker lists
+it.
+
+| Font | Kept | Original (google/fonts) |
+| --- | --- | --- |
+| Roboto Bold | Cyrillic; Greek; fixed at wdth 100, wght 700 | `ofl/roboto/Roboto[wdth,wght].ttf` |
+
 ## Icon fallback
 
 `icon-fallback.ttf` is **Material Symbols Rounded**, instanced at `FILL=1` and subset to the

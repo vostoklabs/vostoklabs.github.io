@@ -95,6 +95,7 @@ const KNOWN = new Set([
   'packages/fonts/tests/coverage.test.mts -> ../src/import',
   'packages/fonts/tests/import.test.mts -> ../src/index',
   'packages/fonts/tests/import.test.mts -> ../src/import',
+  'packages/fonts/tests/faces.test.mts -> ../src/index',
   // Meant too, but the command in its header has no stand-in yet, so its bundle stops at load
   // ("glob is not a function"). font-fallback's header shows the command with it.
   'apps/clicker-generator/tests/text-sizing.test.ts -> ../src/image/letter.ts',

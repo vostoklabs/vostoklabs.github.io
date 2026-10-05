@@ -4114,6 +4114,26 @@
       "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
     },
     {
+      "id": "font/roboto-bold",
+      "kind": "font",
+      "files": {
+        "packages/fonts/src/fonts/weights/roboto-bold.ttf": "281fe2ad13c85b75f1db0b2478dc9a55e819c35b7e97611188f913e2fa8f7bdc"
+      },
+      "licence": "OFL-1.1",
+      "copyright": "Copyright 2011 The Roboto Project Authors (https://github.com/googlefonts/roboto-classic)",
+      "reservedNames": [],
+      "shipsAs": "cut",
+      "source": {
+        "url": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/roboto/Roboto[wdth,wght].ttf",
+        "commit": "9710da1eacb3be272583c3224dcb70f9da6eadbb"
+      },
+      "licenceUrl": "https://github.com/google/fonts/blob/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/roboto/OFL.txt",
+      "notice": [
+        "packages/fonts/src/fonts/OFL.txt"
+      ],
+      "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
+    },
+    {
       "id": "font/roboto-mono",
       "kind": "font",
       "files": {
