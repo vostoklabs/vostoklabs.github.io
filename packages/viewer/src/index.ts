@@ -85,7 +85,8 @@ export interface ViewerOptions {
    *  selects one. Default false: every click selects one part. */
   multiSelect?: boolean;
   /** Draw the selected parts' edges (or the hovered part's, when none is selected) over
-   *  everything else. Default false: the glow alone. */
+   *  everything else, on the part itself, so they move, turn and hide with it. Default false:
+   *  the glow alone. */
   outline?: boolean;
 }
 
@@ -581,13 +582,11 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     const traced = selected.length ? selected : hoveredIndex !== null ? [hoveredIndex] : [];
     for (const i of traced) {
       const mesh = partMeshes[i];
-      if (!mesh?.parent) continue;
+      if (!mesh) continue;
+      // On the part itself, so an offset, a pose or hiding it takes its outline along.
       const line = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 15), outlineMaterial);
-      line.position.copy(mesh.position);
-      line.quaternion.copy(mesh.quaternion);
-      line.scale.copy(mesh.scale);
       line.renderOrder = 999;
-      mesh.parent.add(line);
+      mesh.add(line);
       outlines.push(line);
     }
   }

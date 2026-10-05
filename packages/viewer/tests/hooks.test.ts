@@ -162,8 +162,8 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   page.pointer('pointerup', 400, 300);
   v.highlightParts([0, 2]);
   check('highlightParts: every part named glows', emissive(v).map((e) => (e > 0 ? 1 : 0)).join() === '1,0,1', emissive(v).join());
-  check('outline: an edge outline over each selected part, beside it, drawn last', outlinesOf(v).length === 2
-    && outlinesOf(v).every((l) => l.parent === v.root && ((l as THREE.LineSegments).material as THREE.LineBasicMaterial).depthTest === false));
+  check('outline: an edge outline on each selected part, drawn last', outlinesOf(v).length === 2
+    && outlinesOf(v).every((l, i) => l.parent === v.partMeshes()[[0, 2][i]!] && ((l as THREE.LineSegments).material as THREE.LineBasicMaterial).depthTest === false));
   v.clearHighlight();
   check('outline: gone with the selection', outlinesOf(v).length === 0);
   if (hit !== null) {
@@ -183,6 +183,29 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   } else {
     check('the centre of the stage hits a part', false, 'nothing under the pointer');
   }
+  v.dispose();
+}
+{
+  // An outline is drawn on its part: it moves, turns and hides with it.
+  const v = createViewer(stage, { outline: true });
+  v.setParts(PARTS, true);
+  v.highlightParts([0, 2]);
+  const [first, third] = outlinesOf(v);
+  const meshes = v.partMeshes();
+  const world = (o: THREE.Object3D) => (o.updateWorldMatrix(true, false), o.matrixWorld.elements);
+  const sameWorld = (a: THREE.Object3D, b: THREE.Object3D) => world(a).every((e, i) => near(e, world(b)[i]!));
+  v.setPartOffset(2, [5, -4, 3]);
+  check('outline: slides with its part', !!third && sameWorld(third, meshes[2]!), third ? `${new THREE.Vector3().setFromMatrixPosition(third.matrixWorld).toArray()}` : 'no outline');
+  v.setPartPose(0, [1, 2, 3], 0.7);
+  check('outline: turns with its part', !!first && sameWorld(first, meshes[0]!));
+  const draws = () => {
+    const before = page.log.length;
+    page.frame();
+    return page.log.slice(before).filter((l) => l.startsWith('draw')).length;
+  };
+  const shown = draws();
+  v.setPartVisible(2, false);
+  check('outline: hidden with its part', shown - draws() === 2, 'the part and its outline both left out of the frame');
   v.dispose();
 }
 
