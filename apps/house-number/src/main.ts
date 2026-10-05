@@ -6,7 +6,7 @@ import './style.css';
 import {
   appShell, topbarLinks, generatorHeader, qualityCallout, section, collapsibleSection, sampleGrid,
   sliderRow, toggleSwitch, segmentedControl, fontChooser, sidebarFooter, stageStatus,
-  filamentRow, contrastRatio,
+  filamentRow, contrastRatio, syncControls,
   toast, dialog, licenseAfterExport, el,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
@@ -643,52 +643,61 @@ function syncVisibility() {
   show(colourRows[4]!.row, hasPlate && params.panelOn);
 }
 
-/** Pushes `params` back into every control, after a preset or a loaded project. */
-function syncControls() {
-  controls.text.setValue(params.text);
-  controls.text2.setValue(params.text2);
+/**
+ * Pushes `params` into every control after a preset or a loaded project, and keeps only what
+ * the controls can show.
+ *
+ * The kit's `syncControls` does the one-to-one fields and writes each control's value back, so
+ * a number off a slider's step is built as the slider shows it, not as the file or the preset
+ * had it. The font, the colour rows and which controls are showing follow by hand.
+ */
+function showSettings() {
+  syncControls(params, {
+    text: controls.text,
+    text2: controls.text2,
+    scale: controls.scale,
+    textSize: controls.textSize,
+    line2Size: controls.line2Size,
+    align: controls.align,
+    vAlign: controls.vAlign,
+    linePlacement: controls.linePlacement,
+    orientation: controls.orientation,
+    letterSpacing: controls.letterSpacing,
+    lineSpacing: controls.lineSpacing,
+    stackSpacing: controls.stackSpacing,
+    divider: controls.divider,
+    lineThickness: controls.lineThickness,
+    lineLength: controls.lineLength,
+    lineOverhang: controls.lineOverhang,
+    lineOffset: controls.lineOffset,
+    relief: controls.relief,
+    bridgesOn: controls.bridgesOn,
+    bridgeWidth: controls.bridgeWidth,
+    band: controls.band,
+    bandWidth: controls.bandWidth,
+    panelOn: controls.panelOn,
+    panelInset: controls.panelInset,
+    panelHeight: controls.panelHeight,
+    shape: controls.shape,
+    cornerRadius: controls.cornerRadius,
+    padding: controls.padding,
+    plateWidth: controls.plateWidth,
+    plateHeight: controls.plateHeight,
+    plateThickness: controls.plateThickness,
+    textThickness: controls.textThickness,
+    frameOn: controls.frameOn,
+    frameWidth: controls.frameWidth,
+    frameFollowsText: controls.frameFollowsText,
+    frameHeight: controls.frameHeight,
+    chamfer: controls.chamfer,
+    mount: controls.mount,
+    mountHoleDia: controls.mountHoleDia,
+    mountInset: controls.mountInset,
+    mountOffsetY: controls.mountOffsetY,
+    mountFourHoles: controls.mountFourHoles,
+  });
   fonts.setValue(params.fontId);
   fonts.setSample(FONT_SPECIMEN, params.text + params.text2);
-  controls.scale.setValue(params.scale);
-  controls.textSize.setValue(params.textSize);
-  controls.line2Size.setValue(params.line2Size);
-  controls.align.setValue(params.align);
-  controls.vAlign.setValue(params.vAlign);
-  controls.linePlacement.setValue(params.linePlacement);
-  controls.orientation.setValue(params.orientation);
-  controls.letterSpacing.setValue(params.letterSpacing);
-  controls.lineSpacing.setValue(params.lineSpacing);
-  controls.stackSpacing.setValue(params.stackSpacing);
-  controls.divider.setValue(params.divider);
-  controls.lineThickness.setValue(params.lineThickness);
-  controls.lineLength.setValue(params.lineLength);
-  controls.lineOverhang.setValue(params.lineOverhang);
-  controls.lineOffset.setValue(params.lineOffset);
-  controls.relief.setValue(params.relief);
-  controls.bridgesOn.setValue(params.bridgesOn);
-  controls.bridgeWidth.setValue(params.bridgeWidth);
-  controls.band.setValue(params.band);
-  controls.bandWidth.setValue(params.bandWidth);
-  controls.panelOn.setValue(params.panelOn);
-  controls.panelInset.setValue(params.panelInset);
-  controls.panelHeight.setValue(params.panelHeight);
-  controls.shape.setValue(params.shape);
-  controls.cornerRadius.setValue(params.cornerRadius);
-  controls.padding.setValue(params.padding);
-  controls.plateWidth.setValue(params.plateWidth);
-  controls.plateHeight.setValue(params.plateHeight);
-  controls.plateThickness.setValue(params.plateThickness);
-  controls.textThickness.setValue(params.textThickness);
-  controls.frameOn.setValue(params.frameOn);
-  controls.frameWidth.setValue(params.frameWidth);
-  controls.frameFollowsText.setValue(params.frameFollowsText);
-  controls.frameHeight.setValue(params.frameHeight);
-  controls.chamfer.setValue(params.chamfer);
-  controls.mount.setValue(params.mount);
-  controls.mountHoleDia.setValue(params.mountHoleDia);
-  controls.mountInset.setValue(params.mountInset);
-  controls.mountOffsetY.setValue(params.mountOffsetY);
-  controls.mountFourHoles.setValue(params.mountFourHoles);
   syncVisibility();
   syncColourInputs();
 }
@@ -738,7 +747,7 @@ async function paintExamples() {
       const preset = PRESETS.find((p) => p.id === item.id);
       if (!preset) return;
       params = applyPreset(params, preset.patch);
-      syncControls();
+      showSettings();
       triggerRebuild(true);
     },
   });
@@ -862,7 +871,7 @@ const footer = sidebarFooter({
     reader.onload = () => {
       try {
         params = coerceSettings(JSON.parse(String(reader.result)));
-        syncControls();
+        showSettings();
         triggerRebuild(true);
         toast('Project loaded', { kind: 'ok' });
       } catch {

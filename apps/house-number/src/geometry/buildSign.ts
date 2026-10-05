@@ -11,7 +11,7 @@
  * that must not trap air. Two generators drifting on memory handling is how a WASM leak
  * gets found in the third one.
  */
-import { csOf, ringsOf, extrude } from '@vostok/manifold';
+import { csOf, ringsOf, extrude, withScope, type Keep } from '@vostok/manifold';
 import {
   plateOutline, keyhole, keyholePositions, bboxOf, plateSizeFor, signedArea,
   screwHolePositions, screwHolePositions4, circle, ccw, fitAngleFor, nudgeClear, pullInside,
@@ -20,21 +20,6 @@ import {
 } from './outlines';
 import type { SignParams, LineBox } from '../types';
 import { MAX_PLATE_MM, SCREW_HOLE_ROOM_MM, isSideBySide } from '../types';
-
-type Keep = <M extends { delete(): void }>(m: M) => M;
-
-/** Ensures every Emscripten object allocated inside `fn` is freed, thrown or not. */
-export function withScope<T>(fn: (keep: Keep) => T): T {
-  const created: { delete(): void }[] = [];
-  const keep = <M extends { delete(): void }>(m: M) => { created.push(m); return m; };
-  try {
-    return fn(keep);
-  } finally {
-    for (const m of created) {
-      try { m.delete(); } catch (e) { console.warn('Error deleting manifold object:', e); }
-    }
-  }
-}
 
 function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace('#', '');
