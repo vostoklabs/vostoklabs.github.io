@@ -53,6 +53,8 @@ import {
   fontChooser,
   createStore,
   readProjectFile,
+  markProject,
+  type ProjectShape,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { downloadFile } from '@vostok/export';
@@ -107,6 +109,10 @@ import { buildTextRegionSet } from './image/text';
 
 import type { DesktopHost } from '@vostok/ui-kit';
 import { setAssetBase } from './assets';
+
+/** A magnet project file: every one saved carries `v` and `settings` (see `buildProject`), so a
+ *  file without them, or one another app saved, is refused on Load. */
+const PROJECT_FILE: ProjectShape = { app: 'magnet-generator', keys: ['v', 'settings'] };
 
 /**
  * Builds the generator into `container` and returns its teardown.
@@ -2794,7 +2800,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   function saveToHostOrDownload() {
     if (host) { void saveToHost(); return; }
-    downloadFile(JSON.stringify(buildProject()), 'magnet-project.json', 'application/json');
+    downloadFile(JSON.stringify(markProject(PROJECT_FILE, buildProject())), 'magnet-project.json', 'application/json');
   }
 
   async function openFromHostOrFile(file?: File) {
@@ -2804,7 +2810,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     if (!file) return;
     // applyProject runs inside the kit's guard, so a file it cannot use (no settings) gets the
     // same "not a project file" toast as one that is not JSON at all.
-    await readProjectFile(file, applyProject);
+    await readProjectFile(file, applyProject, PROJECT_FILE);
   }
 
   /** Applies a parameter blob to the live UI. Shared by both load paths. */

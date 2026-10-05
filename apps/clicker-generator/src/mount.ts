@@ -23,7 +23,8 @@ import '@vostok/fonts/fonts.css';
 import '@vostok/plates/plates.css';
 import {
   topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks,
-  chooseFile, listRow, licenseAfterExport, applyTheme, createStore, readProjectFile,
+  chooseFile, listRow, licenseAfterExport, applyTheme, createStore, readProjectFile, markProject,
+  type ProjectShape,
 } from '@vostok/ui-kit';
 import './style.css';
 import { createViewer, type SectionAxis } from './viewer/viewer';
@@ -89,6 +90,10 @@ import { createModelMode, type ModelMode } from './ui/modelMode';
 import { DEFAULT_MODEL_CUT } from './model/types';
 import type { SampleId } from './model/samples';
 import { deflateSync, inflateSync } from 'fflate';
+
+/** A clicker project file: every one saved carries `version` and `settings` (see
+ *  `buildProject`), so a file without them, or one another app saved, is refused on Load. */
+const PROJECT_FILE: ProjectShape = { app: 'clicker-generator', keys: ['version', 'settings'] };
 
 /**
  * Builds the generator into `container` and returns its teardown.
@@ -920,11 +925,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       const proj = buildProject();
       if (host) { void saveToHost(proj); return; }
 
-      downloadFile(JSON.stringify(proj), 'clicker-project.json', 'application/json');
+      downloadFile(JSON.stringify(markProject(PROJECT_FILE, proj)), 'clicker-project.json', 'application/json');
       store.set({ status: 'Project saved ✓' });
     },
     onLoadProject: (file) => {
-      void readProjectFile(file, applyProject).then((loaded) => {
+      void readProjectFile(file, applyProject, PROJECT_FILE).then((loaded) => {
         // Not a project the clicker can open: the kit's toast says so. A file that failed
         // half way through applying must not leave "Loading project…" up behind it.
         if (loaded === null) store.set({ building: false, status: '' });
@@ -2731,8 +2736,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
            reloads with six points. The directory already knows each shape's default. */
         shapeSides: set.shapeSides ?? findShape(set.baseShape ?? '')?.param?.value ?? 6,
         // Per-field `?? default` is this codebase's only real compatibility mechanism —
-        // `version` is written and never read — so a project saved before this knob existed
-        // loads with the shipped default and builds exactly what it always built.
+        // `version` is written and its number never read — so a project saved before this
+        // knob existed loads with the shipped default and builds exactly what it always built.
         shapeArmPct: set.shapeArmPct ?? 0.34,
         shapeCornerPct: set.shapeCornerPct ?? 0.22,
         packShapeToken: set.packShapeToken ?? null,

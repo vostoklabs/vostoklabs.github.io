@@ -31,6 +31,7 @@ import {
   toast,
   dialog,
   readProjectFile,
+  markProject,
   changelogButton,
   closeAllDialogs,
   closeAllDrawers,
@@ -39,6 +40,7 @@ import {
   el,
   type DesktopHost,
   type ValueRow,
+  type ProjectShape,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
@@ -96,6 +98,10 @@ import {
 
 /** What the Length, Width and Height sliders offer, mm; "Resize to fit" keeps to it too. */
 const SIZE_LIMITS: SizeLimits = { min: [20, 20, 8], max: [260, 260, 200] };
+
+/** A project file is the box's `params`: every one saved carries its style and its three sizes,
+ *  so a file without them, or one another app saved, is refused on Load. */
+const PROJECT_FILE: ProjectShape = { app: 'foldbox', keys: ['style', 'lengthMm', 'widthMm', 'heightMm'] };
 
 /**
  * Builds the generator into `container` and returns its teardown.
@@ -2084,13 +2090,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // Also true in the MakerLab embed, where nobody owns them: the sandbox has downloads off,
     // so Save would produce nothing. The kit then draws Help and the theme toggle only.
     hostOwnsProjects: MAKERLAB || Boolean(host?.registerProject),
-    onSave: () => downloadFile(JSON.stringify(params, null, 2), `${params.style}-box.json`, 'application/json'),
+    onSave: () =>
+      downloadFile(JSON.stringify(markProject(PROJECT_FILE, params), null, 2), `${params.style}-box.json`, 'application/json'),
     onLoad: (file?: File) =>
       file &&
       readProjectFile(file, (data) => {
         applyParams(data);
         toast('Project loaded', { kind: 'ok' });
-      }),
+      }, PROJECT_FILE),
     onHelp: () => {
       // The dialog is built when it opens, so the paragraphs that describe ONE mode follow
       // the mode the user is on rather than the build. `CUT &&` keeps them foldable: in the

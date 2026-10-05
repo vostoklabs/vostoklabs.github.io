@@ -3,7 +3,7 @@
 
     pnpm --filter @vostok/ui-kit test
 */
-import { readProjectFile } from '../src/components/project-file';
+import { readProjectFile, markProject, type ProjectShape } from '../src/components/project-file';
 
 const toasts: string[] = [];
 const fakeNode = () => ({
@@ -68,6 +68,36 @@ check('apply rejects later: null and one toast', rejected === null && toasts.len
 let finished = false;
 await readProjectFile(fileOf('g.json', utf8(json)), async () => { await new Promise((r) => setTimeout(r, 5)); finished = true; });
 check('apply is awaited before it returns', finished);
+
+/* An app's shape: its id, and the keys every file it ever saved has. */
+const SHAPE: ProjectShape = { app: 'box-app', keys: ['style', 'lengthMm'] };
+const saved = { style: 'mailer', lengthMm: 90, logo: 'none' };
+const marked = JSON.stringify(markProject(SHAPE, saved), null, 2);
+check('markProject puts the app id first and keeps every field', marked.startsWith('{\n  "app": "box-app",') && JSON.stringify(JSON.parse(marked)) === JSON.stringify({ app: 'box-app', ...saved }));
+
+const opened = async (name: string, text: string) => {
+  toasts.length = 0; logged = 0;
+  applied = [];
+  return readProjectFile(fileOf(name, utf8(text)), (d) => { applied.push(d); }, SHAPE);
+};
+const unmarked = JSON.stringify(saved);
+check('a file this app saved opens, and apply gets it without the marker',
+  JSON.stringify(await opened('h.json', marked)) === unmarked && applied.length === 1 && JSON.stringify(applied[0]) === unmarked && toasts.length === 0);
+check('an older file with no marker but every key still opens',
+  JSON.stringify(await opened('i.json', unmarked)) === unmarked && applied.length === 1 && toasts.length === 0);
+check("another app's file is refused, says so, and apply never runs",
+  (await opened('magnet-project.json', JSON.stringify({ app: 'magnet-app', v: 2, settings: {} }))) === null &&
+    applied.length === 0 && toasts[0] === '"magnet-project.json" was saved by another generator' && logged === 1);
+check("another app's file is refused even when it has this app's keys",
+  (await opened('j.json', JSON.stringify({ app: 'other-app', style: 'x', lengthMm: 1 }))) === null && applied.length === 0 && toasts.length === 1);
+check('{} is refused as not a project file',
+  (await opened('k.json', '{}')) === null && applied.length === 0 && toasts[0] === '"k.json" is not a project file' && logged === 1);
+check('a file missing one of the keys is refused',
+  (await opened('l.json', JSON.stringify({ style: 'mailer' }))) === null && applied.length === 0 && toasts.length === 1);
+check('JSON that is not an object is refused (an array, null, a number)',
+  (await opened('m.json', '[1]')) === null && (await opened('n.json', 'null')) === null && (await opened('o.json', '7')) === null && applied.length === 0);
+check('without a shape nothing is checked, as before',
+  same(await readProjectFile(fileOf('p.json', utf8(json)))) && JSON.stringify(await readProjectFile(fileOf('q.json', utf8('{}')))) === '{}');
 
 console.log(`\nproject file: ${pass} passed, ${fails.length} failed`);
 if (fails.length) process.exit(1);

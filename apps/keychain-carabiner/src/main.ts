@@ -31,6 +31,7 @@ import {
   busyChip,
   readParamsFromHash,
   readProjectFile,
+  markProject,
   toast,
   dialog,
   licenseAfterExport,
@@ -38,6 +39,7 @@ import {
   el,
   type ThumbTileHandle,
   type ValueRow,
+  type ProjectShape,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
@@ -93,6 +95,10 @@ import type { ChainInfo, GeometryResponse, HookFrame, PartMesh } from './types';
 let settings: SetSettings = { ...DEFAULT_SETTINGS };
 const shared = readParamsFromHash();
 if (shared) settings = coerceSettings({ ...settings, ...shared });
+
+/** A project file is these settings: every one saved carries the hook's shape and size, so a
+ *  file without them, or one another app saved, is refused on Load. */
+const PROJECT_FILE: ProjectShape = { app: 'keychain-carabiner', keys: ['hookShape', 'hookSize'] };
 
 type View = 'assembled' | 'print';
 // Typed wide on purpose: it is reassigned from the mode bar's callback, which control flow
@@ -1260,14 +1266,15 @@ const footer = sidebarFooter({
 
     licenseAfterExport();
   },
-  onSave: () => downloadFile(JSON.stringify(settings, null, 2), `${exportSlug()}.json`, 'application/json'),
+  onSave: () =>
+    downloadFile(JSON.stringify(markProject(PROJECT_FILE, settings), null, 2), `${exportSlug()}.json`, 'application/json'),
   onLoad: (file?: File) =>
     file && readProjectFile(file, (data) => {
       settings = coerceSettings(data);
       showSettings();
       triggerRebuild();
       toast('Project loaded', { kind: 'ok' });
-    }),
+    }, PROJECT_FILE),
   onHelp: () =>
     dialog({
       title: 'Keychain Carabiner Set help',
