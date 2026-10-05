@@ -550,6 +550,10 @@ export function createUi(
   /** Signed millimetre offset, for a control whose 0 is a baseline rather than zero. */
   const fmtSignedMm = (v: number, dec: number) =>
     (v > 0.0001 ? '+' : v < -0.0001 ? '−' : '') + Math.abs(v).toFixed(dec) + ' mm';
+  /** The way back from `fmtSignedMm` and `pct`, as a stepper's `parse`. Both write a negative
+   *  with the typographic minus, and the box reads only "-" as a sign, so "−0.10 mm" typed
+   *  back would otherwise land as +0.10. */
+  const readSigned = (typed: number, raw: string) => (raw.includes('−') ? -Math.abs(typed) : typed);
 
   /* A hand-rolled "?" marker duplicating the kit's `helpTip()` — same bubble, but this one
      put `role="img"` on something with `tabindex="0"` and a hover/focus handler, which is not
@@ -1343,6 +1347,7 @@ export function createUi(
     label: 'Line spacing', help: 'Gap between lines when the text has more than one.',
     min: 0.5, max: 1.8, step: 0.05, value: initial.lineSpacing,
     format: (v) => `${Math.round(v * 100)}%`,
+    parse: (typed) => typed / 100,
     onInput: (v) => cb.onLineSpacing(v),
   });
   $('lineSpacingMount').append(lineSpacingRow);
@@ -2093,7 +2098,7 @@ export function createUi(
     help: 'Clearance between the top part and the base it presses into. Press + if the two halves are hard to fit together or the top scrapes, − if they feel loose. 0 = the default fit.',
     min: 0.1, max: 1.0, step: 0.05, value: initial.tolerance,
     format: (v) => fmtSignedMm(v - BASE_SOCKET_TOL, 2),
-    parse: (typed) => typed + BASE_SOCKET_TOL,
+    parse: (typed, raw) => readSigned(typed, raw) + BASE_SOCKET_TOL,
     onInput: (v) => cb.onGapTolerance(v),
   });
   $('gapTolMount').append(gapTolRow);
@@ -2103,6 +2108,7 @@ export function createUi(
     help: 'How tightly the top part grips the stem of your MX switch. Press + if the top is hard to push on or the post splits, − for a firmer grip. Each step makes the cross hole 0.05 mm wider or narrower. 0 = as designed.',
     min: STEM_FIT_MIN_MM, max: STEM_FIT_MAX_MM, step: STEM_FIT_STEP_MM, value: initial.stemFitMm,
     format: (v) => fmtSignedMm(v, 2),
+    parse: readSigned,
     onInput: (v) => cb.onStemFit(v),
   });
   $('stemFitMount').append(stemFitRow);
@@ -2112,6 +2118,7 @@ export function createUi(
     help: 'How tightly the switch itself sits in the base. Press + if the switch is hard to push in, − if it rattles or falls out. 0 = as designed.',
     min: -5, max: 5, step: 0.5, value: initial.socketFitPct,
     format: pct,
+    parse: readSigned,
     onInput: (v) => cb.onSocketFit(v),
   });
   $('socketFitMount').append(socketFitRow);
