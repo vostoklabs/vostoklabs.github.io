@@ -1,6 +1,6 @@
 import { el, uid } from '../dom';
 import { ICONS, svgEl } from '../icons';
-import { helpTip, isSyncing } from './controls';
+import { helpTip, isSyncing, withAccess } from './controls';
 
 /* The primitives the kit was missing, as components.
 
@@ -607,11 +607,6 @@ export function numberField(opts: NumberFieldOptions): NumberFieldHandle {
     show(current);
     if (notify) opts.onInput?.(current);
   };
-  root.getValue = () => current;
-  root.setDisabled = (disabled: boolean) => {
-    root.classList.toggle('vl-control--disabled', disabled);
-    root.setAttribute('aria-disabled', String(disabled));
-    input.disabled = disabled;
-  };
+  withAccess(root, () => current, [input]);
   return root;
 }
