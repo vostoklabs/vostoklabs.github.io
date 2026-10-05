@@ -37,7 +37,10 @@
   Two tiers, as in the clicker: a hardcoded one that survives someone copying the
   source, and a secret one keyed to a build-time seed that only the deployed site
   has. They occupy different fraction bands so they never collide.
+
+  The seed and the generator are the shelf's (@vostok/watermark); the zone is ours.
 */
+import { markSeed, prng } from '@vostok/watermark';
 
 export interface MarkVoid {
   x: number;
@@ -57,48 +60,7 @@ export interface MarkZone {
 }
 
 /** Read the build-time secret. Empty (dev, or a test run in node) → tier 2 is off. */
-export function getMarkSeed(): string {
-  try {
-    return ((import.meta as unknown as { env?: Record<string, string> }).env?.VITE_MARK_SEED as string) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-// xmur3 string hash -> 32-bit seeds for a deterministic PRNG.
-function xmur3(str: string): () => number {
-  let h = 1779033703 ^ str.length;
-  for (let i = 0; i < str.length; i++) {
-    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  return () => {
-    h = Math.imul(h ^ (h >>> 16), 2246822507);
-    h = Math.imul(h ^ (h >>> 13), 3266489909);
-    h ^= h >>> 16;
-    return h >>> 0;
-  };
-}
-
-// sfc32: small, fast, well-distributed PRNG -> floats in [0, 1).
-function sfc32(a: number, b: number, c: number, d: number): () => number {
-  return () => {
-    a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
-    let t = (a + b) | 0;
-    a = b ^ (b >>> 9);
-    b = (c + (c << 3)) | 0;
-    c = (c << 21) | (c >>> 11);
-    d = (d + 1) | 0;
-    t = (t + d) | 0;
-    c = (c + t) | 0;
-    return (t >>> 0) / 4294967296;
-  };
-}
-
-function makePrng(seed: string): () => number {
-  const s = xmur3(seed);
-  return sfc32(s(), s(), s(), s());
-}
+export const getMarkSeed = markSeed;
 
 const HARDCODED_SEED = 'vostok-labs-pen-topper-2026';
 
@@ -112,7 +74,7 @@ const BANDS = {
 
 function constellation(seed: string, zone: MarkZone, count: number, band: readonly [number, number]): MarkVoid[] {
   if (!seed) return [];
-  const rng = makePrng(seed);
+  const rng = prng(seed);
   const R = zone.boreR + zone.wall;
   const ySpan = zone.yTo - zone.yFrom;
   // The clearance at the best spot in the corner. Everything below is a fraction
