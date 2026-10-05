@@ -34,18 +34,20 @@ const WINDOW = 12;
   one. An owner not listed has a budget of zero. Written 2026-10-04.
 */
 const BUDGET = {
-  'apps/bubble-pop-generator': 1634,
-  'apps/clicker-generator': 474,
+  'apps/bubble-pop-generator': 1444,
+  'apps/clicker-generator': 207,
   'apps/house-number': 37,
-  'apps/keycap-generator': 82,
-  'apps/keychain-carabiner': 48,
+  'apps/keycap-generator': 67,
+  'apps/keychain-carabiner': 15,
   'apps/laser-studio': 26,
-  'apps/magnet-generator': 1826,
-  'apps/name-keychain': 92,
-  'apps/pen-topper': 53,
-  'packages/export': 40,
-  'packages/laser': 1012,
+  'apps/magnet-generator': 1595,
+  'apps/name-keychain': 45,
+  'apps/pen-topper': 24,
+  'packages/laser': 13,
   'packages/patterns': 13,
+  // The image tracer moved here from packages/laser (1012 there before); magnet and bubble-pop
+  // still hold their own copies of it.
+  'packages/trace': 955,
   'packages/ui-kit': 26,
   'packages/viewer': 18,
 };
