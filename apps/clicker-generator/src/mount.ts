@@ -23,11 +23,12 @@ import '@vostok/fonts/fonts.css';
 import '@vostok/plates/plates.css';
 import {
   topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks,
-  chooseFile, listRow, licenseAfterExport, applyTheme, createStore,
+  chooseFile, listRow, licenseAfterExport, applyTheme, createStore, readProjectFile,
 } from '@vostok/ui-kit';
 import './style.css';
 import { createViewer, type SectionAxis } from './viewer/viewer';
 import { mountPlatePicker } from '@vostok/plates';
+import { downloadFile } from '@vostok/export';
 import { createUi, type UiState } from './ui/ui';
 import { loadFileToImage, processImage, type RgbaImage } from '@vostok/laser/trace';
 import { runWizard } from './ui/wizard';
@@ -896,7 +897,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         }
         return;
       }
-      downloadBlob(blob, `${designFileBase()}-render.png`);
+      downloadFile(blob, `${designFileBase()}-render.png`, 'image/png');
     },
     onAiPrompt: async () => {
       try {
@@ -915,8 +916,20 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     pickFile: host?.pickMedia
       ? (kind, extensions) => chooseFile(host, { kind, extensions }, () => {})
       : undefined,
-    onSaveProject: () => saveProject(),
-    onLoadProject: (file) => loadProject(file),
+    onSaveProject: () => {
+      const proj = buildProject();
+      if (host) { void saveToHost(proj); return; }
+
+      downloadFile(JSON.stringify(proj), 'clicker-project.json', 'application/json');
+      store.set({ status: 'Project saved ✓' });
+    },
+    onLoadProject: (file) => {
+      void readProjectFile(file, applyProject).then((loaded) => {
+        // Not a project the clicker can open: the kit's toast says so. A file that failed
+        // half way through applying must not leave "Loading project…" up behind it.
+        if (loaded === null) store.set({ building: false, status: '' });
+      });
+    },
     onOpenFromHost: () => void openFromHost(),
     onBodyColor: (hex) => {
       // Live recolor of the clicker body — no rebuild (geometry is unchanged). A block
@@ -2432,17 +2445,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
 
   // ---- Render / project save-load / AI prompt ----
-  function downloadBlob(blob: Blob, fileName: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
   function imageToDataUrl(img: RgbaImage): string {
     const c = document.createElement('canvas');
     c.width = img.width;
@@ -2471,7 +2473,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   /**
    * The saved shape, in one function.
    *
-   * Split out of `saveProject` because the host now asks for it on a timer as well as when
+   * Split out of the Save handler because the host now asks for it on a timer as well as when
    * the user presses Save — autosave cannot go through a function whose other half writes
    * a file and sets a status line.
    */
@@ -2570,14 +2572,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     if (snap.sample) return { name: snap.name, sample: snap.sample };
     if (!snap.bytes || snap.bytes.byteLength > 30 * 1024 * 1024) return null;
     return { name: snap.name, data: bytesToBase64(deflateSync(new Uint8Array(snap.bytes))) };
-  }
-
-  function saveProject() {
-    const proj = buildProject();
-    if (host) { void saveToHost(proj); return; }
-
-    downloadBlob(new Blob([JSON.stringify(proj)], { type: 'application/json' }), 'clicker-project.json');
-    store.set({ status: 'Project saved ✓' });
   }
 
   /** The project currently open, so Save overwrites it instead of piling up copies. */
@@ -2688,14 +2682,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   if (!host?.registerProject) {
     const arrivingWith = host?.initialProjectId?.();
     if (arrivingWith) void openProject(arrivingWith);
-  }
-
-  async function loadProject(file: File) {
-    try {
-      await applyProject(JSON.parse(await file.text()));
-    } catch (err) {
-      store.set({ building: false, status: 'Could not load project: ' + String(err) });
-    }
   }
 
   /** Applies a saved parameter blob to the live UI. Shared by both load paths. */
