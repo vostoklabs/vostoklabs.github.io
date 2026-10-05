@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
+import { flattenSvgStyles } from '@vostok/ui-kit';
 
 /**
  * Parse SVG markup into:
@@ -83,103 +84,10 @@ function isArtboardRect(node, viewW, viewH, bounds) {
  */
 const CHOSEN_ATTR = 'data-vl-chosen';
 
-/** The paint and visibility properties SVGLoader reads off an element. `transform` is not
- *  here on purpose: SVGLoader honours only the ATTRIBUTE, so a CSS transform must stay ignored
- *  rather than become one. */
-const PAINT_PROPS = new Set([
-  'fill', 'fill-opacity', 'fill-rule', 'opacity', 'stroke', 'stroke-opacity', 'stroke-width',
-  'stroke-linejoin', 'stroke-linecap', 'stroke-miterlimit', 'visibility', 'display',
-]);
-
-/** `fill:none; stroke: #000` → { fill: 'none', stroke: '#000' }, paint properties only. */
-function parseDecls(text) {
-  const out = {};
-  for (const decl of (text || '').split(';')) {
-    const i = decl.indexOf(':');
-    if (i < 0) continue;
-    const k = decl.slice(0, i).trim().toLowerCase();
-    const v = decl.slice(i + 1).replace(/!important/i, '').trim();
-    if (PAINT_PROPS.has(k) && v) out[k] = v;
-  }
-  return out;
-}
-
-/**
- * Write every element's CSS paint into presentation attributes, and return the new markup.
- *
- * SVGLoader reads paint from three places, weakest first: the attribute, a `<style>` rule
- * matching the element's class or id, and the element's own `style=""`. The last two go
- * through the browser's CSSOM — and under a CSP whose `style-src` has no 'unsafe-inline'
- * they never get there: a `<style>` element in the parsed file has no
- * stylesheet and a `style` attribute has an empty `node.style`. An Illustrator export
- * (`<style>.cls-1{fill:none;stroke:#000}</style>`) then reads as SVGLoader's default — solid
- * black — and an outline drawing arrives as a filled blob.
- *
- * So the cascade is resolved HERE, in the same order SVGLoader would, into attributes — the
- * one place it reads that no policy can block. Only class and id selectors, because that is
- * all SVGLoader itself supports; anything else in the block is ignored by both. Styles set
- * on a `<g>` land on the `<g>` and inherit through SVGLoader exactly as before.
- *
- * Uses `getElementsByTagName` rather than `querySelectorAll`: the headless test parses
- * with xmldom, which has the former and not the latter.
- *
- * @param {string} svgText
- * @returns {string}
- */
-export function flattenSvgStyles(svgText) {
-  let doc;
-  try {
-    doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
-  } catch {
-    return svgText;
-  }
-  const root = doc?.documentElement;
-  // Not an SVG (or a parser-error document): hand the text on untouched so SVGLoader reports
-  // the failure the way it always has.
-  if (!root || root.nodeName !== 'svg') return svgText;
-
-  /** selector → declarations, in source order so a later rule wins as it does in CSS. */
-  const rules = new Map();
-  for (const styleEl of Array.from(root.getElementsByTagName('style'))) {
-    const css = (styleEl.textContent || '').replace(/\/\*[\s\S]*?\*\//g, '');
-    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const decls = parseDecls(m[2]);
-      if (!Object.keys(decls).length) continue;
-      for (const sel of m[1].split(',').map((x) => x.trim()).filter(Boolean)) {
-        rules.set(sel, Object.assign(rules.get(sel) || {}, decls));
-      }
-    }
-  }
-
-  let touched = false;
-  for (const node of Array.from(root.getElementsByTagName('*'))) {
-    if (node.nodeName === 'style') continue;
-    const decls = {};
-    for (const cls of (node.getAttribute('class') || '').split(/\s+/).filter(Boolean)) {
-      Object.assign(decls, rules.get('.' + cls));
-    }
-    if (node.hasAttribute('id')) Object.assign(decls, rules.get('#' + node.getAttribute('id')));
-    Object.assign(decls, parseDecls(node.getAttribute('style')));
-    for (const [k, v] of Object.entries(decls)) {
-      if (node.getAttribute(k) === v) continue;
-      node.setAttribute(k, v);
-      touched = true;
-    }
-    // Resolved, so it goes. Left in, SVGLoader parses it again on its own — which is exactly
-    // the parse a strict style-src policy refuses, one console error per element per parse.
-    if (node.hasAttribute('style')) {
-      node.removeAttribute('style');
-      touched = true;
-    }
-  }
-  for (const styleEl of Array.from(root.getElementsByTagName('style'))) {
-    styleEl.parentNode?.removeChild(styleEl);
-    touched = true;
-  }
-  return touched ? new XMLSerializer().serializeToString(root) : svgText;
-}
-
-/** Every parse goes through the flattener — see `flattenSvgStyles` for why. */
+/** Every parse goes through the flattener: paint in a `<style>` block or a `style` attribute is
+ *  CSS that a strict style-src policy never lets SVGLoader read (`flattenSvgStyles` in
+ *  @vostok/ui-kit says more). Exported from here too, for the import preview and its test. */
+export { flattenSvgStyles };
 const loadSvg = (svgText) => new SVGLoader().parse(flattenSvgStyles(svgText));
 
 /**
