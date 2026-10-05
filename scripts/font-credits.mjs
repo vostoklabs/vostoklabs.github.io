@@ -20,6 +20,7 @@ import { createRequire } from 'node:module';
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reservedFontNames } from '../packages/fonts/scripts/reserved-names.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(REPO, 'packages/fonts/package.json'));
@@ -75,8 +76,8 @@ function licenceOf(slug, font) {
    a picker does) and may not be used on a modified one. Trademarks are the same idea from the
    other side. Both are listed so the credits say what the file says. */
 function reservedName(font) {
-  const m = name(font, 'copyright').match(/Reserved Font Names?\s*:?\s*['"“]([^'"”]+)['"”]/i);
-  return m ? `Reserved Font Name "${m[1].trim()}"` : '';
+  const names = reservedFontNames(`${name(font, 'copyright')}\n${name(font, 'license')}`);
+  return names.length ? `Reserved Font Name${names.length > 1 ? 's' : ''} ${names.map((n) => `"${n}"`).join(', ')}` : '';
 }
 
 const specimen = (label) => `https://fonts.google.com/specimen/${label.replace(/ /g, '+')}`;

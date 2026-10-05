@@ -20,7 +20,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 47480
+    "bytes": 56548
   },
   {
     "id": "alegreya-sans-sc",
@@ -729,7 +729,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 61108
+    "bytes": 64296
   },
   {
     "id": "dotgothic16",
@@ -1341,7 +1341,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 98600
+    "bytes": 152072
   },
   {
     "id": "lilita-one",
@@ -1665,7 +1665,7 @@ export const FONTS: FontChoice[] = [
       "latin",
       "latin-ext"
     ],
-    "bytes": 298700
+    "bytes": 302380
   },
   {
     "id": "nova-square",
@@ -2734,7 +2734,7 @@ export const FONTS: FontChoice[] = [
     "subsets": [
       "latin"
     ],
-    "bytes": 34680
+    "bytes": 39904
   },
   {
     "id": "work-sans",

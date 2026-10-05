@@ -11,6 +11,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { coverageOf, coverageTests } from '../src/coverage.ts';
+import { reservedFontNames, reservedNameIn } from './reserved-names.mjs';
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FONTS_DIR = path.join(APP, 'src', 'fonts');
@@ -354,6 +355,7 @@ const UPSTREAM = {
  *  declares a Reserved Font Name. A face added from the API later needs the same check. */
 const ORIGINALS = {
   'abril-fatface': 'ofl/abrilfatface/AbrilFatface-Regular.ttf',
+  'aldrich': 'ofl/aldrich/Aldrich-Regular.ttf',
   'alfa-slab-one': 'ofl/alfaslabone/AlfaSlabOne-Regular.ttf',
   'arvo': 'ofl/arvo/Arvo-Regular.ttf',
   'audiowide': 'ofl/audiowide/Audiowide-Regular.ttf',
@@ -376,6 +378,7 @@ const ORIGINALS = {
   'dancing-script': ['ofl/dancingscript/static/DancingScript-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
   'days-one': 'ofl/daysone/DaysOne-Regular.ttf',
   'delius-swash-caps': 'ofl/deliusswashcaps/DeliusSwashCaps-Regular.ttf',
+  'domine': ['ofl/domine/static/Domine-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
   'eater': 'ofl/eater/Eater-Regular.ttf',
   'electrolize': 'ofl/electrolize/Electrolize-Regular.ttf',
   'ewert': 'ofl/ewert/Ewert-Regular.ttf',
@@ -397,6 +400,7 @@ const ORIGINALS = {
   'kaushan-script': 'ofl/kaushanscript/KaushanScript-Regular.ttf',
   'kreon': ['ofl/kreon/static/Kreon-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
   'lexend': ['ofl/lexend/Lexend-Regular.ttf', '2ef72759514b9399d24adab6cf21143c3036a23b'],
+  'libre-baskerville': ['ofl/librebaskerville/LibreBaskerville-Regular.ttf', '93b0f9ed116d44348bae0e12537e00f9502cc47e'],
   'lilita-one': 'ofl/lilitaone/LilitaOne-Regular.ttf',
   'lobster': 'ofl/lobster/Lobster-Regular.ttf',
   'lobster-two': 'ofl/lobstertwo/LobsterTwo-Regular.ttf',
@@ -408,6 +412,7 @@ const ORIGINALS = {
   'new-rocker': 'ofl/newrocker/NewRocker-Regular.ttf',
   'niconne': 'ofl/niconne/Niconne-Regular.ttf',
   'nosifer': 'ofl/nosifer/Nosifer-Regular.ttf',
+  'nova-mono': 'ofl/novamono/NovaMono.ttf',
   'nova-square': 'ofl/novasquare/NovaSquare.ttf',
   'orbitron': ['ofl/orbitron/static/Orbitron-Regular.ttf', '10a708073179c32928eb894e53465fca8106772f'],
   'parisienne': 'ofl/parisienne/Parisienne-Regular.ttf',
@@ -439,6 +444,7 @@ const ORIGINALS = {
   'source-code-pro': ['ofl/sourcecodepro/SourceCodePro-Regular.ttf', '85c7f10bdbca85b4bcbc2c2b3761ec60513d7a57'],
   'squada-one': 'ofl/squadaone/SquadaOne-Regular.ttf',
   'titan-one': 'ofl/titanone/TitanOne-Regular.ttf',
+  'wallpoet': 'ofl/wallpoet/Wallpoet-Regular.ttf',
   'yeseva-one': 'ofl/yesevaone/YesevaOne-Regular.ttf',
 };
 for (const [slug, src] of Object.entries(ORIGINALS)) {
@@ -561,10 +567,12 @@ function problemWith(buf, spec) {
   const tables = tablesOf(buf);
   if (tables.fpgm || tables.prep || tables['cvt ']) return 'is hinted';
   if (tables.fvar) return 'is variable';
-  // A cut is a Modified Version under the OFL, which may not carry a Reserved Font Name.
-  const reserved = nameOf(font, 'copyright').match(/Reserved Font Names?\s*:?\s*['"“]([^'"”]+)['"”]/i)?.[1];
+  // A cut is a Modified Version under the OFL, which may not carry a Reserved Font Name. The
+  // name follows the copyright line, which some files keep in the licence field instead.
+  const reserved = reservedFontNames(`${nameOf(font, 'copyright')}\n${nameOf(font, 'license')}`);
   const names = ['fontFamily', 'fullName', 'postScriptName', 'preferredFamily'].map((k) => nameOf(font, k));
-  if (reserved && names.some((n) => n.includes(reserved))) return `is named with the Reserved Font Name "${reserved}"`;
+  const clash = reservedNameIn(names, reserved);
+  if (clash) return `is named with the Reserved Font Name "${clash}"`;
   return null;
 }
 
