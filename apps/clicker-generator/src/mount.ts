@@ -23,10 +23,9 @@ import '@vostok/fonts/fonts.css';
 import '@vostok/plates/plates.css';
 import {
   topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks,
-  chooseFile, listRow, licenseAfterExport, applyTheme,
+  chooseFile, listRow, licenseAfterExport, applyTheme, createStore,
 } from '@vostok/ui-kit';
 import './style.css';
-import { createStore } from './store/store';
 import { createViewer, type SectionAxis } from './viewer/viewer';
 import { mountPlatePicker } from '@vostok/plates';
 import { createUi, type UiState } from './ui/ui';
