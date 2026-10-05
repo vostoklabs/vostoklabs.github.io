@@ -96,6 +96,9 @@ const KNOWN = new Set([
   // Meant too, but the command in its header has no stand-in yet, so its bundle stops at load
   // ("glob is not a function"). font-fallback's header shows the command with it.
   'apps/clicker-generator/tests/text-sizing.test.ts -> ../src/image/letter.ts',
+  // Meant: the real-mount suite bundles mount.ts with './ui/ui' and the other heavy panels
+  // swapped for stand-ins (mount.test.mjs, `replaced`), so the registry never loads in it.
+  'apps/clicker-generator/tests/mount.scenarios.ts -> ../src/mount',
 ]);
 
 /* Exceptions inside private files are listed privately (scripts/budgets.private.json,
