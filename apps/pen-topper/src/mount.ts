@@ -37,7 +37,6 @@ import {
   el,
   type DesktopHost,
   type HostAsset,
-  type ValueRow,
   type ProjectShape,
 } from '@vostok/ui-kit';
 import { zipSync } from 'fflate';
@@ -754,7 +753,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       { value: 'plate-halo-text', label: '3 colours — plate + outline + text' },
     ],
     onChange: (v) => {
-      settings.colorScheme = v as TopperSettings['colorScheme'];
+      settings.colorScheme = v;
       syncVisibility();
       refreshPauses();
       triggerRebuild();
@@ -982,8 +981,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       plateShape: shapeControl,
       layout: layoutControl,
       style: styleControl,
-      // Its options are exactly the three schemes; the kit's dropdown is typed as plain string.
-      colorScheme: colorSchemeField as ValueRow<TopperSettings['colorScheme']>,
+      colorScheme: colorSchemeField,
       printMode: printModeControl,
     });
     // With no ribs Fit reads No ribs, and `settings.fit` keeps the fit they come back at.
