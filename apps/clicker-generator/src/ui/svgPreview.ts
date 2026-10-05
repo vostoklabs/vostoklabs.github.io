@@ -96,12 +96,12 @@ export async function openSvgPreview(
 ): Promise<SvgPreviewResult | null> {
   const { parts, issues } = describeSvg(svgText);
 
-  // `fillAsPainted`: the geometry fills the rings non-zero, so a filled part is filled as a
-  // browser paints it, and a part drawn inside another adds to it rather than cutting a hole.
+  // `asPainted`: the geometry fills the rings non-zero, so each part is read as a browser paints
+  // it, and a part drawn inside another adds to it rather than cutting a hole.
   const optionsFor = (choices: Record<number, SvgImportChoice>): SvgOptions => {
     const overrides: Record<number, SvgPartChoice> = {};
     for (const [index, c] of Object.entries(choices)) overrides[Number(index)] = { ...c };
-    return { removeBg, overrides, fillAsPainted: true };
+    return { removeBg, overrides, asPainted: true };
   };
 
   const choices = await openSvgImport({

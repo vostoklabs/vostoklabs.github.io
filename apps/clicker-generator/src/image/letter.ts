@@ -420,7 +420,7 @@ export function parseBlockChain(
       let rings: Ring[] = [];
       try {
         // parseSvg already centres the art and normalises its longest side to 1.
-        if (info) rings = parseSvg(buildSvg(info.node), { fillAsPainted: true }).outline;
+        if (info) rings = parseSvg(buildSvg(info.node), { asPainted: true }).outline;
       } catch {
         rings = [];
       }

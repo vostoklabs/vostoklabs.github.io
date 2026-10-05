@@ -215,6 +215,39 @@ function chainsOf(lines: Chain[]): Chain[] {
   ];
 }
 
+/**
+ * Three's stroke mesh as rings, one per triangle, each wound the way a filled shape is, so
+ * under a non-zero fill they add up into the stroke. Slivers of no area are dropped.
+ */
+function strokeGeomToContours(geom: THREE.BufferGeometry): Ring[] {
+  const pos = geom.getAttribute('position');
+  if (!pos) return [];
+  const idx = geom.getIndex();
+  const contours: Ring[] = [];
+
+  const getTri = idx
+    ? (t: number) => [idx.array[t * 3], idx.array[t * 3 + 1], idx.array[t * 3 + 2]]
+    : (t: number) => [t * 3, t * 3 + 1, t * 3 + 2];
+
+  const nTris = (idx ? idx.array.length : pos.count) / 3;
+  for (let t = 0; t < nTris; t++) {
+    const [ia, ib, ic] = getTri(t);
+    const ax = pos.getX(ia), ay = pos.getY(ia);
+    const bx = pos.getX(ib), by = pos.getY(ib);
+    const cx = pos.getX(ic), cy = pos.getY(ic);
+
+    const area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+    if (Math.abs(area) < 1e-12) continue;
+
+    if (area > 0) {
+      contours.push([[ax, ay], [bx, by], [cx, cy]]);
+    } else {
+      contours.push([[ax, ay], [cx, cy], [bx, by]]);
+    }
+  }
+  return contours;
+}
+
 /** Signed shoelace area: anticlockwise positive. */
 const shoelace = (r: Ring): number => {
   let a = 0;
@@ -318,16 +351,18 @@ export interface SvgOptions {
    *  "SVG import is broken" and it is really "your SVG has no fills". Closing the subpaths and
    *  filling them turns the same file into solid shapes. */
   fillStrokes?: boolean;
-  /** Fill every filled path on its own, the way a browser paints it: a line that does not close
-   *  is closed by a straight edge, lines are not joined across paths, and shapes drawn by
-   *  separate paths add up instead of cutting holes in each other. For a caller that fills the
-   *  rings non-zero and wants the drawing as it looks, like the clicker: there, a check mark
-   *  drawn inside a circle and both filled is a solid disc, not a disc with the mark cut out.
+  /** Read every path on its own, the way a browser paints it, for a caller that fills the rings
+   *  non-zero and wants the drawing as it looks, like the clicker. A filled path is filled by
+   *  itself: a line that does not close is closed by a straight edge, and shapes drawn by
+   *  separate paths add up instead of cutting holes in each other, so a check mark drawn inside
+   *  a filled circle leaves a solid disc. An outline is three's stroke mesh, one ring per
+   *  triangle, which follows a line that crosses itself (an infinity sign) exactly.
    *
    *  Off, a stroke drawing is read as a cut file is: lines that meet end to end are joined
-   *  across paths first, and the loops they make are filled even-odd, so a slot drawn inside a
-   *  panel is a hole in it. A caller that re-nests the rings by containment wants that reading. */
-  fillAsPainted?: boolean;
+   *  across paths first, the loops they make are filled even-odd, so a slot drawn inside a
+   *  panel is a hole in it, and each line drawn as an outline is one strip. A caller that
+   *  re-nests the rings by containment wants that reading. */
+  asPainted?: boolean;
 }
 
 /**
@@ -461,10 +496,10 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
     // Filled paths. A FILL closes every subpath by itself, so an authored fill — or a stroke
     // drawing whose lines are all closed already — is taken as it stands. A stroke drawing
     // with open lines is pooled and joined first, because closing one of those on its own is
-    // inventing an edge the file never drew; `fillAsPainted` takes it as it stands too.
+    // inventing an edge the file never drew; `asPainted` takes it as it stands too.
     if (hasFill) {
       const open = !authoredFill && path.subPaths.some((sub: any) => !sub.autoClose);
-      if (!open || opts.fillAsPainted) {
+      if (!open || opts.asPainted) {
         addShapes(rgb, SVGLoader.createShapes(path));
       } else {
         const hex = rgb.map(v => v.toString(16).padStart(2, '0')).join('');
@@ -477,10 +512,38 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
       }
     }
 
+    // Outlines, as painted: three's stroke mesh for each line, one ring per triangle.
+    // `getStrokeStyle` takes the join before the cap, and they reach it the other way round, as
+    // they always reached it in the clicker: a file that sets the two to different values gets
+    // its cap style on the joins and its join style on the ends (one that sets neither, or both
+    // round, draws as it should). Kept, so the clicker's outlines stay exactly what they were.
+    if (hasStroke && !hasFill && opts.asPainted) {
+      const strokeStyle = SVGLoader.getStrokeStyle(
+        Number(style.strokeWidth) || 1,
+        style.stroke || '#000',
+        style.strokeLineCap || 'butt',
+        style.strokeLineJoin || 'miter',
+        style.strokeMiterLimit || 4
+      );
+      for (const sub of path.subPaths) {
+        const pts = sub.getPoints(32);
+        if (pts.length < 2) continue;
+        const geom = SVGLoader.pointsToStroke(pts, strokeStyle);
+        if (!geom) continue;
+        const pos = geom.getAttribute('position');
+        if (!pos || pos.count === 0) continue;
+        for (let i = 0; i < pos.count; i++) {
+          box.expandByPoint(new THREE.Vector2(pos.getX(i), pos.getY(i)));
+        }
+        addRings(rgb, strokeGeomToContours(geom));
+        geom.dispose();
+      }
+    }
+
     // Outlines: pooled by colour and stroke, joined, and drawn as strips once every path is read.
     // A round join is bevelled past a right angle rather than drawn round — close enough for a
     // strip that is cut, and one fewer shape to get wrong.
-    if (hasStroke && !hasFill) {
+    if (hasStroke && !hasFill && !opts.asPainted) {
       const width = Number(style.strokeWidth) || 1;
       const cap = style.strokeLineCap || 'butt';
       const join = style.strokeLineJoin || 'miter';

@@ -85,7 +85,7 @@ function fetchSvg(url: string): Promise<string> {
  */
 export async function loadShapeRings(pack: Pack, shape: PackShape): Promise<Ring[]> {
   const svg = await fetchSvg(packAssetUrl(pack, 'shapes', shape.file));
-  const set: RegionSet = parseSvg(svg, { removeBg: true, fillAsPainted: true });
+  const set: RegionSet = parseSvg(svg, { removeBg: true, asPainted: true });
   return set.outline;
 }
 
@@ -99,7 +99,7 @@ export function designUrl(pack: Pack, design: PackDesign): string {
  *  control, the palette and the export behave identically. */
 export async function loadDesign(pack: Pack, design: PackDesign): Promise<{ svgText: string; regionSet: RegionSet }> {
   const svgText = await fetchSvg(packAssetUrl(pack, 'designs', design.file));
-  return { svgText, regionSet: parseSvg(svgText, { removeBg: true, fillAsPainted: true }) };
+  return { svgText, regionSet: parseSvg(svgText, { removeBg: true, asPainted: true }) };
 }
 
 /**

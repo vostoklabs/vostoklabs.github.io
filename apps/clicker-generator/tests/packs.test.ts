@@ -211,7 +211,7 @@ for (const shape of HALLOWEEN.shapes) {
     join(appDir, 'public/assets/packs', HALLOWEEN.dir, 'shapes', shape.file),
     'utf-8',
   );
-  const traced = parseSvg(svg, { removeBg: true, fillAsPainted: true });
+  const traced = parseSvg(svg, { removeBg: true, asPainted: true });
   check(
     `${shape.id}: the file traces to a filled silhouette`,
     traced.outline.length > 0 && traced.outline.some((r) => r.length >= 3),
@@ -314,7 +314,7 @@ const sized = bodyShape({
   baseShape: 'custom',
   baseShapeRings: parseSvg(
     readFileSync(join(appDir, 'public/assets/packs/halloween/shapes/pumpkin.svg'), 'utf-8'),
-    { removeBg: true, fillAsPainted: true },
+    { removeBg: true, asPainted: true },
   ).outline,
   bodySize: { w: 46, h: 40 },
 });

@@ -21,6 +21,7 @@
     "@types/three": "^0.171.0",
     "@xmldom/xmldom": "^0.9.10",
     "esbuild": "^0.24.2",
+    "lucide": "^1.21.0",
     "typescript": "^5.7.2"
   }
 }

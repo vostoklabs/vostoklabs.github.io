@@ -6,14 +6,16 @@
   The apps that read it that way re-nest the rings by containment, and they must get exactly
   the rings they always had, so the default is pinned here ring for ring.
 
-  `fillAsPainted` fills every path on its own, the way a browser paints it, for a caller that
-  fills the rings non-zero (the clicker), where a ring's direction decides solid or hole. Read
-  as a cut file there, a check mark drawn inside a circle, both filled, was wound against the
-  circle and cut out of it; nested circles came out as a bullseye.
+  `asPainted` reads every path on its own, the way a browser paints it, for a caller that fills
+  the rings non-zero (the clicker), where a ring's direction decides solid or hole. Read as a
+  cut file there, a check mark drawn inside a circle, both filled, was wound against the circle
+  and cut out of it; nested circles came out as a bullseye; and an outline that crosses itself,
+  an infinity sign, came out as filled blobs.
 
     pnpm --filter @vostok/trace test
 */
 import { DOMParser } from '@xmldom/xmldom';
+import { Command, Infinity as InfinityIcon, ListChecks, type IconNode } from 'lucide';
 (globalThis as any).DOMParser = DOMParser;
 const { parseSvg } = await import('../src/logo');
 
@@ -75,7 +77,7 @@ check(
   `ring signs ${signs(cut)}, area ${area(cut).toFixed(6)} (panel less slot less V: ${cutArea.toFixed(6)})`,
 );
 
-/* The rings the default gave before `fillAsPainted` existed, in order, by signed area. Any change
+/* The rings the default gave before `asPainted` existed, in order, by signed area. Any change
    here changes what the apps reading SVGs as cut files make of these drawings. */
 const BEFORE: [string, string, Options][] = [
   ['outlines', checkInCircle, {}],
@@ -100,9 +102,9 @@ BEFORE.forEach(([name, file, opts], i) => {
   check(`default, unchanged: ${name}`, got === EXPECTED[i], got === EXPECTED[i] ? got : `${got}, was ${EXPECTED[i]}`);
 });
 
-// ---------------------------------------------------------------- fillAsPainted
+// ---------------------------------------------------------------- asPainted
 
-const painted = (file: string, opts: Options = {}) => parseSvg(file, { ...opts, fillAsPainted: true });
+const painted = (file: string, opts: Options = {}) => parseSvg(file, { ...opts, asPainted: true });
 
 const strokes = painted(checkInCircle);
 const filled = painted(checkInCircle, fill);
@@ -153,16 +155,42 @@ check(
   `${ringsOf(panelPainted).length} ring (the V)`,
 );
 
-// ---------------------------------------------------------------- outlines, either way
+// ---------------------------------------------------------------- outlines
 
-const ribbon = ringsOf(strokes)
+const strip = ringsOf(parseSvg(checkInCircle))
   .map((r) => signed(r))
   .sort((a, b) => Math.abs(b) - Math.abs(a));
 check(
-  'a closed outline is a strip: its inner edge is wound against its outer one',
-  ribbon.length === 3 && Math.sign(ribbon[0]) !== Math.sign(ribbon[1]) && signature(strokes) === signature(parseSvg(checkInCircle)),
-  `outer ${ribbon[0].toFixed(4)}, inner ${ribbon[1].toFixed(4)}; the same with the option off`,
+  'default: a closed outline is a strip, its inner edge wound against its outer one',
+  strip.length === 3 && Math.sign(strip[0]) !== Math.sign(strip[1]),
+  `outer ${strip[0].toFixed(4)}, inner ${strip[1].toFixed(4)}`,
+);
+check(
+  'painted: an outline is three\'s stroke mesh, every triangle wound alike so they add up',
+  ringsOf(strokes).length === 132 && alike(strokes) && near(area(strokes), Math.abs(strip.reduce((s, a) => s + a, 0)), 1e-3),
+  `${ringsOf(strokes).length} rings, area ${area(strokes).toFixed(4)}`,
 );
 
-console.log(failures ? `\n${failures} FAILED` : '\nthe cut-file reading is unchanged, and the painted one winds every shape alike');
+/* Three of the clicker's symbols as it reads them, against what its own reader drew before the
+   reader was shared: ring count and signed area. Read as strips instead, the two that cross
+   themselves came out as filled blobs. */
+const HEADER = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+const icon = (node: IconNode): string =>
+  `${HEADER}${node.map(([tag, attrs]) => `<${tag}${Object.entries(attrs).map(([k, v]) => ` ${k}="${v}"`).join('')}/>`).join('')}</svg>`;
+const SYMBOLS: [string, IconNode, number, number][] = [
+  ['Infinity', InfinityIcon, 3054, -0.233418],
+  ['Command', Command, 4160, -0.522763],
+  ['ListChecks', ListChecks, 162, -0.242591],
+];
+for (const [name, node, rings, signedArea] of SYMBOLS) {
+  const set = painted(icon(node));
+  const sum = ringsOf(set).reduce((s, r) => s + signed(r), 0);
+  check(
+    `painted: the ${name} symbol is the outline the clicker always drew`,
+    ringsOf(set).length === rings && alike(set) && sum.toFixed(6) === signedArea.toFixed(6),
+    `${ringsOf(set).length} rings, signed area ${sum.toFixed(6)} (was ${rings}, ${signedArea.toFixed(6)})`,
+  );
+}
+
+console.log(failures ? `\n${failures} FAILED` : '\nthe cut-file reading is unchanged, and the painted one is what the clicker always drew');
 process.exit(failures ? 1 : 0);

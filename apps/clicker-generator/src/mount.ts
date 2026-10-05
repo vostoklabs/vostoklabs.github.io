@@ -2227,7 +2227,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       try {
         store.set({ building: true, status: 'Parsing SVG…' });
         // `removeBg` is a live control, so it wins over whatever the preview was opened with.
-        regionSet = parseSvg(currentSvgText, { ...currentSvgOptions, removeBg: s.removeBg, fillAsPainted: true });
+        regionSet = parseSvg(currentSvgText, { ...currentSvgOptions, removeBg: s.removeBg, asPainted: true });
       } catch (e: any) {
         traceFailed('Error: ' + e.message);
         return;
@@ -2247,7 +2247,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       }
       try {
         store.set({ building: true, status: 'Parsing icon…' });
-        regionSet = parseSvg(currentIconText, { fillAsPainted: true });
+        regionSet = parseSvg(currentIconText, { asPainted: true });
       } catch (e: any) {
         traceFailed('Error: ' + e.message);
         return;
