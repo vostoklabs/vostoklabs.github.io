@@ -9,6 +9,6 @@
     { "name": "Text as shapes", "category": "engine", "use": ["buildText", "buildSymbol"], "with": ["DEFAULT_TEXT"], "for": "Text or one symbol as centred islands in millimetres, ready to cut, engrave or extrude (built on Text to outlines)." },
     { "name": "Laser operations", "category": "laser", "use": ["OPS", "OP_ORDER"], "for": "Cut, score and engrave: their colours, names and the order a job runs them in." },
     { "name": "Materials and sheets", "category": "laser", "use": ["MATERIALS", "SHEET_PRESETS", "burnStyle"], "with": ["materialById", "presetById"], "for": "The sheet materials with their thickness and how they burn, and the sheet sizes." },
-    { "name": "Material preview", "category": "laser", "use": ["createMaterialPreview"], "for": "A 3D preview of cut pieces in their material, flat or posed as assembled." }
+    { "name": "Material preview", "category": "laser", "use": ["createMaterialPreview"], "for": "A 3D preview of cut pieces in their material, flat or posed as assembled, with options for its camera, lights and grid, a shadow under the product, zoom tools, clicking a piece, and labels pinned to points in the scene." }
   ]
 }
