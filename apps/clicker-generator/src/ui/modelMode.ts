@@ -30,7 +30,8 @@ export interface ModelModeDeps {
   /** Send to the geometry worker. A function rather than the Worker, because mount.ts creates
    *  this controller before it creates the worker. */
   post(msg: GeometryRequest, transfer?: Transferable[]): void;
-  /** A build that answers the caller instead of the viewport: a result card's picture. */
+  /** A build that answers the caller instead of the viewport: a result card's picture. Rejects
+   *  when the build fails. */
   buildDetached(params: ModelCutParams): Promise<{ parts: ClickerPart[]; warnings: string[] }>;
   viewer: Viewer;
   /** The stage (`.vl-stage`): the cut's grip floats on it. The preview's switches are the bar
@@ -299,17 +300,22 @@ export function createModelMode(deps: ModelModeDeps) {
       const key = pictureKey(cutter, s);
       if (pictureKeys[cutter] === key || inflight[cutter] === key) continue;
       inflight[cutter] = key;
-      void deps.buildDetached({ ...params(s), cutter }).then((r) => {
-        if (inflight[cutter] === key) inflight[cutter] = null;
-        if (token !== modelToken || store.get().importMode !== 'model') return;
-        results[cutter] = { key, warnings: r.warnings };
-        const src = viewer.renderThumbnail(PICTURE_PX, r.parts);
-        if (src) {
-          panel.setPicture(cutter, src);
-          pictureKeys[cutter] = key;
-        }
-        choose();
-      });
+      void deps.buildDetached({ ...params(s), cutter }).then(
+        (r) => {
+          if (inflight[cutter] === key) inflight[cutter] = null;
+          if (token !== modelToken || store.get().importMode !== 'model') return;
+          results[cutter] = { key, warnings: r.warnings };
+          const src = viewer.renderThumbnail(PICTURE_PX, r.parts);
+          if (src) {
+            panel.setPicture(cutter, src);
+            pictureKeys[cutter] = key;
+          }
+          choose();
+        },
+        // The card keeps no picture. It stays marked as asked for, so these settings, which
+        // would fail the same way, are not built again until what the card shows changes.
+        () => {},
+      );
     }
   }
 

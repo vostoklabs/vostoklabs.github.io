@@ -1287,8 +1287,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // A result card's build: correlated like a batch run's, so the viewport never sees it.
     buildDetached: (params) => {
       const requestId = `m${++buildSeq}`;
-      return new Promise((resolve) => {
-        pendingBuilds.set(requestId, resolve);
+      return new Promise((resolve, reject) => {
+        pendingBuilds.set(requestId, { resolve, reject });
         send({ type: 'buildModel', params, requestId });
       });
     },
@@ -1697,8 +1697,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
      is why the worker never needed this. A batch run does: it drives N builds through the
      same worker and has to tell the answers apart. The map lives here rather than in the run
      loop so the worker protocol stays the shell's business and the paid module only ever
-     awaits a promise. */
-  const pendingBuilds = new Map<string, (r: { parts: ClickerPart[]; warnings: string[] }) => void>();
+     awaits a promise. A build that fails rejects it, in the first line of the worker's
+     message, and leaves the status line to the design. */
+  const pendingBuilds = new Map<string, {
+    resolve: (r: { parts: ClickerPart[]; warnings: string[] }) => void;
+    reject: (err: Error) => void;
+  }>();
   let buildSeq = 0;
   function buildOne(
     regions: BuildRegion[],
@@ -1706,8 +1710,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     params: BuildParams,
   ): Promise<{ parts: ClickerPart[]; warnings: string[] }> {
     const requestId = `b${++buildSeq}`;
-    return new Promise((resolve) => {
-      pendingBuilds.set(requestId, resolve);
+    return new Promise((resolve, reject) => {
+      pendingBuilds.set(requestId, { resolve, reject });
       send({ type: 'buildClicker', regions, outline, params, requestId });
     });
   }
@@ -1748,20 +1752,28 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
     const requestId = `fit${++fitStripSeq}`;
     store.set({ building: true, status: 'Building the fit test…' });
-    pendingBuilds.set(requestId, ({ parts, warnings }) => {
-      // A newer strip was asked for, or the preview already went back to the design.
-      if (requestId !== `fit${fitStripSeq}` || !store.get().fitTestActive) return;
-      fitStripParts = parts;
-      viewer.setParts(parts, false);
-      viewer.setView(store.get().view);
-      store.set({
-        building: false,
-        hasParts: parts.length > 0,
-        status: [
-          ...warnings,
-          `Fit test tiles ${values.map(fitTestLabel).join(', ')} mm. Export and print them, press each onto a switch, then set Switch stem fit to the number on the tile that fits.`,
-        ].join(' · '),
-      });
+    // A newer strip was asked for, or the preview already went back to the design.
+    const replaced = () => requestId !== `fit${fitStripSeq}` || !store.get().fitTestActive;
+    pendingBuilds.set(requestId, {
+      resolve: ({ parts, warnings }) => {
+        if (replaced()) return;
+        fitStripParts = parts;
+        viewer.setParts(parts, false);
+        viewer.setView(store.get().view);
+        store.set({
+          building: false,
+          hasParts: parts.length > 0,
+          status: [
+            ...warnings,
+            `Fit test tiles ${values.map(fitTestLabel).join(', ')} mm. Export and print them, press each onto a switch, then set Switch stem fit to the number on the tile that fits.`,
+          ].join(' · '),
+        });
+      },
+      // While the tiles are what the preview shows, the status line is theirs, in the words a
+      // failed design build would get.
+      reject: (err) => {
+        if (!replaced()) store.set({ building: false, status: 'Error: ' + err.message });
+      },
     });
     send({
       type: 'buildFitStrip',
@@ -1847,9 +1859,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // before anything else here so a run in progress cannot repaint the preview forty
         // times or reset the undo baseline on every row.
         if (msg.requestId) {
-          const resolve = pendingBuilds.get(msg.requestId);
+          const pending = pendingBuilds.get(msg.requestId);
           pendingBuilds.delete(msg.requestId);
-          resolve?.({ parts: msg.parts, warnings: msg.warnings ?? [] });
+          pending?.resolve({ parts: msg.parts, warnings: msg.warnings ?? [] });
           break;
         }
         latestParts = msg.parts;
@@ -1945,6 +1957,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         modelMode.onModelInfo(msg.info);
         break;
       case 'error':
+        // A correlated build (a result card, a fit test strip, a batch row) failed: that is its
+        // caller's to report. Taken for the design's, it overwrote the status line, dropped the
+        // busy state of a build still running, and, while a model loaded, said the model would
+        // not open; and its caller waited for ever.
+        if (msg.requestId) {
+          const pending = pendingBuilds.get(msg.requestId);
+          pendingBuilds.delete(msg.requestId);
+          console.error('[geometry worker]', msg.message);
+          pending?.reject(new Error(firstLine(msg.message)));
+          break;
+        }
         // A model that failed to open is the user's file, not a crash: the controller says so
         // in words and forgets it.
         if (modelMode.onError(msg.message)) {

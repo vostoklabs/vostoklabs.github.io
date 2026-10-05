@@ -87,7 +87,8 @@ function answer(msg: any): unknown {
     case 'buildBlocks':
       return { type: 'parts', parts: partsNamed(`blocks:${traceOf(msg)}|w=${msg.params.capWidthMm}`), switchPlacements: [], warnings: [], requestId: msg.requestId };
     case 'importModel':
-      return { type: 'modelInfo', info: { name: msg.name, fileTriangles: 1, triangles: 1, sizeMm: [40, 40, 40], notes: [] } };
+      // The samples are 40 mm; anything uploaded is 60 mm, so its cut is told apart from theirs.
+      return { type: 'modelInfo', info: { name: msg.name, fileTriangles: 1, triangles: 1, sizeMm: msg.name.startsWith('skull') ? [40, 40, 40] : [60, 60, 60], notes: [] } };
     case 'buildModel':
       return {
         type: 'parts',
@@ -95,7 +96,7 @@ function answer(msg: any): unknown {
         switchPlacements: [],
         warnings: [],
         requestId: msg.requestId,
-        modelMeta: { sizeMm: [40, 40, 40], cutHeightMm: 20, cutRangeMm: [5, 35], switchAt: { x: 0, y: 0, z: 0, rotation: 0 }, buttonAt: null, movingGrams: 1, flattenMm: 0, canHideSeam: false, hideSeam: false, assemblyMinZ: 0 },
+        modelMeta: { sizeMm: [msg.params.sizeMm, msg.params.sizeMm, msg.params.sizeMm], cutHeightMm: 20, cutRangeMm: [5, 35], switchAt: { x: 0, y: 0, z: 0, rotation: 0 }, buttonAt: null, movingGrams: 1, flattenMm: 0, canHideSeam: false, hideSeam: false, assemblyMinZ: 0 },
       };
     case 'buildFitStrip':
       return { type: 'parts', parts: partsNamed(`tiles:${msg.labels.map((l: any) => l.fitMm).join(',')}`), switchPlacements: [], warnings: [], requestId: msg.requestId };
@@ -511,7 +512,7 @@ const press = () => watch<void>(ui().onExport());
   ui().onModelFile(new File([new Uint8Array(16)], 'figure.stl'));
   const exp = press();
   await clock.advance(1000);
-  check('a model uploaded while a design build runs: Export waits for the model\'s cut', exp.done && written()[0] === 'model:slice|size=40|st=0', describe(exp));
+  check('a model uploaded while a design build runs: Export waits for the model\'s cut', exp.done && written()[0] === 'model:slice|size=60|st=0', describe(exp));
   finish(unmount);
 }
 
@@ -525,6 +526,83 @@ const press = () => watch<void>(ui().onExport());
   await clock.advance(200);
   check('a model that fails to open: Export is answered', exp.done, describe(exp));
   check('…and the status says why', status() === 'Could not open that model: That file has no triangles', status());
+  finish(unmount);
+}
+
+/* ============================== builds that answer whoever asked for them, not the screen */
+
+{
+  // Each result card's picture is a build of its own, asked for after the cut on screen lands.
+  const unmount = await fresh();
+  worker.failIf = (msg) => (msg.type === 'buildModel' && msg.requestId ? 'Assets not initialized' : null);
+  worker.ms = (msg) => (msg.requestId ? 200 : 5);
+  ui().onImportMode('model');
+  await clock.advance(100); // the sample is cut; its cards are asked for 120 ms after
+  seen.modelPanel.setCut({ ...seen.state.modelCut, sizeMm: 50 }, false); // an edit, cut behind the cards
+  await clock.advance(250); // the first card has failed; the edit is still in the worker
+  check('a result card whose build fails: the status line still says the edit is being cut', status() === 'Cutting the model…' && seen.state?.building === true, `building ${seen.state?.building}; status "${status()}"`);
+  const exp = press();
+  await clock.advance(800);
+  check('…and Export writes that cut', written()[0] === 'model:slice|size=50|st=0', describe(exp));
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  worker.failIf = (msg) => (msg.type === 'buildModel' && msg.requestId ? 'Assets not initialized' : null);
+  worker.ms = (msg) => (msg.requestId ? 200 : 5);
+  ui().onImportMode('model');
+  await clock.advance(200); // the sample is cut, and its cards are in the worker
+  ui().onModelFile(new File([new Uint8Array(16)], 'figure.stl')); // read in behind them
+  await clock.advance(10);
+  const exp = press();
+  await clock.advance(1500);
+  check('a result card that fails while a new model loads: the new model still opens, and is cut', onScreen() === 'model:slice|size=60|st=0', `screen ${shown(onScreen())}; status "${status()}"`);
+  check('…and Export writes it', written()[0] === 'model:slice|size=60|st=0', describe(exp));
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(200);
+  worker.failIf = (msg) => (msg.type === 'buildFitStrip' ? 'Assets not initialized' : null);
+  ui().onFitTest();
+  await clock.advance(50);
+  check('a fit test strip that fails: the status says so, and the busy state comes down', status() === 'Error: Assets not initialized' && seen.state?.building === false, `building ${seen.state?.building}; status "${status()}"`);
+  const refused = press();
+  await clock.advance(10);
+  check('…and Export refuses, in those words', refused.error?.message === 'Error: Assets not initialized', describe(refused));
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(200);
+  const before = status();
+  worker.failIf = (msg) => (msg.type === 'buildFitStrip' ? 'Assets not initialized' : null);
+  worker.ms = (msg) => (msg.type === 'buildFitStrip' ? 100 : 5);
+  ui().onFitTest();
+  await clock.advance(20);
+  ui().onFitTestExit(); // back to the design before the strip has come back
+  await clock.advance(200);
+  check('a fit test strip that fails after the fit test has closed: the design\'s status line is left alone', status() === before && seen.state?.building === false, `building ${seen.state?.building}; status "${status()}", was "${before}"`);
+  finish(unmount);
+}
+
+{
+  // The MakerWorld build's batch run builds one clicker per row through the same worker.
+  const unmount = await fresh(() => (knobs.makerlab = true));
+  ui().onWidth(40);
+  await clock.advance(200);
+  const before = status();
+  worker.failIf = (msg) => (msg.type === 'buildClicker' && msg.requestId ? 'RangeError: Invalid array length\n    at buildClicker' : null);
+  const ring = [[0, 0], [1, 0], [0, 1]];
+  const row = watch(seen.pro.buildOne([{ filamentRgb: [0, 0, 0], coverage: 1, rings: [ring], partName: 'top-color-0-0' }], [ring], {}));
+  await clock.advance(50);
+  check('a batch row whose build fails: the batch is told, rather than left waiting', row.done && row.error?.message === 'RangeError: Invalid array length', row.done ? row.error?.message ?? 'answered' : 'still waiting');
+  check('…and the design\'s status line is left alone', status() === before, `"${status()}", was "${before}"`);
   finish(unmount);
 }
 

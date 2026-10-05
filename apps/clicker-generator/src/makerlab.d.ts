@@ -65,7 +65,8 @@ declare module 'virtual:pro-pack' {
     /** Set the status line, the same one the build writes to. */
     setStatus(msg: string): void;
     /** Build ONE clicker off the main thread and resolve its parts. The worker is the shell's,
-     *  and correlates answers by request id. */
+     *  and correlates answers by request id. Rejects, in the first line of the worker's message,
+     *  when the build fails; the status line is left to the caller. */
     buildOne(
       regions: { filamentRgb: RGB; coverage: number; rings: Ring[]; partName: string }[],
       outline: Ring[],
