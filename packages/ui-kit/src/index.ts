@@ -207,8 +207,14 @@ export {
   type Stepper,
   type StepperOptions,
   type StageStatus,
+  type StageStatusOptions,
   type StatusKind,
 } from './components/stage';
+// The stage as a framed card (switches over the picture, the picture, strips under it), the zoom
+// tools that sit on its picture, and the mm | in choice its lengths are shown in.
+export { previewCard, type PreviewCardOptions, type PreviewCard } from './components/preview-card';
+export { zoomControl, type ZoomControlOptions, type ZoomControl } from './components/zoom-control';
+export { lengthUnits, type LengthUnit, type LengthUnitsOptions, type LengthUnits } from './components/length-units';
 export { ICONS, svgEl, svgPathEl } from './icons';
 export { el, svgNode } from './dom';
 export { themeColorHex, themeColor } from './tokens';

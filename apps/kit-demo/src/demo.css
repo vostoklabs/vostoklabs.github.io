@@ -297,6 +297,12 @@ body {
 .kit-side--back { grid-area: back; }
 .kit-side--bottom { grid-area: bottom; }
 
+/* The page's own drawing in a preview card's view, where an app's SVG or canvas would be. */
+.kit-plate { position: absolute; inset: 0; width: 100%; height: 100%; display: block; color: var(--text); }
+/* A strip under a preview card's picture: its own layout, the card rules it off. */
+.kit-card-strip { padding: var(--space-3) var(--space-4); font-size: var(--fs-small); color: var(--muted); }
+.kit-card-strip--tools { display: flex; align-items: center; gap: var(--space-5); padding-block: var(--space-2); }
+
 /* A play button beside a scrubber that takes the rest of the row, in a stage panel. */
 .kit-scrub-row { display: flex; align-items: center; gap: var(--space-3); }
 .kit-scrub { flex: 1 1 auto; }

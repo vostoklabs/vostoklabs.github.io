@@ -81,6 +81,9 @@ import {
   stepper,
   stageHandle,
   stageStatus,
+  previewCard,
+  zoomControl,
+  lengthUnits,
   diagnosticsList,
   buildLoop,
   settingsRail,
@@ -94,6 +97,7 @@ import {
   statusBar,
   floatingPanel,
   svgEl,
+  svgNode,
   themeColor,
   type CatalogSymbol,
   type Diagnostic,
@@ -1351,6 +1355,76 @@ app.append(
         button({ label: 'Warning', onClick: () => foldLine.set('The lid tab is narrower than the glue flap.', 'warn') }),
         button({ label: 'Ready', onClick: () => foldLine.set(FOLD_READY) }),
       ),
+    ),
+  ),
+);
+
+/* A preview card: the view switch and the unit switch over a drawing that zooms, the status line
+   and the zoom tools in its corners, and under it the strip the view needs. The drawing is the
+   page's own, where an app's SVG or 3D canvas would be. */
+const cardUnits = lengthUnits({ storageKey: 'kit-demo-unit', trimZeros: true });
+const PLATE_MM = { w: 120, h: 80 };
+let cardZoomAt = 1;
+const plateLabel = svgNode('text', { x: 100, y: 128, 'text-anchor': 'middle', 'font-size': 8, fill: 'currentColor' });
+const plateSvg = svgNode('svg', { class: 'kit-plate', viewBox: '0 0 200 140', preserveAspectRatio: 'xMidYMid meet' }, [
+  svgNode('rect', { x: 40, y: 30, width: 120, height: 80, rx: 8, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }),
+  svgNode('circle', { cx: 52, cy: 42, r: 4, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }),
+  plateLabel,
+]);
+const cardStatus = stageStatus('');
+const cardZoom = zoomControl({ onZoom: (factor) => showCardZoom(cardZoomAt * factor), onFit: () => showCardZoom(1) });
+function showCardZoom(zoom: number): void {
+  cardZoomAt = Math.min(8, Math.max(0.25, zoom));
+  const w = 200 / cardZoomAt;
+  const h = 140 / cardZoomAt;
+  plateSvg.setAttribute('viewBox', `${100 - w / 2} ${70 - h / 2} ${w} ${h}`);
+  cardZoom.set(cardZoomAt);
+}
+function showCardSizes(): void {
+  plateLabel.textContent = cardUnits.format(PLATE_MM.w);
+  cardStatus.set(`${cardUnits.formatSize(PLATE_MM.w, PLATE_MM.h)} · cut + engrave`);
+}
+cardUnits.onChange(showCardSizes);
+showCardSizes();
+const cardTools = el('div', { className: 'kit-card-strip kit-card-strip--tools' }, [
+  toggleSwitch({ label: 'Open', compact: true }),
+  toggleSwitch({ label: 'Pull apart', compact: true }),
+]);
+const cardLegend = el('div', { className: 'kit-card-strip', text: 'Red cuts · blue scores · black engraves.' });
+cardLegend.hidden = true;
+const cardViews = segmentedControl({
+  options: [
+    { value: 'three', label: '3D Preview' },
+    { value: 'file', label: 'Export Preview' },
+  ],
+  value: 'three',
+  fit: 'content',
+  size: 'compact',
+  onChange: (v) => {
+    cardTools.hidden = v !== 'three';
+    cardLegend.hidden = v !== 'file';
+  },
+});
+const demoCard = previewCard({
+  start: [cardViews],
+  end: [cardUnits.unitSwitch({ fit: 'content' })],
+  view: [plateSvg],
+  status: cardStatus.root,
+  zoom: cardZoom.root,
+  footer: [cardTools, cardLegend],
+});
+
+app.append(
+  fullWidth(
+    entry(
+      'previewCard() · zoomControl() · lengthUnits()',
+      'Preview card',
+      'The stage as a framed card: the view switch and the mm | in switch in a bar over the picture, ' +
+        'the status line and the zoom tools in its bottom corners, and under it the strip the view ' +
+        'needs: the 3D view’s switches, or what the export’s colours mean. The unit switch is ' +
+        'lengthUnits(): every length on the card follows it, and the choice is remembered. On a ' +
+        'phone the zoom tools go to the top corner without the number.',
+      el('div', { className: 'kit-stage' }, [demoCard.root]),
     ),
   ),
 );

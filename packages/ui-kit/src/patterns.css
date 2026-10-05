@@ -837,6 +837,83 @@ details.vl-section--collapsible[open] > summary {
   max-width: min(70ch, 60%);
 }
 
+/* ------------------------------------------------------ stage overlay: zoom tools */
+/* `zoomControl()`: zoom out, the zoom, zoom in, fit, floating in the bottom-right corner of the
+   box it is placed in. Its buttons a size down from the panel's icon buttons, which would make a
+   cluster on a picture as tall as a toolbar. On a phone the cluster moves to the top-right corner
+   and drops the number, clear of the status line along the bottom; a pinch zooms there anyway. */
+.vl-zoom-control {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  --icon-btn-size: 30px;
+}
+/* A steady width, so the buttons do not move as the number changes. */
+.vl-zoom-control__value {
+  min-width: 46px;
+  text-align: center;
+  font-size: var(--fs-compact);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .vl-zoom-control { top: var(--space-2); bottom: auto; right: var(--space-2); }
+  .vl-zoom-control__value { display: none; }
+}
+
+/* ----------------------------------------------------------------- preview card */
+/* `previewCard()`: the stage as a framed card, a little in from the stage's edges: a bar of
+   switches over the picture (one end each, wrapping when the stage is too narrow for one row,
+   where it used to clip), the picture, and strips under it, each ruled off above. */
+.vl-preview-card {
+  position: absolute;
+  inset: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel);
+  overflow: hidden;
+}
+.vl-preview-card__bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.vl-preview-card__start,
+.vl-preview-card__end { display: flex; align-items: center; gap: var(--space-2); }
+.vl-preview-card__view { position: relative; flex: 1 1 0; min-height: 0; }
+.vl-preview-card__foot { flex: 0 0 auto; border-top: 1px solid var(--line); }
+/* The status line in the picture's bottom-left corner, on the card's own ground so it reads over
+   a drawing and over a 3D scene alike, and short of the zoom tools when they are there. */
+.vl-preview-card__view > .vl-stage-status {
+  bottom: var(--space-3);
+  left: var(--space-3);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+.vl-preview-card__view:has(> .vl-zoom-control) > .vl-stage-status { max-width: calc(100% - 210px); }
+@media (max-width: 900px) {
+  .vl-preview-card { inset: var(--space-2); }
+}
+@media (max-width: 760px) {
+  /* The zoom tools have gone to the top corner: the status line takes the width. */
+  .vl-preview-card__view:has(> .vl-zoom-control) > .vl-stage-status { max-width: calc(100% - 2 * var(--space-3)); }
+}
+
 /* ----------------------------------------------- diagnostics: every one, listed */
 /* `diagnosticsList()`: what a build found, one quiet card each, in the product panel.
 
