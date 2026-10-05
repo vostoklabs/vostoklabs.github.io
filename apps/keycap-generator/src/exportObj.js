@@ -7,7 +7,7 @@ import { weldPositions } from './meshUtils.js';
  * Writes one `o` object per colour region with its own `usemtl`, and one `Kd` material per
  * distinct colour.
  *
- * Geometry is written in the same native millimetre space buildThreeMF() uses, so the OBJ
+ * Geometry is written in the same native millimetre space keycapThreeMF() uses, so the OBJ
  * and the standalone .3mf describe an identical model.
  */
 
@@ -102,7 +102,7 @@ export function mtlText(materials) {
  * Build an OBJ (+ matching MTL) describing one print plate.
  *
  * @param {Array<{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}>} parts
- *        Same shape buildThreeMF() takes. `extruder` is the 1-based filament slot; parts
+ *        Same shape keycapThreeMF() takes. `extruder` is the 1-based filament slot; parts
  *        sharing a slot share one material (cap + stem are both slot 1 normally).
  * @param {{ mtlFileName?: string }} [opts]
  * @returns {{ obj: string, mtl: string, materials: Array<{name:string,color:string,extruder:number}> }}

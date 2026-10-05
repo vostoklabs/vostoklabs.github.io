@@ -41,7 +41,7 @@ import { applyStemClearance } from './stemClearance.js';
 import {
   FIT_TEST_STEP_MM, FIT_TEST_STEP_OPTIONS, FIT_TEST_FONT_ID, computeFitTestLadder, buildFitTestRow,
 } from './fitTest.js';
-import { buildThreeMF } from './export3mf.js';
+import { keycapThreeMF } from './export3mf.js';
 import { buildObjMtl, objToArrayBuffer } from './exportObj.js';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
 import { zipSync } from 'fflate';
@@ -446,7 +446,7 @@ export function mount(container, host) {
 
   // debug handles (harmless; used for automated verification)
   window.__app = {
-    THREE, scene, camera, renderer, capMesh, logoMesh, stemMesh, buildThreeMF, buildObjMtl,
+    THREE, scene, camera, renderer, capMesh, logoMesh, stemMesh, keycapThreeMF, buildObjMtl,
     get exportParts() {
       return lastBodies
         ? buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked)
@@ -1668,7 +1668,7 @@ export function mount(container, host) {
       return;
     }
 
-    const blob = buildThreeMF(makeParts(), { process: projectProcess() });
+    const blob = keycapThreeMF(makeParts(), { process: projectProcess() });
 
     if (host) {
       // With a host the file goes to the host's own export path rather than the browser's
@@ -1857,7 +1857,7 @@ export function mount(container, host) {
           plates.push(objToArrayBuffer(obj));
           plateMtl = mtl;
         } else {
-          files[`keycap-${ch}.3mf`] = new Uint8Array(await buildThreeMF(parts, { process: projectProcess() }).arrayBuffer());
+          files[`keycap-${ch}.3mf`] = new Uint8Array(await keycapThreeMF(parts, { process: projectProcess() }).arrayBuffer());
         }
         bodies.keycapGeometry.dispose();
         bodies.logoGeometry?.dispose();

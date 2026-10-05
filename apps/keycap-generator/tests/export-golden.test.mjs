@@ -96,7 +96,7 @@ await build({
       "export { printMatrix } from './src/meshUtils.js';",
       "export { applyStemClearance } from './src/stemClearance.js';",
       "export { buildFitTestRow, computeFitTestLadder, FIT_TEST_STEP_MM, FIT_TEST_FONT_ID } from './src/fitTest.js';",
-      "export { buildThreeMF } from './src/export3mf.js';",
+      "export { keycapThreeMF } from './src/export3mf.js';",
       "export { buildObjMtl } from './src/exportObj.js';",
       "export { BufferGeometry, Float32BufferAttribute, BufferAttribute } from 'three';",
     ].join('\n'),
@@ -379,7 +379,7 @@ function measure(geom) {
 async function run(c) {
   const { parts, baseName, walls = 'arachne' } = await exportParts(c);
   // mount.js projectProcess(): Arachne is written as an override, Classic is the preset's own.
-  const blob = app.buildThreeMF(parts, { process: walls === 'classic' ? {} : { wall_generator: walls } });
+  const blob = app.keycapThreeMF(parts, { process: walls === 'classic' ? {} : { wall_generator: walls } });
   const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
   const files = {};
   for (const name of Object.keys(zip).sort()) {

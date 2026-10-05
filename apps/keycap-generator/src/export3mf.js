@@ -22,7 +22,7 @@ const rgbOf = (hex) => {
  *        project_settings.config.
  * @returns {Blob} the file, typed `model/3mf`.
  */
-export function buildThreeMF(parts, { process } = {}) {
+export function keycapThreeMF(parts, { process } = {}) {
   // Read without assuming Vite, so a node script that imports this file still runs.
   const env = import.meta.env ?? {};
   const bytes = writeThreeMF(

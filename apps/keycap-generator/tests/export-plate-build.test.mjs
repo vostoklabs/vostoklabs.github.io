@@ -45,7 +45,7 @@ async function load(name, env) {
   await build({
     stdin: {
       contents:
-        "export { buildThreeMF } from './src/export3mf.js';\n" +
+        "export { keycapThreeMF } from './src/export3mf.js';\n" +
         "export { buildObjMtl } from './src/exportObj.js';\n" +
         "export { plateSize, savePlateChoice } from '@vostok/plates';\n" +
         "export { BoxGeometry } from 'three';\n",
@@ -83,7 +83,7 @@ const partsOf = (app) => [
 
 // --- The 3MF ---------------------------------------------------------------------------------
 stamped.savePlateChoice(PLATE);
-const blob = stamped.buildThreeMF(partsOf(stamped));
+const blob = stamped.keycapThreeMF(partsOf(stamped));
 const model = strFromU8(unzipSync(new Uint8Array(await blob.arrayBuffer()))['3D/3dmodel.model']);
 
 // Where the keycap lands on the bed: the XY box of every vertex in the file, moved by the
