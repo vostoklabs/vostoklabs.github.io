@@ -503,6 +503,37 @@ for (const app of [...new Set([...Object.keys(PRIVATE_UI), ...privateCounts.keys
   }
 }
 
+// A name found only in private files may be excused by the private lists; anywhere public, only
+// by the lists in this file.
+const onlyPrivate = (files) => [...files].every((f) => PRIVATE_FILES.has(f));
+const PRIVATE_KNOWN_TOKENS = new Set(PRIVATE.uiKnownTokens ?? []);
+const PRIVATE_KNOWN_ORPHANS = new Set(PRIVATE.uiKnownOrphans ?? []);
+
+/* Ground gained. Never a failure — nobody should have a commit rejected for improving
+   things — but loud enough that the number actually gets lowered. First, and even when another
+   count fails: in a tree several sessions share, someone else's unfinished file must not hide
+   the budgets this change has freed. */
+const fixedTokens = [...KNOWN_UNRESOLVED_TOKENS].filter((t) => !unresolvedTokens.has(t));
+const fixedClasses = [...KNOWN_ORPHAN_CLASSES].filter((c) => !orphanClasses.has(c));
+
+if (under.length > 0 || fixedTokens.length > 0 || fixedClasses.length > 0) {
+  console.log('\nUI drift: ground gained. Update scripts/check-ui-drift.mjs:\n');
+  for (const [app, kind] of under) console.log(`  BUDGET['${app}'].${kind}: ${allowed(app, kind)} -> ${have(app, kind)}`);
+  for (const t of fixedTokens) console.log(`  drop '${t}' from KNOWN_UNRESOLVED_TOKENS`);
+  for (const c of fixedClasses) console.log(`  drop '${c}' from KNOWN_ORPHAN_CLASSES`);
+  console.log('');
+}
+
+const fixedPrivateTokens = [...PRIVATE_KNOWN_TOKENS].filter((t) => !unresolvedTokens.has(t));
+const fixedPrivateClasses = [...PRIVATE_KNOWN_ORPHANS].filter((c) => !orphanClasses.has(c));
+if (underPrivate.length > 0 || fixedPrivateTokens.length > 0 || fixedPrivateClasses.length > 0) {
+  console.log('\nUI drift: ground gained in private files. Update scripts/budgets.private.json:\n');
+  for (const [app, kind] of underPrivate) console.log(`  ${app}.ui.${kind}: ${pAllowed(app, kind)} -> ${pHave(app, kind)}`);
+  for (const t of fixedPrivateTokens) console.log(`  drop '${t}' from uiKnownTokens`);
+  for (const c of fixedPrivateClasses) console.log(`  drop '${c}' from uiKnownOrphans`);
+  console.log('');
+}
+
 const ADVICE = {
   button: 'button(), iconButton(), buttonRow()',
   select: 'selectField()',
@@ -534,11 +565,6 @@ if (over.length > 0 || overPrivate.length > 0) {
   );
 }
 
-// A name found only in private files may be excused by the private lists; anywhere public, only
-// by the lists in this file.
-const onlyPrivate = (files) => [...files].every((f) => PRIVATE_FILES.has(f));
-const PRIVATE_KNOWN_TOKENS = new Set(PRIVATE.uiKnownTokens ?? []);
-const PRIVATE_KNOWN_ORPHANS = new Set(PRIVATE.uiKnownOrphans ?? []);
 const newTokens = [...unresolvedTokens].filter(
   ([t, files]) => !KNOWN_UNRESOLVED_TOKENS.has(t) && !(onlyPrivate(files) && PRIVATE_KNOWN_TOKENS.has(t)),
 );
@@ -568,29 +594,6 @@ if (newOrphans.length > 0) {
 }
 
 if (failed) process.exit(1);
-
-/* Ground gained. Never a failure — nobody should have a commit rejected for improving
-   things — but loud enough that the number actually gets lowered. */
-const fixedTokens = [...KNOWN_UNRESOLVED_TOKENS].filter((t) => !unresolvedTokens.has(t));
-const fixedClasses = [...KNOWN_ORPHAN_CLASSES].filter((c) => !orphanClasses.has(c));
-
-if (under.length > 0 || fixedTokens.length > 0 || fixedClasses.length > 0) {
-  console.log('\nUI drift: ground gained. Update scripts/check-ui-drift.mjs:\n');
-  for (const [app, kind] of under) console.log(`  BUDGET['${app}'].${kind}: ${allowed(app, kind)} -> ${have(app, kind)}`);
-  for (const t of fixedTokens) console.log(`  drop '${t}' from KNOWN_UNRESOLVED_TOKENS`);
-  for (const c of fixedClasses) console.log(`  drop '${c}' from KNOWN_ORPHAN_CLASSES`);
-  console.log('');
-}
-
-const fixedPrivateTokens = [...PRIVATE_KNOWN_TOKENS].filter((t) => !unresolvedTokens.has(t));
-const fixedPrivateClasses = [...PRIVATE_KNOWN_ORPHANS].filter((c) => !orphanClasses.has(c));
-if (underPrivate.length > 0 || fixedPrivateTokens.length > 0 || fixedPrivateClasses.length > 0) {
-  console.log('\nUI drift: ground gained in private files. Update scripts/budgets.private.json:\n');
-  for (const [app, kind] of underPrivate) console.log(`  ${app}.ui.${kind}: ${pAllowed(app, kind)} -> ${pHave(app, kind)}`);
-  for (const t of fixedPrivateTokens) console.log(`  drop '${t}' from uiKnownTokens`);
-  for (const c of fixedPrivateClasses) console.log(`  drop '${c}' from uiKnownOrphans`);
-  console.log('');
-}
 
 const total = (kind) => APPS.reduce((n, app) => n + have(app, kind), 0);
 console.log(
