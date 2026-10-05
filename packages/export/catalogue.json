@@ -6,6 +6,6 @@
     { "name": "OBJ export", "category": "print3d", "use": ["buildObj", "buildObjMtl", "downloadObj"], "for": "Wavefront OBJ, plain or with an MTL of colours." },
     { "name": "Laser cut file", "category": "laser", "use": ["buildCutSvg"], "for": "The laser SVG: one group per operation (engrave, score, cut), one unit per millimetre, the provenance mark inside." },
     { "name": "Provenance mark", "category": "behaviour", "use": ["provenance", "provenanceComment"], "with": ["PROVENANCE_FILE"], "for": "Invariant #2: the forensic mark every exported file carries, never visible on a print." },
-    { "name": "Download and zip", "category": "behaviour", "use": ["downloadFile", "buildZip"], "with": ["textToArrayBuffer", "bytesToArrayBuffer"], "for": "Save bytes or text to the downloads folder, and bundle several files into one zip." }
+    { "name": "Download and zip", "category": "behaviour", "use": ["downloadFile", "buildZip"], "with": ["textToArrayBuffer", "bytesToArrayBuffer"], "for": "Save bytes, text or a ready Blob to the downloads folder, and bundle several files into one zip." }
   ]
 }
