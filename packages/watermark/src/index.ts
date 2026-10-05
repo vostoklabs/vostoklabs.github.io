@@ -5,7 +5,7 @@
   is solid at every setting. They are invisible on a print and in the preview, and show in any
   slicer's section view: forensic evidence of where a file came from, never a feature lock.
   WHERE the voids may sit is each app's own geometry. What lives here is how a constellation is
-  drawn from a seed, so one seed gives the same voids forever, in every app.
+  drawn from a seed, so a seed and an app's spec give the same voids forever.
 
   Two tiers, by convention: one keyed to a seed string written in the app, which survives a
   copy of the source, and one keyed to the build-time seed `markSeed()` reads, which is empty
