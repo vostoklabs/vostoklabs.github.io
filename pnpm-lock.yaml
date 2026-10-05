@@ -72,15 +72,15 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
-      '@vostok/laser':
-        specifier: workspace:*
-        version: link:../../packages/laser
       '@vostok/manifold':
         specifier: workspace:*
         version: link:../../packages/manifold
       '@vostok/plates':
         specifier: workspace:*
         version: link:../../packages/plates
+      '@vostok/trace':
+        specifier: workspace:*
+        version: link:../../packages/trace
       '@vostok/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit

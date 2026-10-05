@@ -38,12 +38,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 
-// The tracer is the shelf's (`@vostok/laser/trace`); `quantize` is internal to it, so the test
-// reads that one from its file.
-const { quantize } = await import('../../../packages/laser/src/trace/quantize.ts');
-const { processImage, srgbToOklab } = await import('@vostok/laser/trace');
+// The tracer is the shelf's (`@vostok/trace`); `quantize` is the one stage measured on its own.
+const { quantize, processImage, srgbToOklab } = await import('@vostok/trace');
 const { FILAMENTS } = await import('../src/types.ts');
-type RgbaImage = import('@vostok/laser/trace').RgbaImage;
+type RgbaImage = import('@vostok/trace').RgbaImage;
 
 /* The browser decodes PNGs with `createImageBitmap`, which node does not have. These files are
    8-bit RGBA (the artwork) or 8-bit indexed (the bundled samples), both of which are a zlib
@@ -411,7 +409,7 @@ for (const f of ['dog.png', 'cheese.png', 'heart.png', 'paw.png', 'radiation.png
   produces at twelve, not the anti-aliasing debris under 0.1%, and not one fewer.
 */
 {
-  const { discoverColours } = await import('@vostok/laser/trace');
+  const { discoverColours } = await import('@vostok/trace');
   const found = discoverColours(clone(sample('heart.png')), true);
   const names = found.map((c) => {
     const [r, g, b] = c.rgb;

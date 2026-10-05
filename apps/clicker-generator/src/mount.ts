@@ -31,7 +31,7 @@ import { createViewer, type SectionAxis } from './viewer/viewer';
 import { mountPlatePicker } from '@vostok/plates';
 import { downloadFile } from '@vostok/export';
 import { createUi, type UiState } from './ui/ui';
-import { loadFileToImage, processImage, type RgbaImage } from '@vostok/laser/trace';
+import { loadFileToImage, processImage, type RgbaImage } from '@vostok/trace';
 import { runWizard } from './ui/wizard';
 import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
 import { shownBuild } from './export/shownBuild';

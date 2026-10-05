@@ -43,13 +43,13 @@ import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import Module from 'manifold-3d';
 
-const { processImage } = await import('@vostok/laser/trace');
+const { processImage } = await import('@vostok/trace');
 const { parse3MF } = await import('../src/geometry/threemfImport.ts');
 const { buildClicker } = await import('../src/geometry/buildClicker.ts');
 type BuildParams = import('../src/types.ts').BuildParams;
 type BuildRegion = import('../src/types.ts').BuildRegion;
 type Ring = import('../src/types.ts').Ring;
-type RgbaImage = import('@vostok/laser/trace').RgbaImage;
+type RgbaImage = import('@vostok/trace').RgbaImage;
 
 function decodePng(buf: Buffer): RgbaImage {
   let p = 8;

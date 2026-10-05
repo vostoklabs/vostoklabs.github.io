@@ -28,7 +28,7 @@ import {
 } from '@vostok/ui-kit';
 import {
   discoverColours, preprocessImage, processImage, srgbToOklab, type ColourCandidate, type RgbaImage,
-} from '@vostok/laser/trace';
+} from '@vostok/trace';
 import { DEFAULT_PREPROCESS, type PreprocessParams, type RegionSet, type RGB } from '../types';
 
 export interface WizardResult {

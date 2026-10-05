@@ -110,8 +110,8 @@ export interface KeychainParams {
 }
 
 /** Image preprocessing (crop, tone, background), as the image tracer defines it. */
-export type { CropRatio, PreprocessParams } from '@vostok/laser/trace';
-export { DEFAULT_PREPROCESS } from '@vostok/laser/trace';
+export type { CropRatio, PreprocessParams } from '@vostok/trace';
+export { DEFAULT_PREPROCESS } from '@vostok/trace';
 
 /** Parameters the geometry worker needs to build the clicker (all mm).
  *  Design: the BODY is a solid block with a recessed well + raised border cut
