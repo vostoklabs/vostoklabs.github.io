@@ -260,8 +260,15 @@ const abs = (p) => join(ROOT, p);
    unseen. A count from a private file goes to a private budget (`scripts/budgets.private.json`,
    "ui"), and a dead class or token found only in private files is excused only by that file's
    lists, so no public file names anything private. A public clone has no private files, so
-   there this check reads exactly what it always did. */
-const PRIVATE_FILES = new Set(privateFiles());
+   there this check reads exactly what it always did.
+
+   Only an app's or a package's own source is read: its `src/`, and an app's `index.html`. A
+   private folder can also hold code that is not the app's (someone else's example project kept
+   beside it, an experiment, design files). Read as the app's, a stylesheet in one declared a
+   token that private code used without declaring it, and the check passed a property that
+   renders as nothing. */
+const OWN_SOURCE = /^(?:apps|packages)\/[^/]+\/src\/|^apps\/[^/]+\/index\.html$/;
+const PRIVATE_FILES = new Set(privateFiles().filter((f) => OWN_SOURCE.test(f)));
 const PRIVATE = privateBudgets();
 const APP_FILES = [...tracked('apps'), ...[...PRIVATE_FILES].filter((f) => f.startsWith('apps/'))];
 const PKG_FILES = [...tracked('packages'), ...[...PRIVATE_FILES].filter((f) => f.startsWith('packages/'))];
@@ -446,6 +453,8 @@ for (const file of ALL_CODE) {
   for (const m of src.matchAll(/\bclass=["']([^"']*)["']/g)) found.push(m[1]);
   // `el('div', { className: '…' })` and `node.className = '…'`.
   for (const m of src.matchAll(/\bclassName\s*[:=]\s*["'`]([^"'`]*)["'`]/g)) found.push(m[1]);
+  // The kit's short form, `el('span', 'cls', 'text')`: a string second argument is the class.
+  for (const m of src.matchAll(/\bel\(\s*["'`][\w-]+["'`]\s*,\s*["'`]([^"'`]*)["'`]/g)) found.push(m[1]);
   // Only the FIRST literal after the paren: `toggle('hidden', v !== 'image')` must not
   // contribute `image`. Under-reporting is safe here; a false positive is not.
   for (const m of src.matchAll(/\bclassList\.(?:add|remove|toggle)\(\s*["'`]([^"'`]*)["'`]/g)) {
