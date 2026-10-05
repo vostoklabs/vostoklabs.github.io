@@ -8,7 +8,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "esbuild tests/svg-reader.test.ts --bundle --platform=node --format=esm --external:@xmldom/xmldom --outfile=node_modules/.cache/svg-reader.test.mjs --log-level=error && node node_modules/.cache/svg-reader.test.mjs"
   },
   "dependencies": {
     "d3-contour": "^4.0.2",
@@ -18,6 +19,8 @@
   "devDependencies": {
     "@types/d3-contour": "^3.0.6",
     "@types/three": "^0.171.0",
+    "@xmldom/xmldom": "^0.9.10",
+    "esbuild": "^0.24.2",
     "typescript": "^5.7.2"
   }
 }

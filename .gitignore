@@ -103,6 +103,8 @@ packages/laser/tests/silhouettes.test.mjs
 !packages/export/tests/**
 !packages/watermark/tests/
 !packages/watermark/tests/**
+!packages/trace/tests/
+!packages/trace/tests/**
 # What the suites write while they run
 **/tests/.*
 
