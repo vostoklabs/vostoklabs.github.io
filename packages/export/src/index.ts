@@ -839,16 +839,24 @@ export function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
+export interface ZipOptions {
+  /**
+   * Deflate level, 0 to 9. Default 6, fflate's own default and the right trade for SVG, which is
+   * text and compresses to a fraction. 0 stores the files as they are: for files that are
+   * already compressed (a 3MF is a zip), where deflating again costs time and saves nothing.
+   */
+  level?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+}
+
 /** Zip a handful of named files — text or bytes — into one archive.
  *
- *  Here rather than in an app because more than one app wants it. Deflate level 6 is fflate's
- *  own default and the right trade for SVG, which is text and compresses to a fraction. */
-export function buildZip(files: Record<string, string | Uint8Array>): Uint8Array {
+ *  Here rather than in an app because more than one app wants it. */
+export function buildZip(files: Record<string, string | Uint8Array>, opts: ZipOptions = {}): Uint8Array {
   const entries: Record<string, Uint8Array> = {};
   for (const [name, data] of Object.entries(files)) {
     entries[name] = typeof data === 'string' ? strToU8(data) : data;
   }
-  return zipSync(entries, { level: 6 });
+  return zipSync(entries, { level: opts.level ?? 6 });
 }
 
 /** A flat ring in millimetres, Y up, as manifold's `CrossSection.toPolygons()` returns it. */
@@ -1034,6 +1042,39 @@ export function buildCutSvg(layers: CutLayer[], meta: ProvenanceMeta): string {
     '</svg>',
     '',
   ].join('\n');
+}
+
+/** One file of a cut download: a sheet's SVG, or the README that goes with the sheets. */
+export interface CutFile {
+  name: string;
+  text: string;
+}
+
+/** A file ready to save or to hand to a host: its name, its contents, its type. */
+export interface FileToSave {
+  name: string;
+  data: string | Uint8Array;
+  mime: string;
+}
+
+/**
+ * What a cut download saves. One sheet is its SVG, as it is. More are one zip, `<stem>.zip`,
+ * of every sheet and then the README (`README.txt`) when there is one: a README beside a single
+ * SVG would turn one file into a zip for the sake of a note.
+ */
+export function cutFileBundle(sheets: CutFile[], stem: string, readme?: string): FileToSave {
+  if (sheets.length === 1) return { name: sheets[0]!.name, data: sheets[0]!.text, mime: 'image/svg+xml' };
+  const files: Record<string, string> = {};
+  for (const s of sheets) files[s.name] = s.text;
+  if (readme !== undefined) files['README.txt'] = readme;
+  return { name: `${stem}.zip`, data: buildZip(files), mime: 'application/zip' };
+}
+
+/** Save a cut download (`cutFileBundle`) to the downloads folder. Returns the file name saved. */
+export function downloadCut(sheets: CutFile[], stem: string, readme?: string): string {
+  const file = cutFileBundle(sheets, stem, readme);
+  downloadFile(file.data, file.name, file.mime);
+  return file.name;
 }
 
 /** Save bytes, text or a ready Blob to the user's downloads folder. */
