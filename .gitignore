@@ -49,6 +49,7 @@ packages/*/
 !packages/manifold-noeval/
 !packages/patterns/
 !packages/plates/
+!packages/trace/
 !packages/ui-kit/
 !packages/viewer/
 !packages/watermark/

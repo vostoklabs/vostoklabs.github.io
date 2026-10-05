@@ -568,6 +568,9 @@ importers:
       '@vostok/manifold':
         specifier: workspace:*
         version: link:../manifold
+      '@vostok/trace':
+        specifier: workspace:*
+        version: link:../trace
       d3-contour:
         specifier: ^4.0.2
         version: 4.0.2
@@ -577,9 +580,6 @@ importers:
       onnxruntime-web:
         specifier: ^1.29.0
         version: 1.30.0
-      pica:
-        specifier: ^10.0.2
-        version: 10.0.2
       three:
         specifier: ^0.171.0
         version: 0.171.0
@@ -619,6 +619,28 @@ importers:
         specifier: ^0.171.0
         version: 0.171.0
       three:
+        specifier: ^0.171.0
+        version: 0.171.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/trace:
+    dependencies:
+      d3-contour:
+        specifier: ^4.0.2
+        version: 4.0.2
+      pica:
+        specifier: ^10.0.2
+        version: 10.0.2
+      three:
+        specifier: ^0.171.0
+        version: 0.171.0
+    devDependencies:
+      '@types/d3-contour':
+        specifier: ^3.0.6
+        version: 3.0.6
+      '@types/three':
         specifier: ^0.171.0
         version: 0.171.0
       typescript:

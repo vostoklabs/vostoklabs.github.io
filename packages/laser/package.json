@@ -3,10 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "The shared laser engine: operations, ring maths, 2D CSG on manifold, parametric blanks, keyring placement, text outlines, and the clicker's image tracer.",
+  "description": "The shared laser engine: operations, ring maths, 2D CSG on manifold, parametric blanks, keyring placement and text outlines. ./trace hands on @vostok/trace, the image tracer.",
   "exports": {
     ".": "./src/index.ts",
-    "./trace": "./src/trace/index.ts",
+    "./trace": "./src/trace.ts",
     "./photo": "./src/photo/index.ts",
     "./material-preview": "./src/material-preview.ts",
     "./csg2d": "./src/csg2d.ts",
@@ -25,10 +25,10 @@
     "@vostok/export": "workspace:*",
     "@vostok/fonts": "workspace:*",
     "@vostok/manifold": "workspace:*",
+    "@vostok/trace": "workspace:*",
     "d3-contour": "^4.0.2",
     "manifold-3d": "^3.0.1",
     "onnxruntime-web": "^1.29.0",
-    "pica": "^10.0.2",
     "three": "^0.171.0"
   },
   "devDependencies": {

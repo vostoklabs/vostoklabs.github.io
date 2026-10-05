@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "esModuleInterop": true,
-    // `trace/` was written under a tsconfig that does not switch this on. Off here so it checks
-    // as written; the rest of the package passes with it on and loses nothing.
+    // `./trace` re-exports `@vostok/trace`, so its source is checked under this config too, and
+    // it was written under one that does not switch this on. Off here so it checks as written.
     "noUncheckedIndexedAccess": false
   },
   "include": ["src"]

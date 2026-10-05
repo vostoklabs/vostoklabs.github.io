@@ -47,12 +47,13 @@ const LAYERS = [
   ['packages/manifold/', 'core'],
   ['packages/manifold-noeval/', 'core'],
   ['packages/watermark/', 'core'],
+  ['packages/trace/', 'core'], // a picture or an SVG file into shapes
   ['packages/laser/src/ops.ts', 'connector'],
   ['packages/laser/src/sheets.ts', 'connector'],
   ['packages/laser/src/burn.ts', 'connector'],
   ['packages/laser/src/material-preview.ts', 'connector'],
   ['packages/laser/src/index.ts', 'connector'], // the front door hands out connector parts too; a core imports a subpath
-  ['packages/laser/', 'core'], // shape maths, 2D booleans, blanks, keyring, text, the tracers
+  ['packages/laser/', 'core'], // shape maths, 2D booleans, blanks, keyring, text
   ['packages/export/', 'connector'],
   ['packages/plates/', 'connector'],
 ];

@@ -1,8 +1,8 @@
 // @vostok/laser — the engine under every laser tool: what a cut file is made of and how to
-// make one. No DOM anywhere in here except `trace/` (decoding an upload needs a canvas).
+// make one.
 //
-// Ops, rings, 2D CSG, blanks, keyring, text, burn palette and materials, plus the clicker's
-// image tracer under ./trace. Units are millimetres, Y up, throughout.
+// Ops, rings, 2D CSG, blanks, keyring, text, burn palette and materials. Units are
+// millimetres, Y up, throughout. The image tracer is `@vostok/trace`.
 
 export type { Op, Shapes, Keyring, KeychainParams } from './types';
 export { DEFAULT_KEYRING } from './types';

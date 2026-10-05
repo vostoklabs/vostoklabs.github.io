@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "esModuleInterop": true,
+    // The tracer was written under a tsconfig that does not switch this on. Off here so it
+    // checks as written.
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src"]
+}
