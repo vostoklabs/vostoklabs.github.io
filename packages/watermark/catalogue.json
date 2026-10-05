@@ -1,0 +1,6 @@
+{
+  "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
+  "blocks": [
+    { "name": "Void watermark", "category": "engine", "use": ["polarVoids", "prng", "markSeed"], "for": "The covert provenance mark: a seeded constellation of small voids to bury in a solid part of a 3D model, the same voids for the same seed forever. Polar placement ready-made, or the seeded generator for a placement of your own, and the build seed." }
+  ]
+}

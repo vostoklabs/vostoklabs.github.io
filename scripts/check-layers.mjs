@@ -44,6 +44,7 @@ const LAYERS = [
   ['packages/fonts/', 'core'],
   ['packages/manifold/', 'core'],
   ['packages/manifold-noeval/', 'core'],
+  ['packages/watermark/', 'core'],
   ['packages/laser/src/ops.ts', 'connector'],
   ['packages/laser/src/sheets.ts', 'connector'],
   ['packages/laser/src/burn.ts', 'connector'],

@@ -49,6 +49,7 @@ packages/*/
 !packages/plates/
 !packages/ui-kit/
 !packages/viewer/
+!packages/watermark/
 
 # docs/ is local, except listing copy. `docs/**` rather than `docs/`, so the negation can match.
 docs/**
@@ -94,6 +95,8 @@ apps/foldbox/README.internal.md
 packages/laser/tests/silhouettes.test.mjs
 !packages/manifold/tests/
 !packages/manifold/tests/**
+!packages/watermark/tests/
+!packages/watermark/tests/**
 # What the suites write while they run
 **/tests/.*
 

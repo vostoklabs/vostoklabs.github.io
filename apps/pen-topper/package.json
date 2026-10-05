@@ -18,6 +18,7 @@
     "@vostok/plates": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "@vostok/viewer": "workspace:*",
+    "@vostok/watermark": "workspace:*",
     "fflate": "^0.8.3",
     "manifold-3d": "^3.0.1",
     "three": "^0.171.0"

@@ -17,6 +17,7 @@
     "@vostok/export": "workspace:*",
     "@vostok/plates": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
+    "@vostok/watermark": "workspace:*",
     "d3-contour": "^4.0.2",
     "fflate": "^0.8.3",
     "manifold-3d": "^3.0.1",
