@@ -49,9 +49,7 @@ export interface BuildParams {
   lines: LineBox[];
 }
 
-export type GeometryRequest =
-  | { type: 'build'; textContours: number[][][]; params: BuildParams }
-  | { type: 'init' };
+export type GeometryRequest = { type: 'build'; textContours: number[][][]; params: BuildParams };
 
 export interface PartMesh {
   name: string;
@@ -73,7 +71,9 @@ export interface Outline {
   text: CutRing[][];
 }
 
-export type GeometryResponse =
-  | { type: 'ready' }
-  | { type: 'parts'; parts: PartMesh[]; outline: Outline; warnings: string[] }
-  | { type: 'error'; message: string };
+/** The geometry worker's answer to a build. A build that fails rejects instead. */
+export interface GeometryResult {
+  parts: PartMesh[];
+  outline: Outline;
+  warnings: string[];
+}

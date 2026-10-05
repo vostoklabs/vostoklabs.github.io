@@ -29,6 +29,8 @@ import {
   filamentRow,
   symbolPickerButton,
   fontChooser,
+  buildLoop,
+  workerClient,
   type SymbolItem,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
@@ -52,7 +54,7 @@ import {
   getFontUrl,
   FALLBACK_FONT_ID,
 } from '@vostok/fonts';
-import type { GeometryResponse, Outline, PartMesh } from './types';
+import type { GeometryRequest, GeometryResult } from './types';
 import { noAmsPauses } from './geometry/noAms';
 import type { DesktopHost } from '@vostok/ui-kit';
 
@@ -252,13 +254,30 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---------------------------------------------------------------------------
   // Worker setup
   // ---------------------------------------------------------------------------
-  const worker = new Worker(new URL('./workers/geometry.worker.ts', import.meta.url), { type: 'module' });
+  // Each request carries an id and gets its own reply, so a reply always reaches the build that
+  // asked for it, and a worker that dies fails that build instead of leaving it waiting. The
+  // next build starts a fresh worker.
+  const worker = workerClient<GeometryRequest, GeometryResult>(
+    () => new Worker(new URL('./workers/geometry.worker.ts', import.meta.url), { type: 'module' }),
+  );
 
-  let isWorkerBusy = false;
-  let needsRebuild = false;
-  let rebuildTimeout: any = null;
-  let lastParts: PartMesh[] = [];
-  let lastOutline: Outline | null = null;
+  // One build at a time, from the state as it is when the build starts, so a burst of edits
+  // costs one build and an edit made during a build is built straight after it. Export awaits
+  // `loop.settled()`: the build of what the controls show now, never just the last to finish.
+  const loop = buildLoop<GeometryResult>({
+    run: runRebuild,
+    debounceMs: 80,
+    onStart: () => showStatus('Generating 3D model...'),
+    onResult: (built) => {
+      viewer.setParts(built.parts, true);
+      hideStatus();
+    },
+    onError: (err) => {
+      console.error(err);
+      hideStatus();
+      toast(err.message, { kind: 'error' });
+    },
+  });
 
   // Each font's natural line gap differs; this is the default the user's Line spacing
   // slider multiplies. Pixel/condensed faces want a tighter default.
@@ -269,76 +288,62 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
 
   function triggerRebuild() {
-    needsRebuild = true;
-    if (isWorkerBusy) return;
-    if (rebuildTimeout) clearTimeout(rebuildTimeout);
-    rebuildTimeout = setTimeout(runRebuild, 80);
+    loop.request();
   }
 
-  async function runRebuild() {
-    if (!needsRebuild) return;
-    needsRebuild = false;
-    isWorkerBusy = true;
-    showStatus('Generating 3D model...');
+  /** One build of the current state: the text is laid out here, the solids built in the worker. */
+  async function runRebuild(): Promise<GeometryResult> {
+    const [font, fallbackFont] = await Promise.all([
+      getFont(state.font),
+      getFont('icon-fallback').catch(() => null)
+    ]);
 
-    try {
-      const [font, fallbackFont] = await Promise.all([
-        getFont(state.font),
-        getFont('icon-fallback').catch(() => null)
-      ]);
+    const gap = 2 * (state.holeDia / 2 + state.ringThickness) + 2;
+    const line2Sz = state.size * state.line2Scale;
+    // User's Line spacing slider scales the font's natural default.
+    const lineFactor = baseLineFactor(state.font) * state.lineSpacing;
 
-      const gap = 2 * (state.holeDia / 2 + state.ringThickness) + 2;
-      const line2Sz = state.size * state.line2Scale;
-      // User's Line spacing slider scales the font's natural default.
-      const lineFactor = baseLineFactor(state.font) * state.lineSpacing;
+    const res = state.layout === 'vertical'
+      ? getVerticalContours(font, fallbackFont, state.name, state.size, state.lineSpacing, state.letterSpacing)
+      : getHorizontalContours(font, fallbackFont, state.name, state.secondLine, state.size, line2Sz, gap, state.line2Align, lineFactor, state.letterSpacing);
 
-      const res = state.layout === 'vertical'
-        ? getVerticalContours(font, fallbackFont, state.name, state.size, state.lineSpacing, state.letterSpacing)
-        : getHorizontalContours(font, fallbackFont, state.name, state.secondLine, state.size, line2Sz, gap, state.line2Align, lineFactor, state.letterSpacing);
-
-      worker.postMessage({
-        type: 'build',
-        textContours: res.contours,
-        params: {
-          name: state.name,
-          secondLine: state.secondLine,
-          font: state.font,
-          layout: state.layout,
-          style: state.style,
-          size: state.size,
-          line2Scale: state.line2Scale,
-          baseThickness: state.baseThickness,
-          textThickness: state.textThickness,
-          outlineWidth: state.outlineWidth,
-          smoothing: state.smoothing,
-          ringStyle: state.ringStyle,
-          holeDia: state.holeDia,
-          ringThickness: state.ringThickness,
-          ringPosX: state.ringPosX,
-          ringPosY: state.ringPosY,
-          ringAngle: state.ringAngle,
-          haloWidth: state.haloWidth,
-          haloThickness: state.haloThickness,
-          colorScheme: state.colorScheme,
-          plateColor: state.plate,
-          haloColor: state.halo,
-          textColor: state.text,
-          plateShape: state.plateShape,
-          lineSpacing: state.lineSpacing,
-          letterSpacing: state.letterSpacing,
-          boldness: state.boldness,
-          chamfer: state.chamferOn ? state.chamfer : 0,
-          printMode: state.printMode,
-          layerHeight: state.layerHeight,
-          lines: res.lines,
-        },
-      });
-    } catch (e) {
-      console.error(e);
-      isWorkerBusy = false;
-      hideStatus();
-      toast(e instanceof Error ? e.message : 'Error preparing geometry', { kind: 'error' });
-    }
+    return worker.call({
+      type: 'build',
+      textContours: res.contours,
+      params: {
+        name: state.name,
+        secondLine: state.secondLine,
+        font: state.font,
+        layout: state.layout,
+        style: state.style,
+        size: state.size,
+        line2Scale: state.line2Scale,
+        baseThickness: state.baseThickness,
+        textThickness: state.textThickness,
+        outlineWidth: state.outlineWidth,
+        smoothing: state.smoothing,
+        ringStyle: state.ringStyle,
+        holeDia: state.holeDia,
+        ringThickness: state.ringThickness,
+        ringPosX: state.ringPosX,
+        ringPosY: state.ringPosY,
+        ringAngle: state.ringAngle,
+        haloWidth: state.haloWidth,
+        haloThickness: state.haloThickness,
+        colorScheme: state.colorScheme,
+        plateColor: state.plate,
+        haloColor: state.halo,
+        textColor: state.text,
+        plateShape: state.plateShape,
+        lineSpacing: state.lineSpacing,
+        letterSpacing: state.letterSpacing,
+        boldness: state.boldness,
+        chamfer: state.chamferOn ? state.chamfer : 0,
+        printMode: state.printMode,
+        layerHeight: state.layerHeight,
+        lines: res.lines,
+      },
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -772,33 +777,37 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
 
   async function handleExport(formatId: string) {
-    const baseName = `${state.name.trim().replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'name'}-keychain`;
+    // Read once the build is in, so the file is named for the model inside it.
+    const baseName = () => `${state.name.trim().replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'name'}-keychain`;
+    // Both formats take the build of what the controls show now: `settled()` waits for one still
+    // running, and refuses, with its reason, when it failed, rather than handing over the model
+    // from before it.
     if (formatId === '3mf') {
-      if (!lastParts.length) throw new Error('No 3D geometry generated yet.');
-      const fn = `${baseName}.3mf`;
+      const { parts } = await loop.settled();
+      const fn = `${baseName()}.3mf`;
       if (host) {
         // With a host the file goes to the host's own export path rather than the browser's
         // download bar.
         const { indexed } = await host.exportToLibrary(
-          { name: fn, bytes: buildThreeMF(lastParts) },
+          { name: fn, bytes: buildThreeMF(parts) },
           { designer: 'Name Keychain Generator' },
         );
         toast(indexed ? 'Exported to your library' : `Exported as ${fn}`, { kind: 'ok' });
       } else {
-        downloadThreeMF(lastParts, fn);
+        downloadThreeMF(parts, fn);
         licenseAfterExport({ badge: '✓ 3MF Export started' });
       }
     } else if (formatId === 'svg') {
-      if (!lastOutline) throw new Error('No outline generated yet.');
-      const fn = `${baseName}.svg`;
+      const { outline } = await loop.settled();
+      const fn = `${baseName()}.svg`;
       if (host) {
         const { indexed } = await host.exportToLibrary(
-          { name: fn, bytes: new TextEncoder().encode(buildKeychainSvg(lastOutline)) },
+          { name: fn, bytes: new TextEncoder().encode(buildKeychainSvg(outline)) },
           { designer: 'Name Keychain Generator' },
         );
         toast(indexed ? 'Exported to your library' : `Exported as ${fn}`, { kind: 'ok' });
       } else {
-        downloadKeychainSvg(lastOutline, fn);
+        downloadKeychainSvg(outline, fn);
         licenseAfterExport({ badge: '✓ SVG Export started' });
       }
     } else if (formatId === 'stl') {
@@ -1093,33 +1102,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   });
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-  // Setup worker message handling
-  worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
-    const msg = e.data;
-    if (msg.type === 'ready') {
-      isWorkerBusy = false;
-      triggerRebuild();
-      return;
-    }
-    if (msg.type === 'parts') {
-      lastParts = msg.parts;
-      lastOutline = msg.outline;
-      viewer.setParts(msg.parts, true);
-      hideStatus();
-      isWorkerBusy = false;
-      if (needsRebuild) runRebuild();
-      return;
-    }
-    if (msg.type === 'error') {
-      console.error(msg.message);
-      hideStatus();
-      isWorkerBusy = false;
-      toast(msg.message, { kind: 'error' });
-      return;
-    }
-  };
-
-  worker.postMessage({ type: 'init' });
+  // The first model. Starting the worker and loading its WASM are part of this build, so a
+  // failure there is reported like any failed build.
+  triggerRebuild();
 
   // Show What's New dialog once.
   //
@@ -1153,9 +1138,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // container the host clears. Unmounting with one open would strand it.
     closeAllDialogs();
     observer.disconnect();
-    worker.terminate();
+    loop.dispose();
+    worker.dispose();
     viewer.dispose();
-    if (rebuildTimeout) clearTimeout(rebuildTimeout);
     // The icon fallback face adds a <style> tag to <head>. It lives outside the container,
     // so replaceChildren() would not touch it and every mount would leave another behind.
     // An imported font stays registered for the session: its id comes from the file, so
