@@ -263,8 +263,8 @@ const abs = (p) => join(ROOT, p);
    there this check reads exactly what it always did.
 
    Only an app's or a package's own source is read: its `src/`, and an app's `index.html`. A
-   private folder can also hold code that is not the app's (someone else's example project kept
-   beside it, an experiment, design files). Read as the app's, a stylesheet in one declared a
+   private folder can also hold code that is not the app's (an unrelated project kept beside
+   it, an experiment, design files). Read as the app's, a stylesheet in one declared a
    token that private code used without declaring it, and the check passed a property that
    renders as nothing. */
 const OWN_SOURCE = /^(?:apps|packages)\/[^/]+\/src\/|^apps\/[^/]+\/index\.html$/;
