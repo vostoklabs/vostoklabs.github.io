@@ -1864,6 +1864,47 @@ const railShell = appShell({
   },
 });
 
+/* The same kind of frame with the phone layout on: below 900 px the left panel's settings move
+   behind a Settings button pinned at the foot, beside Download. */
+const phoneShell = appShell({
+  contained: true,
+  phone: true,
+  topbar: topbarLinks({ themeToggle: false }),
+  left: {
+    compact: true,
+    header: [generatorHeader({ title: 'Name Keychain', hideCredit: true })],
+    scroll: [
+      settingsRail({
+        label: 'Keychain settings',
+        flush: true,
+        items: [
+          { id: 'shape', label: 'Shape', icon: ICONS.box, body: [outlineTabs('Outline'), mmSlider('Width', 30, 90, 56), mmSlider('Corner radius', 0, 10, 3)] },
+          { id: 'hole', label: 'Hole', icon: ICONS.target, body: [toggleSwitch({ label: 'Hanging hole', checked: true }), mmSlider('Hole size', 3, 8, 5)] },
+        ],
+      }),
+    ],
+    footer: [buttonRow(button({ label: 'Reset', icon: ICONS.rotateLeft, emphasis: 'ghost', onClick: () => toast('Reset') }))],
+    credit: panelCredit({ title: 'Name Keychain' }),
+  },
+  stage: [stagePlaceholder(ICONS.box, 'The preview comes first', 'Narrow the window below 900 px: one column, this picture, then the panel on the right.')],
+  right: {
+    scroll: [section({ title: 'Text', body: [textField({ label: 'Name', value: 'Max' }), mmSlider('Letter size', 6, 20, 12)] })],
+    footer: [
+      sidebarFooter({
+        formats: [{ id: 'svg', label: 'SVG' }],
+        onExport: async (id) => {
+          await new Promise((r) => setTimeout(r, 600));
+          toast(`Exported demo.${id}`, { kind: 'ok' });
+        },
+        onSave: () => toast('Project saved', { kind: 'ok' }),
+        onLoad: () => toast('Project loaded', { kind: 'ok' }),
+        onHelp: () => toast('Help dialog opens here'),
+        themeStorageKey: 'kit-demo-theme',
+      }),
+    ],
+  },
+});
+
 /* The editor frame: a Design body (tool rail, panel slot, canvas, Objects) and a studio, swapped
    by the suite bar's tabs. */
 const EDITOR_TOOLS = [
@@ -1992,6 +2033,18 @@ app.append(
         'panel is compact: the header follows the rail’s rhythm with the back button at its own ' +
         'width, the footer is one slim row, and the credit strip sits at the very foot.',
       inWindow(railShell.root),
+    ),
+  ),
+  fullWidth(
+    entry(
+      'appShell({ phone: true })',
+      'Phone layout',
+      'Narrow the window below 900 px to see it. One column: the picture first, then the panel on ' +
+        'the right, with Download pinned to the bottom of the screen beside a Settings button. ' +
+        'Settings opens the left panel’s rail and Reset in a drawer (a bottom sheet on a phone) and ' +
+        'puts them back when it closes; Save, Load and Help follow the panel’s content. On a wider ' +
+        'screen nothing moves.',
+      inWindow(phoneShell.root),
     ),
   ),
   fullWidth(

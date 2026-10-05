@@ -21,6 +21,7 @@ import { settingsRail } from '../src/components/settings-rail';
 import { studioView } from '../src/components/editor-shell';
 import { chip } from '../src/components/elements';
 import { generatorHeader } from '../src/components/generator-chrome';
+import { sidebarFooter } from '../src/components/sidebar-footer';
 
 let pass = 0;
 const fails: string[] = [];
@@ -41,7 +42,8 @@ function norm(node: unknown): string {
 /** The same markup with one class taken out wherever it appears. */
 const without = (markup: string, cls: string) => markup.replace(new RegExp(` ${cls}(?=[ "])`, 'g'), '');
 const styles = (markup: string) => (markup.match(/ style="/g) ?? []).length;
-const has = (node: unknown, cls: string) => (node as MiniElement).classList.contains(cls);
+const has = (node: unknown, cls: string) => !!node && (node as MiniElement).classList.contains(cls);
+const mini = (node: unknown) => node as MiniElement;
 
 /** Off by default; off when turned off; on, its class and nothing more. */
 function option(name: string, cls: string, build: (on: boolean | undefined) => unknown) {
@@ -184,6 +186,66 @@ option('chip centered', 'vl-chip--centered', (on) => chip({ label: 'Lid', presse
 option('generatorHeader compact', 'vl-app-header--compact', (on) =>
   generatorHeader({ title: 'Laser Studio', description: 'Pick a design.', ...(on === undefined ? {} : { compact: on }) }),
 );
+
+/* ------------------------------------------------------------- the phone layout */
+
+{
+  const shellWith = (phone: boolean | undefined, withFooter = true) => {
+    const left = { header: [el('p', { text: 'name' })], scroll: [el('p', { text: 'rail' }), el('p', { text: 'more' })], footer: [el('p', { text: 'reset' })] };
+    const footer = sidebarFooter({ formats: [{ id: 'svg', label: 'SVG' }], onExport() {}, onSave() {}, onLoad() {}, theme: false });
+    return appShell({
+      left,
+      stage: [],
+      right: { scroll: [el('p', { text: 'size' })], ...(withFooter ? { footer: [footer] } : {}) },
+      ...(phone === undefined ? {} : { phone }),
+    });
+  };
+  const byDefault = norm(shellWith(undefined).root);
+  check('appShell phone: off by default (no vl-app--phone, no phone bar)', !byDefault.includes('vl-app--phone') && !byDefault.includes('vl-app__phone-bar'));
+  check('appShell phone: turned off builds what the default builds', norm(shellWith(false).root) === byDefault);
+
+  const narrow = window.matchMedia('(max-width: 900px)') as unknown as { set(m: boolean): void };
+  narrow.set(false);
+  const shell = shellWith(true);
+  const root = mini(shell.root);
+  const leftScroll = mini(shell.leftScroll);
+  const rightScroll = mini(shell.rightScroll);
+  const footer = root.querySelector('.vl-panel--right > .vl-panel__footer')!;
+  const bar = footer.querySelector('.vl-app__phone-bar')!;
+  const projectFooter = root.querySelector('.vl-sidebar-footer')!;
+  const exportBlock = root.querySelector('.vl-export')!;
+  check('appShell phone: the class is on the frame', has(root, 'vl-app--phone'));
+  check('appShell phone: Settings in a bar at the start of the right footer', footer.firstElementChild === bar && bar.textContent.includes('Settings'));
+  check('appShell phone: on a wide screen the footer and its export stay where they were', projectFooter.parentNode === footer && exportBlock.parentNode === projectFooter && projectFooter.firstElementChild === exportBlock);
+  check('appShell phone: no inline style', styles(html(root)) === styles(byDefault));
+
+  narrow.set(true);
+  check('appShell phone: narrow, the export buttons go beside Settings', bar.firstElementChild === exportBlock && bar.children.length === 2);
+  check('appShell phone: narrow, Save and Load follow the panel’s content', projectFooter.parentNode === rightScroll && rightScroll.lastElementChild === projectFooter);
+
+  const settingsButton = bar.querySelectorAll('button').find((b) => b.textContent.includes('Settings'))!;
+  settingsButton.click();
+  const sheet = mini(document.body).querySelector('.vl-drawer');
+  const sheetBody = sheet?.querySelector('.vl-app__phone-sheet');
+  check('appShell phone: Settings opens a drawer titled Settings', !!sheet && sheet.getAttribute('aria-label') === 'Settings');
+  check('appShell phone: the drawer holds the left panel’s settings, then its footer', sheetBody?.textContent === 'railmorereset' && leftScroll.childNodes.length === 0);
+  settingsButton.click();
+  check('appShell phone: a second press opens no second drawer', mini(document.body).querySelectorAll('.vl-drawer').length === 1);
+  sheet!.querySelector('.vl-drawer__close')!.click();
+  const leftFooter = root.querySelector('.vl-panel--left > .vl-panel__footer')!;
+  check('appShell phone: closing puts the settings back, in order', leftScroll.textContent === 'railmore' && leftFooter.textContent === 'reset' && !mini(document.body).querySelector('.vl-drawer'));
+
+  settingsButton.click();
+  narrow.set(false);
+  check('appShell phone: going wide closes the drawer and puts the settings back', !mini(document.body).querySelector('.vl-drawer') && leftScroll.textContent === 'railmore');
+  check('appShell phone: going wide puts the export and the footer back', footer.lastElementChild === projectFooter && projectFooter.firstElementChild === exportBlock && bar.children.length === 1);
+
+  const bare = shellWith(true, false);
+  const made = mini(bare.root).querySelector('.vl-panel--right > .vl-panel__footer');
+  check('appShell phone: with no right footer, one is made for the bar alone', !!made && made.children.length === 1 && has(made.firstElementChild, 'vl-app__phone-bar'));
+  const twoCol = appShell({ right: { scroll: [] }, phone: true });
+  check('appShell phone: needs a left panel; without one it does nothing', !has(twoCol.root, 'vl-app--phone') && !mini(twoCol.root).querySelector('.vl-app__phone-bar'));
+}
 
 console.log(`\nlayout options: ${pass} passed, ${fails.length} failed`);
 if (fails.length) process.exit(1);

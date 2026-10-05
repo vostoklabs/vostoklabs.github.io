@@ -74,3 +74,11 @@ select optgroup {
   background-color: var(--panel);
   color: var(--text);
 }
+
+/* `appShell({ phone: true })` on a narrow screen: one column longer than the window, read by
+   scrolling the page. A generator keeps the page from scrolling (`body { overflow: hidden }`, its
+   panels scroll instead); this is the one layout that needs it to, so the shell asks for it here,
+   where the kit styles the document, and it outranks the app's rule. */
+@media (max-width: 900px) {
+  body:has(.vl-app--phone) { overflow: visible; }
+}

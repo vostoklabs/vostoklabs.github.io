@@ -231,3 +231,40 @@
   }
   .vl-panel { height: auto; }
 }
+
+/* `appShell({ phone: true })`: the narrow-screen layout, under 900 px. One column: the picture,
+   then the right panel, whose footer stays pinned to the bottom of the screen while the page
+   scrolls (the panel lets its content out, so the footer sticks to the page, not the panel). The
+   left panel is not shown: its settings open from the Settings button in that footer, in a drawer
+   (components/app-shell.ts moves them in and back). Never the three panels stacked in full. Wider
+   than that, nothing moves; the footer that holds only the Settings button is not shown. */
+.vl-app__phone-bar { display: none; }
+@media (min-width: 901px) {
+  .vl-panel__footer:has(> .vl-app__phone-bar:only-child) { display: none; }
+}
+@media (max-width: 900px) {
+  .vl-app.vl-app--phone {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(280px, 46vh) auto;
+    max-height: none;
+  }
+  .vl-app.vl-app--phone.vl-app--no-topbar { grid-template-rows: minmax(280px, 46vh) auto; }
+  .vl-app--phone > .vl-panel--left { display: none; }
+  .vl-app--phone > .vl-panel--right {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
+  .vl-app--phone > .vl-panel--right > .vl-panel__footer { position: sticky; bottom: 0; z-index: 5; }
+  /* Download (when the footer is a `sidebarFooter()`) takes the width, Settings beside it. */
+  .vl-app--phone .vl-app__phone-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+    align-items: stretch;
+  }
+}
+/* The drawer's content: the left panel's settings, then its footer (Reset). */
+.vl-app__phone-sheet { display: flex; flex-direction: column; gap: var(--space-3); }
