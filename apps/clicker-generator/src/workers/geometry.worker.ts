@@ -73,9 +73,9 @@ function toKeycapAsset(json: any): KeycapAsset | null {
 }
 
 self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
+  const msg = e.data;
   try {
     const wasm = await getModule();
-    const msg = e.data;
 
     if (msg.type === 'init') {
       socket?.delete?.();
@@ -230,6 +230,10 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
     post({
       type: 'error',
       message: err instanceof Error ? (err.stack ?? err.message) : String(err),
+      // Which request failed: the main thread cannot tell a design build's failure from a fit
+      // test strip's or a model import's by the message alone.
+      request: msg?.type,
+      requestId: msg && 'requestId' in msg ? msg.requestId : undefined,
     });
   }
 };

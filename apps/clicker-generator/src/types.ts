@@ -384,4 +384,7 @@ export type GeometryResponse =
     requestId?: string; modelMeta?: ModelMeta;
   }
   | { type: 'modelInfo'; info: ModelInfo }
-  | { type: 'error'; message: string };
+  // `request` and `requestId` name the request that failed, so what Export waits for
+  // (src/export/shownBuild.ts) never takes a fit test strip's or a result card's failure for
+  // the design's.
+  | { type: 'error'; message: string; request?: GeometryRequest['type']; requestId?: string };

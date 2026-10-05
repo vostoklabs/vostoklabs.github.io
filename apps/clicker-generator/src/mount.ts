@@ -34,6 +34,7 @@ import { createUi, type UiState } from './ui/ui';
 import { loadFileToImage, processImage, type RgbaImage } from '@vostok/laser/trace';
 import { runWizard } from './ui/wizard';
 import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
+import { shownBuild } from './export/shownBuild';
 import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
 import { buildObjMtl, objToArrayBuffer } from './export/objExport';
 import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from './geometry/stemFit';
@@ -72,6 +73,7 @@ import type {
   BuildRegion,
   ClickerPart,
   EdgeStyle,
+  GeometryRequest,
   GeometryResponse,
   PaletteEntry,
   RegionSet,
@@ -323,15 +325,37 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let latestParts: ClickerPart[] = [];
   let assetsReady = false;
   let defaultClickerLoaded = false;
-  /** Design builds sent to the worker and not answered yet; it answers each, in order, with
-   *  `parts` or `error`. Counting down on every `error` can only undercount, which at worst
-   *  lowers a spinner early, never leaves one stuck. */
-  let designBuildsInFlight = 0;
+  /** What Export exports: the build on screen, once it has landed (export/shownBuild.ts). Every
+   *  message to the worker goes through `send()` and every reply through `worker.onmessage`, so
+   *  it sees each build go out and come back. */
+  const onScreen = shownBuild({
+    fitTest: () => store.get().fitTestActive,
+    design: () => latestParts,
+    tiles: () => fitStripParts,
+    designPending: () =>
+      debouncedRebuild.pending() || debouncedQuietRebuild.pending() || debouncedReprocess.pending()
+      || designHolds > 0 || modelMode.isLoading(),
+    tilesPending: () => debouncedFitStrip.pending(),
+  });
+  /** Work under way that ends in a design build without a debounce in front of it: a font
+   *  loading, a project opening. Export waits for it. */
+  let designHolds = 0;
+  /** Hold Export until the returned function is called (once). */
+  function holdDesign(): () => void {
+    designHolds++;
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      designHolds--;
+      onScreen.poke();
+    };
+  }
   /** The spinner, lowered by a path that ends without building anything, unless a design build
    *  is still running: that build's answer lowers it. Loading a project raises it first, and a
    *  project with nothing to build (an SVG design without its SVG, a model without its model)
    *  used to leave it spinning over the stage for good. */
-  const notBuilding = (): { building?: false } => (designBuildsInFlight > 0 ? {} : { building: false });
+  const notBuilding = (): { building?: false } => (onScreen.designsInFlight > 0 ? {} : { building: false });
 
   // Vector states
   let currentSvgText = '';
@@ -368,7 +392,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const pick = ++fontPick;
     void ensureFont(next).then((ok) => {
       if (ok && pick === fontPick) reprocess();
-    });
+    }).finally(holdDesign());
   }
   let isInitialLoad = true;
 
@@ -815,12 +839,18 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       viewer.setSection(axis, pos);
     },
     onExport: async () => {
-      // With the fit test showing, Export sends the tiles. Same paths as the design on purpose:
-      // the MakerLab route, the cover and the licence nudge all come with it.
-      const fitTest = store.get().fitTestActive;
-      const parts = fitTest ? fitStripParts : latestParts;
-      if (!parts.length) return;
+      // What the preview shows, once its build has landed: the tiles while the fit test is up,
+      // the design otherwise. A build still on its way is waited for, and one that failed
+      // refuses the export in the status line's words (the export panel shows them). Same paths
+      // for the tiles as for the design on purpose: the MakerLab route, the cover and the
+      // licence nudge all come with it.
+      const shown = await onScreen.settled();
+      if (!shown) return;
+      const { parts, fitTest } = shown;
       const fileBase = fitTest ? 'clicker-stem-fit-test' : designFileBase();
+      // Read with the parts, not after the cover is drawn: a mode switch meanwhile must not
+      // strip a cut model's credit from the file.
+      const source = fitTest ? {} : modelExportOpts();
       if (MAKERLAB && mlReady() && mlCan('export')) {
         // Embedded path: hand the host an OBJ (one `o` object per colour region) plus an MTL
         // carrying those colours.
@@ -865,7 +895,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         try {
           const name = `${fileBase}.3mf`;
           const { indexed } = await host.exportToLibrary(
-            { name, bytes: buildThreeMF(parts, { ...(await coverImages()), ...modelExportOpts() }) },
+            { name, bytes: buildThreeMF(parts, { ...(await coverImages()), ...source }) },
             { designer: 'Clicker Generator' },
           );
           store.set({ status: indexed ? 'Exported to your library ✓' : `Exported as ${name} ✓` });
@@ -888,7 +918,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // Standalone / public path: direct browser download + license reminder.
         // The cover goes in the file, so a folder of orders shows what each one is instead of
         // forty identical 3MF icons.
-        downloadThreeMF(latestParts, `${designFileBase()}.3mf`, { ...(await coverImages()), ...modelExportOpts() });
+        downloadThreeMF(parts, `${fileBase}.3mf`, { ...(await coverImages()), ...source });
         // First download on the page: the full licence window. Later ones: the corner reminder.
         licenseAfterExport();
       }
@@ -1145,7 +1175,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           return;
         }
         reprocess();
-      });
+      }).finally(holdDesign());
     },
     importFont: async (file) => {
       // The font block selects what came in and says so; picking it (onFontSelect) builds.
@@ -1254,16 +1284,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     store,
     viewer,
     // `worker` is created further down; this only runs once it exists.
-    post: (msg, transfer) => {
-      if (msg.type === 'buildModel') designBuildsInFlight++;
-      worker.postMessage(msg, transfer ?? []);
-    },
+    post: (msg, transfer) => send(msg, transfer),
     // A result card's build: correlated like a batch run's, so the viewport never sees it.
     buildDetached: (params) => {
       const requestId = `m${++buildSeq}`;
       return new Promise((resolve) => {
         pendingBuilds.set(requestId, resolve);
-        worker.postMessage({ type: 'buildModel', params, requestId });
+        send({ type: 'buildModel', params, requestId });
       });
     },
     stage: container.querySelector<HTMLElement>('#viewport')!,
@@ -1417,6 +1444,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
     // Record undoable edits (debounced; no-op if nothing tracked actually changed).
     if (!restoringHistory && !pendingHistoryReset) commitHistory();
+
+    // The fit test opening or closing changes what Export waits for, and Model mode says a
+    // model failed to arrive only through the store.
+    onScreen.poke();
   });
   ui.update(store.get());
   modelMode.sync(store.get());
@@ -1655,6 +1686,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   });
   cleanups.push(() => worker.terminate());
 
+  /** Every message to the worker goes out here, so `onScreen` sees each build Export may have
+   *  to wait for. Recorded after posting: a message that could not be posted was never sent. */
+  function send(msg: GeometryRequest, transfer: Transferable[] = []) {
+    worker.postMessage(msg, transfer);
+    onScreen.sent(msg);
+  }
+
   /* One-off builds, correlated by request id.
      The live preview only ever has one build in flight and takes whatever comes back, which
      is why the worker never needed this. A batch run does: it drives N builds through the
@@ -1671,7 +1709,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const requestId = `b${++buildSeq}`;
     return new Promise((resolve) => {
       pendingBuilds.set(requestId, resolve);
-      worker.postMessage({ type: 'buildClicker', regions, outline, params, requestId });
+      send({ type: 'buildClicker', regions, outline, params, requestId });
     });
   }
 
@@ -1726,7 +1764,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         ].join(' · '),
       });
     });
-    worker.postMessage({
+    send({
       type: 'buildFitStrip',
       labels,
       // The same colour the real cap gets, so the tiles print in what they are looking at.
@@ -1774,6 +1812,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   worker.onmessage = (e: MessageEvent<GeometryResponse>) => {
     const msg = e.data;
+    // Every reply, ahead of the cases below (several of which end early), so Export sees each
+    // build come back.
+    onScreen.answered(msg);
     switch (msg.type) {
       case 'ready':
         initAssets();
@@ -1812,7 +1853,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           resolve?.({ parts: msg.parts, warnings: msg.warnings ?? [] });
           break;
         }
-        designBuildsInFlight = Math.max(0, designBuildsInFlight - 1);
         latestParts = msg.parts;
         latestSwitchPlacements = msg.switchPlacements ?? [];
         if (msg.modelMeta) modelMode.onParts(msg.modelMeta, msg.warnings ?? []);
@@ -1906,8 +1946,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         modelMode.onModelInfo(msg.info);
         break;
       case 'error':
-        // An error does not say which request failed (see `designBuildsInFlight`).
-        designBuildsInFlight = Math.max(0, designBuildsInFlight - 1);
         // A model that failed to open is the user's file, not a crash: the controller says so
         // in words and forgets it.
         if (modelMode.onError(msg.message)) {
@@ -1925,15 +1963,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   };
   worker.onerror = (e) => {
-    designBuildsInFlight = 0;
-    store.set({ building: false, status: 'Worker failed: ' + e.message });
+    const status = 'Worker failed: ' + e.message;
+    onScreen.crashed(status);
+    store.set({ building: false, status });
     console.error(e);
   };
 
   async function initAssets() {
     try {
       const [socket, stem, sw, keycapJson] = await assetsPromise;
-      worker.postMessage(
+      send(
         { type: 'init', socket, stem, switch: sw, keycapJson },
         [socket, stem, sw],
       );
@@ -1959,6 +1998,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         triVerts: new Uint32Array(p.triVerts),
       }));
       latestParts = parts;
+      onScreen.shown();
       viewer.setParts(parts, false);
       viewer.setView(store.get().view);
       store.set({
@@ -2190,7 +2230,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // `removeBg` is a live control, so it wins over whatever the preview was opened with.
         regionSet = parseSvg(currentSvgText, { ...currentSvgOptions, removeBg: s.removeBg });
       } catch (e: any) {
-        store.set({ building: false, status: 'Error: ' + e.message });
+        traceFailed('Error: ' + e.message);
         return;
       }
     } else if (s.importMode === 'icon') {
@@ -2210,7 +2250,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         store.set({ building: true, status: 'Parsing icon…' });
         regionSet = parseSvg(currentIconText);
       } catch (e: any) {
-        store.set({ building: false, status: 'Error: ' + e.message });
+        traceFailed('Error: ' + e.message);
         return;
       }
     } else if (s.importMode === 'blocks') {
@@ -2219,7 +2259,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         const arr = arrangeBlocks(s.blockLayout, s.blockGridRows, s.blockGridCols, s.blockCells, s.blockLines, s.blockSymbols);
         regionSet = parseBlockChain(arr.slots, currentFontId, tracedSymbols(s.blockSymbols));
       } catch (e: any) {
-        store.set({ building: false, status: 'Error: ' + e.message });
+        traceFailed('Error: ' + e.message);
         return;
       }
     } else if (s.importMode === 'text') {
@@ -2231,7 +2271,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         }, lineSymbols(s.textSymbols));
         store.set({ textSizeMul: regionSet.sizeMul ?? 1 });
       } catch (e: any) {
-        store.set({ building: false, status: 'Error: ' + e.message });
+        traceFailed('Error: ' + e.message);
         return;
       }
     }
@@ -2259,13 +2299,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     if (palette.length === 0) {
       // A dead end on its own — anyone who skips the wizard (icon, SVG, text all can reach
       // this) needs the next step spelled out, not just the diagnosis.
-      store.set({
-        building: false,
-        status: 'No outline found. Turn off Remove background, or use Adjust image to check the trace.',
-      });
+      traceFailed('No outline found. Turn off Remove background, or use Adjust image to check the trace.');
       return;
     }
     rebuild();
+  }
+
+  /** The trace of a new design threw, or found nothing to build. The model on screen is the one
+   *  from before the change, so Export refuses, in these words, until a build lands. */
+  function traceFailed(status: string) {
+    store.set({ building: false, status });
+    onScreen.failed(status);
   }
 
 
@@ -2434,21 +2478,30 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     } else {
       store.set({ building: true, status: 'Building clicker…' });
     }
-    designBuildsInFlight++;
     if (isBlocks) {
-      worker.postMessage({ type: 'buildBlocks', regions, params });
+      send({ type: 'buildBlocks', regions, params });
     } else {
-      worker.postMessage({ type: 'buildClicker', regions, outline: regionSet.outline, params });
+      send({ type: 'buildClicker', regions, outline: regionSet.outline, params });
     }
   }
 
   // ---- Debounce ----
+  /** `fn`, once the calls stop for `ms`. `pending()` is true while one is counting down: an edit
+   *  that has not been built yet, which Export waits out. */
   function debounce(fn: () => void, ms: number) {
     let t = 0;
-    return () => {
+    const call = () => {
       clearTimeout(t);
-      t = window.setTimeout(fn, ms);
+      t = window.setTimeout(() => {
+        t = 0;
+        try {
+          fn();
+        } finally {
+          onScreen.poke();
+        }
+      }, ms);
     };
+    return Object.assign(call, { pending: () => t !== 0 });
   }
   const debouncedRebuild = debounce(rebuild, 130);
   // Quiet rebuild used by live edit modes (extrude / edges) so the preview reflects
@@ -2715,7 +2768,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   /** Applies a saved parameter blob to the live UI. Shared by both load paths. */
   async function applyProject(raw: unknown) {
-    {
+    // Its settings land across several awaits (a font, the picture, a pack shape), so Export
+    // waits for the build they end in rather than taking what was on screen before.
+    const release = holdDesign();
+    try {
       exitFitTest();
       store.set({ building: true, status: 'Loading project…' });
       const proj = raw as Record<string, any>;
@@ -2816,16 +2872,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       if (set.importMode === 'model') {
         store.set({ modelCut: { ...DEFAULT_MODEL_CUT, ...(set.modelCut ?? {}) } });
         const m = proj.model as { name?: string; sample?: SampleId; data?: string } | null | undefined;
+        // Held until the model is on its way to the worker: reading the saved bytes comes first.
         if (m?.sample) {
-          modelMode.restore({ name: m.name ?? m.sample, bytes: null, sample: m.sample });
+          void modelMode.restore({ name: m.name ?? m.sample, bytes: null, sample: m.sample }).finally(holdDesign());
         } else if (m?.data) {
           const packed = Uint8Array.from(atob(m.data), (ch) => ch.charCodeAt(0));
           const bytes = inflateSync(packed);
-          modelMode.restore({
+          void modelMode.restore({
             name: m.name ?? 'model.stl',
             bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
             sample: null,
-          });
+          }).finally(holdDesign());
         } else {
           store.set({ ...notBuilding(), status: 'This project did not keep its model. Upload it again to carry on.' });
         }
@@ -2899,6 +2956,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         store.set({ palette: pal, baseColorOverride: set.baseColorOverride ?? null });
         rebuild();
       }
+    } finally {
+      release();
     }
   }
 
@@ -2944,6 +3003,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         showParts: (parts) => {
           exitFitTest();
           latestParts = parts;
+          onScreen.shown();
           viewer.setParts(parts, false);
           viewer.setView(store.get().view);
           viewer.setSwitchPlacements([]);

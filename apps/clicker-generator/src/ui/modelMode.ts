@@ -450,11 +450,13 @@ export function createModelMode(deps: ModelModeDeps) {
     return loaded;
   }
 
-  /** Bring a saved model back: re-import its bytes, or reload its sample. */
-  function restore(saved: { name: string; bytes: ArrayBuffer | null; sample: SampleId | null }): void {
+  /** Bring a saved model back: re-import its bytes, or reload its sample. Settles once it is on
+   *  its way to the worker (or failed to get there). */
+  function restore(saved: { name: string; bytes: ArrayBuffer | null; sample: SampleId | null }): Promise<void> {
     keepCutOnce = true;
-    if (saved.sample) void loadSample(saved.sample);
-    else if (saved.bytes) void loadFile(new File([saved.bytes], saved.name));
+    if (saved.sample) return loadSample(saved.sample);
+    if (saved.bytes) return loadFile(new File([saved.bytes], saved.name));
+    return Promise.resolve();
   }
 
   return {
@@ -472,6 +474,8 @@ export function createModelMode(deps: ModelModeDeps) {
     snapshot,
     restore,
     isLoaded: () => loaded !== null,
+    /** A model or sample is on its way in; its build follows it. */
+    isLoading: () => loading,
   };
 }
 

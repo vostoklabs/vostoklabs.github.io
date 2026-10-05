@@ -357,7 +357,9 @@ export interface UiCallbacks {
   /** Turn the cut on or off. Separate from `onView` — the two are unrelated questions. */
   onSectionEnabled(on: boolean): void;
   onSection(axis: SectionAxis, pos: number): void;
-  onExport(): void;
+  /** Handed straight to the footer's export panel, which waits for it and shows a rejection
+   *  (Export refusing a build that failed) as a toast. */
+  onExport(): Promise<void> | void;
   onRenderPng(): void;
   onAiPrompt(): void;
   onSaveProject(): void;
