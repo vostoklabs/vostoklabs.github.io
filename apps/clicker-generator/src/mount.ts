@@ -353,7 +353,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   let fontPick = 0;
   /**
    * Letters the chosen face cannot draw would print as "?", so typing them moves the text to the
-   * plainest face that can (Standard has no Cyrillic, say) and says so. Only typing does this: a
+   * plainest face that can (Standard has no Korean, say) and says so. Only typing does this: a
    * face picked by hand for a text it cannot write keeps its ⚠ mark and stays picked.
    */
   function fitFontTo(text: string): void {

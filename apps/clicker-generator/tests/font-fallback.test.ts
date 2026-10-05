@@ -1,13 +1,13 @@
 /*
   Text in an alphabet the chosen face cannot draw (src/image/letter.ts).
 
-  Standard is the clicker's default and writes Latin only, so a Russian, Greek, Korean, Japanese
-  or Chinese name typed into a new clicker used to print a "?" per letter. Typing such a text now
-  moves it to the plainest face that writes all of it, and the font cards lead with those faces.
-  What has to hold:
-   - Standard is first for Latin (and Greek, which it has), and is judged from its own glyphs:
-     no Cyrillic and no accented Latin;
-   - each alphabet lands on its plain face, and a mix lands on one face that writes all of it;
+  Standard is the clicker's default. It writes Latin with its accents, Greek and Cyrillic, so a
+  Korean, Japanese or Chinese name typed into a new clicker would print a "?" per letter. Typing
+  such a text moves it to the plainest face that writes all of it, and the font cards lead with
+  those faces. What has to hold:
+   - Standard is first for every alphabet it has, and is judged from its own glyphs;
+   - each alphabet it lacks lands on its plain face, and a mix lands on one face that writes all
+     of it; after the Standard pair, Cyrillic and accented Latin still lead with theirs;
    - a symbol in the text (a private-use character) is never counted as a missing letter.
 
   Run from the repo root:
@@ -28,11 +28,11 @@ const check = (name: string, ok: boolean, detail: string) => {
 
 const first = (text: string) => facesThatWrite(text)[0] ?? '(none)';
 check('Latin stays on Standard', first('Custom Text') === 'helvetiker-regular', first('Custom Text'));
-check('Standard cannot write Cyrillic', !fontWritesText('helvetiker-regular', 'Привет'), 'judged from its glyphs');
+check('Standard cannot write Korean', !fontWritesText('helvetiker-regular', '안녕'), 'judged from its glyphs');
 for (const [alphabet, text, face] of [
-  ['Cyrillic', 'Привет', 'montserrat'],
+  ['Cyrillic (Standard has it)', 'Привет', 'helvetiker-regular'],
   ['Greek (Standard has it)', 'Γειά σου', 'helvetiker-regular'],
-  ['accented Latin', 'Señor Müller', 'montserrat'],
+  ['accented Latin (Standard has it)', 'Señor Müller', 'helvetiker-regular'],
   ['Korean', '안녕하세요', 'gothic-a1'],
   ['Japanese kana', 'こんにちは', 'm-plus-1p'],
   ['Japanese with kanji', 'こんにちは世界', 'm-plus-1p'],
@@ -40,6 +40,10 @@ for (const [alphabet, text, face] of [
   ['Korean with Cyrillic', '안녕 Привет', 'gothic-a1'],
 ] as const) {
   check(`${alphabet} lands on ${face}`, first(text) === face, first(text));
+}
+for (const text of ['Привет', 'Señor Müller']) {
+  const after = facesThatWrite(text).filter((id) => !id.startsWith('helvetiker-'))[0];
+  check(`after Standard, ${text} leads with montserrat`, after === 'montserrat', after ?? '(none)');
 }
 check('every face offered writes the text', facesThatWrite('Привет').every((id) => fontWritesText(id, 'Привет')),
   `${facesThatWrite('Привет').length} faces`);

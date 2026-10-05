@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { FontLoader, Font } from 'three/examples/jsm/loaders/FontLoader.js';
-// Vendored rather than imported from `three/examples/fonts/`: three stopped shipping that
-// folder after 0.171, so the old imports break on any newer version. See typefaces/README.md.
-import helvetikerRegular from '../typefaces/helvetiker_regular.typeface.json';
-import helvetikerBold from '../typefaces/helvetiker_bold.typeface.json';
+// Roboto, converted to three's typeface format from its own font files by
+// scripts/typefaces.mjs. See typefaces/README.md.
+import robotoRegular from '../typefaces/roboto_regular.typeface.json';
+import robotoBold from '../typefaces/roboto_bold.typeface.json';
 import { FONTS, fontSupportsText, getFont, getRequiredSubsets, importFontFiles, pathCommandsToPolygons } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg } from './lucideIcons';
 import { parseSvg } from './logo';
@@ -14,10 +14,10 @@ import { lookRings, normaliseRings, type SymbolLook } from './symbolRings';
   Where the letters' outlines come from.
 
   Every face in the shared set (`@vostok/fonts`, the one all the generators that put type on a
-  model use) is read with opentype the first time it is picked. The two "Standard" faces are the
-  three.js typefaces the clicker has always had — its default text and the fit test's labels —
-  and are loaded from the start. Both kinds answer the same three questions through `GlyphFont`,
-  so the layout below never needs to know which it has.
+  model use) is read with opentype the first time it is picked. The two "Standard" faces are
+  three.js typefaces — the clicker's default text and the fit test's labels — and are loaded from
+  the start. Both kinds answer the same three questions through `GlyphFont`, so the layout below
+  never needs to know which it has.
 */
 
 const fontLoader = new FontLoader();
@@ -74,7 +74,8 @@ export interface FontOption {
   category?: string;
 }
 
-/** The Standard faces: always loaded, never fetched. */
+/** The Standard faces: always loaded, never fetched. They are Roboto, under the ids of the faces
+ *  Standard used to be (Helvetiker), so a saved project still finds them. */
 export const STANDARD_FONTS: FontOption[] = [
   { id: 'helvetiker-regular', name: 'Standard', category: 'Clean' },
   { id: 'helvetiker-bold', name: 'Standard Bold', category: 'Clean' },
@@ -87,8 +88,8 @@ export function fontOptions(): FontOption[] {
 }
 
 const loaded = new Map<string, GlyphFont>([
-  ['helvetiker-regular', typefaceGlyphs(fontLoader.parse(helvetikerRegular))],
-  ['helvetiker-bold', typefaceGlyphs(fontLoader.parse(helvetikerBold))],
+  ['helvetiker-regular', typefaceGlyphs(fontLoader.parse(robotoRegular))],
+  ['helvetiker-bold', typefaceGlyphs(fontLoader.parse(robotoBold))],
 ]);
 
 /**

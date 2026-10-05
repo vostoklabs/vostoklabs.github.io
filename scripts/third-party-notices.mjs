@@ -259,8 +259,8 @@ function libsFor(appDir, pkg) {
 }
 
 /** Typefaces an app vendors itself in three.js's typeface format (`src/typefaces/`), each with
- *  the copyright and licence its own file carries. The clicker's Standard pair is MgOpen's,
- *  whose licence asks for its notice in every copy. */
+ *  the copyright and licence its own file carries: a font's licence asks for its notice in
+ *  every copy. */
 function appTypefacesSection(appDir, number) {
   const dir = join(appDir, 'src', 'typefaces');
   if (!existsSync(dir)) return '';
