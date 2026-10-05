@@ -44,6 +44,7 @@
     ["player-skip-back","Player skip back","music","skip-back previous prev rewind beginning media music video controls",0],
     ["player-skip-forward","Player skip forward","music","skip-forward next end media music video controls",0],
     ["keyboard","Keyboard","tech","typing input keys computer hardware device type devices",1],
-    ["battery-4","Battery 4","tech","power energy charge level phone mobile full charged devices",1]
+    ["battery-4","Battery 4","tech","power energy charge level phone mobile full charged devices",1],
+    ["yin-yang","Yin yang","shapes","yin-yang balance harmony taoism peace symbol yinyang tao symbols",0]
   ]
 }

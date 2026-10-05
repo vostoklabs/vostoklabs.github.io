@@ -5584,8 +5584,8 @@
       "kind": "symbols",
       "files": {
         "apps/laser-studio/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3",
-        "packages/symbols/data/fluent-emoji-high-contrast.json": "782de334ce0e52ba8cc921f264428fe41c48e1817c4f7733f19dfb0fc1a7c09d",
-        "packages/symbols/data/fluent-emoji-high-contrast.outlines.json": "8ea746b58e9b0506a85dab1cef4f73d9a360593ac0dd7cb90882cda622ab7d45",
+        "packages/symbols/data/fluent-emoji-high-contrast.json": "e6637f511ed4bd002bd7bf3728b27c5baebe2dd58f0e77e756c4313c91f616d3",
+        "packages/symbols/data/fluent-emoji-high-contrast.outlines.json": "c091a4538e79e12550fddcac5f7f446afd97e98e0cc1d4dc0840456b30957a7f",
         "packages/ui-kit/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3"
       },
       "licence": "MIT",
@@ -5606,8 +5606,8 @@
       "kind": "symbols",
       "files": {
         "apps/laser-studio/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3",
-        "packages/symbols/data/tabler-icons-filled.json": "02b53e4c45a8bd22f62bd7f99e2c6dcc16b5647bdb879ffe21592088ba022e45",
-        "packages/symbols/data/tabler-icons-filled.outlines.json": "4e5926e9518df28b533763153def2167756026140bafc9d7f33a520c19cc0379",
+        "packages/symbols/data/tabler-icons-filled.json": "06f43b0bb00eb9c685c0333b904a3809f9211a0d71ec26662adb2fd8aefcf819",
+        "packages/symbols/data/tabler-icons-filled.outlines.json": "08ba5df09d93c44ae5cfd092f599c50ce24c52f1dd3a8faebeca67d1f1a58b1b",
         "packages/ui-kit/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3"
       },
       "licence": "MIT",

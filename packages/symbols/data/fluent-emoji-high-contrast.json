@@ -76,7 +76,6 @@
     ["guitar","Guitar","music","instrument music",0],
     ["ring","Ring","shapes","diamond",0],
     ["bomb","Bomb","shapes","comic",1],
-    ["yin-yang","Yin yang","shapes","religion tao taoist",0],
-    ["peace-symbol","Peace symbol","shapes","",0]
+    ["victory-hand","Victory hand","people","v",0]
   ]
 }

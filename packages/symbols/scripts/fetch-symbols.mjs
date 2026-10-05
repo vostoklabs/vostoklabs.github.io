@@ -62,7 +62,7 @@ const FLUENT_PICKS = [
   ['Slightly smiling face', 'smileys'], ['Grinning squinting face', 'smileys'], ['Pile of poo', 'smileys'],
   ['Black cat', 'animals'], ['Dog', 'animals'], ['Horse', 'animals'], ['Dragon', 'animals'], ['Fish', 'animals'],
   ['Spider', 'animals'], ['Honeybee', 'animals'], ['Seedling', 'nature'], ['Comet', 'nature'], ['Guitar', 'music'],
-  ['Ring', 'shapes'], ['Bomb', 'shapes'], ['Yin yang', 'shapes'], ['Peace symbol', 'shapes'],
+  ['Ring', 'shapes'], ['Bomb', 'shapes'], ['Victory hand', 'people'],
 ];
 
 const TABLER_PICKS = [
@@ -75,6 +75,8 @@ const TABLER_PICKS = [
   ['arrow-big-up', 'shapes'], ['arrow-big-down', 'shapes'], ['arrow-big-left', 'shapes'], ['arrow-big-right', 'shapes'],
   ['caret-up', 'shapes'], ['caret-down', 'shapes'], ['player-play', 'music'], ['player-pause', 'music'],
   ['player-skip-back', 'music'], ['player-skip-forward', 'music'], ['keyboard', 'tech'], ['battery-4', 'tech'],
+  // Fluent draws Yin yang inside a square frame; this one stands on its own.
+  ['yin-yang', 'shapes'],
 ];
 
 const raw = (repo, commit, path) => `https://raw.githubusercontent.com/${repo}/${commit}/${path.split('/').map(encodeURIComponent).join('/')}`;

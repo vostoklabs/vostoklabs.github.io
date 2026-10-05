@@ -97,6 +97,13 @@ const POPULAR_DRAWN = [
   'tabler:moon', 'tabler:crown', 'fluent:unicorn', 'fluent:rainbow',
 ];
 
+/** Material's popular glyphs that a drawn pick above already shows (a heart, a star, a moon, a
+ *  crown, a paw, a flower, a smiling face). Popular shows each once; search still finds them. */
+const POPULAR_SHOWN_ALREADY = new Set([
+  'material:favorite', 'material:star', 'material:bedtime', 'material:crown', 'material:pets',
+  'material:local_florist', 'material:mood', 'material:sentiment_very_satisfied',
+]);
+
 /** The categories a picker lists, in order: @vostok/fonts' symbol groups. */
 export const SYMBOL_CATEGORIES: readonly { id: string; label: string }[] = SYMBOL_GROUPS.map((g) => ({
   id: g.id,
@@ -129,7 +136,10 @@ export function listSymbols(category: string, filter?: SymbolFilter): SymbolEntr
   const material = (list: { id: string }[]) => list.map((i) => lib.byId.get(`material:${i.id}`)).filter((e): e is SymbolEntry => !!e);
   let list: SymbolEntry[];
   if (category === 'popular') {
-    list = [...POPULAR_DRAWN.map((id) => lib.byId.get(id)).filter((e): e is SymbolEntry => !!e), ...material(POPULAR)];
+    list = [
+      ...POPULAR_DRAWN.map((id) => lib.byId.get(id)).filter((e): e is SymbolEntry => !!e),
+      ...material(POPULAR).filter((e) => !POPULAR_SHOWN_ALREADY.has(e.id)),
+    ];
   } else if (category === 'all') {
     list = lib.all;
   } else if (SYMBOL_GROUPS.some((g) => g.id === category)) {

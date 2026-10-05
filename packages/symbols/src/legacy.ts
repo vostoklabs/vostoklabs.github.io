@@ -6,13 +6,17 @@
   on those characters draw an unrelated Material glyph or nothing at all, in the picker and in
   every project saved before. Each code below is the symbol the customer picked, by the name the
   button showed, matched by eye: Material's filled glyph where one is close (nearest to Font
-  Awesome's solid style), then Tabler's, then a Fluent drawing. Key on a project's version
-  stamp, never on the character alone: 16 of these codes are also valid Material characters.
+  Awesome's solid style), then Tabler's, then a Fluent drawing. No set draws the peace sign
+  without a frame, so Peace becomes the victory hand, the other peace sign. Key on a project's
+  version stamp, never on the character alone: 16 of these codes are also valid Material
+  characters.
 
   Lucide. The clicker and keycap list a shortlist of Lucide icons first in their icon gallery,
-  and the clicker's Arrows preset names four. Each name's twin in the library is below; null is a
-  name none of the three sets draws, which an app keeps reading from Lucide itself (and saved
-  projects may hold any Lucide name, not only these).
+  and the clicker's Arrows preset names four. Lucide is not a set of this library and is never
+  listed: a project that saved a Lucide symbol keeps reading it from Lucide, exactly as it was
+  saved (any of its names, not only these), and a new pick comes from the library. The twins
+  below are where a new pick of each shortlisted name lands; null is a name none of the three
+  sets draws.
 */
 
 /** [code point, the name the button showed, the library id]. */
@@ -67,8 +71,8 @@ export const FONT_AWESOME_TWINS: readonly (readonly [number, string, string])[] 
   [0xf0d0, 'Magic', 'material:auto_fix_high'],
   [0xf1e2, 'Bomb', 'fluent:bomb'],
   [0xf2fe, 'Poo', 'fluent:pile-of-poo'],
-  [0xf6ad, 'Yin Yang', 'fluent:yin-yang'],
-  [0xf67c, 'Peace', 'fluent:peace-symbol'],
+  [0xf6ad, 'Yin Yang', 'tabler:yin-yang'],
+  [0xf67c, 'Peace', 'fluent:victory-hand'],
 ];
 
 const BY_CODE = new Map(FONT_AWESOME_TWINS.map(([cp, , id]) => [cp, id]));
