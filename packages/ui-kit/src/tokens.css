@@ -62,6 +62,7 @@
   --fs-micro: 11px;      /* tags, metadata floor */
   --fs-small: 12px;      /* dense chrome */
   --fs-compact: 13px;    /* compact density body size */
+  --fs-caption: 14px;    /* a compact switch's label */
   --fs-medium: 15px;     /* today's de-facto control size, finally named */
   --fs-strong: 16px;     /* heading inside a panel */
   --fs-subtitle: 18px;

@@ -252,6 +252,12 @@ body {
   border-top: 2px dashed var(--accent-2);
 }
 
+/* A play button beside a scrubber that takes the rest of the row, in a stage panel. */
+.kit-scrub-row { display: flex; align-items: center; gap: var(--space-3); }
+.kit-scrub { flex: 1 1 auto; }
+/* Switches stacked, each only as wide as its label and switch. */
+.kit-switch-stack { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+
 /* Centres a placeholder where a stage's canvas would sit. */
 .kit-stage-fill {
   position: absolute;

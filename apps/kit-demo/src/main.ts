@@ -22,6 +22,7 @@ import {
   presetShareButton,
   readParamsFromHash,
   toggleSwitch,
+  slider,
   sliderRow,
   stepperRow,
   segmentedControl,
@@ -769,6 +770,26 @@ const SOURCE_HINTS: Record<string, string> = {
   text: 'Letters in any of the fonts, set as outlines.',
 };
 const sourceHint = el('p', { className: 'vl-hint', text: SOURCE_HINTS.image ?? '' });
+/* Eight sources in a settings column: the tiles layout. */
+const BOX_STYLES = [
+  { value: 'tuck', label: 'Tuck carton', icon: ICONS.box },
+  { value: 'mailer', label: 'Mailer', icon: ICONS.layers },
+  { value: 'tray', label: 'Tray', icon: ICONS.grid },
+  { value: 'sleeve', label: 'Sleeve', icon: ICONS.list },
+  { value: 'pillow', label: 'Pillow', icon: ICONS.heart },
+  { value: 'gable', label: 'Gable bag', icon: ICONS.stand },
+  { value: 'divided', label: 'Divided tray', icon: ICONS.joint },
+  { value: 'lid', label: 'Lid and base', icon: ICONS.ruler },
+];
+const boxStyleHint = el('p', { className: 'vl-hint', text: 'Tuck carton: picked.' });
+const boxStyles = sourceCards({
+  layout: 'tiles',
+  options: BOX_STYLES,
+  value: 'tuck',
+  onChange: (v) => {
+    boxStyleHint.textContent = `${BOX_STYLES.find((s) => s.value === v)?.label ?? v}: picked.`;
+  },
+});
 const sources = sourceCards({
   options: [
     { value: 'image', label: 'Image', icon: ICONS.image },
@@ -864,6 +885,14 @@ app.append(
     'The Image / SVG / Text cards at the top of an input panel. Pressing one says where the design ' +
       'comes from, and the app swaps the panel underneath to match.',
     panel(sources.root, sourceHint),
+  ),
+  entry(
+    "sourceCards({ layout: 'tiles' })",
+    'Source tiles',
+    'More sources than a row of cards has room for: small tiles, the icon over a centred name that ' +
+      'may take two lines and is never hyphenated or clipped. Fold-Up Box’s box styles, at the ' +
+      'width of a settings panel.',
+    el('div', { className: 'kit-sidebar-frame' }, [boxStyles.root, boxStyleHint]),
   ),
   entry(
     'dropZone() · uploadCta()',
@@ -1192,6 +1221,77 @@ app.append(
         }),
         button({ label: 'Warning', onClick: () => stageLine.set('Letters are thinner than the nozzle.', 'warn') }),
         button({ label: 'Error', onClick: () => stageLine.set('The outline crosses itself.', 'error') }),
+      ),
+    ),
+  ),
+);
+
+/* Fold-Up Box's stage: a panel holds the bottom centre for good, so the status line sits at the top;
+   the fold panel's one control names itself; the flat view's switches are the compact kind. */
+const FOLD_READY = 'Ready · 212 × 148 mm blank · fits A4';
+const foldLine = stageStatus(FOLD_READY, { position: 'top' });
+const foldScrub = slider({ min: 0, max: 100, value: 100, ariaLabel: 'Fold progress', className: 'kit-scrub', onInput: (v) => foldLine.set(`Folded ${v} %`) });
+const foldPanel = stagePanel({
+  title: 'Fold',
+  titleHidden: true,
+  open: true,
+  body: [
+    el('div', { className: 'kit-scrub-row' }, [
+      button({
+        label: 'Fold it',
+        emphasis: 'primary',
+        onClick: () => {
+          foldScrub.setValue(0);
+          foldLine.set('Folding…', 'busy');
+          setTimeout(() => {
+            foldScrub.setValue(100);
+            foldLine.set(FOLD_READY);
+          }, 700);
+        },
+      }),
+      foldScrub,
+    ]),
+  ],
+});
+const flatPanel = stagePanel({
+  title: 'Dieline',
+  body: [
+    el('div', { className: 'kit-switch-stack' }, [
+      toggleSwitch({ label: 'Panel names', checked: true, compact: true }),
+      toggleSwitch({ label: 'Sheet outline', checked: true, compact: true }),
+    ]),
+  ],
+});
+const foldModes = modeBar({
+  modes: [{ value: 'fold', label: 'Fold' }, { value: 'flat', label: 'Flat' }],
+  value: 'fold',
+  onChange: (m) => {
+    foldPanel.setOpen(m === 'fold');
+    flatPanel.setOpen(m === 'flat');
+  },
+});
+const foldStage = el('div', { className: 'kit-stage' }, [
+  el('p', { className: 'vl-stage__label', text: 'Live 3D Preview' }),
+  el('div', { className: 'kit-model' }, [el('div', { className: 'kit-model__lid' }), el('div', { className: 'kit-model__base' }), el('div', { className: 'kit-model__plate' })]),
+  foldModes.root,
+  foldPanel.root,
+  flatPanel.root,
+  foldLine.root,
+]);
+
+app.append(
+  fullWidth(
+    entry(
+      "stageStatus(text, { position: 'top' }) · stagePanel({ titleHidden }) · toggleSwitch({ compact })",
+      'A stage with a panel for good',
+      'Fold-Up Box’s stage. Its fold panel never leaves the bottom centre, so the status line sits at ' +
+        'the top left, under the label, where nothing covers it. The panel’s one control names ' +
+        'itself, so its title is read out and not drawn. Switch to Flat: the dieline’s switches are ' +
+        'the compact kind, a smaller label close to its switch.',
+      foldStage,
+      buttonRow(
+        button({ label: 'Warning', onClick: () => foldLine.set('The lid tab is narrower than the glue flap.', 'warn') }),
+        button({ label: 'Ready', onClick: () => foldLine.set(FOLD_READY) }),
       ),
     ),
   ),

@@ -10,7 +10,8 @@
 //   top-centre    `modeBar()`            what a click on the model does
 //   on the model  `stageHandle()`        a grip placed by the viewer, off any slot
 //   top-right     the build-plate picker (@vostok/plates)
-//   bottom-left   `stageStatus()`        what the generator is doing
+//   bottom-left   `stageStatus()`        what the generator is doing; with `position:
+//                                        'top'`, top-left under the label instead
 //   bottom-centre `.vl-stage__hint` / `stagePanel()` — the panel replaces the
 //                 hint while a mode is active; don't show both at once
 import { el } from '../dom';
@@ -284,6 +285,12 @@ export interface StagePanelOptions {
   hint?: string;
   /** Panels start hidden unless their mode is already active. */
   open?: boolean;
+  /**
+   * The title stays for screen readers and comes off the screen: for a panel whose one control
+   * names itself (Fold-Up Box's play button and fold scrubber), where a heading over it only made
+   * the panel taller, on top of the model. Default false: the title shows.
+   */
+  titleHidden?: boolean;
 }
 
 export interface StagePanel {
@@ -296,7 +303,7 @@ export interface StagePanel {
 /** Bottom-centre floating panel for whatever the current mode is editing. */
 export function stagePanel(opts: StagePanelOptions): StagePanel {
   const body = el('div', { className: 'vl-stage-panel__body' }, opts.body ?? []);
-  const root = el('div', { className: 'vl-stage-panel' }, [
+  const root = el('div', { className: opts.titleHidden ? 'vl-stage-panel vl-stage-panel--title-hidden' : 'vl-stage-panel' }, [
     el('p', { className: 'vl-stage-panel__title', text: opts.title }),
     body,
   ]);
@@ -360,18 +367,30 @@ export interface StageStatus {
   setDiagnostics(list: readonly Diagnostic[], ok: string): void;
 }
 
+export interface StageStatusOptions {
+  /**
+   * `'bottom'` (default): the bottom-left corner, the stage's slot for it. `'top'`: the top-left,
+   * under the stage label, where the eye enters the frame: for a stage whose bottom centre holds a
+   * panel for good (Fold-Up Box's fold scrubber), where on a narrow stage the status line and the
+   * panel overlapped every time. Not on a stage whose top-left holds `stageTools()`.
+   */
+  position?: 'bottom' | 'top';
+}
+
 /** Bottom-left one-liner: what the generator is doing, or warning about. A live region, so a
  *  build error or a warning is read out when it appears, not only when someone goes looking. */
-export function stageStatus(initial = ''): StageStatus {
+export function stageStatus(initial = '', opts: StageStatusOptions = {}): StageStatus {
+  // `set()` rewrites the class on every message, so the position goes into the base it starts from.
+  const base = opts.position === 'top' ? 'vl-stage-status vl-stage-status--top' : 'vl-stage-status';
   const root = el('p', {
-    className: 'vl-stage-status',
+    className: base,
     text: initial,
     attrs: { role: 'status', 'aria-live': 'polite' },
   });
   const set = (text: string, kind: StatusKind = 'idle') => {
     root.textContent = text;
     root.className =
-      'vl-stage-status' + (kind === 'idle' ? '' : ` vl-stage-status--${kind}`);
+      base + (kind === 'idle' ? '' : ` vl-stage-status--${kind}`);
   };
   return {
     root,

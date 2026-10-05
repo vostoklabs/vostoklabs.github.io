@@ -35,6 +35,13 @@ export interface ToggleOptions {
   onChange?: (checked: boolean) => void;
   /** Optional "?" tooltip shown next to the label. */
   help?: string;
+  /**
+   * A smaller label close to its switch, and a row that does not shrink: for switches set side by
+   * side or stacked on the stage or under a preview (Fold-Up Box's dieline switches), where the
+   * parent sizes the row to its content. Default false: the panel row, label and switch at its
+   * two ends.
+   */
+  compact?: boolean;
 }
 
 /** A control row that Load-project can push a value back into. Still an
@@ -140,7 +147,7 @@ export function toggleSwitch(opts: ToggleOptions): ValueRow<boolean> {
   input.checked = opts.checked ?? false;
   input.addEventListener('change', () => opts.onChange?.(input.checked));
 
-  const row = el('div', { className: 'vl-switch-row' }, [
+  const row = el('div', { className: opts.compact ? 'vl-switch-row vl-switch-row--compact' : 'vl-switch-row' }, [
     cap.label,
     el('label', { className: 'vl-toggle' }, [input, el('span', { className: 'vl-knob' })]),
   ]) as unknown as ValueRow<boolean>;

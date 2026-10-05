@@ -18,6 +18,14 @@ export interface SourceCardsOptions<T extends string = string> {
   /** Which card starts active. Omit for none. */
   value?: T;
   onChange: (value: T) => void;
+  /**
+   * `'row'` (default): each card's icon beside its label, right for the three or so sources at
+   * the top of an input panel. `'tiles'`: small tiles, the icon over a centred label that may
+   * take two lines and is never hyphenated: for a picker with more sources than a row has room
+   * for (Fold-Up Box's eight box styles), where a 70 px card clipped its label ("Maile") or
+   * broke it mid-word ("Tuck car-ton").
+   */
+  layout?: 'row' | 'tiles';
 }
 
 export interface SourceCards<T extends string = string> {
@@ -26,10 +34,12 @@ export interface SourceCards<T extends string = string> {
   setValue(value: T | null): void;
 }
 
-/** The row of "Image / SVG / Text" cards at the top of an input panel. */
+/** The row of "Image / SVG / Text" cards at the top of an input panel, or with `layout: 'tiles'`
+ *  a grid of small tiles for a longer list. */
 export function sourceCards<T extends string = string>(opts: SourceCardsOptions<T>): SourceCards<T> {
   const buttons = new Map<T, HTMLButtonElement>();
-  const root = el('div', { className: 'vl-source-grid', attrs: { role: 'group' } });
+  const className = opts.layout === 'tiles' ? 'vl-source-grid vl-source-grid--tiles' : 'vl-source-grid';
+  const root = el('div', { className, attrs: { role: 'group' } });
 
   for (const o of opts.options) {
     const card = el('button', {

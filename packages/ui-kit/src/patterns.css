@@ -186,6 +186,37 @@ details.vl-section--collapsible[open] > summary {
   font-weight: 600;
 }
 
+/* `sourceCards({ layout: 'tiles' })`: the icon over a centred label, in a grid of small tiles.
+   The row's icon-left card is right for a full-width row and wrong for a 70 px tile: the label
+   has nowhere to go, so it clipped ("Maile") or broke mid-word ("Tuck car-ton"). Stacked, two
+   lines allowed, no hyphenation: a tile that cannot show its own name is worse than a tile one
+   line taller. Fold-Up Box's eight box styles, at its shipped numbers. */
+.vl-source-grid--tiles {
+  grid-template-columns: repeat(auto-fit, minmax(4.6rem, 1fr));
+  gap: var(--space-2);
+  align-items: stretch;
+}
+.vl-source-grid--tiles .vl-source-card {
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  /* icon 26 + gap 4 + one line 16 + padding 16. */
+  min-height: 4rem;
+  padding: var(--space-2) var(--space-1);
+  text-align: center;
+}
+.vl-source-grid--tiles .vl-source-card__icon {
+  width: 26px;
+  height: 26px;
+}
+.vl-source-grid--tiles .vl-source-card__label {
+  flex-grow: 0;
+  font-size: var(--fs-compact);
+  line-height: 1.2;
+  hyphens: manual;
+  overflow-wrap: normal;
+}
+
 /* ---------------------------------------------------------------- dropzone */
 .vl-drop {
   display: flex;
@@ -721,6 +752,20 @@ details.vl-section--collapsible[open] > summary {
   color: var(--muted);
 }
 
+/* `stagePanel({ titleHidden: true })`: the title is read out and not drawn. A panel whose one
+   control labels itself does not need a heading over it, and a heading on a panel that sits on
+   the model is a fifth of the stage. Out of the flow, so the panel's gap closes up behind it. */
+.vl-stage-panel--title-hidden > .vl-stage-panel__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* A centred -/+ pair, the standard nudge control inside a stage panel. */
 .vl-stepper {
   display: flex;
@@ -779,6 +824,17 @@ details.vl-section--collapsible[open] > summary {
 .vl-stage-status--error {
   color: var(--error-text);
   border-color: color-mix(in srgb, var(--red) 45%, var(--line));
+}
+
+/* `stageStatus(text, { position: 'top' })`: top-left, under the stage label. For a stage whose
+   bottom centre holds a panel for good: there the bottom-left corner is in the panel's way on
+   any narrow stage, and up here the line collides with nothing and sits where the eye enters
+   the frame. Two classes, so the narrow-stage `max-width` in app-shell.css (later in the
+   cascade) does not undo this one. */
+.vl-stage-status.vl-stage-status--top {
+  top: 3.1rem;
+  bottom: auto;
+  max-width: min(70ch, 60%);
 }
 
 /* ----------------------------------------------- diagnostics: every one, listed */

@@ -446,6 +446,12 @@
   gap: 15px;
 }
 .vl-switch-row .vl-switch-label { font-size: 15.5px; color: var(--text); }
+/* `toggleSwitch({ compact: true })`: a switch set beside others on the stage or under a preview.
+   The panel row puts the label and the switch at the two ends of its width; here the parent
+   sizes the row to its content, so the gap is all there is between them. Fold-Up Box's
+   dieline switches, at their shipped numbers. */
+.vl-switch-row--compact { flex: 0 0 auto; gap: var(--space-2); }
+.vl-switch-row--compact .vl-switch-label { font-size: var(--fs-caption); }
 .vl-toggle { position: relative; display: inline-block; width: 50px; height: 29px; flex: 0 0 50px; cursor: pointer; }
 .vl-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
 .vl-toggle .vl-knob {
