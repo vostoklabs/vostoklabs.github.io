@@ -12,7 +12,10 @@
     "./csg2d": "./src/csg2d.ts",
     "./blanks": "./src/blanks.ts",
     "./sheets": "./src/sheets.ts",
-    "./ops": "./src/ops.ts"
+    "./ops": "./src/ops.ts",
+    "./rings": "./src/rings.ts",
+    "./burn": "./src/burn.ts",
+    "./keyring": "./src/keyring.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

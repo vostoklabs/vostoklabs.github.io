@@ -891,9 +891,9 @@ export function buildCutSvg(layers: CutLayer[], meta: ProvenanceMeta): string {
   ].join('\n');
 }
 
-/** Save bytes or text to the user's downloads folder. */
-export function downloadFile(data: Uint8Array | string, fileName: string, mime: string): void {
-  const blob = new Blob([data as unknown as BlobPart], { type: mime });
+/** Save bytes, text or a ready Blob to the user's downloads folder. */
+export function downloadFile(data: Uint8Array | string | Blob, fileName: string, mime: string): void {
+  const blob = data instanceof Blob ? data : new Blob([data as unknown as BlobPart], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

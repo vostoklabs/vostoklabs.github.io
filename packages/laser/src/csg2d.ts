@@ -4,32 +4,14 @@
 // (outer CCW positive, holes CW negative, one flat list) lives in `toCS` / `fromCS`, and
 // nothing else in the app needs to know manifold's conventions.
 import type { CutRing } from '@vostok/export';
-import { csOf, ringsOf } from '@vostok/manifold';
+import { csOf, ringsOf, withScope, type Keep } from '@vostok/manifold';
 import { signedArea, circleRing, simplifyRing } from './rings';
 import type { Keyring } from './types';
 import type { KeychainParams } from './types';
 
-/** Anything manifold hands out that has to be freed — the WASM heap only grows. */
-export type Keep = <M extends { delete(): void }>(m: M) => M;
-
-export function withScope<T>(fn: (keep: Keep) => T): T {
-  const created: { delete(): void }[] = [];
-  const keep: Keep = (m) => {
-    created.push(m);
-    return m;
-  };
-  try {
-    return fn(keep);
-  } finally {
-    for (const m of created) {
-      try {
-        m.delete();
-      } catch {
-        /* already freed */
-      }
-    }
-  }
-}
+// The disposal scope lives in @vostok/manifold, beside the leak-free calls; it is handed on from
+// here so the importers that already take it from this module keep working.
+export { withScope, type Keep };
 
 /*
   manifold-3d 3.5.1's JS glue leaks every ring that passes through it, both ways: 16 bytes a

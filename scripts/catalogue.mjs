@@ -125,12 +125,20 @@ function valueExports(file, seen = new Set()) {
       const [orig, alias] = p.split(/\s+as\s+/).map((s) => s.trim());
       const name = alias ?? orig;
       if (m[3]) {
-        if (!target) continue; // a package or a private file that is not here
+        if (!target) {
+          // Handed on from another package (`export { x } from '@vostok/y'`): a value of this
+          // module too, unless written as a type. A relative path that is not here is a private
+          // file absent from this checkout: skip it.
+          if (!m[3].startsWith('.')) out.set(name, { file, doc: '' });
+          continue;
+        }
         if (inner.has(orig)) out.set(name, inner.get(orig));
         // A name that is only a type in the target is not a value: leave it out.
       } else {
         const d = LOCAL_DECL(orig).exec(src);
         if (d) out.set(name, { file, doc: docAbove(raw, d.index) });
+        // `import { x } from …` then `export { x }`: an imported value handed on.
+        else if (new RegExp(`^import\\s+\\{[^}]*(?<!type\\s)\\b${orig}\\b[^}]*\\}\\s*from`, 'm').test(src)) out.set(name, { file, doc: '' });
       }
     }
   }

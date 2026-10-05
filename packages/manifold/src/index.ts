@@ -118,3 +118,30 @@ export function extrude(
     solid.delete();
   }
 }
+
+/** Anything manifold hands out that has to be freed: the WASM heap only grows. */
+export type Keep = <M extends { delete(): void }>(m: M) => M;
+
+/**
+ * Run `fn`, then free everything it passed to `keep`, even when it throws. A rebuild keeps each
+ * intermediate as it makes it (`const a = keep(cs.offset(d))`) and returns plain data, so a chain
+ * whose middle nobody named is freed too. Four generators and @vostok/laser each carried a copy.
+ */
+export function withScope<T>(fn: (keep: Keep) => T): T {
+  const created: { delete(): void }[] = [];
+  const keep: Keep = (m) => {
+    created.push(m);
+    return m;
+  };
+  try {
+    return fn(keep);
+  } finally {
+    for (const m of created) {
+      try {
+        m.delete();
+      } catch {
+        /* already freed */
+      }
+    }
+  }
+}

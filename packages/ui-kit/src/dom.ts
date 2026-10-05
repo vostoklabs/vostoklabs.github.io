@@ -50,3 +50,24 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   }
   return node;
 }
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * An SVG element with its attributes: `el()` for SVG, which `document.createElement` cannot
+ * make. (`svgEl()` in `icons.ts` is a different thing: it parses a string of markup.) A `style`
+ * attribute goes through the CSSOM for the same reason as in `el()`.
+ */
+export function svgNode<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | number> = {},
+  children: Node[] = [],
+): SVGElementTagNameMap[K] {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'style') node.style.cssText = String(v);
+    else node.setAttribute(k, String(v));
+  }
+  node.append(...children);
+  return node;
+}

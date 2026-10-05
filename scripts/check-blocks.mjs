@@ -26,8 +26,7 @@
   - `worker`: a worker started without `workerClient()`, i.e. hand-rolled request plumbing.
   - `project`: save/load written by hand. Saving is `downloadFile()` (`@vostok/export`), reading
     is `readProjectFile()` (`@vostok/ui-kit`).
-  - `store`: a hand-written state store, which several apps carry and the shelf does not have
-    yet. Counted so the copies stop multiplying until the kit has one.
+  - `store`: a hand-written state store. The kit's is `createStore()` ("State store").
 
   **Ratcheted per app**, like `check:ui`: a count may go down, never up, and when one falls the
   check prints the new number. An app with no budget starts at zero, so a new generator starts
@@ -131,7 +130,7 @@ const ADVICE = {
   fonts: '@vostok/fonts (Font library, Font import, Text to outlines)',
   worker: 'workerClient() + answerRequests() from @vostok/ui-kit (Worker requests)',
   project: 'save with downloadFile() (@vostok/export), read with readProjectFile() (@vostok/ui-kit): "Project file"',
-  store: 'no shelf block yet: build the store in the kit, then use it, rather than another copy',
+  store: 'createStore() from @vostok/ui-kit (State store)',
 };
 const KINDS = ['shadow', 'viewer', 'fileformat', 'fonts', 'worker', 'project', 'store'];
 
