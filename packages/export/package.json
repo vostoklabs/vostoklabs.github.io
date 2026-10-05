@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "check": "esbuild src/bambuProfile.check.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/bambuProfile.check.mjs --log-level=error && node node_modules/.cache/bambuProfile.check.mjs",
+    "check": "esbuild src/bambuProfile.check.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/bambuProfile.check.mjs --log-level=error && node node_modules/.cache/bambuProfile.check.mjs && esbuild tests/three-mf.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/three-mf.test.mjs --log-level=error && node node_modules/.cache/three-mf.test.mjs",
     "profile:build": "node scripts/build-bambu-profile.mjs"
   },
   "dependencies": {

@@ -96,6 +96,8 @@ apps/foldbox/README.internal.md
 packages/laser/tests/silhouettes.test.mjs
 !packages/manifold/tests/
 !packages/manifold/tests/**
+!packages/export/tests/
+!packages/export/tests/**
 !packages/watermark/tests/
 !packages/watermark/tests/**
 # What the suites write while they run
