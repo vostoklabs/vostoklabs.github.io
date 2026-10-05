@@ -1170,7 +1170,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       ],
     });
 
-    return { ...controls2, sheetField, sheetAlert, fitHostCut, cutSection, cutAdvancedSection };
+    return { ...controls2, stockField, machineField, sheetField, sheetAlert, fitHostCut, cutSection, cutAdvancedSection };
   }
 
   const cutUI = CUT ? buildCutUI() : null;
@@ -2423,7 +2423,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         glueTabMm: controls.glueTab!,
         filmInsert: controls.filmInsert!,
         filmMarginMm: controls.filmMargin!,
+        // Without their side effects: a project carries its own thickness, beam width, fold
+        // marks and sheet, which picking a card or a machine by hand would overwrite.
+        stockId: ui.stockField,
         caliperMm: ui.caliper,
+        machineId: ui.machineField,
         kerfMm: ui.kerf,
         perfAuto: ui.perfAuto,
         perfCutMm: ui.perfCut,
