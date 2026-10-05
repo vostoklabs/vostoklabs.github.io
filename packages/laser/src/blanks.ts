@@ -835,12 +835,14 @@ export function snowflakeArms(p: BlankParams): CutRing[] {
 
 /** A disc with `n` tangent scallops of radius `r` — `R_c = r / sin(π/n)` puts every scallop
  *  exactly tangent to its neighbours. `r` is the
- *  blank's `corner` value here, not a rounding radius — there is no plain edge to round. */
-export function scallopDiscRing(r: number, n = 16, seg = 8): CutRing {
+ *  blank's `corner` value here, not a rounding radius — there is no plain edge to round.
+ *  `start` turns the ring: the first scallop's crest points that way (radians from +X), so
+ *  `Math.PI / 2` puts a crest at 12 o'clock. 0, the default, is the ring as it always was. */
+export function scallopDiscRing(r: number, n = 16, seg = 8, start = 0): CutRing {
   const Rc = r / Math.sin(Math.PI / n);
   const out: CutRing = [];
   for (let k = 0; k < n; k++) {
-    const theta = (2 * Math.PI * k) / n;
+    const theta = start + (2 * Math.PI * k) / n;
     const c: Pt = [Rc * Math.cos(theta), Rc * Math.sin(theta)];
     const a0 = theta - Math.PI / n - Math.PI / 2;
     const a1 = theta + Math.PI / n + Math.PI / 2;
@@ -1853,16 +1855,15 @@ export function textBoxOf(def: BlankDef, p: BlankParams): Box | null {
   return { minX: cx - hw, minY: cy - hh, maxX: cx + hw, maxY: cy + hh };
 }
 
-/** A 40 × 40 SVG path for the tile, drawn from the real generator at its defaults. */
-/** The blank alone — no hole — as a path `d` in a 40 × 40 box, for a picker that shows the
- *  shape rather than one particular keyring arrangement. */
-export function blankSilhouette(def: BlankDef): string {
-  const shapes = buildBlank(def, { ...def.defaults, holeSide: 'none', pair: false });
+/** Islands as a path `d` in a 40 × 40 box: centred on (20, 20), the longest side `fit` long,
+ *  Y flipped for SVG, two decimals. What the blank pickers draw, and the picture for any set of
+ *  shapes that has no blank behind it. */
+export function shapesSilhouette(shapes: CutRing[][], fit = 34): string {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const isl of shapes) for (const r of isl) for (const [x, y] of r) {
     if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
   }
-  const k = 34 / Math.max(maxX - minX, maxY - minY, 1e-6);
+  const k = fit / Math.max(maxX - minX, maxY - minY, 1e-6);
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
   const n = (v: number) => v.toFixed(2);
@@ -1872,18 +1873,13 @@ export function blankSilhouette(def: BlankDef): string {
     .join(' ');
 }
 
+/** The blank alone — no hole — as a path `d` in a 40 × 40 box, for a picker that shows the
+ *  shape rather than one particular keyring arrangement. */
+export function blankSilhouette(def: BlankDef): string {
+  return shapesSilhouette(buildBlank(def, { ...def.defaults, holeSide: 'none', pair: false }));
+}
+
+/** A 40 × 40 SVG path for the tile, drawn from the real generator at its defaults. */
 export function blankThumb(def: BlankDef): string {
-  const shapes = buildBlank(def, def.defaults);
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const isl of shapes) for (const r of isl) for (const [x, y] of r) {
-    if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
-  }
-  const k = 32 / Math.max(maxX - minX, maxY - minY, 1e-6);
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
-  const n = (v: number) => v.toFixed(2);
-  return shapes
-    .flat()
-    .map((r) => `M ${r.map(([x, y]) => `${n(20 + (x - cx) * k)} ${n(20 - (y - cy) * k)}`).join(' L ')} Z`)
-    .join(' ');
+  return shapesSilhouette(buildBlank(def, def.defaults), 32);
 }

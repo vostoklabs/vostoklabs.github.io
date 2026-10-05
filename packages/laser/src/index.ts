@@ -50,6 +50,7 @@ export {
   buildBlank,
   blankThumb,
   blankSilhouette,
+  shapesSilhouette,
   polygonRing,
   starRing,
   ellipseRing,
