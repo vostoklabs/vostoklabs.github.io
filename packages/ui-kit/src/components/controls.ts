@@ -87,7 +87,8 @@ export function withAccess<T>(
  * updated before this runs, or values get clamped to the old range.
  *
  * A text field someone is typing in takes the value too (see `isSyncing`), or it would hand
- * the typed text back and the loaded value would be lost.
+ * the typed text back and the loaded value would be lost. So does a slider's or a stepper's
+ * number box, or leaving it would commit the typed number over the loaded one.
  *
  * Returns the keys that had to change to fit, so the caller can say so.
  */
@@ -120,9 +121,9 @@ let syncing = 0;
 /**
  * True while `syncControls` is pushing a state into its controls.
  *
- * A text field ignores `setValue` while it has the focus, so a rebuild echoing the state back
- * cannot replace what someone is typing. A load, an undo or a preset is a new value on
- * purpose: under `syncControls` the field takes it.
+ * `setValue` does not rewrite a text field, or a slider's or a stepper's number box, while it has
+ * the focus, so a rebuild echoing the state back cannot replace what someone is typing. A load,
+ * an undo or a preset is a new value on purpose: under `syncControls` the field takes it.
  */
 export function isSyncing(): boolean {
   return syncing > 0;
@@ -332,6 +333,7 @@ function valueField(labelledBy: string, id = uid('vl-val')): {
   input: HTMLInputElement;
   fit: HTMLElement;
   show(text: string): void;
+  edited(): boolean;
 } {
   const input = el('input', {
     className: 'vl-val',
@@ -343,6 +345,7 @@ function valueField(labelledBy: string, id = uid('vl-val')): {
   input.addEventListener('input', () => {
     fit.dataset.value = input.value;
   });
+  let shown = '';
   return {
     input,
     fit,
@@ -351,7 +354,10 @@ function valueField(labelledBy: string, id = uid('vl-val')): {
     show(text) {
       input.value = text;
       fit.dataset.value = text;
+      shown = text;
     },
+    /** Whether the box holds text the row did not write: what someone typed. */
+    edited: () => input.value !== shown,
   };
 }
 
@@ -405,7 +411,7 @@ export function sliderRow(opts: SliderOptions): SliderRowHandle {
     },
   });
 
-  const { input: valBox, fit: valFit, show: showValue } = valueField(cap.textId);
+  const { input: valBox, fit: valFit, show: showValue, edited } = valueField(cap.textId);
   showValue(fmt(opts.value));
 
   let current = opts.value;
@@ -438,6 +444,10 @@ export function sliderRow(opts: SliderOptions): SliderRowHandle {
   // moment `onCommit` is for.
   range.addEventListener('change', () => opts.onCommit?.(current));
   valBox.addEventListener('change', () => {
+    // Only typing is committed. After a load has replaced a half-typed number (see `setValue`),
+    // leaving the box fires `change` on the row's own text, which is already the value, and
+    // reading it back can move it: `format` and `parse` need not round-trip.
+    if (!edited()) return;
     const raw = valBox.value;
     const parsed = firstNumber(raw);
     if (!Number.isFinite(parsed)) return commit(current);
@@ -458,9 +468,12 @@ export function sliderRow(opts: SliderOptions): SliderRowHandle {
     landing mid-keystroke replaces the half-typed number with the old value and the caret
     jumps. `commit()` deliberately keeps writing the box — that path is a drag or a committed
     edit, where the box SHOULD follow.
+
+    A load is the exception (`isSyncing`): the box takes the loaded value, or leaving it would
+    commit the half-typed number over the load.
   */
   row.setValue = (value, notify = false) => {
-    const typing = document.activeElement === valBox;
+    const typing = document.activeElement === valBox && !isSyncing();
     current = snap(value);
     range.value = String(current);
     if (!typing) showValue(fmt(current));
@@ -543,7 +556,7 @@ export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
 
   const valId = uid('vl-val');
   const cap = caption(opts.label, opts.help, valId);
-  const { input: valBox, fit: valFit, show: showValue } = valueField(cap.textId, valId);
+  const { input: valBox, fit: valFit, show: showValue, edited } = valueField(cap.textId, valId);
   let current = snap(opts.value);
 
   const minus = el('button', {
@@ -578,6 +591,8 @@ export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
   minus.addEventListener('click', () => commit(current - step));
   plus.addEventListener('click', () => commit(current + step));
   valBox.addEventListener('change', () => {
+    // Only typing is committed, as in `sliderRow`: after a load, the box holds the row's own text.
+    if (!edited()) return;
     const raw = valBox.value;
     const parsed = firstNumber(raw);
     if (!Number.isFinite(parsed)) return commit(current, false);
@@ -604,8 +619,8 @@ export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
 
   row.setValue = (value, notify = false) => {
     // Same guard as `sliderRow`: a rebuild landing mid-keystroke must not replace what is
-    // being typed, or the caret jumps and the half-typed number is gone.
-    const typing = document.activeElement === valBox;
+    // being typed, or the caret jumps and the half-typed number is gone. A load still does.
+    const typing = document.activeElement === valBox && !isSyncing();
     current = snap(value);
     if (!typing) showValue(fmt(current));
     paintBounds();
