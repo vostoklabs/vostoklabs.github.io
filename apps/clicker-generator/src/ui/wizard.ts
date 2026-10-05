@@ -26,10 +26,9 @@ import {
   button, collapsibleSection, el, ICONS, iconButton, section, segmentedControl,
   sliderRow, toggleSwitch, type SliderRowHandle,
 } from '@vostok/ui-kit';
-import type { RgbaImage } from '../image/decode';
-import { preprocessImage } from '../image/adjust';
-import { discoverColours, processImage, type ColourCandidate } from '../image/pipeline';
-import { srgbToOklab } from '../image/colorspace';
+import {
+  discoverColours, preprocessImage, processImage, srgbToOklab, type ColourCandidate, type RgbaImage,
+} from '@vostok/laser/trace';
 import { DEFAULT_PREPROCESS, type PreprocessParams, type RegionSet, type RGB } from '../types';
 
 export interface WizardResult {

@@ -8,7 +8,7 @@
  * Packs are free and present in both builds — see `./types.ts` for why.
  */
 import { assetUrl } from '../assets';
-import { loadUrlToImage, type RgbaImage } from '../image/decode';
+import { loadUrlToImage, type RgbaImage } from '@vostok/laser/trace';
 import { parseSvg } from '../image/logo';
 import type { RegionSet, Ring } from '../types';
 import { HALLOWEEN } from './halloween';

@@ -21,9 +21,11 @@ import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { inflateSync, deflateSync } from 'node:zlib';
 
-const { removeBackground, compositeOverMatte, cleanMask } = await import('../src/image/matte.ts');
-const { quantize } = await import('../src/image/quantize.ts');
-const { traceRegions } = await import('../src/image/trace.ts');
+// The pipeline's stages are internal to the shelf's tracer (`@vostok/laser/trace`), so the bench
+// reads them from its files.
+const { removeBackground, compositeOverMatte, cleanMask } = await import('../../../packages/laser/src/trace/matte.ts');
+const { quantize } = await import('../../../packages/laser/src/trace/quantize.ts');
+const { traceRegions } = await import('../../../packages/laser/src/trace/trace.ts');
 type RgbaImage = { data: Uint8ClampedArray; width: number; height: number };
 type Ring = [number, number][];
 

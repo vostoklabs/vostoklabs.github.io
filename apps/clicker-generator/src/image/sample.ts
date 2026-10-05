@@ -1,6 +1,6 @@
 // Bundled sample images, shipped as static assets under public/assets/media.
 // Selecting one loads the real PNG through the same path as a user upload.
-import { loadUrlToImage, type RgbaImage } from './decode';
+import { loadUrlToImage, type RgbaImage } from '@vostok/laser/trace';
 import { assetUrl } from '../assets';
 
 const imgDir = () => assetUrl('assets/media/images/');

@@ -84,8 +84,6 @@ export interface EdgeSetting {
   radius: number; // mm
 }
 
-export type CropRatio = 'free' | '1:1' | '4:3' | '3:2' | '16:9';
-
 /** One MX switch placement on the design. x/y in mm from centre, rotation in degrees. */
 export interface SwitchPlacement {
   x: number;
@@ -111,32 +109,9 @@ export interface KeychainParams {
   offsetMm: number;
 }
 
-/** Bambu-style image preprocessing. Adjustment values are multipliers, 1 = neutral. */
-export interface PreprocessParams {
-  cropRatio: CropRatio;
-  keepBackground: boolean;
-  thicknessMm: number;
-  exposure: number;
-  contrast: number;
-  saturation: number;
-  brightness: number;
-  whiteBalance: number;
-  highlights: number;
-  shadows: number;
-}
-
-export const DEFAULT_PREPROCESS: PreprocessParams = {
-  cropRatio: 'free',
-  keepBackground: false,
-  thicknessMm: 1,
-  exposure: 1,
-  contrast: 1,
-  saturation: 1,
-  brightness: 1,
-  whiteBalance: 1,
-  highlights: 1,
-  shadows: 1,
-};
+/** Image preprocessing (crop, tone, background), as the image tracer defines it. */
+export type { CropRatio, PreprocessParams } from '@vostok/laser/trace';
+export { DEFAULT_PREPROCESS } from '@vostok/laser/trace';
 
 /** Parameters the geometry worker needs to build the clicker (all mm).
  *  Design: the BODY is a solid block with a recessed well + raised border cut

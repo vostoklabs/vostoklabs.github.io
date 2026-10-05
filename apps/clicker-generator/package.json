@@ -20,6 +20,7 @@
     "@vostok/brand": "workspace:*",
     "@vostok/export": "workspace:*",
     "@vostok/fonts": "workspace:*",
+    "@vostok/laser": "workspace:*",
     "@vostok/manifold": "workspace:*",
     "@vostok/plates": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
@@ -27,7 +28,6 @@
     "fflate": "^0.8.3",
     "lucide": "^1.21.0",
     "manifold-3d": "^3.0.1",
-    "pica": "^10.0.2",
     "three": "^0.171.0"
   },
   "devDependencies": {

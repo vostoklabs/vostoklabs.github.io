@@ -45,7 +45,7 @@ import type { BaseShapeKind, BlockStyle, BlockTexture, KeychainSide, EditMode, E
 import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
 import { SAMPLES } from '../image/sample';
-import type { RgbaImage } from '../image/decode';
+import type { RgbaImage } from '@vostok/laser/trace';
 import { facesThatWrite, fontWritesText, STANDARD_FONTS } from '../image/letter';
 import { FONTS, curatedFonts, getRequiredSubsets, toPickerFont } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from '../image/lucideIcons';
