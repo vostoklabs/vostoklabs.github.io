@@ -86,6 +86,9 @@ export function withAccess<T>(
  * stay the caller's job. Slider ranges that follow other settings (`setBounds`) must be
  * updated before this runs, or values get clamped to the old range.
  *
+ * A text field someone is typing in takes the value too (see `isSyncing`), or it would hand
+ * the typed text back and the loaded value would be lost.
+ *
  * Returns the keys that had to change to fit, so the caller can say so.
  */
 export function syncControls<S extends object>(
@@ -93,17 +96,36 @@ export function syncControls<S extends object>(
   controls: { [K in keyof S]?: ValueRow<S[K]> },
 ): (keyof S)[] {
   const changed: (keyof S)[] = [];
-  for (const key of Object.keys(controls) as (keyof S)[]) {
-    const control = controls[key];
-    if (!control) continue;
-    control.setValue(state[key]);
-    const shown = control.getValue();
-    if (!Object.is(shown, state[key])) {
-      state[key] = shown;
-      changed.push(key);
+  syncing++;
+  try {
+    for (const key of Object.keys(controls) as (keyof S)[]) {
+      const control = controls[key];
+      if (!control) continue;
+      control.setValue(state[key]);
+      const shown = control.getValue();
+      if (!Object.is(shown, state[key])) {
+        state[key] = shown;
+        changed.push(key);
+      }
     }
+  } finally {
+    syncing--;
   }
   return changed;
+}
+
+/** How many `syncControls` calls are under way. */
+let syncing = 0;
+
+/**
+ * True while `syncControls` is pushing a state into its controls.
+ *
+ * A text field ignores `setValue` while it has the focus, so a rebuild echoing the state back
+ * cannot replace what someone is typing. A load, an undo or a preset is a new value on
+ * purpose: under `syncControls` the field takes it.
+ */
+export function isSyncing(): boolean {
+  return syncing > 0;
 }
 
 /** A labelled iOS-style switch (green when on). Returns the whole row. */
@@ -908,18 +930,25 @@ export function segmentedControl<T extends string = string>(
 
 /* ---------------- Select field ---------------- */
 
-export interface SelectFieldOptions {
+export interface SelectFieldOptions<T extends string = string> {
   label: string;
   /** `group` puts the option under a native `<optgroup>` of that name. */
-  options: { value: string; label: string; group?: string }[];
-  value?: string;
-  onChange?: (value: string) => void;
+  options: { value: T; label: string; group?: string }[];
+  value?: T;
+  onChange?: (value: T) => void;
   /** Optional "?" tooltip shown next to the label. */
   help?: string;
 }
 
-/** Labelled dropdown, styled to match the app's fields. */
-export function selectField(opts: SelectFieldOptions): ValueRow<string> {
+/**
+ * Labelled dropdown, styled to match the app's fields.
+ *
+ * Typed by its options, like `segmentedControl`: a dropdown listing a setting's values is a
+ * `ValueRow` of that setting, so `syncControls` takes it without a cast. A list built from
+ * plain strings stays a `ValueRow<string>`. `setFieldOptions` can swap in values the type
+ * does not know, so a field whose list changes is typed by the whole set it can show.
+ */
+export function selectField<T extends string = string>(opts: SelectFieldOptions<T>): ValueRow<T> {
   const id = uid('vl-select');
   const cap = caption(opts.label, opts.help, id);
   const select = el('select', { attrs: { id, 'aria-labelledby': cap.textId } });
@@ -941,9 +970,11 @@ export function selectField(opts: SelectFieldOptions): ValueRow<string> {
       g.append(option);
     } else select.append(option);
   }
-  select.addEventListener('change', () => opts.onChange?.(select.value));
+  // The `<select>` only offers the option values it was given, which are `T`s.
+  const current = () => select.value as T;
+  select.addEventListener('change', () => opts.onChange?.(current()));
 
-  const row = el('div', { className: 'vl-field' }, [cap.label, select]) as unknown as ValueRow<string>;
+  const row = el('div', { className: 'vl-field' }, [cap.label, select]) as unknown as ValueRow<T>;
   // The other three controls in this file have had `setValue` since Load-project
   // needed it; the dropdown was the one that did not, so every generator that has to
   // move a dropdown from code reaches through the DOM for its `<select>` instead —
@@ -951,13 +982,13 @@ export function selectField(opts: SelectFieldOptions): ValueRow<string> {
   //
   // An unknown value is ignored rather than clearing the selection, matching
   // `segmentedControl`: a loaded project can carry an option this build dropped.
-  row.setValue = (value: string, notify = false) => {
+  row.setValue = (value: T, notify = false) => {
     if (!Array.from(select.options).some((o) => o.value === value)) return;
     if (select.value === value) return;
     select.value = value;
     if (notify) opts.onChange?.(value);
   };
-  withAccess(row, () => select.value, [select]);
+  withAccess(row, current, [select]);
   return row;
 }
 

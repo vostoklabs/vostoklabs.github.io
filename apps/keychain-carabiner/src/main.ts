@@ -38,7 +38,6 @@ import {
   ICONS,
   el,
   type ThumbTileHandle,
-  type ValueRow,
   type ProjectShape,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
@@ -55,7 +54,7 @@ import {
 } from '@vostok/fonts';
 import {
   DEFAULT_SETTINGS, coerceSettings, hexToRgb, rgbToHex, SHAPE_ICON_PREFIX, PIP_ASPECT,
-  type SetSettings, type RGB, type Attach, type CharmMount, type GateFit, type CharmFill, type CharmIconStyle, type EdgeStyle,
+  type SetSettings, type RGB, type Attach, type GateFit, type CharmFill, type EdgeStyle,
   type ChainMode, type PipAspect, type PipRoot,
 } from './state';
 import { PIP_Z_GAP, pipGeometry, pipLevels } from './geometry/pipChain';
@@ -483,7 +482,7 @@ const controls = {
     ],
     value: settings.attach,
     help: `The swivel needs the hook at least ${SWIVEL_MIN_THICK} mm thick. If your printer fuses it, choose the loop.`,
-    onChange: (v) => setAttach(v as Attach),
+    onChange: (v) => setAttach(v),
   }),
   swivelStem: sliderRow({
     label: 'Swivel stem', min: 2.4, max: 6, step: 0.2, value: settings.swivelStem, defaultValue: DEFAULT_SETTINGS.swivelStem, unit: 'mm',
@@ -579,7 +578,7 @@ const controls = {
       { value: 'swivel', label: 'Straight on the swivel — no chain' },
     ],
     value: settings.charmMount,
-    onChange: (v) => { settings.charmMount = v as CharmMount; syncVisibility(); triggerRebuild(); },
+    onChange: (v) => { settings.charmMount = v; syncVisibility(); triggerRebuild(); },
   }),
   charmSize: sliderRow({
     label: 'Size', min: 12, max: 50, step: 1, value: settings.charmSize, defaultValue: DEFAULT_SETTINGS.charmSize, unit: 'mm',
@@ -594,7 +593,7 @@ const controls = {
     ],
     value: settings.charmIconStyle,
     help: 'Cut through fills the symbol’s own holes so nothing floats. Engraved keeps them.',
-    onChange: (v) => { settings.charmIconStyle = v as CharmIconStyle; triggerRebuild(); },
+    onChange: (v) => { settings.charmIconStyle = v; triggerRebuild(); },
   }),
   charmIconSize: sliderRow({
     label: 'Symbol size', min: 4, max: 30, step: 0.5, value: settings.charmIconSize, defaultValue: DEFAULT_SETTINGS.charmIconSize, unit: 'mm',
@@ -1099,8 +1098,7 @@ function showSettings() {
   syncControls(settings, {
     mode: modeControl,
     hookSize: controls.hookSize,
-    // `selectField` is typed as any string; these three offer only their setting's values.
-    attach: controls.attach as ValueRow<Attach>,
+    attach: controls.attach,
     swivelStem: controls.swivelStem,
     pipLinkCount: pipControls.linkCount,
     pipLinkSize: pipControls.linkSize,
@@ -1126,9 +1124,9 @@ function showSettings() {
     connectorRings: controls.connectorRings,
     connectorExtra: controls.connectorExtra,
     charm: controls.charm,
-    charmMount: controls.charmMount as ValueRow<CharmMount>,
+    charmMount: controls.charmMount,
     charmSize: controls.charmSize,
-    charmIconStyle: controls.charmIconStyle as ValueRow<CharmIconStyle>,
+    charmIconStyle: controls.charmIconStyle,
     charmIconSize: controls.charmIconSize,
     charmFill: controls.charmFill,
     charmBar: controls.charmBar,

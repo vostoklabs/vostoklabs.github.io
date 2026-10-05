@@ -39,7 +39,6 @@ import {
   bindExternalLinks,
   el,
   type DesktopHost,
-  type ValueRow,
   type ProjectShape,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
@@ -525,7 +524,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       ],
       value: params.tuckLock,
       help: 'A slit lock cuts two small nicks at the tuck shoulders that catch under the dust flaps. Without one a card box springs open on the shelf.',
-      onChange: (v) => setParam('tuckLock', v as BoxParams['tuckLock']),
+      onChange: (v) => setParam('tuckLock', v),
     }),
     // Cut-only, like the four structures that need it.
     ...(CUT
@@ -659,7 +658,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       ],
       value: params.hangHole,
       help: 'The two a shop actually has. The euro slot is the wide low slot with a round crown on top that most European retail packaging uses. A plain round hole is what a bare peg or a J-hook wants, and it still fits panels too narrow for a slot. Both stay 4 mm clear of every edge, which is the number that stops the sheet tearing off the peg.',
-      onChange: (v) => setParam('hangHole', v as BoxParams['hangHole']),
+      onChange: (v) => setParam('hangHole', v),
     }),
     hangEnd: selectField({
       label: 'Hangs from',
@@ -670,7 +669,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       ],
       value: params.hangEnd,
       help: 'Which short end the tab reaches past. Either way the box hangs long-side-down rather than jutting out at the customer; that is the point of putting the tab on an end rather than on a wall. Both ends keeps the blank symmetric and lets you hang it from whichever end suits the shelf.',
-      onChange: (v) => setParam('hangEnd', v as BoxParams['hangEnd']),
+      onChange: (v) => setParam('hangEnd', v),
     }),
     hangTabHeight: sliderRow({
       label: 'Tab length',
@@ -2398,16 +2397,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       lidHeightMm: controls.lidHeight,
       lidPlayMm: controls.lidPlay,
       tuckDepthMm: controls.tuckDepth,
-      // `selectField` is typed as any string; these three offer only their setting's values.
-      tuckLock: controls.tuckLock as ValueRow<BoxParams['tuckLock']>,
+      tuckLock: controls.tuckLock,
       thumbNotch: controls.thumbNotch,
       handle: controls.handle,
       handleHeightMm: controls.handleHeight,
       window: controls.window,
       windowScale: controls.windowScale,
       windowRadiusMm: controls.windowRadius,
-      hangEnd: controls.hangEnd as ValueRow<BoxParams['hangEnd']>,
-      hangHole: controls.hangHole as ValueRow<BoxParams['hangHole']>,
+      hangEnd: controls.hangEnd,
+      hangHole: controls.hangHole,
       lidWings: controls.lidWings,
       logo: logoControls.kind,
       logoScale: logoControls.scale,

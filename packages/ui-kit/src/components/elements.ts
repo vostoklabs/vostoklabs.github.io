@@ -1,6 +1,6 @@
 import { el, uid } from '../dom';
 import { ICONS, svgEl } from '../icons';
-import { helpTip } from './controls';
+import { helpTip, isSyncing } from './controls';
 
 /* The primitives the kit was missing, as components.
 
@@ -404,8 +404,9 @@ export function textField(opts: TextFieldOptions): TextFieldHandle {
   Object.defineProperty(root, 'value', { get: () => input.value });
   Object.defineProperty(root, 'field', { get: () => input });
   root.setValue = (value, notify = false) => {
-    // Never fight a typist, the same guard sliderRow carries.
-    if (document.activeElement === input) return;
+    // Never fight a typist, the same guard sliderRow carries, except for a load: under
+    // `syncControls` the field takes the value, or the sync reads the typed text back.
+    if (document.activeElement === input && !isSyncing()) return;
     input.value = value;
     if (notify) opts.onInput?.(value);
   };
