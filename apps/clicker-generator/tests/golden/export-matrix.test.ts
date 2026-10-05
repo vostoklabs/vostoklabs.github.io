@@ -65,6 +65,8 @@ const { buildModelClicker } = await import('../../src/model/buildModel.ts');
 const { DEFAULT_MODEL_CUT } = await import('../../src/model/types.ts');
 const { buildThreeMF } = await import('../../src/export/threemfExport.ts');
 const { buildObjMtl } = await import('../../src/export/objExport.ts');
+const { assemblyMinZ, objectKeyOf, place, plateLayout } = await import('../../src/export/plateLayout.ts');
+const { buildObjMtl: shelfObjMtl } = await import('@vostok/export');
 
 type BuildParams = import('../../src/types.ts').BuildParams;
 type BuildRegion = import('../../src/types.ts').BuildRegion;
@@ -380,6 +382,30 @@ const DESIGNS: Record<string, () => Built> = {
   },
 };
 
+/* ------------------------------------------------------------------ the shelf's OBJ writer */
+
+/**
+ * The same plate through the shelf's OBJ writer: every vertex placed the way the clicker's own
+ * writer places it (dropped to the bed, packed onto the plate, tops face down), each part in
+ * its group, coloured by colour. What moving the clicker onto the shelf's writer would write.
+ */
+function shelfObj(parts: ClickerPart[], plate: PlateChoice) {
+  const minZ = assemblyMinZ(parts);
+  const layout = plateLayout(parts, minZ, { plate });
+  return shelfObjMtl(parts.map((p) => {
+    const pl = layout.placementFor(objectKeyOf(p));
+    const out = new Float64Array((p.vertProperties.length / p.numProp) * 3);
+    for (let i = 0, j = 0; i < p.vertProperties.length; i += p.numProp, j += 3) {
+      const [x, y, z] = place(p.vertProperties[i]!, p.vertProperties[i + 1]!, p.vertProperties[i + 2]! - minZ, pl);
+      out[j] = x;
+      out[j + 1] = y;
+      out[j + 2] = z;
+    }
+    return { name: p.name, group: p.group, color: p.colorRgb, positions: out, indices: p.triVerts };
+  }), { mtlFileName: 'clicker.mtl' });
+}
+const shelfObjs = new Map<Built, { obj: string; mtl: string; shelf: { obj: string; mtl: string } }>();
+
 /* ------------------------------------------------------------------ measuring and hashing */
 
 const hash = (...chunks: (string | Uint8Array)[]): string => {
@@ -426,6 +452,7 @@ function record(built: Built) {
   const plate = built.plate ?? 'a1';
   const threeMF = unzipSync(buildThreeMF(built.parts, { plate, ...(built.sourceModel ? { sourceModel: built.sourceModel } : {}) }));
   const { obj, mtl } = buildObjMtl(built.parts, 'clicker.mtl', { plate });
+  shelfObjs.set(built, { obj, mtl, shelf: shelfObj(built.parts, plate) });
   return {
     warnings: built.warnings,
     parts,
@@ -442,9 +469,12 @@ function record(built: Built) {
 
 type Record_ = ReturnType<typeof record>;
 const actual: Record<string, Record_> = {};
+const objs: Record<string, { obj: string; mtl: string; shelf: { obj: string; mtl: string } }> = {};
 for (const [name, build] of Object.entries(DESIGNS)) {
   const started = performance.now();
-  actual[name] = record(build());
+  const built = build();
+  actual[name] = record(built);
+  objs[name] = shelfObjs.get(built)!;
   console.log(`built  ${name}  (${actual[name]!.parts.length} parts, ${actual[name]!.tris} triangles, ${((performance.now() - started) / 1000).toFixed(1)} s)`);
 }
 
@@ -485,6 +515,18 @@ for (const [name, got] of Object.entries(actual)) {
     changed.length ? `changed: ${changed.join(', ')}` : `${entries.length} entries`,
   );
   check(`${name}: the OBJ and the MTL unchanged`, got.obj === want.obj && got.mtl === want.mtl, got.obj === want.obj ? (got.mtl === want.mtl ? '' : 'the MTL changed') : 'the OBJ changed');
+}
+
+// The shelf's writer, given the plate the clicker's writer lays out, writes the same file but
+// for the header comment: the clicker's two lines ("# Clicker Generator - Vostok Labs" and its
+// units line) against the shelf's one. Everything from `mtllib` on is the same text.
+const fromMtllib = (obj: string) => obj.slice(obj.indexOf('\nmtllib ') + 1);
+for (const [name, o] of Object.entries(objs)) {
+  check(
+    `${name}: the shelf's OBJ writer writes the same plate, header comment aside`,
+    fromMtllib(o.shelf.obj) === fromMtllib(o.obj) && o.shelf.mtl === o.mtl,
+    o.obj.slice(0, o.obj.indexOf('\nmtllib ')).split('\n').length + ' header lines here, ' + o.shelf.obj.slice(0, o.shelf.obj.indexOf('\nmtllib ')).split('\n').length + ' on the shelf',
+  );
 }
 
 console.log(`\nexport matrix: ${pass} passed, ${fails.length} failed`);

@@ -667,12 +667,67 @@ export interface ObjMtlOptions {
   mtlFileName?: string;
   /** The provenance mark, written as the OBJ's header comment (invariant #2). */
   provenance?: ProvenanceMeta;
+  /**
+   * What a material stands for. `'color'` (the default): one per distinct colour, so two parts
+   * of one colour print from one filament. `'extruder'`: one per filament slot, numbered the
+   * way `buildThreeMF` numbers its slots (`ExportPart.extruder`, or the slot its colour gets),
+   * so two parts of the same colour on two slots stay two materials, as they are in the 3MF.
+   */
+  materialBy?: 'color' | 'extruder';
+  /**
+   * The materials table to name materials from and add to, shared by every OBJ of one export
+   * (a set's plates) so that each names one filament the same way; `buildMtl` writes it once.
+   * Default: a table of its own.
+   */
+  materials?: ObjMaterials;
 }
 
 export interface ObjMtl {
   obj: string;
   mtl: string;
   materialCount: number;
+}
+
+/** One material of an OBJ export. */
+export interface ObjMaterial {
+  /** Its `newmtl` name: `filament1`, `filament2`… */
+  name: string;
+  /** Its `Kd`: the colour of the first part given it. */
+  color: RGB;
+}
+
+/**
+ * The materials an export's OBJ files use, in the order they were first used, and the slot each
+ * colour has been given. One table per export: `objMaterials()` makes one, the writers fill it,
+ * `buildMtl` writes it.
+ */
+export interface ObjMaterials {
+  /** Material per key (a colour, or a slot), in the order first used. */
+  readonly byKey: Map<string, ObjMaterial>;
+  /** Filament slot per colour, in the order first seen: `buildThreeMF`'s numbering. */
+  readonly slotByColor: Map<string, number>;
+}
+
+/** An empty materials table, for the OBJ files of one export to share. */
+export function objMaterials(): ObjMaterials {
+  return { byKey: new Map(), slotByColor: new Map() };
+}
+
+/** The MTL of a materials table: one `Kd` colour per material. */
+export function buildMtl(materials: ObjMaterials): string {
+  return [...materials.byKey.values()].map((m) => `newmtl ${m.name}\nKd ${kd(m.color)}`).join('\n\n') + '\n';
+}
+
+/** An OBJ being written a part at a time. */
+export interface ObjWriter {
+  /** Write one part: its object, its material, its vertices and faces. */
+  add(part: ExportPart<ArrayLike<number>>): void;
+  /** True until a part with a vertex in it has been added. */
+  readonly isEmpty: boolean;
+  /** The OBJ so far. */
+  readonly text: string;
+  /** The table its materials are named from. */
+  readonly materials: ObjMaterials;
 }
 
 /** "r g b" as 0..1 floats, the only colour form MTL's `Kd` takes. */
@@ -682,15 +737,78 @@ const kd = (rgb: RGB): string => rgb.map((v) => (Math.max(0, Math.min(255, v)) /
 const objSlug = (s: string): string => s.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'part';
 
 /**
+ * An OBJ written one part at a time: what `buildObjMtl` writes, without holding every part
+ * until the end. A set of keycaps carved one after another can add each the moment it is made
+ * and let its geometry go.
+ *
+ * Several writers given one `materials` table (several plates of one export) name each filament
+ * the same way; `buildMtl` writes that table as the export's one MTL.
+ */
+export function objWriter(opts: ObjMtlOptions = {}): ObjWriter {
+  const materials = opts.materials ?? objMaterials();
+  const byExtruder = opts.materialBy === 'extruder';
+  /** The material a part's colour, or its slot, stands for: made the first time it is asked. */
+  const materialFor = (p: ExportPart<ArrayLike<number>>): string => {
+    const colour = p.color.join(',');
+    // Every colour is numbered, forced slot or not, exactly as buildThreeMF numbers them.
+    let slot = materials.slotByColor.get(colour);
+    if (slot === undefined) {
+      slot = materials.slotByColor.size + 1;
+      materials.slotByColor.set(colour, slot);
+    }
+    const n = byExtruder ? (p.extruder ?? slot) : slot;
+    const key = byExtruder ? `slot ${n}` : `color ${colour}`;
+    let m = materials.byKey.get(key);
+    if (!m) {
+      m = { name: `filament${n}`, color: p.color };
+      materials.byKey.set(key, m);
+    }
+    return m.name;
+  };
+
+  const lines: string[] = [
+    ...(opts.provenance ? provenanceComment(opts.provenance).split('\n') : []),
+    '# Units: millimetres. One `o` object per part, coloured through the MTL.',
+    `mtllib ${opts.mtlFileName ?? 'model.mtl'}`,
+  ];
+  // Face indices are 1-based and GLOBAL across the file, so every object's indices shift by
+  // the number of vertices already written.
+  let vOff = 0;
+  const used = new Set<string>();
+
+  return {
+    add(p) {
+      const base = objSlug(p.group ? `${p.group}_${p.name}` : p.name);
+      let name = base;
+      for (let n = 2; used.has(name); n++) name = `${base}_${n}`;
+      used.add(name);
+
+      lines.push(`o ${name}`, `usemtl ${materialFor(p)}`);
+      for (let i = 0; i < p.positions.length; i += 3) {
+        lines.push(`v ${f(p.positions[i]!)} ${f(p.positions[i + 1]!)} ${f(p.positions[i + 2]!)}`);
+      }
+      for (let i = 0; i < p.indices.length; i += 3) {
+        lines.push(`f ${p.indices[i]! + 1 + vOff} ${p.indices[i + 1]! + 1 + vOff} ${p.indices[i + 2]! + 1 + vOff}`);
+      }
+      vOff += p.positions.length / 3;
+    },
+    get isEmpty() {
+      return vOff === 0;
+    },
+    get text() {
+      return lines.join('\n') + '\n';
+    },
+    materials,
+  };
+}
+
+/**
  * OBJ + MTL: a multi-colour model as one OBJ plus an MTL of `Kd` colours.
  *
- * Writes one `o` object per colour region with its own `usemtl`, and one `Kd` material per
- * distinct colour.
+ * Writes one `o` object per part with its own `usemtl`, and one `Kd` material per distinct
+ * colour, or per filament slot with `materialBy: 'extruder'`.
  *
  * Millimetres in the parts' own coordinates, Z up exactly as `buildThreeMF` writes it.
- *
- * `ExportPart.extruder` has no OBJ spelling: materials are keyed by distinct `Kd`, so a forced
- * slot only survives if its colour is also distinct.
  *
  * The clicker (`objExport.ts`) and the keycap generator (`exportObj.js`) each still carry their
  * own copy of this writer, with app-specific plate layout baked in. This one is the shared
@@ -700,49 +818,12 @@ const objSlug = (s: string): string => s.replace(/[^A-Za-z0-9_-]+/g, '_').replac
  * needs the licence to travel should also put it in the export's description.
  */
 export function buildObjMtl(parts: ExportPart<ArrayLike<number>>[], opts: ObjMtlOptions = {}): ObjMtl {
-  const matByColor = new Map<string, string>();
-  const mtlBlocks: string[] = [];
-  const materialFor = (rgb: RGB): string => {
-    const key = rgb.join(',');
-    let name = matByColor.get(key);
-    if (name === undefined) {
-      name = `filament${matByColor.size + 1}`;
-      matByColor.set(key, name);
-      mtlBlocks.push(`newmtl ${name}\nKd ${kd(rgb)}`);
-    }
-    return name;
-  };
-
-  const lines: string[] = [
-    ...(opts.provenance ? provenanceComment(opts.provenance).split('\n') : []),
-    '# Units: millimetres. One `o` object per part, coloured through the MTL.',
-    `mtllib ${opts.mtlFileName ?? 'model.mtl'}`,
-  ];
-
-  // Face indices are 1-based and GLOBAL across the file, so every object's indices shift by
-  // the number of vertices already written.
-  let vOff = 0;
-  const used = new Set<string>();
-  for (const p of parts) {
-    const base = objSlug(p.group ? `${p.group}_${p.name}` : p.name);
-    let name = base;
-    for (let n = 2; used.has(name); n++) name = `${base}_${n}`;
-    used.add(name);
-
-    lines.push(`o ${name}`, `usemtl ${materialFor(p.color)}`);
-    for (let i = 0; i < p.positions.length; i += 3) {
-      lines.push(`v ${f(p.positions[i]!)} ${f(p.positions[i + 1]!)} ${f(p.positions[i + 2]!)}`);
-    }
-    for (let i = 0; i < p.indices.length; i += 3) {
-      lines.push(`f ${p.indices[i]! + 1 + vOff} ${p.indices[i + 1]! + 1 + vOff} ${p.indices[i + 2]! + 1 + vOff}`);
-    }
-    vOff += p.positions.length / 3;
-  }
-
+  const writer = objWriter(opts);
+  for (const p of parts) writer.add(p);
   return {
-    obj: lines.join('\n') + '\n',
-    mtl: mtlBlocks.join('\n\n') + '\n',
-    materialCount: matByColor.size,
+    obj: writer.text,
+    mtl: buildMtl(writer.materials),
+    materialCount: writer.materials.byKey.size,
   };
 }
 
