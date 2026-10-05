@@ -31,7 +31,7 @@ import { createViewer, type SectionAxis } from './viewer/viewer';
 import { mountPlatePicker } from '@vostok/plates';
 import { downloadFile } from '@vostok/export';
 import { createUi, type UiState } from './ui/ui';
-import { loadFileToImage, processImage, type RgbaImage } from '@vostok/trace';
+import { loadFileToImage, parseSvg, processImage, type RgbaImage, type SvgOptions } from '@vostok/trace';
 import { runWizard } from './ui/wizard';
 import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
 import { shownBuild } from './export/shownBuild';
@@ -39,7 +39,6 @@ import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
 import { buildObjMtl, objToArrayBuffer } from './export/objExport';
 import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from './geometry/stemFit';
 import { FIT_TEST_FONT_ID, FIT_TEST_STEP_MM, fitTestLabel, fitTestLadder } from './geometry/fitStrip';
-import { parseSvg, type SvgOptions } from './image/logo';
 import { openSvgPreview } from './ui/svgPreview';
 import { allShapes, findShape, loadPackShapes } from './shapes/directory';
 // The shape editor, a paid feature fenced in src/pro/, is imported dynamically from

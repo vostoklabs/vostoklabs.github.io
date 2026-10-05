@@ -12,12 +12,12 @@
  *
  * The colour half matters more here than anywhere: the region colours are what get matched to
  * filaments, so a colour arriving wrong is a model printed in the wrong material. (That bug is
- * fixed in `logo.ts` — three's ColorManagement was turning every imported colour linear-light,
- * so #c8102e arrived as #930107 — and it was a large part of what "SVG import doesn't work"
- * meant on the listing.)
+ * fixed in the SVG reader, `@vostok/trace` — three's ColorManagement was turning every imported
+ * colour linear-light, so #c8102e arrived as #930107 — and it was a large part of what "SVG
+ * import doesn't work" meant on the listing.)
  */
 import { openSvgImport, type SvgImportChoice, type SvgImportTrace } from '@vostok/ui-kit';
-import { describeSvg, parseSvg, type SvgOptions, type SvgPartChoice } from '../image/logo';
+import { describeSvg, parseSvg, type SvgOptions, type SvgPartChoice } from '@vostok/trace';
 import type { RegionSet, Ring } from '../types';
 
 const hex = (rgb: [number, number, number]): string =>

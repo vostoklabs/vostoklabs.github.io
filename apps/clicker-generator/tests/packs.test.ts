@@ -28,7 +28,7 @@ import { DOMParser } from '@xmldom/xmldom';
 // parseSvg needs a browser DOMParser — the same polyfill svg-coverage.test.ts uses.
 (globalThis as any).DOMParser = DOMParser;
 
-const { parseSvg } = await import('../src/image/logo.ts');
+const { parseSvg } = await import('@vostok/trace');
 const { parse3MF } = await import('../src/geometry/threemfImport.ts');
 const { buildClicker } = await import('../src/geometry/buildClicker.ts');
 const { HALLOWEEN } = await import('../src/packs/halloween.ts');

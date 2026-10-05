@@ -10,7 +10,7 @@
 // parseSvg needs a browser DOMParser; polyfill it with @xmldom/xmldom.
 import { DOMParser } from '@xmldom/xmldom';
 (globalThis as any).DOMParser = DOMParser;
-const { parseSvg } = await import('../src/image/logo.ts');
+const { parseSvg } = await import('@vostok/trace');
 
 // Build an N-gon path approximating a circle (matches svg-coverage.test.ts style).
 function circle(cx: number, cy: number, r: number, n = 48): string {

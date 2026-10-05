@@ -6,7 +6,7 @@ import robotoRegular from '../typefaces/roboto_regular.typeface.json';
 import robotoBold from '../typefaces/roboto_bold.typeface.json';
 import { FONTS, fontSupportsText, getFont, getRequiredSubsets, importFontFiles, pathCommandsToPolygons } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg } from './lucideIcons';
-import { parseSvg } from './logo';
+import { parseSvg } from '@vostok/trace';
 import type { BlockSlot, LegendLook, RegionSet, Ring, RGB } from '../types';
 import { lookRings, normaliseRings, type SymbolLook } from './symbolRings';
 

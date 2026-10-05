@@ -19,7 +19,7 @@
 */
 import { DOMParser } from '@xmldom/xmldom';
 (globalThis as any).DOMParser = DOMParser;
-const { describeSvg, parseSvg } = await import('../src/image/logo.ts');
+const { describeSvg, parseSvg } = await import('@vostok/trace');
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail: string) => {
@@ -84,19 +84,24 @@ check(
 
 // ---------------------------------------------------------------- the fix actually works
 
-/** Total ring area — the honest measure of "is there anything solid here". */
+/** Total ring area — the honest measure of "is there anything solid here". Signed, as the
+ *  non-zero fill paints it: an outline is a strip whose inner edge is wound against its outer
+ *  one, and that hole counts against the strip, not as more solid. Where two shapes overlap the
+ *  overlap counts twice; the comparisons here only need more of a drawing filled to mean more. */
 const solidArea = (rs: any): number => {
   let total = 0;
   for (const r of rs.regions) {
+    let region = 0;
     for (const c of r.components) {
       for (const ring of c.rings) {
         let a = 0;
         for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
           a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
         }
-        total += Math.abs(a / 2);
+        region += a / 2;
       }
     }
+    total += Math.abs(region);
   }
   return total;
 };

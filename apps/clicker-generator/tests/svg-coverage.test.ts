@@ -11,7 +11,7 @@
 // parseSvg needs a browser DOMParser; polyfill it with @xmldom/xmldom.
 import { DOMParser } from '@xmldom/xmldom';
 (globalThis as any).DOMParser = DOMParser;
-const { parseSvg } = await import('../src/image/logo.ts');
+const { parseSvg } = await import('@vostok/trace');
 
 // Synthetic SVG: a full-canvas WHITE background (4 points, area 10000) plus a small
 // but HIGH-POLY black design (48 points, area ≈ 113). Point-count coverage ranks the

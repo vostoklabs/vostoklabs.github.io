@@ -13,7 +13,7 @@ import {
   type SymbolLibraryEntry,
 } from '@vostok/ui-kit';
 import { FALLBACK_FONT_ID, ICONS, POPULAR, SYMBOL_GROUPS, getFont, pathCommandsToPolygons, searchGroup } from '@vostok/fonts';
-import { parseSvg } from '../image/logo';
+import { parseSvg } from '@vostok/trace';
 import { buildSvg, LUCIDE_ICONS } from '../image/lucideIcons';
 import { normaliseRings } from '../image/symbolRings';
 import type { Ring } from '../types';
