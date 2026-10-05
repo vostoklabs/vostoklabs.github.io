@@ -135,6 +135,39 @@ function isArtboardRect(
   return Math.abs(parseFloat(wStr) - viewW) < 1 && Math.abs(parseFloat(hStr) - viewH) < 1;
 }
 
+/** A path's bounds as drawn, in the file's own user space: every transform on the element and
+ *  its ancestors is already applied, because that is what SVGLoader hands back. */
+function drawnBounds(path: any): { x0: number; y0: number; x1: number; y1: number } {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const sub of path.subPaths) {
+    for (const p of sub.getPoints(8)) {
+      if (p.x < x0) x0 = p.x;
+      if (p.x > x1) x1 = p.x;
+      if (p.y < y0) y0 = p.y;
+      if (p.y > y1) y1 = p.y;
+    }
+  }
+  return { x0, y0, x1, y1 };
+}
+
+/**
+ * The style three's `pointsToStroke` draws a path's line in, from the path's own style.
+ *
+ * `getStrokeStyle` takes the join before the cap, and they reach it the other way round, as they
+ * always reached it in the clicker and the keycap: a file that sets the two to different values
+ * gets its cap style on the joins and its join style on the ends (one that sets neither, or both
+ * round, draws as it should). Kept, so the outlines both apps carve stay exactly what they were.
+ */
+function meshStrokeStyle(style: any) {
+  return SVGLoader.getStrokeStyle(
+    Number(style.strokeWidth) || 1,
+    style.stroke || '#000',
+    style.strokeLineCap || 'butt',
+    style.strokeLineJoin || 'miter',
+    style.strokeMiterLimit || 4
+  );
+}
+
 /** A run of points the file drew as a line, and whether it comes back to where it started. */
 interface Chain { pts: THREE.Vector2[]; closed: boolean }
 
@@ -331,7 +364,8 @@ export interface SvgPart {
 /** What the import preview decided for one path: how to draw it, and in what colour. */
 export interface SvgPartChoice {
   /** `fill` closes the subpaths into solid shapes; `outline` traces the stroke as a ribbon
-   *  (`strokeWidth` wide, or 1 unit if the file gave none); `off` drops the path. */
+   *  (`strokeWidth` wide, or 1 unit if the file gave none), or follows it as a line under
+   *  `outlinesAsLines`; `off` drops the path. */
   mode: 'fill' | 'outline' | 'off';
   /** `#rrggbb`. Defaults to the colour the file gave the path. */
   hex?: string;
@@ -363,6 +397,17 @@ export interface SvgOptions {
    *  panel is a hole in it, and each line drawn as an outline is one strip. A caller that
    *  re-nests the rings by containment wants that reading. */
   asPainted?: boolean;
+  /** Read every outline as the line it follows, for a caller whose machine follows lines: a
+   *  laser or a pen draws a 1 pt stroke as one pass along it, not round the edge of a strip a
+   *  fraction of a millimetre wide. A path read as an outline (stroke-only, or `outline` in
+   *  `overrides`) comes back on its colour's region as `lines`, one open polyline per subpath,
+   *  as drawn: no width, nothing filled, nothing joined across paths. It wins over both readings
+   *  of an outline above. Fills are read as they always are.
+   *
+   *  The lines share the rings' frame and count towards its size, so a drawing that is all lines
+   *  still reads, and `aspect` and `mm` measure the lines too. They are never part of `outline`
+   *  or `coverage`, and `removeBg` never takes them away: a background is a filled shape. */
+  outlinesAsLines?: boolean;
 }
 
 /**
@@ -385,15 +430,7 @@ export function describeSvg(svgText: string): { parts: SvgPart[]; issues: string
     const style = path.userData?.style || {};
     const hasFill = paints(style.fill, style.fillOpacity, style.opacity);
     const hasStroke = paints(style.stroke, style.strokeOpacity, style.opacity);
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const sub of path.subPaths) {
-      for (const p of sub.getPoints(8)) {
-        if (p.x < x0) x0 = p.x;
-        if (p.x > x1) x1 = p.x;
-        if (p.y < y0) y0 = p.y;
-        if (p.y > y1) y1 = p.y;
-      }
-    }
+    const { x0, y0, x1, y1 } = drawnBounds(path);
     const area = isFinite(x0) ? Math.max(0, (x1 - x0) * (y1 - y0)) : 0;
     const rgb = parseColor(hasFill ? style.fill : hasStroke ? style.stroke : '');
     const why = isArtboardRect(path.userData?.node, viewW, viewH, { x0, y0, x1, y1 })
@@ -429,16 +466,21 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
     new THREE.Vector2(-Infinity, -Infinity)
   );
 
-  const groups = new Map<string, { rgb: RGB; rings: Ring[] }>();
+  const groups = new Map<string, { rgb: RGB; rings: Ring[]; lines: Ring[] }>();
 
-  function addRings(rgb: RGB, rings: Ring[]) {
+  /** The colour's entry, made the first time something is drawn in it. */
+  function groupOf(rgb: RGB) {
     const hex = rgb.map(v => v.toString(16).padStart(2, '0')).join('');
     let g = groups.get(hex);
     if (!g) {
-      g = { rgb, rings: [] };
+      g = { rgb, rings: [], lines: [] };
       groups.set(hex, g);
     }
-    g.rings.push(...rings);
+    return g;
+  }
+
+  function addRings(rgb: RGB, rings: Ring[]) {
+    groupOf(rgb).rings.push(...rings);
   }
 
   /** Filled shapes as rings: outlines anticlockwise, holes clockwise. */
@@ -512,19 +554,27 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
       }
     }
 
-    // Outlines, as painted: three's stroke mesh for each line, one ring per triangle.
-    // `getStrokeStyle` takes the join before the cap, and they reach it the other way round, as
-    // they always reached it in the clicker: a file that sets the two to different values gets
-    // its cap style on the joins and its join style on the ends (one that sets neither, or both
-    // round, draws as it should). Kept, so the clicker's outlines stay exactly what they were.
+    // Outlines as the lines they follow: each subpath once, as drawn, at the density a strip is
+    // drawn at. Not joined across paths, so every line goes exactly where the file put it, and a
+    // closed subpath ends where it began.
+    if (hasStroke && !hasFill && opts.outlinesAsLines) {
+      for (const sub of path.subPaths) {
+        const pts = sub.getPoints(32);
+        if (pts.length < 2) continue;
+        const line: Ring = [];
+        for (const p of pts) {
+          box.expandByPoint(p);
+          line.push([p.x, p.y]);
+        }
+        groupOf(rgb).lines.push(line);
+      }
+      return;
+    }
+
+    // Outlines, as painted: three's stroke mesh for each line, one ring per triangle, in the
+    // style `meshStrokeStyle` reads off the path.
     if (hasStroke && !hasFill && opts.asPainted) {
-      const strokeStyle = SVGLoader.getStrokeStyle(
-        Number(style.strokeWidth) || 1,
-        style.stroke || '#000',
-        style.strokeLineCap || 'butt',
-        style.strokeLineJoin || 'miter',
-        style.strokeMiterLimit || 4
-      );
+      const strokeStyle = meshStrokeStyle(style);
       for (const sub of path.subPaths) {
         const pts = sub.getPoints(32);
         if (pts.length < 2) continue;
@@ -620,20 +670,29 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
       const rectLike = area >= RECT * (gw * gh || Infinity);
       if (spans && rectLike && area > bgArea) { bgArea = area; bgHex = hex; }
     }
-    if (bgHex) groups.delete(bgHex);
+    if (bgHex) {
+      // The background is the filled shape. A line drawn in the same colour is still drawn.
+      const bg = groups.get(bgHex)!;
+      if (bg.lines.length) bg.rings = [];
+      else groups.delete(bgHex);
+    }
   }
 
   const allRings: Ring[] = [];
-  groups.forEach(g => allRings.push(...g.rings));
+  const allLines: Ring[] = [];
+  groups.forEach(g => {
+    allRings.push(...g.rings);
+    allLines.push(...g.lines);
+  });
 
-  if (allRings.length === 0) {
+  if (allRings.length === 0 && allLines.length === 0) {
     throw new Error('No drawable paths found in this SVG.');
   }
 
-  // Bbox over the (possibly background-stripped) rings, so the remaining art is
+  // Bbox over the (possibly background-stripped) rings and lines, so the remaining art is
   // recentered and normalized to fill the cap and drives the outline silhouette.
   let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
-  for (const r of allRings) for (const [x, y] of r) {
+  for (const list of [allRings, allLines]) for (const r of list) for (const [x, y] of r) {
     if (x < bMinX) bMinX = x; if (x > bMaxX) bMaxX = x;
     if (y < bMinY) bMinY = y; if (y > bMaxY) bMaxY = y;
   }
@@ -664,7 +723,9 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
     return {
       quantRgb: g.rgb,
       components: [{ rings: normRings, coverage: cov }],
-      coverage: cov
+      coverage: cov,
+      // In the same frame as the rings; only a colour that has some carries the field.
+      ...(g.lines.length ? { lines: g.lines.map(normalizeRing) } : {}),
     };
   });
 
@@ -674,4 +735,112 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
   const { viewW: vw, viewH: vh } = viewSize(data.xml);
   const mm = mmSpan(data.xml, vw, vh, maxSide);
   return { regions, outline, aspect, ...(mm ? { mm } : {}) };
+}
+
+/** The root attribute the keycap's import window stamps on a file it has been through: every
+ *  part's fate is written into the file as its paint, so the guesses below stand down. */
+const CHOSEN_ATTR = 'data-vl-chosen';
+
+/** An SVG as one colour, in the file's own units: what a legend is carved from. */
+export interface SvgLegend {
+  /** The filled shapes, every colour in one list, in the file's units and axes (Y down, not
+   *  normalised). Outlines are wound one way and holes the other (an outline is not clockwise to
+   *  `THREE.ShapeUtils.isClockWise`), so a non-zero fill cuts the holes. */
+  contours: Ring[];
+  /** Each stroke-only line as three's stroke mesh, one array per subpath: x, y, z for each
+   *  corner, three corners to a triangle, in the same units. Plain arrays, so the result holds
+   *  no three.js object. */
+  strokes: Float32Array[];
+  /** The bounds of every contour point and every stroke corner, in the file's units. */
+  box: { minX: number; minY: number; maxX: number; maxY: number };
+  /** The view box's size, or the width and height, when the file gives one: an icon's em. An
+   *  icon family draws every symbol on one grid, so a set scaled by it keeps a small symbol
+   *  small, where scaling each by its own box would make them all one size. */
+  view: { w: number; h: number } | null;
+}
+
+/**
+ * An SVG read as a one-colour legend, the way the keycap carves one: each filled path as its
+ * shapes, each stroke-only path as three's stroke mesh, both left in the file's own units for the
+ * caller to place.
+ *
+ * Unless the file has been chosen already, two guesses stand in for the import window: white is
+ * the background or the negative space of a black-and-white drawing (carved, it would fill the
+ * design in solid), so a white fill is not filled and a white stroke not stroked; and a rect over
+ * the whole artboard is the backdrop icon sites draw behind their art, so it is neither.
+ * `chosen` says the file has been through the window. Left out, a root carrying
+ * `data-vl-chosen` says so, which is how a saved file keeps its choices.
+ *
+ * A path that paints nothing is skipped, and a zero opacity paints nothing. SVGLoader reads a
+ * `<style>` block and a `style=""` attribute through the browser's CSSOM, which a strict
+ * style-src policy leaves empty; a caller that may run under one flattens them into attributes
+ * first.
+ */
+export function parseSvgLegend(svgText: string, opts: { chosen?: boolean } = {}): SvgLegend {
+  const data = new SVGLoader().parse(svgText);
+  const { viewW, viewH } = viewSize(data.xml);
+  const chosen = opts.chosen ?? !!(data.xml as any)?.hasAttribute?.(CHOSEN_ATTR);
+  const contours: Ring[] = [];
+  const strokes: Float32Array[] = [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const grow = (x: number, y: number) => {
+    minX = Math.min(minX, x); minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+  };
+  /** A ring of a filled shape, turned to its winding: an `outer` one not clockwise, a hole clockwise. */
+  const take = (points: THREE.Vector2[], outer: boolean) => {
+    if (points.length < 3) return;
+    if (THREE.ShapeUtils.isClockWise(points) === outer) points.reverse();
+    const ring: Ring = [];
+    for (const p of points) {
+      grow(p.x, p.y);
+      ring.push([p.x, p.y]);
+    }
+    contours.push(ring);
+  };
+
+  for (const path of data.paths as any[]) {
+    const style = path.userData?.style || {};
+    let hasFill = paints(style.fill, style.fillOpacity, style.opacity);
+    let hasStroke = paints(style.stroke, style.strokeOpacity, style.opacity);
+    if (!chosen) {
+      if (hasFill && isWhite(style.fill)) hasFill = false;
+      if (hasStroke && isWhite(style.stroke)) hasStroke = false;
+      if (isArtboardRect(path.userData?.node, viewW, viewH, drawnBounds(path))) hasFill = hasStroke = false;
+    }
+
+    if (hasFill) {
+      for (const shape of SVGLoader.createShapes(path)) {
+        take(shape.getPoints(16), true);
+        for (const hole of shape.holes) take(hole.getPoints(16), false);
+      }
+    }
+
+    // A path that is filled is drawn by its fill alone; its stroke is not added on top.
+    if (hasStroke && !hasFill) {
+      const strokeStyle = meshStrokeStyle(style);
+      for (const sub of path.subPaths) {
+        const pts = sub.getPoints(32);
+        if (pts.length < 2) continue;
+        const geom = SVGLoader.pointsToStroke(pts, strokeStyle);
+        if (!geom) continue;
+        const pos = geom.getAttribute('position');
+        if (pos && pos.count > 0) {
+          for (let i = 0; i < pos.count; i++) grow(pos.getX(i), pos.getY(i));
+          strokes.push((pos.array as Float32Array).slice());
+        }
+        geom.dispose();
+      }
+    }
+  }
+
+  if (!contours.length && !strokes.length) {
+    throw new Error('No drawable paths found in this SVG.');
+  }
+  return {
+    contours,
+    strokes,
+    box: { minX, minY, maxX, maxY },
+    view: viewW > 0 && viewH > 0 ? { w: viewW, h: viewH } : null,
+  };
 }

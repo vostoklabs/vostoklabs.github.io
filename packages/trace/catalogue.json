@@ -2,7 +2,7 @@
   "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
   "blocks": [
     { "name": "Image tracer", "category": "engine", "use": ["processImage", "discoverColours"], "with": ["DEFAULT_PREPROCESS", "loadFileToImage", "loadUrlToImage", "drawToImageData", "preprocessImage", "adjustImage", "cropToRatio", "srgbToOklab", "oklabToSrgb"], "note": "Machine-neutral. An app that still carries its own copy of it should import it instead.", "for": "A picture into colour regions as shapes: decode, crop and adjust, remove the background, reduce the colours, trace the outlines." },
-    { "name": "SVG reader", "category": "engine", "use": ["describeSvg", "parseSvg"], "for": "Read an SVG file into shapes: what it contains first (colours, strokes, real size in mm), then the outlines. The SVG wizard shows its result." }
+    { "name": "SVG reader", "category": "engine", "use": ["describeSvg", "parseSvg", "parseSvgLegend"], "for": "Read an SVG file into shapes: what it contains first (colours, strokes, real size in mm), then the outlines, as normalised rings per colour (with outlines as lines to follow, for a laser or a pen) or as a one-colour legend in the file's own units. The SVG wizard shows its result." }
   ],
   "internal": {
     "why": "The image tracer's stages one at a time, for the tests and benches that measure each. An app traces with processImage.",

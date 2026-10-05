@@ -2,12 +2,21 @@
 // unit box (longest side = 1), centred on the origin, Y up. The app decides the millimetres.
 export type RGB = [number, number, number];
 
-/** A closed 2D ring (list of [x,y]); EvenOdd fill handles outer/hole nesting. */
+/** A closed 2D ring (list of [x,y]); EvenOdd fill handles outer/hole nesting. A region's `lines`
+ *  use the same type for an open polyline. */
 export type Ring = [number, number][];
 
 export interface RegionSet {
   /** One entry per palette colour actually used. */
-  regions: { quantRgb: RGB; components: { rings: Ring[]; coverage: number }[]; coverage: number }[];
+  regions: {
+    quantRgb: RGB;
+    components: { rings: Ring[]; coverage: number }[];
+    coverage: number;
+    /** The SVG reader's `outlinesAsLines` only: this colour's outlines as the lines they follow,
+     *  open polylines in the same frame as the rings, never filled. A colour drawn only in lines
+     *  has no rings and no coverage. The image tracer never sets it. */
+    lines?: Ring[];
+  }[];
   /** Union silhouette of all foreground pixels. */
   outline: Ring[];
   /** Aspect (width/height) of the source silhouette, for reference. */
