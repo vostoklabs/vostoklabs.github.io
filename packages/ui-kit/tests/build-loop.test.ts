@@ -34,6 +34,34 @@ function manualRun<T>() {
   };
 }
 
+/** `p`, or a failure once `ms` have passed: a promise that hangs fails its check instead of
+ *  stopping the suite. */
+function within<T>(p: Promise<T>, ms = 200): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`still waiting after ${ms} ms`)), ms);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
+/** Runs `fn` with console.error caught rather than printed, and returns what it was sent. */
+async function errorsLogged(fn: () => Promise<void>): Promise<unknown[]> {
+  const logged: unknown[] = [];
+  const real = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args[0]); };
+  try {
+    await fn();
+  } finally {
+    console.error = real;
+  }
+  return logged;
+}
+
+/** Rejections nothing handled. A callback that threw inside the loop used to end up here, and
+ *  node stops the process for one, so they are collected and checked at the end instead. */
+const escaped: unknown[] = [];
+process.on('unhandledRejection', (e) => { escaped.push(e); });
+
 /* ------------------------------------------------------------------ buildLoop */
 
 test('a burst of requests costs one build, built from the newest settings', async () => {
@@ -195,6 +223,82 @@ test('before anything is built, export refuses', async () => {
   assert(nothing, 'expected NothingBuiltError');
 });
 
+/* The app's callbacks are the app's code. One that throws is reported, and the loop goes on. */
+
+test('a throw in onResult neither strands Export nor drops the edit queued behind the build', async () => {
+  let width = 1;
+  const m = manualRun<number>();
+  const loop = buildLoop({
+    run: () => { const w = width; return m.run().then(() => w); },
+    onResult: () => { throw new Error('the preview could not show it'); },
+  });
+  const logged = await errorsLogged(async () => {
+    loop.request();
+    await tick();
+    const exported = within(loop.settled()); // Export, pressed while the build runs…
+    width = 2;
+    loop.request(); // …and an edit made behind it
+    await tick();
+    m.calls[0]!.resolve(0);
+    await tick();
+    assert(m.calls.length === 2, 'the edit queued behind the build was dropped');
+    m.calls[1]!.resolve(0);
+    assert((await exported) === 2, 'Export must get the newest build');
+  });
+  assert(logged.length === 2, `each throw is reported, once: ${logged.length} reported`);
+  assert(!loop.busy, 'the loop must be idle again');
+});
+
+test('a throw in onError still refuses Export with the build error, and builds the queued edit', async () => {
+  let width = 1;
+  let fail = true;
+  const m = manualRun<number>();
+  const loop = buildLoop({
+    run: () => { const w = width; return m.run().then(() => { if (fail) throw new Error('boom'); return w; }); },
+    onError: () => { throw new Error('the error message could not be shown'); },
+  });
+  await errorsLogged(async () => {
+    loop.request();
+    await tick();
+    const refused = within(loop.settled()).then(() => 'exported', (e: Error) => e.message);
+    m.calls[0]!.resolve(0);
+    assert((await refused) === 'boom', `Export must refuse with the build's own error, got "${await refused}"`);
+    loop.request();
+    await tick();
+    const exported = within(loop.settled());
+    width = 2;
+    loop.request(); // an edit behind the build that is about to fail
+    await tick();
+    m.calls[1]!.resolve(0);
+    await tick();
+    assert(m.calls.length === 3, 'the edit queued behind the failed build was dropped');
+    fail = false;
+    m.calls[2]!.resolve(0);
+    assert((await exported) === 2, 'and Export gets it');
+  });
+});
+
+test('a throw in onStart neither stops the build nor leaves the loop busy for good', async () => {
+  let width = 1;
+  const loop = buildLoop({ run: () => width, onStart: () => { throw new Error('the busy state could not be shown'); } });
+  await errorsLogged(async () => {
+    loop.request();
+    assert((await within(loop.settled())) === 1, 'the build must still run');
+    width = 2;
+    loop.request();
+    assert((await within(loop.settled())) === 2, 'and so must the next one');
+  });
+  assert(!loop.busy, 'the loop must be idle again');
+});
+
+test('a throw in onIdle still answers Export', async () => {
+  const loop = buildLoop({ run: () => 7, onIdle: () => { throw new Error('the busy state could not be cleared'); } });
+  await errorsLogged(async () => {
+    loop.request();
+    assert((await within(loop.settled())) === 7, 'Export must get the build');
+  });
+});
+
 /* -------------------------------------------------------------- worker transport */
 
 /**
@@ -316,6 +420,10 @@ test('syncControls writes the clamped value back, so the model builds what the s
   assert(state.height === 30, 'an in-range value is left alone');
   assert(state.label === 'kept', 'a key with no control is left alone');
   assert(changed.length === 1 && changed[0] === 'width', `changed: ${changed.join(',')}`);
+});
+
+test('nothing above left a rejection unhandled', () => {
+  assert(escaped.length === 0, `${escaped.length} unhandled: ${escaped.map((e) => (e as Error)?.message ?? String(e)).join(' | ')}`);
 });
 
 /* ------------------------------------------------------------------------ run */

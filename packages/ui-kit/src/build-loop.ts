@@ -142,6 +142,17 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
     }
   };
 
+  /** One of the app's callbacks. A throw in it is the app's bug: reported, and stopped here, so
+   *  it cannot leave the loop running for good, drop the edit queued behind the build, or leave
+   *  an export waiting on `settled()` for ever. */
+  const guard = (callback: () => void) => {
+    try {
+      callback();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const start = () => {
     clearTimeout(timer);
     timer = undefined;
@@ -162,17 +173,18 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
         if (ok) {
           latest = value as R;
           error = null;
-          opts.onResult?.(value as R);
+          guard(() => opts.onResult?.(value as R));
         } else {
-          error = asError(value);
-          opts.onError?.(error);
+          const failure = asError(value);
+          error = failure;
+          guard(() => opts.onError?.(failure));
         }
       }
       // A change arrived while this one ran: build it, success or failure. Dropping it on an
       // error is how an edit used to vanish.
       if (dirty) start();
       else {
-        opts.onIdle?.();
+        guard(() => opts.onIdle?.());
         settleWaiters();
       }
     };
@@ -181,7 +193,7 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
       const ms = opts.timeoutMs;
       watchdog = setTimeout(() => finish(false, new BuildTimeoutError(ms)), ms);
     }
-    opts.onStart?.();
+    guard(() => opts.onStart?.());
     try {
       Promise.resolve(opts.run()).then(
         (r) => finish(true, r),
