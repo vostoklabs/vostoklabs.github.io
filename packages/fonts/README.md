@@ -55,8 +55,11 @@ against them letter by letter. `isFontSupported` checks text against the same se
 1. Add the slug to the table in `scripts/fetch-fonts.mjs`. A face wanted for another
    alphabet also goes in `UPSTREAM` there: it is taken from google/fonts and, when large,
    cut to that alphabet's common set.
-2. `pnpm --filter @vostok/fonts fetch-fonts`
-3. Commit the new `.ttf` plus the regenerated `registry.ts` / `fonts.css` / `CREDITS.md`.
+2. `pnpm --filter @vostok/fonts fetch-fonts`. It reads the family's licence file in
+   google/fonts at the pinned commit, and refuses a face from the font API named with a
+   name that file reserves: such a family goes in `ORIGINALS`, as its original file.
+3. Commit the new `.ttf` plus the regenerated `registry.ts` / `fonts.css` / `CREDITS.md`
+   and the face's row in the repo's `assets.json`, which `pnpm check:assets` holds it to.
 
 `curated: true` puts a face in the instant grid; everything else lives behind
 "Browse all fonts". A curated face's file is fetched by every generator that shows
