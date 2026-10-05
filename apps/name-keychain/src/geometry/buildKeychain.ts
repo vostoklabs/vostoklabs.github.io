@@ -2,29 +2,7 @@ import type { BuildParams, Outline } from '../types';
 import type { CutRing } from '@vostok/export';
 import type { LineBox } from '@vostok/fonts/textLayout';
 import { snapLayers } from './noAms';
-import { csOf, ringsOf, extrude } from '@vostok/manifold';
-
-/** Helper to ensure clean Emscripten memory allocation and disposal. */
-function withScope<T>(fn: (keep: <M extends { delete(): void }>(m: M) => M) => T): T {
-  const created: { delete(): void }[] = [];
-  const keep = <M extends { delete(): void }>(m: M) => {
-    created.push(m);
-    return m;
-  };
-  try {
-    return fn(keep);
-  } finally {
-    for (const m of created) {
-      try {
-        m.delete();
-      } catch (e) {
-        console.warn('Error deleting manifold object:', e);
-      }
-    }
-  }
-}
-
-type Keep = <M extends { delete(): void }>(m: M) => M;
+import { csOf, ringsOf, extrude, withScope, type Keep } from '@vostok/manifold';
 
 function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace('#', '');
