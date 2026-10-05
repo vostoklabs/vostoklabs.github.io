@@ -9,15 +9,13 @@
       }
       /* The mount container owns the height.
          This markup used to live in index.html with <header> and <main> as direct children
-         of <body>, so `main.vl-app { flex: 1 1 auto }` below was handed the remaining
-         viewport height by the body flex column. Moving the markup into template.js put a
-         container between them — #app on the web, a host-owned element inside a host —
-         and an unstyled block wrapper breaks that chain in both directions: `flex` means
-         nothing inside a block box, while the `min-height: 0; max-height: none` below still
-         cancels app-shell.css's 100dvh clamp. With no ceiling and no flex, the grid sizes to
-         its tallest panel (~981px of left-hand controls) and body{overflow:hidden} silently
-         clips the rest — which in a short embedded viewport took the whole export footer
-         off-screen and left #viewport taller than the window, so the cap rendered low. */
+         of <body>, so the shell was handed the remaining viewport height by the body flex
+         column. Moving the markup into template.js put a container between them — #app on the
+         web, a host-owned element inside a host — and an unstyled block wrapper breaks that
+         chain: with no ceiling, the grid sizes to its tallest panel (~981px of left-hand
+         controls) and body{overflow:hidden} silently clips the rest — which in a short
+         embedded viewport took the whole export footer off-screen and left #viewport taller
+         than the window, so the cap rendered low. */
       .kc-root {
         display: flex;
         flex-direction: column;
@@ -26,29 +24,14 @@
         min-height: 0;
         overflow: hidden;
       }
-      /* The topbar sits ABOVE .vl-app in the .kc-root flex column, so .vl-app must fill
-         the REMAINING height, not a full 100dvh — otherwise its bottom (and the
-         right sidebar footer's last row: Help / Light mode) is pushed off-screen. */
-      main.vl-app {
-        min-height: 0;
-        max-height: none;
-        flex: 1 1 auto;
-      }
-      /* app-shell.css defines two rows (auto + 1fr) for apps whose topbar sits
-         INSIDE .vl-app. Ours sits outside, so the three panels all land in row 1
-         and the 1fr row below them soaks up every spare pixel as blank space on a
-         tall screen. Collapse the template to the single row we actually use.
-         Scoped above the 760px breakpoint on purpose: below it app-shell stacks
-         the panels into four rows, and `main.vl-app` (0,1,1) would outrank that
-         `.vl-app` (0,1,0) rule even from inside its media query, collapsing the
-         mobile layout so the left panel loses its height. */
-      @media (min-width: 761px) {
-        main.vl-app { grid-template-rows: minmax(0, 1fr); }
-      }
+      /* The topbar sits ABOVE the shell in this column, so the shell fills the REMAINING
+         height, not a full 100dvh — otherwise its bottom (and the right sidebar footer's last
+         row: Help / Light mode) is pushed off-screen. That is appShell({ contained }) in
+         mount.js; and with the bar outside it, the shell has no bar row (`--no-topbar`), which
+         would otherwise soak up every spare pixel as blank space under the panels. */
       /* Below the kit's stacking breakpoint the PAGE scrolls, so nothing above may pin
          itself to the viewport. Above it the panels scroll individually and the height chain
-         further up is exactly right — which is why this is scoped rather than removed, the
-         same reasoning as the `min-width: 761px` grid-rows override above it.
+         further up is exactly right — which is why this is scoped rather than removed.
 
          Measured before this rule, at 390px: the four stacked rows were squeezed into one
          screen, leaving the settings column 165px tall with the whole of Placement & size
@@ -333,10 +316,8 @@
       }
       .fit-help { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 9px 0 0; }
       .fit-help strong { color: var(--text); }
-      /* Placement only — .vl-tabs is the kit's own class from segmentedControl(). */
-      .fit-block > .vl-tabs { margin-top: 10px; }
-      /* The Fit test step control carries a caption, so the kit wraps it in .vl-control. */
-      .fit-block > .vl-control { margin-top: 10px; }
+      /* The rows the Fit test switch and its step sit in: placement only, on our own element. */
+      .kc-fit-row { margin-top: 10px; }
       /* Controls that only shape a keycap, while Fit test shows stems. `inert` (mount.js,
          setFitTestLock) is what stops them; this only says so. */
       .kc-fit-locked { opacity: .4; transition: opacity var(--dur-hover) var(--ease-standard); }
@@ -362,10 +343,6 @@
       #status.warn { color: #e3b341; }
       #status.err { color: #f0726a; }
       .meta { position: absolute; left: 14px; bottom: 12px; font-size: 11px; color: var(--muted); margin: 0; pointer-events: none; user-select: none; }
-      /* The shared stage hint is a bottom-CENTER pill; the keycap keeps a live
-         status/meta readout in the bottom-left, so move the hint to the bottom-right
-         (its original corner) to keep the two from overlapping. */
-      #hint.vl-stage__hint { left: auto; right: 14px; transform: none; }
       code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
 
 

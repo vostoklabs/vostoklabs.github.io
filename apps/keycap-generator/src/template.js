@@ -13,12 +13,9 @@
  */
 export const TEMPLATE = `
     <header id="topbar"></header>
-    <main class="vl-app">
-      <!-- The left panel is a flex column with its own scrolling body, mirroring the right
-           panel, so a pinned block (the credit strip) can sit in the bottom-left corner
-           instead of scrolling away with the controls. -->
-      <aside class="vl-panel vl-panel--left">
-        <div class="vl-panel__scroll">
+    <!-- The frame (the panels, their scroll areas and the stage) is the kit's appShell(), built
+         in mount.js. These holders carry what goes into each part. -->
+    <div id="kcLeft">
         <div id="keycapAppHeader"></div>
 
         <!-- Mode tabs. Empty here and filled at runtime by the paid panel, which is a
@@ -105,9 +102,9 @@ export const TEMPLATE = `
           <!-- Cap / Fit test switch, built in mount.js from the kit's segmentedControl(). Sits
                right under the value it previews: pressing a real switch is the only way to
                answer "what number do I type" for this control. -->
-          <div id="fitTestMount"></div>
+          <div id="fitTestMount" class="kc-fit-row"></div>
           <!-- The fit test's step (kit segmentedControl, mount.js), shown only while it is open. -->
-          <div id="fitTestStepMount"></div>
+          <div id="fitTestStepMount" class="kc-fit-row" hidden></div>
           <p class="fit-help" id="fitTestNote" hidden>Fit test shows the stems only. Legend and placement settings wait until you switch back to Keycap.</p>
         </div>
         <div class="switch-row">
@@ -162,23 +159,21 @@ export const TEMPLATE = `
         <div id="printSettingsMount"></div>
         <p class="fit-help">Arachne gives smoother walls and keeps thin legend lines solid. Saved into the exported 3MF.</p>
       </div>
-      </div><!-- .vl-panel__scroll -->
+    </div>
 
-      <!-- Bottom-left credit strip: who made this, and what changed. The kit's
-           panelCredit(), pinned outside the scroll area so it does not scroll away with the
-           controls; the Updates button lives here rather than competing with them. -->
-      <div id="keycapCredit"></div>
-    </aside>
+    <!-- Bottom-left credit strip: who made this, and what changed. The kit's
+         panelCredit(), pinned under the left panel's scroll area so it does not scroll away
+         with the controls; the Updates button lives here rather than competing with them. -->
+    <div id="keycapCredit"></div>
 
-    <div id="viewport" class="vl-stage">
+    <div id="kcStage">
       <p class="vl-stage__label">Live 3D Preview</p>
       <p id="hint" class="vl-stage__hint">Hold left click to rotate, right click to pan, scroll to zoom.</p>
       <div id="status" role="status" aria-live="polite" aria-atomic="true">Loading…</div>
       <div class="meta" id="meta"></div>
     </div>
 
-    <aside class="vl-panel vl-panel--right">
-      <div class="vl-panel__scroll">
+    <div id="kcRight">
         <div class="section legend-section">
           <div class="section-head">
             <span class="label">Legend</span>
@@ -239,11 +234,10 @@ export const TEMPLATE = `
           </div>
         </div>
 
-      </div>
+    </div>
 
-      <!-- Mount point for the shared ui-kit sidebar footer (Export / Save / Load / Help / theme). -->
-      <div id="keycapFooter"></div>
-    </aside>
-    </main><!-- .vl-app -->
+    <!-- Mount point for the shared ui-kit sidebar footer (Export / Save / Load / Help / theme),
+         pinned under the right panel's scroll area. -->
+    <div id="keycapFooter"></div>
 
 `;

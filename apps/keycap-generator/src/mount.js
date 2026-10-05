@@ -23,7 +23,7 @@ import {
   topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs,
   promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile,
   button, dropZone, toast, themeColorHex, licenseAfterExport,
-  nudgePad, busyChip, panelCredit, paletteRow, segmentedControl, readProjectFile,
+  nudgePad, busyChip, panelCredit, paletteRow, segmentedControl, readProjectFile, appShell,
 } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
@@ -88,6 +88,25 @@ export function mount(container, host) {
   /** Scoped to the container: two generators can be mid-teardown and mid-mount at once,
    *  and a bare getElementById would happily find the other one's node. */
   const $ = (id) => container.querySelector(`#${id}`);
+
+  /* The frame is the kit's appShell(); the template holds what goes in it, and each holder is
+     emptied into its part. `contained`: the frame fills the box it is mounted in, under the
+     topbar, rather than the window. The topbar stays outside it, in .kc-root's column, so the
+     frame has no bar row (`--no-topbar`). The stage keeps the id everything finds it by. */
+  const takeChildren = (id) => {
+    const holder = $(id);
+    const nodes = [...holder.childNodes];
+    holder.remove();
+    return nodes;
+  };
+  const appFrame = appShell({
+    contained: true,
+    left: { scroll: takeChildren('kcLeft'), credit: $('keycapCredit') },
+    stage: takeChildren('kcStage'),
+    right: { scroll: takeChildren('kcRight'), footer: [$('keycapFooter')] },
+  });
+  appFrame.stage.id = 'viewport';
+  container.append(appFrame.root);
 
   /** Everything the teardown has to undo, in the order it was set up. */
   const cleanups = [];
@@ -622,8 +641,9 @@ export function mount(container, host) {
     value: FIT_TEST_STEP_MM.toFixed(2),
     onChange: (v) => { fitTestStep = Number(v); renderFitTest(); },
   });
-  fitStepControl.hidden = true; // setFitTestLock shows it while Fit test is open
-  $('fitTestStepMount').replaceWith(fitStepControl);
+  // In a row of its own (.kc-fit-row in style.css), which setFitTestLock shows while Fit test is open.
+  const fitStepRow = $('fitTestStepMount');
+  fitStepRow.append(fitStepControl);
 
   /** {positions, indices} (fitTest.js's plain output) -> a real THREE.BufferGeometry.
    *
@@ -729,7 +749,7 @@ export function mount(container, host) {
     }
     const note = $('fitTestNote');
     if (note) note.hidden = !on;
-    fitStepControl.hidden = !on;
+    fitStepRow.hidden = !on;
   }
 
   function enterFitTest() {
@@ -783,7 +803,7 @@ export function mount(container, host) {
     value: 'cap',
     onChange: (v) => { if (v === 'fit') enterFitTest(); else exitFitTest(); },
   });
-  $('fitTestMount').replaceWith(fitTestControl);
+  $('fitTestMount').append(fitTestControl);
 
   // ---------------------------------------------------------------- nudge d-pad
   //
