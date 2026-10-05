@@ -12,18 +12,20 @@ import { FONTS } from '../../../packages/fonts/src/registry';
  *  Not a taste judgement — a budget. This app goes to MakerLab as a ZIP and the
  *  developer guide asks for 10 MB or less, or the SDK handshake can miss its 10 s
  *  timeout (`makerlab/pack.mjs` warns above that figure). The whole library is
- *  241 faces / 32.9 MB of TTF, which a zip cannot carry; under 140 KB it is 185
- *  faces / 12.0 MB, which compresses to well under the limit.
+ *  251 faces / 36.6 MB of TTF, which a zip cannot carry; under 149 KB it is 185
+ *  faces / 13.0 MB, about 6.5 MB compressed.
  *
  *  What the cut actually removes is the fonts that carry a script this app has no
  *  use for — Gaegu is 3.0 MB of Korean, DotGothic16 1.9 MB of Japanese — plus a
  *  handful of decorative faces whose outlines are genuinely enormous (Rubik Spray
  *  Paint is 477 KB of speckle). Every one of the eleven categories survives it.
  *
- *  140 and not a rounder 120 because Anton is 127 KB and is this app's DEFAULT face:
- *  a budget that silently drops the font the box opens on is a budget that broke the
- *  app. The floor is whatever keeps every face this generator already shipped. */
-const MAX_FONT_BYTES = 140 * 1024;
+ *  The floor is whatever keeps every face this generator already shipped. Anton is
+ *  127 KB and is this app's DEFAULT face: a budget that silently drops the font the
+ *  box opens on is a budget that broke the app. 149 because Libre Baskerville ships as
+ *  its original file (148.5 KB; its licence keeps the name off a cut copy), and a box
+ *  saved with it must still load. */
+const MAX_FONT_BYTES = 149 * 1024;
 
 /** The faces the logo offers.
  *
