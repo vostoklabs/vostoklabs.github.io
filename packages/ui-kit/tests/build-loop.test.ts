@@ -276,6 +276,27 @@ test('the loop and the transport together: export after a worker crash refuses, 
   assert((await loop.settled()) === 6, 'and the next request rebuilds on a fresh worker');
 });
 
+test('a build still waiting on a font when the generator closes starts no worker afterwards', async () => {
+  // A build that loads its font before it calls the worker, closed while the font loads: the
+  // call arrives after dispose(), and a worker started for it would never be stopped.
+  const w = fakeWorkerPair<{ n: number }, number>((r) => r.n);
+  const client = workerClient<{ n: number }, number>(w.create);
+  let fontArrives!: () => void;
+  const font = new Promise<void>((resolve) => { fontArrives = resolve; });
+  const loop = buildLoop({ run: async () => { await font; return client.call({ n: 1 }); } });
+  loop.request();
+  await tick();
+  loop.dispose(); // the generator closes while its font loads…
+  client.dispose();
+  fontArrives(); // …and then the font arrives
+  await tick();
+  const running = w.created.filter((x) => !x.terminated).length;
+  assert(running === 0, `${w.created.length} worker(s) started after dispose, ${running} still running`);
+  const late = await client.call({ n: 2 }).then(() => 'answered', (e: Error) => e.message);
+  assert(late === 'This generator has been closed.', `a call after dispose must be refused, got "${late}"`);
+  assert(w.created.length === 0, `no worker may be started after dispose, made ${w.created.length}`);
+});
+
 /* -------------------------------------------------------------- syncControls */
 
 /** The two methods `syncControls` uses, behaving like a slider clamped to [lo, hi]. */

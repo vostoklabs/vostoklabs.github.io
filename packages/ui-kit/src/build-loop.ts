@@ -262,7 +262,7 @@ export interface WorkerClient<Req, Res> {
   call(request: Req, transfer?: Transferable[]): Promise<Res>;
   /** Stop the worker and fail every pending call. The next `call()` starts a fresh one. */
   restart(): void;
-  /** Stop the worker for good. */
+  /** Stop the worker for good: every call after this rejects instead of starting another. */
   dispose(): void;
 }
 
@@ -276,6 +276,10 @@ export interface WorkerClient<Req, Res> {
 export function workerClient<Req, Res>(create: () => Worker, opts: WorkerClientOptions = {}): WorkerClient<Req, Res> {
   let worker: Worker | null = null;
   let nextId = 0;
+  /** `dispose()` has run. A build that was still waiting on something else when the generator
+   *  closed (a font loading) calls in afterwards, and a worker started for it would never be
+   *  stopped. */
+  let closed = false;
   const pending = new Map<number, { resolve: (r: Res) => void; reject: (e: Error) => void }>();
 
   const failAll = (err: Error) => {
@@ -322,6 +326,7 @@ export function workerClient<Req, Res>(create: () => Worker, opts: WorkerClientO
 
   return {
     call(request, transfer = []) {
+      if (closed) return Promise.reject(new Error('This generator has been closed.'));
       const id = ++nextId;
       return new Promise<Res>((resolve, reject) => {
         pending.set(id, { resolve, reject });
@@ -338,6 +343,7 @@ export function workerClient<Req, Res>(create: () => Worker, opts: WorkerClientO
       failAll(new Error('The geometry engine was restarted.'));
     },
     dispose() {
+      closed = true;
       stop();
       failAll(new Error('This generator has been closed.'));
     },
