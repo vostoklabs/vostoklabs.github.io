@@ -134,6 +134,9 @@ function fontCopyrights() {
         : rawStr.toString('latin1');
       if (val.length > best.length) best = val;
     }
+    // A face whose file holds no copyright notice has its family's, recorded in the asset
+    // registry from the family's OFL.txt.
+    if (!best.trim()) best = ROWS.find((r) => `packages/fonts/src/fonts/${f}` in r.files)?.copyright ?? '';
     if (best.trim()) out.push(`  ${f.replace('.ttf', '')}: ${best.replace(/\s+/g, ' ').trim()}`);
   }
   return out;

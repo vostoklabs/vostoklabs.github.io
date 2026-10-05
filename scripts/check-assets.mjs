@@ -71,6 +71,8 @@ for (const row of rows) {
   if (!KINDS.has(row.kind)) fail(row, `kind "${row.kind}" is not one of ${[...KINDS].join(', ')}`);
   if (!SHIPS_AS.has(row.shipsAs)) fail(row, `shipsAs "${row.shipsAs}" is not original, cut or converted`);
   if (!licenceAllowed(row.licence)) fail(row, `licence ${row.licence} is not allowed (allowed: ${ALLOWED.join(', ')})`, true);
+  // Every allowed licence but CC0 asks for the copyright notice to travel with the work.
+  if (row.licence !== 'CC0-1.0' && !String(row.copyright ?? '').trim()) fail(row, `has no copyright notice, which its licence asks to travel with it: ${refresh(row)}`);
   for (const [path, hash] of Object.entries(row.files)) {
     if (leaked.has(path)) problems.push(`${REGISTRY} names ${path}, which is gitignored: its row belongs in ${PRIVATE_REGISTRY} (pnpm gen:assets)`);
     if (!existsSync(abs(path))) { fail(row, `claims ${path}, which is not on disk: ${refresh(row)}`); continue; }

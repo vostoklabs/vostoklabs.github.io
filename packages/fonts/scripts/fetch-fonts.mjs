@@ -621,7 +621,8 @@ async function fetchUpstream(file, commit = PINNED) {
 }
 
 /** A family's licence at `commit`, from the first of `folders` that google/fonts has: OFL-1.1
- *  under ofl/, with the names its OFL.txt reserves, or Apache-2.0 under apache/. */
+ *  under ofl/, with the names its OFL.txt reserves and the copyright notice it opens with, or
+ *  Apache-2.0 under apache/. */
 async function familyLicence(folders, commit = PINNED) {
   for (const folder of folders) {
     const ofl = folder.startsWith('ofl/');
@@ -633,7 +634,8 @@ async function familyLicence(folders, commit = PINNED) {
       if (e.status === 404) continue;
       throw e;
     }
-    return { licence: ofl ? 'OFL-1.1' : 'Apache-2.0', file, commit, reserved: ofl ? reservedFontNames(text) : [] };
+    const copyright = ofl ? text.replace(/\r\n?/g, '\n').split(/\n\s*This Font Software/)[0].trim() : '';
+    return { licence: ofl ? 'OFL-1.1' : 'Apache-2.0', file, commit, reserved: ofl ? reservedFontNames(text) : [], copyright };
   }
   throw new Error(`google/fonts has no ${folders.join(' or ')} at ${commit.slice(0, 7)}: the licence is not established`);
 }
@@ -914,7 +916,8 @@ if (failed.length) {
       kind: 'font',
       files: { [`packages/fonts/src/fonts/${slug}.ttf`]: fileHash(`packages/fonts/src/fonts/${slug}.ttf`, buf) },
       licence: family.licence,
-      copyright: nameOf(parse(buf), 'copyright').replace(/\s+/g, ' ').trim(),
+      // A file whose name table holds no copyright takes the notice its family's OFL.txt opens with.
+      copyright: (nameOf(parse(buf), 'copyright') || family.copyright).replace(/\s+/g, ' ').trim(),
       reservedNames: family.reserved,
       shipsAs: spec && !spec.cut ? 'original' : 'cut',
       source: spec
