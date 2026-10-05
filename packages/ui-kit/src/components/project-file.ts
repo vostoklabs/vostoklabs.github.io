@@ -9,8 +9,9 @@ export interface ProjectShape {
   app: string;
   /**
    * Top-level keys every file this app has ever saved carries. A file from before the `app`
-   * field opens when it has all of them; one missing any is not this app's project, which is
-   * what refuses `{}` and an older file saved by another app.
+   * field opens when it has all of them; one missing any is not this app's project. That
+   * refuses `{}`, and an older file from another app only when it lacks one of these keys: an
+   * older file carrying them all opens, whichever app saved it.
    */
   keys: readonly string[];
 }
