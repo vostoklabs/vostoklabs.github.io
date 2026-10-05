@@ -14,7 +14,7 @@
 // too — which is what a one-piece silhouette (an earring blank) wants without a single click.
 import { bboxOf, signedArea, type Shapes } from '@vostok/laser';
 import {
-  button, buttonRow, closeAllMenus, el, openMenu, splitDialog, toggleSwitch,
+  button, buttonRow, closeAllMenus, el, openMenu, splitDialog, svgNode, toggleSwitch,
   type SvgImportChoice, type SvgImportPart,
 } from '@vostok/ui-kit';
 import { insideShapes } from './engine/editorGeometry';
@@ -22,7 +22,6 @@ import { symbolLayer } from './engine/text';
 import { readSymbols, symbolIslands } from './symbols/model';
 import type { Values } from './templates/types';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 /** The size the picker traces at. A face's INDEX does not move with scale, so any size does. */
 const NOMINAL = 100;
 
@@ -129,12 +128,6 @@ export function pickedCount(a: ArtworkAreas, picked: Set<number> | null): { all:
   return { all, n, text };
 }
 
-const svgEl = (tag: string, attrs: Record<string, string> = {}): SVGElement => {
-  const node = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-  return node;
-};
-
 const n = (v: number) => (Math.abs(v) < 5e-4 ? '0' : v.toFixed(3));
 
 /** One face as a path, Y flipped for the screen. The holes ride in the same `d`, read even-odd,
@@ -169,14 +162,14 @@ export function areaStage(faces: Shapes, picked: Set<number> | null, on?: AreaAc
   const w = Math.max(b.maxX - b.minX, 1);
   const h = Math.max(b.maxY - b.minY, 1);
   const pad = Math.max(w, h) * 0.06;
-  const svg = svgEl('svg', {
+  const svg = svgNode('svg', {
     viewBox: `${n(b.minX - pad)} ${n(-b.maxY - pad)} ${n(w + 2 * pad)} ${n(h + 2 * pad)}`,
     class: 'ls-area-stage',
     ...(on ? { role: 'group', 'aria-label': 'The shapes in your artwork' } : { 'aria-hidden': 'true' }),
   }) as SVGSVGElement;
   const name = (i: number) => (i < solid ? `Shape ${i + 1} of ${solid}` : `Hole ${i - solid + 1} of ${faces.length - solid}`);
   const paths = faces.map((face, i) => {
-    const p = svgEl('path', { class: 'ls-area', d: faceD(face), 'fill-rule': 'evenodd', 'data-hole': String(i >= solid) });
+    const p = svgNode('path', { class: 'ls-area', d: faceD(face), 'fill-rule': 'evenodd', 'data-hole': String(i >= solid) });
     if (on) {
       p.setAttribute('role', 'checkbox');
       p.setAttribute('aria-label', name(i));

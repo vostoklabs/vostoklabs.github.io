@@ -11,34 +11,13 @@
 // a real attachment chord, never a mathematical point) are applied by the caller through `ribW`,
 // and by seating every leaf's inner tip on the rib centreline so the chord where it crosses the
 // rib's edge is ~0.8 × w_leaf.
-import { circleRing, roundedRectRing, simplifyRing, type Shapes } from '@vostok/laser';
+import { circleRing, leafRing, roundedRectRing, simplifyRing, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
 
 type Pt = [number, number];
 
-/**
- * A leaf (marquise): two circular arcs meeting at sharp points at (0, ±h/2), bulging to
- * (±w/2, 0). The same construction as `@vostok/laser`'s `leafRing`, which is defined in
- * `blanks.ts` but not re-exported from that package's `index.ts` — export it there and this
- * copy goes away.
- */
-function leafRing(w: number, h: number, n = 28): CutRing {
-  const W = w / 2;
-  const H = h / 2;
-  const cx = (W * W - H * H) / (2 * W);
-  const r = W - cx;
-  const th = Math.atan2(H, -cx);
-  const out: CutRing = [];
-  for (let i = 0; i <= n; i++) {
-    const t = th - (i / n) * (2 * th);
-    out.push([cx + r * Math.cos(t), r * Math.sin(t)]);
-  }
-  for (let i = 1; i < n; i++) {
-    const t = -th + (i / n) * (2 * th);
-    out.push([-cx - r * Math.cos(t), r * Math.sin(t)]);
-  }
-  return out;
-}
+/** A leaf's arcs are drawn with this many segments each; the shelf's `leafRing` defaults to 40. */
+const LEAF_SEGMENTS = 28;
 
 /** Move a ring: rotate about its own origin by `deg`, then translate. */
 function place(ring: CutRing, x: number, y: number, deg: number): CutRing {
@@ -151,7 +130,7 @@ export function laurelWreathShapes(p: WreathParams): { shapes: Shapes; ribRadius
     const axis = Math.atan2(-Math.cos(a), Math.sin(a));
     // The leaf's inner tip sits on the rib centreline: it is embedded ribW/2 deep, so the chord
     // where it crosses the rib's outer edge is a real attachment, never a point.
-    const ring = leafRing(Math.max(0.8, ratio * len), len).map(([x, y]) => [x, y + len / 2] as Pt);
+    const ring = leafRing(Math.max(0.8, ratio * len), len, LEAF_SEGMENTS).map(([x, y]) => [x, y + len / 2] as Pt);
     for (const side of [gamma, -gamma]) {
       branch.push([place(ring, ribRadius * Math.cos(a), ribRadius * Math.sin(a), ((axis + side) * 180) / Math.PI - 90)]);
     }

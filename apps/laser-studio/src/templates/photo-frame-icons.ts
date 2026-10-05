@@ -36,6 +36,7 @@
 // RIM of front round each one is what bulges the outline.
 import { bboxOf, cancelCoincidentRings, filletRing, mapShapes, placeShapes, signedArea, type Box, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
+import { pointInRing } from '@vostok/patterns';
 import { FALLBACK_FONT_ID, getFont, getHorizontalContours, iconById } from '@vostok/fonts';
 import { BED, FRAME_NOTE, GAP, framePieces, holeClear, type FrameGeometry } from '../engine/photo-frame';
 import { sizeForCapHeight } from '../engine/metrics';
@@ -300,18 +301,7 @@ function glyphInk(contours: number[][][]): Shapes {
     if (hole > out && probe) holes.push({ ring: r, probe });
     else if (out > 0) ink.push(r);
   }
-  return ink.map((r) => [r, ...holes.filter((h) => inRing(h.probe, r)).map((h) => h.ring)]);
-}
-
-/** Even-odd point in ring. */
-function inRing([x, y]: Pt, ring: CutRing): boolean {
-  let c = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!;
-    const [xj, yj] = ring[j]!;
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
+  return ink.map((r) => [r, ...holes.filter((h) => pointInRing(h.probe, r)).map((h) => h.ring)]);
 }
 
 // ------------------------------------------------------------------------ an icon's measures --
@@ -342,7 +332,7 @@ function segmentsCross(p: Pt, q: Pt, a: Pt, b: Pt): boolean {
 
 /** Do two outlines overlap, or one sit inside the other — one pocket once unioned and filled? */
 function meets(a: CutRing, b: CutRing): boolean {
-  if (inRing(a[0]!, b) || inRing(b[0]!, a)) return true;
+  if (pointInRing(a[0]!, b) || pointInRing(b[0]!, a)) return true;
   for (let i = 0; i < a.length; i++) {
     for (let j = 0; j < b.length; j++) if (segmentsCross(a[i]!, a[(i + 1) % a.length]!, b[j]!, b[(j + 1) % b.length]!)) return true;
   }
@@ -393,7 +383,7 @@ function fillOf(shapes: Shapes): number {
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < N; j++) {
       const p: Pt = [-0.5 + (i + 0.5) / N, -0.5 + (j + 0.5) / N];
-      if (outer.some((r, k) => p[0] >= boxes[k]!.minX && p[0] <= boxes[k]!.maxX && p[1] >= boxes[k]!.minY && p[1] <= boxes[k]!.maxY && inRing(p, r))) n++;
+      if (outer.some((r, k) => p[0] >= boxes[k]!.minX && p[0] <= boxes[k]!.maxX && p[1] >= boxes[k]!.minY && p[1] <= boxes[k]!.maxY && pointInRing(p, r))) n++;
     }
   }
   return n / (N * N);

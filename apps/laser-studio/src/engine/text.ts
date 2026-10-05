@@ -3,6 +3,7 @@
 // is likely to expose.
 import { bboxOf, buildSymbol, centreShapes, islandsFromContours, placeShapes, type Box, type Shapes } from '@vostok/laser';
 import { FALLBACK_FONT_ID, getFont, getHorizontalContours, getVerticalContours, pathCommandsToPolygons } from '@vostok/fonts';
+import { pointInRing } from '@vostok/patterns';
 import { withSymbols, symbolIslands, type SymbolMap } from '../symbols/model';
 import { unionIndex, unionOutlineDistance, type UnionIndex } from './editorGeometry';
 import type { DesignLayer, OpChoice } from './types';
@@ -485,17 +486,6 @@ function weldShift(glyph: Shapes, prev: Shapes, want: number, travel: number, bu
 
 // ------------------------------------------------------------------ the counters --
 
-/** Whether `p` is inside a single closed ring. */
-function inRing(p: [number, number], ring: readonly [number, number][]): boolean {
-  let c = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!;
-    const [xj, yj] = ring[j]!;
-    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-}
-
 /** Distance from `p` to the nearest point of a closed ring. */
 function ringDistance(p: [number, number], ring: readonly [number, number][]): number {
   let d = Infinity;
@@ -529,7 +519,7 @@ function inscribedDiameter(ring: readonly [number, number][]): number {
   for (let iy = 0; iy <= steps; iy++) {
     for (let ix = 0; ix <= steps; ix++) {
       const p: [number, number] = [b.minX + ((b.maxX - b.minX) * ix) / steps, b.minY + ((b.maxY - b.minY) * iy) / steps];
-      if (!inRing(p, ring)) continue;
+      if (!pointInRing(p, ring as [number, number][])) continue;
       const d = ringDistance(p, ring);
       if (d > best) { best = d; at = p; }
     }
@@ -540,7 +530,7 @@ function inscribedDiameter(ring: readonly [number, number][]): number {
     let moved = false;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const p: [number, number] = [at[0] + dx * step, at[1] + dy * step];
-      if (!inRing(p, ring)) continue;
+      if (!pointInRing(p, ring as [number, number][])) continue;
       const d = ringDistance(p, ring);
       if (d > best) { best = d; at = p; moved = true; }
     }

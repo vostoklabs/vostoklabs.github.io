@@ -33,6 +33,7 @@
 // Batch mode is the product: one name per line, a sheet of stakes.
 import { bboxOf, placeShapes, type Box, type Pt, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
+import { pointInRing } from '@vostok/patterns';
 import { readSymbols } from '../symbols/model';
 import { MIN_COUNTER, applyCase, glyphLayers, textLayer } from '../engine/text';
 import { sizeForCapHeight } from '../engine/metrics';
@@ -312,17 +313,6 @@ async function setWord(v: Values, text: string, w: number, rail: number): Promis
   return { islands, glyphIslands, end: bboxOf(islands).maxX, dropped: all.length - islands.length, stroke: line.stroke, foot };
 }
 
-/** Whether `p` is inside a closed ring, even–odd. */
-function inRing(p: Pt, ring: CutRing): boolean {
-  let c = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!;
-    const [xj, yj] = ring[j]!;
-    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-}
-
 /** An island's outer ring: the largest, whatever order the rings came in. */
 const outerOf = (island: CutRing[]): CutRing =>
   island.reduce((a, r) => (Math.abs(ringArea(r)) > Math.abs(ringArea(a)) ? r : a), island[0]!);
@@ -346,7 +336,7 @@ function touches(a: CutRing[], b: CutRing[]): boolean {
   const ba = bboxOf([a]);
   const bb = bboxOf([b]);
   if (ba.minX > bb.maxX || bb.minX > ba.maxX || ba.minY > bb.maxY || bb.minY > ba.maxY) return false;
-  const inMaterial = (p: Pt, isl: CutRing[]) => { const o = outerOf(isl); return inRing(p, o) && !isl.some((r) => r !== o && inRing(p, r)); };
+  const inMaterial = (p: Pt, isl: CutRing[]) => { const o = outerOf(isl); return pointInRing(p, o) && !isl.some((r) => r !== o && pointInRing(p, r)); };
   const oa = outerOf(a);
   const ob = outerOf(b);
   if (oa.some((p) => inMaterial(p, b)) || ob.some((p) => inMaterial(p, a))) return true;

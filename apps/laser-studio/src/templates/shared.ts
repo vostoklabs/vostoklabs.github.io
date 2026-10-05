@@ -6,6 +6,7 @@
 // defaults, the labels and the one knob that makes it itself.
 import { bboxOf, blankById, blankDetail, buildBlank, circleRing, cornerLabel, placeShapes, textBoxOf, type BlankCategory, type BlankParams, type Box, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
+import { pointInRing } from '@vostok/patterns';
 import { MIN_COUNTER, smallestCounter, textLayer, type ConnectSpec, type TextSpec } from '../engine/text';
 import { sizeForCapHeight } from '../engine/metrics';
 import { finalHoleCentre, fitBoxInside, insideUnion } from '../engine/editorGeometry';
@@ -856,21 +857,10 @@ export function lightPieceFields(
 
 // ------------------------------------------------------------------ dots joined to their letter --
 
-/** Whether `p` lies inside `ring`, even–odd. */
-function inRing(p: [number, number], ring: CutRing): boolean {
-  let c = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!;
-    const [xj, yj] = ring[j]!;
-    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-}
-
 /** How far straight down `p` is buried in `ring` — the distance to the ring's nearest crossing
  *  ABOVE it — or 0 when it is not inside at all. */
 function depthBelowTop(p: [number, number], ring: CutRing): number {
-  if (!inRing(p, ring)) return 0;
+  if (!pointInRing(p, ring)) return 0;
   let best = Infinity;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const [xi, yi] = ring[i]!;

@@ -59,6 +59,7 @@ import {
   type Pt,
   type Shapes,
 } from '@vostok/laser';
+import { pointInRing } from '@vostok/patterns';
 import type { CutRing } from '@vostok/export';
 import { rimWidthFor } from '../engine/frame';
 import { sizeForCapHeight } from '../engine/metrics';
@@ -197,16 +198,6 @@ function inkRadius(shapes: Shapes): number {
 
 /** Whether the point is inside the frame's band: in the head and out of the window. */
 const inBand = (p: Pt, head: CutRing, window: CutRing) => pointInRing(p, head) && !pointInRing(p, window);
-
-function pointInRing(p: Pt, ring: readonly Pt[]): boolean {
-  let c = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!;
-    const [xj, yj] = ring[j]!;
-    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-}
 
 /** Whether the word bites into the frame's band — which is what decides a name welded into the
  *  frame from one cut as its own piece and glued in the window. */
