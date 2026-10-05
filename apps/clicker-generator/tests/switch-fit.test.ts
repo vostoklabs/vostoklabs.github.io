@@ -183,13 +183,13 @@ for (const f of ['bat.png', 'candy-corn.png', 'potion.png', 'witch-hat.png']) {
   const r = build(f, defaults());
   check(
     `${f}: the base is not widened around the switch`,
-    !r.warnings.some((w) => w.includes('was widened')),
-    r.warnings.find((w) => w.includes('was widened')) ?? 'no lobe, no box',
+    !r.warnings.some((w) => w.includes('Base widened')),
+    r.warnings.find((w) => w.includes('Base widened')) ?? 'no lobe, no box',
   );
   check(
     `${f}: and the size it actually used is stated`,
-    r.warnings.some((w) => w.includes('scaled up to')),
-    r.warnings.find((w) => w.includes('scaled up to')) ?? '(no message)',
+    r.warnings.some((w) => /^Grown to \d+ mm so the switch fits\.$/.test(w)),
+    r.warnings.find((w) => w.startsWith('Grown to')) ?? '(no message)',
   );
 }
 
@@ -202,7 +202,7 @@ for (const f of ['bat.png', 'candy-corn.png', 'potion.png', 'witch-hat.png']) {
 */
 for (const [f, w, h] of [
   ['ghost.png', 36.6, 41.0], ['skull.png', 36.3, 41.0],
-  ['pumpkin-classic.png', 40.9, 40.1], ['web.png', 39.9, 39.7],
+  ['pumpkin-classic.png', 40.9, 40.3], ['web.png', 40.8, 40.7],
 ] as [string, number, number][]) {
   const r = build(f, defaults());
   check(

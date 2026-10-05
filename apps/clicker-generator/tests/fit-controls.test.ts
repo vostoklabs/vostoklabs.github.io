@@ -219,7 +219,7 @@ const offCentre = buildClicker(wasm, socket, stem, regions, [square], {
 const big = buildClicker(wasm, socket, stem, regions, [square], base);
 check(
   'a switch near the edge warns about the widened base',
-  offCentre.warnings.some((w) => w.includes('base was widened')),
+  offCentre.warnings.some((w) => w.includes('Base widened')),
   offCentre.warnings.length ? offCentre.warnings.join(' | ') : '(no warnings)',
 );
 check(
