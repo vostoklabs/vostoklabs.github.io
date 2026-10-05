@@ -59,7 +59,7 @@ const CLICKER = [
   { r: 9.193212089128792, thetaDeg: 248.72193454764783, z: -1.9942049677483737, d: 1.3675723494030536 },
   { r: 9.43426554929465, thetaDeg: 6.95471802726388, z: -3.3862115587107837, d: 1.0296355014666916 },
 ];
-check('the clicker\'s always-on constellation is unchanged', same(W.polarVoids('vostok-labs-clicker-generator-2026', clickerSpec), CLICKER));
+check('polarVoids, given the seed and spec the clicker\'s always-on tier used, draws what it always has', same(W.polarVoids('vostok-labs-clicker-generator-2026', clickerSpec), CLICKER));
 
 // The magnet's always-on tier at 70 mm: bands that scale with the size.
 const size = 70;
@@ -70,7 +70,7 @@ const MAGNET = [
   { r: 33.431273561529814, thetaDeg: 350.9913481492549, z: 2.564055700507015, d: 1.033557418361306 },
   { r: 34.26410053633153, thetaDeg: 68.53395947255194, z: 2.882793034054339, d: 1.309905694704503 },
 ];
-check('the magnet\'s always-on constellation at 70 mm is unchanged', same(W.polarVoids('vostok-labs-magnet-generator-2026', magnetSpec), MAGNET));
+check('polarVoids, given the seed and spec the magnet\'s always-on tier used at 70 mm, draws what it always has', same(W.polarVoids('vostok-labs-magnet-generator-2026', magnetSpec), MAGNET));
 
 // A seeded tier's spec at 35 mm, with a test seed: five voids, 25° apart.
 const small = 35;
@@ -82,7 +82,7 @@ const SEEDED = [
   { r: 14.376532455720008, thetaDeg: 32.00436984188855, z: 1.1530703322030604, d: 1.549759193882346 },
   { r: 13.805437614209952, thetaDeg: 106.35455899871886, z: 0.7791522542946041, d: 1.2951367334462702 },
 ];
-check('a seeded constellation at 35 mm is unchanged', same(W.polarVoids('golden-build-seed', seededSpec), SEEDED));
+check('polarVoids, given a test seed and a seeded tier\'s spec at 35 mm, draws what it always has', same(W.polarVoids('golden-build-seed', seededSpec), SEEDED));
 
 // --- Polar constellations, the rules ---------------------------------------------------------
 check('an empty seed places nothing', W.polarVoids('', seededSpec).length === 0);
