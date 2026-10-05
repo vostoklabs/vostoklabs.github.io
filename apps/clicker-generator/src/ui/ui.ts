@@ -62,6 +62,7 @@ import { assetUrl } from '../assets';
 import { lookOf, lookRings } from '../image/symbolRings';
 import { lucideImg, ringsSvg } from './symbols';
 import { symbolLines, type LineSpec } from './symbolLines';
+import { fmtSignedMm, readSigned } from './signedReadout';
 
 /** Fallback swatch for the keycap row before the build derives a contrasting frame. */
 const DEFAULT_CAP_RGB: RGB = [240, 240, 240];
@@ -548,14 +549,6 @@ export function createUi(
   /** The source the rail last opened for, so arriving in a mode opens its first category once
    *  and later updates leave the open one alone. */
   let railMode: UiState['importMode'] | null = null;
-
-  /** Signed millimetre offset, for a control whose 0 is a baseline rather than zero. */
-  const fmtSignedMm = (v: number, dec: number) =>
-    (v > 0.0001 ? '+' : v < -0.0001 ? '−' : '') + Math.abs(v).toFixed(dec) + ' mm';
-  /** The way back from `fmtSignedMm` and `pct`, as a stepper's `parse`. Both write a negative
-   *  with the typographic minus, and the box reads only "-" as a sign, so "−0.10 mm" typed
-   *  back would otherwise land as +0.10. */
-  const readSigned = (typed: number, raw: string) => (raw.includes('−') ? -Math.abs(typed) : typed);
 
   /* A hand-rolled "?" marker duplicating the kit's `helpTip()` — same bubble, but this one
      put `role="img"` on something with `tabindex="0"` and a hover/focus handler, which is not
