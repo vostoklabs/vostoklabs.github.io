@@ -279,11 +279,11 @@ importers:
         specifier: ^3.5.1
         version: 3.5.1(@gltf-transform/core@4.4.1)(@gltf-transform/extensions@4.4.1)(@gltf-transform/functions@4.4.1)(esbuild-wasm@0.27.7)
       three:
-        specifier: ^0.169.0
-        version: 0.169.0
+        specifier: ^0.171.0
+        version: 0.171.0
       three-mesh-bvh:
         specifier: ^0.7.8
-        version: 0.7.8(three@0.169.0)
+        version: 0.7.8(three@0.171.0)
     devDependencies:
       '@xmldom/xmldom':
         specifier: ^0.9.10
@@ -1819,9 +1819,6 @@ packages:
     peerDependencies:
       three: '>= 0.151.0'
 
-  three@0.169.0:
-    resolution: {integrity: sha512-Ed906MA3dR4TS5riErd4QBsRGPcx+HBDX2O5yYE5GqJeFQTPU+M56Va/f/Oph9X7uZo3W3o4l2ZhBZ6f6qUv0w==}
-
   three@0.171.0:
     resolution: {integrity: sha512-Y/lAXPaKZPcEdkKjh0JOAHVv8OOnv/NDJqm0wjfCzyQmfKxV7zvkwsnBgPBKTzJHToSOhRGQAGbPJObT59B/PQ==}
 
@@ -2815,11 +2812,9 @@ snapshots:
       harfbuzzjs: 0.10.3
       p-limit: 3.1.0
 
-  three-mesh-bvh@0.7.8(three@0.169.0):
+  three-mesh-bvh@0.7.8(three@0.171.0):
     dependencies:
-      three: 0.169.0
-
-  three@0.169.0: {}
+      three: 0.171.0
 
   three@0.171.0: {}
 
