@@ -133,9 +133,12 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   const top = v.layer('top');
   v.setParts(PARTS.map((p, i) => (i ? { ...p, layer: 'top' } : p)));
   check('layer: its parts are drawn in its group, the rest in the model group', v.partMeshes()[0]!.parent === v.root && v.partMeshes()[1]!.parent === top && v.partMeshes()[2]!.parent === top);
-  top.position.z = 25;
+  // Moved sideways as well as up: measured where it was moved, the layer would widen the model
+  // and shift its centre, and the model would be seated somewhere else.
+  const moved = new THREE.Vector3(30, -12, 25);
+  top.position.copy(moved);
   v.setParts(PARTS.map((p, i) => (i ? { ...p, layer: 'top' } : p)));
-  check('layer: a moved layer keeps its place, and its group, across setParts', v.layer('top') === top && top.position.z === 25 && top.children.length === 2);
+  check('layer: a moved layer keeps its place, and its group, across setParts', v.layer('top') === top && top.position.equals(moved) && top.children.length === 2);
   check('layer: the model is seated with every layer in its place', v.root.position.equals(seatedPlain), `${v.root.position.toArray()} vs ${seatedPlain.toArray()}`);
 
   const camera = v.camera.position.clone();
