@@ -55,6 +55,9 @@ export interface AppShellOptions {
    * `sidebarFooter()` in the right footer is split: its export buttons stay pinned beside
    * Settings, and Save, Load, Help and Light mode follow the panel's content. Nothing changes on
    * a wider screen. Needs a left panel. Default false: the three panels stack on a phone.
+   *
+   * It watches the window's width for as long as the page lives, so it is for a shell built once
+   * per page: an app that builds a new shell per screen would leave a watcher per old shell.
    */
   phone?: boolean;
 }
