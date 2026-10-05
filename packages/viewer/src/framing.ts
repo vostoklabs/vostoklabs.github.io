@@ -92,3 +92,30 @@ export function followOutDistance(current: number, framed: number | null, needed
 export function coverDistance(radius: number, fovDeg: number, pad = COVER_PAD): number {
   return (radius / Math.sin((fovDeg * Math.PI) / 360)) * pad;
 }
+
+/**
+ * The camera distance at which a bounding sphere of `radius` fills `fill` of the view, measured
+ * across whichever field of view is narrower: the vertical one on a wide stage, the horizontal
+ * one on a tall one, so the model covers the same share of the stage whatever its shape. An
+ * aspect that is zero or not a number (a stage not laid out yet) counts as square.
+ */
+export function fillDistance(radius: number, fovDeg: number, aspect: number, fill: number): number {
+  const vFov = (fovDeg * Math.PI) / 180;
+  const a = aspect > 0 && Number.isFinite(aspect) ? aspect : 1;
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * a);
+  return radius / (fill * Math.tan(Math.min(vFov, hFov) / 2));
+}
+
+/** The way each preset looks at the model, as a unit vector from the model to the camera:
+ *  the same quarters `presetPosition` uses, for framing by distance alone. */
+export function presetDirection(preset: ViewPreset): THREE.Vector3 {
+  switch (preset) {
+    case 'front': return new THREE.Vector3(0, -1, 0.08).normalize();
+    case 'back': return new THREE.Vector3(0, 1, 0.08).normalize();
+    case 'left': return new THREE.Vector3(-1, 0, 0.08).normalize();
+    case 'right': return new THREE.Vector3(1, 0, 0.08).normalize();
+    case 'top': return new THREE.Vector3(0, -0.08, 1).normalize();
+    case 'bottom': return new THREE.Vector3(0, 0.08, -1).normalize();
+    default: return COVER_DIR.clone();
+  }
+}

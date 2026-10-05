@@ -10,8 +10,8 @@
 */
 import * as THREE from 'three';
 import {
-  COVER_DIR, COVER_PAD, FAR, FLOOR_GAP, NEAR, coverDistance, depthResolution, floorGapFor, followOutDistance,
-  frameDistance, presetPosition, seatOf, type ViewPreset,
+  COVER_DIR, COVER_PAD, FAR, FLOOR_GAP, NEAR, coverDistance, depthResolution, fillDistance, floorGapFor, followOutDistance,
+  frameDistance, presetDirection, presetPosition, seatOf, type ViewPreset,
 } from '../src/framing';
 
 let pass = 0;
@@ -88,6 +88,27 @@ check('nothing framed yet: it follows', followOutDistance(10, null, 140, true) =
 check('the cover direction is the three-quarter view, as a unit vector', near(COVER_DIR.length(), 1) && COVER_DIR.x > 0 && COVER_DIR.y < 0 && near(COVER_DIR.z / COVER_DIR.x, 0.75));
 check('a cover is shot from where the bounding sphere just fills the frame, plus 15%', COVER_PAD === 1.15
   && near(coverDistance(10, 45), (10 / Math.sin(Math.PI / 8)) * 1.15) && near(coverDistance(10, 45, 1), 26.131259297527535));
+
+/* ------------------------------------------------------------------ framing by fill */
+
+{
+  // A sphere of radius 10 seen through 45 degrees fills 55% of a square stage at:
+  const square = fillDistance(10, 45, 1, 0.55);
+  check('fill: the sphere covers that share of a square view', near(square, 10 / (0.55 * Math.tan(Math.PI / 8))), String(square));
+  check('fill: a wide stage is framed by its height, the same as square', near(fillDistance(10, 45, 2, 0.55), square));
+  const tall = fillDistance(10, 45, 0.5, 0.55);
+  check('fill: a tall stage is framed by its narrower width, so further back', tall > square * 1.9, `${tall.toFixed(2)} vs ${square.toFixed(2)}`);
+  check('fill: a stage not laid out yet counts as square', near(fillDistance(10, 45, 0, 0.55), square) && near(fillDistance(10, 45, Number.NaN, 0.55), square));
+}
+{
+  const dirs = (['iso', 'front', 'back', 'left', 'right', 'top', 'bottom'] as ViewPreset[]).map((p) => [p, presetDirection(p)] as const);
+  check('every preset direction is a unit vector', dirs.every(([, d]) => near(d.length(), 1)));
+  check('the three-quarter direction is the cover\'s, as a copy', presetDirection('iso').equals(COVER_DIR) && presetDirection('iso') !== COVER_DIR);
+  const c = new THREE.Vector3(0, 0, 0);
+  const size = new THREE.Vector3(0, 0, 0);
+  check('each face-on direction points the way its preset puts the camera',
+    dirs.filter(([p]) => p !== 'iso').every(([p, d]) => presetPosition(p, c, size, 1).normalize().distanceTo(d) < 1e-12));
+}
 
 /* ------------------------------------------------------------------ report */
 

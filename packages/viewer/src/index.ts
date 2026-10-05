@@ -5,18 +5,20 @@
 //
 // Existing generators still ship their own viewer (each has app-specific extras
 // — section/explode, magnet handles, socket markers). This is the baseline the
-// template starts from and the place to grow shared behaviour.
+// template starts from and the place to grow shared behaviour: the options and
+// hooks below are what lets an app keep its extras beside this stage instead of
+// in a copy of it, and every one of them is off until an app asks for it.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { themeColorHex } from '@vostok/ui-kit';
 import { createBuildPlate, type BuildPlate } from '@vostok/plates/three';
 import { loadPlateChoice, type PlateChoice } from '@vostok/plates';
 import {
-  COVER_DIR, FLOOR_GAP, FAR, NEAR, coverDistance, floorGapFor, followOutDistance, frameDistance, presetPosition, seatOf,
-  type ViewPreset,
+  COVER_DIR, FLOOR_GAP, FAR, NEAR, coverDistance, fillDistance, floorGapFor, followOutDistance, frameDistance,
+  presetDirection, presetPosition, seatOf, type ViewPreset,
 } from './framing';
+import { partGeometry } from './mesh';
 
 // `setPlate` takes this, so an app that calls it needs to be able to name it without
 // taking its own dependency on @vostok/plates just for a type.
@@ -27,12 +29,20 @@ export type RGB = [number, number, number];
 /** One coloured body of the model — the shape a manifold/three mesh reduces to. */
 export interface ViewerPart {
   name: string;
-  /** Flat xyz triples, millimetres. */
+  /** Flat xyz triples, millimetres — or `stride` floats per vertex, xyz first. */
   positions: Float32Array;
   /** Triangle indices into `positions`. */
   indices: Uint32Array;
   /** Filament colour, 0-255. */
   color: RGB;
+  /** Floats per vertex in `positions`, xyz first: a manifold mesh's `numProp`. Default 3. */
+  stride?: number;
+  /**
+   * The named group the part is drawn in (`Viewer.layer`), so an app can move all of a layer's
+   * parts together: the top of an exploded view. Default: none, the part sits in the model
+   * group itself.
+   */
+  layer?: string;
 }
 
 export interface ViewerOptions {
@@ -42,6 +52,50 @@ export interface ViewerOptions {
   /** Follow `<html data-theme>` automatically. Default true — turn it off only
    *  if the app wants to drive `setTheme` itself. */
   observeTheme?: boolean;
+  /**
+   * Frame the model so its bounding sphere fills `fill` of the narrower field of view, so it
+   * covers the same share of the stage whatever the stage's shape; every view then puts the
+   * camera at that distance. Default: the `frameMul` and `framePad` rule.
+   */
+  frame?: { fill: number };
+  /**
+   * The light. 'studio' (the default): a room environment, a key light and ACES tone mapping.
+   * 'soft': a hemisphere light with a white key and a cool fill, no environment and no tone
+   * mapping, the keycap generator's stage.
+   */
+  look?: 'studio' | 'soft';
+  /** Ask the context for a stencil buffer, which a section view's caps are drawn through.
+   *  Default false. `hasStencil` says whether the context gave one. */
+  stencil?: boolean;
+  /** A canvas that can show through where nothing is drawn, which `renderThumbnail` needs for
+   *  a picture on a transparent background. The stage itself still paints its background over
+   *  every pixel. Default false. */
+  alpha?: boolean;
+  /** Let a material carry its own clipping planes (a section view). Default false. */
+  localClipping?: boolean;
+  /** Keep a drawn frame readable after it is shown, for pictures taken of it. Default true. */
+  preserveDrawingBuffer?: boolean;
+  /** Hand the WebGL context back to the browser on dispose instead of waiting for it to be
+   *  collected. Default false. */
+  forceContextLoss?: boolean;
+  /** Draw into this canvas rather than one of the viewer's own. The viewer does not move it
+   *  and leaves it where it is on dispose. Default: a new canvas, added to the container. */
+  canvas?: HTMLCanvasElement;
+  /** Shift-click adds a part to the selection or takes it out of it; a plain click still
+   *  selects one. Default false: every click selects one part. */
+  multiSelect?: boolean;
+  /** Draw the selected parts' edges (or the hovered part's, when none is selected) over
+   *  everything else. Default false: the glow alone. */
+  outline?: boolean;
+}
+
+/** How a cover is shot (`renderCoverPng`). */
+export interface CoverOptions {
+  /** Pixels a side. Default 512. */
+  edge?: number;
+  /** 'iso' (the default): from a fixed three-quarter angle, so two covers of one model match.
+   *  'view': from the way the user is looking at it now. */
+  angle?: 'iso' | 'view';
 }
 
 export interface Viewer {
@@ -54,15 +108,25 @@ export interface Viewer {
    * Centring is right for a single object; for an assembly whose extent changes as parts
    * come and go, it moves the part the user is looking at on every rebuild. A generator
    * that knows which part is the stable one passes its centre here.
+   *
+   * The model is measured with every layer in its place, so a layer an app has moved (an
+   * exploded top) does not move where the model sits.
    */
   setParts(parts: ViewerPart[], refit?: boolean, anchor?: [number, number, number]): void;
   /** Frame the model from a named angle. */
   setView(preset: ViewPreset): void;
   /** Recolour one part in place, without rebuilding its geometry. */
   setPartColor(index: number, color: RGB): void;
+  /** Replace one part's shape, without rebuilding the others or moving the camera: its colour,
+   *  its place in the list and any offset or pose it has stay. */
+  setPartGeometry(index: number, part: Pick<ViewerPart, 'positions' | 'indices' | 'stride'>): void;
+  /** Show or hide one part. */
+  setPartVisible(index: number, on: boolean): void;
   /** Called with the clicked part's index, or null when the click missed. */
   onPartPick(cb: (index: number | null, event: PointerEvent) => void): void;
   highlightPart(index: number | null): void;
+  /** Select several parts at once, as shift-clicking each does with `multiSelect`. */
+  highlightParts(indices: number[]): void;
   clearHighlight(): void;
   /** Screen point -> model coordinates (mm, relative to the model's centre), or
    *  null if the ray misses. */
@@ -77,6 +141,18 @@ export interface Viewer {
   /** Place one part: a translation and a rotation about the Y axis, in model coordinates —
    *  how an animation moves a part without touching its geometry. Cleared by `setParts`. */
   setPartPose(index: number, position: [number, number, number], rotationY: number): void;
+  /** The group a layer's parts are drawn in (`ViewerPart.layer`), made the first time it is
+   *  asked for and kept across `setParts`: move it, and its parts move. */
+  layer(name: string): THREE.Group;
+  /** The parts' meshes, in part order. */
+  partMeshes(): THREE.Mesh[];
+  /** Called after every `setParts`, once the parts are built and the model is seated, with
+   *  their meshes. Returns a function that stops it. */
+  onPartsSet(cb: (meshes: THREE.Mesh[], parts: ViewerPart[]) => void): () => void;
+  /** Called once a frame, before the frame is drawn. Returns a function that stops it. */
+  onFrame(cb: () => void): () => void;
+  /** Stop drawing while something covers the stage, and start again. */
+  setPaused(paused: boolean): void;
   /** Show or hide the build plate. */
   setPlateVisible(on: boolean): void;
   /** Hand the viewer a hierarchy it did not build — a fold rig, a linkage, anything
@@ -107,13 +183,28 @@ export interface Viewer {
   /** A 2x-supersampled PNG of the current view, at the viewport's own size. */
   renderToPng(): Promise<Blob | null>;
   /** A square, framed PNG of the whole model for a cover image: a fixed three-quarter
-   *  angle, the build plate off, and an explicit edge in pixels (default 512). */
-  renderCoverPng(edge?: number): Promise<Blob | null>;
+   *  angle (or the user's own, with `angle: 'view'`), the build plate off, and an explicit
+   *  edge in pixels (default 512). */
+  renderCoverPng(opts?: number | CoverOptions): Promise<Blob | null>;
+  /**
+   * A square picture, as a PNG data URL: of `parts` if given (a result the stage is not
+   * showing, built for the picture and freed after it), otherwise of the model on the stage
+   * with every layer in its place. From the default three-quarter angle whatever the user has
+   * orbited to, so pictures side by side compare the models and not the camera. On a
+   * transparent background with `alpha`, on the stage's background without. No plate, no fold
+   * rig, no highlight. Null if the canvas cannot be read.
+   */
+  renderThumbnail(edge: number, parts?: ViewerPart[]): string | null;
   /** Escape hatches for generator-specific overlays. */
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
   /** Where the model group sits, so overlays can follow it. */
   readonly root: THREE.Group;
+  readonly controls: OrbitControls;
+  readonly renderer: THREE.WebGLRenderer;
+  /** Whether the context has a stencil buffer: asked for with `stencil`, and given. Without
+   *  one every stencil test passes, so stencilled caps would paint across the whole scene. */
+  readonly hasStencil: boolean;
   dispose(): void;
 }
 
@@ -129,25 +220,24 @@ function toColor(rgb: RGB): THREE.Color {
   return new THREE.Color().setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
 }
 
-function partToGeometry(p: ViewerPart): THREE.BufferGeometry {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(p.positions, 3));
-  geo.setIndex(new THREE.BufferAttribute(p.indices, 1));
-  // Crease-split normals: domes and round walls stay smooth, hard edges crisp.
-  const creased = toCreasedNormals(geo, (35 * Math.PI) / 180);
-  geo.dispose();
-  return creased;
-}
-
 export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): Viewer {
   const FRAME_MUL = opts.frameMul ?? 2.2;
   const FRAME_PAD = opts.framePad ?? 15;
+  const soft = opts.look === 'soft';
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  // Only what an app asked for is passed: the parameters the renderer has always been made
+  // with are the parameters it is made with.
+  const params: THREE.WebGLRendererParameters = { antialias: true, preserveDrawingBuffer: opts.preserveDrawingBuffer ?? true };
+  if (opts.canvas) params.canvas = opts.canvas;
+  if (opts.stencil) params.stencil = true;
+  if (opts.alpha) params.alpha = true;
+  const renderer = new THREE.WebGLRenderer(params);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  container.appendChild(renderer.domElement);
+  if (!soft) renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  if (opts.localClipping) renderer.localClippingEnabled = true;
+  if (!opts.canvas) container.appendChild(renderer.domElement);
+  const hasStencil = !!opts.stencil && renderer.getContext().getContextAttributes()?.stencil === true;
 
   let theme = readTheme();
   const scene = new THREE.Scene();
@@ -157,13 +247,28 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   camera.up.set(0, 0, 1); // Z up (CAD)
   camera.position.set(60, -60, 45);
 
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  let pmrem: THREE.PMREMGenerator | null = null;
+  if (soft) {
+    // The keycap generator's stage, turned Z-up: sky from above, a white key over the front
+    // right shoulder, a cool fill from behind on the left.
+    const sky = new THREE.HemisphereLight(0xffffff, 0x404654, 1.05);
+    sky.position.set(0, 0, 1);
+    scene.add(sky);
+    const key = new THREE.DirectionalLight(0xffffff, 1.4);
+    key.position.set(12, -18, 30);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x9fb6ff, 0.5);
+    fill.position.set(-18, 14, 10);
+    scene.add(fill);
+  } else {
+    pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-  const key = new THREE.DirectionalLight(0xffffff, 1.8);
-  key.position.set(40, -30, 70);
-  scene.add(key);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+    const key = new THREE.DirectionalLight(0xffffff, 1.8);
+    key.position.set(40, -30, 70);
+    scene.add(key);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+  }
 
   let floorZ = -FLOOR_GAP;
   const buildPlate: BuildPlate = createBuildPlate(THREE, { theme, topZ: floorZ });
@@ -184,11 +289,17 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
   const materials: THREE.MeshStandardMaterial[] = [];
   const partMeshes: THREE.Mesh[] = [];
+  /** The layers asked for, by name: groups inside `root` that `clearParts` empties but keeps. */
+  const layers = new Map<string, THREE.Group>();
+  const partsSetHooks = new Set<(meshes: THREE.Mesh[], parts: ViewerPart[]) => void>();
+  const frameHooks = new Set<() => void>();
 
   // Radius the camera was last framed for. A rebuild only re-frames when the
   // model grew or shrank enough to leave the view — otherwise dragging a slider
   // would yank the camera back to default on every tick.
   let framedRadius = 0;
+  /** The extent the camera was last framed for, which `frame` measures by. */
+  const framedSize = new THREE.Vector3();
   let lastSize = new THREE.Vector3(40, 40, 10);
   /** Where the model's centre ended up in world space after `setParts` positioned it. The
    *  presets aim here. With no anchor it is (0, 0, height/2) — the model sits on the plate —
@@ -201,8 +312,29 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     return h > 0 ? container.clientWidth / h : 1;
   }
 
+  /** How far from the model the camera is framed: `radius` is the model's largest extent,
+   *  `size` its extent on each axis. */
+  function distanceFor(radius: number, size: THREE.Vector3): number {
+    if (opts.frame) return fillDistance(size.length() / 2, camera.fov, camera.aspect, opts.frame.fill);
+    return frameDistance(radius, FRAME_MUL, FRAME_PAD);
+  }
+
+  function disposeMesh(mesh: THREE.Mesh) {
+    mesh.geometry.dispose();
+    (mesh.material as THREE.Material).dispose();
+  }
+
   function clearParts() {
+    clearOutline();
     for (const child of [...root.children]) {
+      // A layer stays where the app put it; only its parts go.
+      if (child instanceof THREE.Group && [...layers.values()].includes(child)) {
+        for (const part of [...child.children]) {
+          child.remove(part);
+          if (part instanceof THREE.Mesh) disposeMesh(part);
+        }
+        continue;
+      }
       root.remove(child);
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose();
@@ -211,6 +343,35 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     }
     materials.length = 0;
     partMeshes.length = 0;
+  }
+
+  function layer(name: string): THREE.Group {
+    let group = layers.get(name);
+    if (!group) {
+      group = new THREE.Group();
+      group.name = `layer:${name}`;
+      layers.set(name, group);
+      root.add(group);
+    }
+    return group;
+  }
+
+  /** Every layer moved back into its place while `fn` measures or draws, then put back. */
+  function withLayersInPlace<T>(fn: () => T): T {
+    if (!layers.size) return fn();
+    const moved = [...layers.values()].map((g) => [g, g.position.clone(), g.quaternion.clone()] as const);
+    for (const [g] of moved) {
+      g.position.set(0, 0, 0);
+      g.quaternion.identity();
+    }
+    try {
+      return fn();
+    } finally {
+      for (const [g, p, q] of moved) {
+        g.position.copy(p);
+        g.quaternion.copy(q);
+      }
+    }
   }
 
   /** Dispose a whole subtree. `clearParts` only reaches direct Mesh children, which
@@ -265,16 +426,25 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
     if (refit || framedRadius === 0) {
       framedRadius = radius;
+      framedSize.copy(size);
       const offset = camera.position.clone().sub(controls.target);
       controls.target.set(0, 0, size.z / 2);
       camera.position
         .copy(controls.target)
-        .add(offset.setLength(frameDistance(radius, FRAME_MUL, FRAME_PAD)));
+        .add(offset.setLength(distanceFor(radius, size)));
       controls.update();
     }
   }
 
   function setParts(parts: ViewerPart[], refit = false, anchor?: [number, number, number]) {
+    buildParts(parts, refit, anchor);
+    if (partsSetHooks.size) {
+      const meshes = partMeshes.slice();
+      for (const cb of [...partsSetHooks]) cb(meshes, parts);
+    }
+  }
+
+  function buildParts(parts: ViewerPart[], refit: boolean, anchor?: [number, number, number]) {
     clearParts();
 
     for (let i = 0; i < parts.length; i++) {
@@ -286,11 +456,11 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
         side: THREE.DoubleSide,
       });
       materials.push(mat);
-      const mesh = new THREE.Mesh(partToGeometry(p), mat);
+      const mesh = new THREE.Mesh(partGeometry(p), mat);
       mesh.userData.partIndex = i;
       mesh.userData.partName = p.name;
       partMeshes.push(mesh);
-      root.add(mesh);
+      (p.layer === undefined ? root : layer(p.layer)).add(mesh);
     }
 
     // An empty build is a real state, not an error: a generator whose text field is
@@ -316,8 +486,10 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     // rebuild, so the model hops sideways on every keystroke. The four apps that carry
     // their own viewer fixed this in 34224d7; this shared one was missed.
     root.position.set(0, 0, 0);
-    root.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(root);
+    const box = withLayersInPlace(() => {
+      root.updateMatrixWorld(true);
+      return new THREE.Box3().setFromObject(root);
+    });
     const seat = seatOf(box, anchor);
     root.position.copy(seat.offset);
     lastSize = box.getSize(new THREE.Vector3());
@@ -346,8 +518,8 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     const offset = camera.position.clone().sub(controls.target);
     const to = followOutDistance(
       offset.length(),
-      framedRadius === 0 ? null : frameDistance(framedRadius, FRAME_MUL, FRAME_PAD),
-      frameDistance(radius, FRAME_MUL, FRAME_PAD),
+      framedRadius === 0 ? null : distanceFor(framedRadius, framedSize),
+      distanceFor(radius, lastSize),
       radius > framedRadius,
     );
     if (to !== null) {
@@ -355,15 +527,18 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       controls.update();
     }
     framedRadius = radius;
+    framedSize.copy(lastSize);
   }
 
   /** Point the camera at the model from a preset angle, at a fitting distance. */
   function setView(preset: ViewPreset) {
     const radius = Math.max(lastSize.x, lastSize.y, lastSize.z);
-    presetPosition(preset, lastCentre, lastSize, frameDistance(radius, FRAME_MUL, FRAME_PAD), camera.position);
+    if (opts.frame) camera.position.copy(lastCentre).addScaledVector(presetDirection(preset), distanceFor(radius, lastSize));
+    else presetPosition(preset, lastCentre, lastSize, frameDistance(radius, FRAME_MUL, FRAME_PAD), camera.position);
     controls.target.copy(lastCentre);
     controls.update();
     framedRadius = radius;
+    framedSize.copy(lastSize);
   }
 
   // ---- picking, hover and selection ----
@@ -371,22 +546,49 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   const pointer = new THREE.Vector2();
   const HILITE = new THREE.Color(0x3b82f6);
   let hoveredIndex: number | null = null;
-  let selectedIndex: number | null = null;
+  /** The selected parts: one, or with `multiSelect` and shift-clicks, several. */
+  let selected: number[] = [];
   let pickCb: ((index: number | null, event: PointerEvent) => void) | null = null;
   let downX = 0;
   let downY = 0;
   let downT = 0;
 
+  /** The edges drawn over the selection (`outline`), and their one material. */
+  const outlines: THREE.LineSegments[] = [];
+  const outlineMaterial = opts.outline ? new THREE.LineBasicMaterial({ color: 0x3b82f6, depthTest: false }) : null;
+
+  function clearOutline() {
+    for (const line of outlines) {
+      line.removeFromParent();
+      line.geometry.dispose();
+    }
+    outlines.length = 0;
+  }
+
   function applyHighlight() {
     for (let i = 0; i < materials.length; i++) {
       const m = materials[i]!;
-      const on = selectedIndex === i || hoveredIndex === i;
+      const on = selected.includes(i) || hoveredIndex === i;
       if (on) {
         m.emissive.copy(HILITE);
         m.emissiveIntensity = hoveredIndex === i ? 0.4 : 0.2;
       } else {
         m.emissiveIntensity = 0;
       }
+    }
+    if (!outlineMaterial) return;
+    clearOutline();
+    const traced = selected.length ? selected : hoveredIndex !== null ? [hoveredIndex] : [];
+    for (const i of traced) {
+      const mesh = partMeshes[i];
+      if (!mesh?.parent) continue;
+      const line = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 15), outlineMaterial);
+      line.position.copy(mesh.position);
+      line.quaternion.copy(mesh.quaternion);
+      line.scale.copy(mesh.scale);
+      line.renderOrder = 999;
+      mesh.parent.add(line);
+      outlines.push(line);
     }
   }
 
@@ -445,13 +647,22 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     downY = e.clientY;
     downT = performance.now();
   };
+  /** A tap on part `idx`, or on empty space: select it (with `multiSelect` and shift, add it to
+   *  the selection or take it out), and tell the app. */
+  function tapPart(idx: number | null, e: PointerEvent) {
+    if (opts.multiSelect && e.shiftKey && idx !== null) {
+      selected = selected.includes(idx) ? selected.filter((i) => i !== idx) : [...selected, idx];
+    } else {
+      selected = idx === null ? [] : [idx];
+    }
+    applyHighlight();
+    pickCb?.(idx, e);
+  }
   const onPointerUp = (e: PointerEvent) => {
     // Ignore the pointerup that ends an orbit drag or a long press.
     if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
     if (performance.now() - downT > 500) return;
-    selectedIndex = pickIndexAt(e.clientX, e.clientY);
-    applyHighlight();
-    pickCb?.(selectedIndex, e);
+    tapPart(pickIndexAt(e.clientX, e.clientY), e);
   };
   renderer.domElement.addEventListener('pointermove', onPointerMove);
   renderer.domElement.addEventListener('pointerleave', onPointerLeave);
@@ -476,7 +687,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
    *  resize the drawing buffer back to the viewport between the cover render and the
    *  `toBlob` that reads it — which clears it, and the cover comes back blank. */
   let capturing = false;
-  (function animate() {
+  function animate() {
     raf = requestAnimationFrame(animate);
     if (capturing) return;
     // Self-heal the canvas size: the stage is a CSS-grid cell whose height
@@ -513,8 +724,21 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     // From below, a solid plate would sit between the camera and the model —
     // ghost it rather than hiding it, so it never pops as you orbit past level.
     buildPlate.setGhosted(camera.position.z <= floorZ);
+    for (const cb of [...frameHooks]) cb();
     renderer.render(scene, camera);
-  })();
+  }
+  animate();
+
+  /** Stop drawing, or start again. Two render loops running at once is double the GPU's work
+   *  for a scene nobody can see, and the extra pressure is what makes a browser drop a context. */
+  function setPaused(paused: boolean) {
+    if (paused) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    } else if (!raf) {
+      animate();
+    }
+  }
 
   // ---- theme ----
   function setTheme(next: string) {
@@ -538,9 +762,11 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
    * scene background, at `edge` pixels a side.
    *
    * The angle is fixed rather than the user's, so two exports of the same box produce the
-   * same cover: a cover is the product shot, not a record of the last orbit.
+   * same cover: a cover is the product shot, not a record of the last orbit. `angle: 'view'`
+   * shoots from where the user is looking instead.
    */
-  async function renderCoverPng(edge = 512): Promise<Blob | null> {
+  async function renderCoverPng(cover: number | CoverOptions = {}): Promise<Blob | null> {
+    const { edge = 512, angle = 'iso' } = typeof cover === 'number' ? { edge: cover } : cover;
     /* Restore from the RENDERER's own size, not from `container.clientWidth`. The container
        measures 0 x 0 whenever its pane is hidden or mid-layout, and restoring to that leaves
        the canvas permanently 0 x 0 — the viewport goes black until a window resize. */
@@ -550,6 +776,8 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     const prevPos = camera.position.clone();
     const prevTarget = controls.target.clone();
     const plateWasVisible = buildPlate.object.visible;
+    const dir = angle === 'view' ? prevPos.clone().sub(prevTarget).normalize() : COVER_DIR;
+    if (dir.lengthSq() === 0) dir.copy(COVER_DIR);
 
     capturing = true;
     // `finally`, because a throw in here would otherwise leave the viewport frozen at 512 px
@@ -570,7 +798,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
         // Sphere radius, so the fit holds at any angle, and the frame is square, so the
         // vertical FOV governs both directions.
         const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
-        camera.position.copy(centre).addScaledVector(COVER_DIR, coverDistance(radius, camera.fov));
+        camera.position.copy(centre).addScaledVector(dir, coverDistance(radius, camera.fov));
         camera.lookAt(centre);
       }
       camera.aspect = 1;
@@ -596,6 +824,91 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     }
   }
 
+  /** A card's picture: see `Viewer.renderThumbnail`. Synchronous, so the frame on the stage is
+   *  put back before anything can paint in between. */
+  function renderThumbnail(edge: number, parts?: ViewerPart[]): string | null {
+    const prevSize = renderer.getSize(new THREE.Vector2());
+    const prevRatio = renderer.getPixelRatio();
+    const prevAspect = camera.aspect;
+    const prevPos = camera.position.clone();
+    const prevBackground = scene.background;
+    const prevClear = renderer.getClearColor(new THREE.Color());
+    const prevClearAlpha = renderer.getClearAlpha();
+    const plateWasVisible = buildPlate.object.visible;
+    const rigWasVisible = rig.visible;
+    const rootWasVisible = root.visible;
+    const hovered = hoveredIndex;
+    const chosen = selected;
+    let shot: THREE.Group | null = null;
+    let url: string | null = null;
+
+    // A hover glow or a selection outline is the pointer's business, not the picture's.
+    hoveredIndex = null;
+    selected = [];
+    applyHighlight();
+    buildPlate.object.visible = false;
+    rig.visible = false;
+    try {
+      withLayersInPlace(() => {
+        const box = new THREE.Box3();
+        if (parts) {
+          shot = new THREE.Group();
+          for (const p of parts) {
+            const mat = new THREE.MeshStandardMaterial({ color: toColor(p.color), metalness: 0, roughness: 0.5 });
+            shot.add(new THREE.Mesh(partGeometry(p), mat));
+          }
+          scene.add(shot);
+          root.visible = false;
+          shot.updateMatrixWorld(true);
+          box.expandByObject(shot);
+        } else {
+          root.updateMatrixWorld(true);
+          if (partMeshes.length) box.expandByObject(root);
+        }
+        const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+        const radius = box.isEmpty() ? 1 : Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
+        camera.position.copy(centre).addScaledVector(COVER_DIR, coverDistance(radius, camera.fov, 1));
+        camera.lookAt(centre);
+        camera.aspect = 1;
+        camera.updateProjectionMatrix();
+
+        if (opts.alpha) {
+          scene.background = null;
+          renderer.setClearColor(0x000000, 0);
+        }
+        renderer.setPixelRatio(1);
+        renderer.setSize(edge, edge, false);
+        renderer.render(scene, camera);
+        try {
+          url = renderer.domElement.toDataURL('image/png');
+        } catch {
+          url = null;
+        }
+      });
+    } finally {
+      if (shot) {
+        scene.remove(shot);
+        disposeSubtree(shot);
+      }
+      root.visible = rootWasVisible;
+      rig.visible = rigWasVisible;
+      scene.background = prevBackground;
+      renderer.setClearColor(prevClear, prevClearAlpha);
+      renderer.setPixelRatio(prevRatio);
+      renderer.setSize(prevSize.x, prevSize.y, false);
+      camera.aspect = prevAspect;
+      camera.updateProjectionMatrix();
+      camera.position.copy(prevPos);
+      controls.update(); // re-aims the camera at the untouched orbit target
+      buildPlate.object.visible = plateWasVisible;
+      hoveredIndex = hovered;
+      selected = chosen;
+      applyHighlight();
+      renderer.render(scene, camera);
+    }
+    return url;
+  }
+
   async function renderToPng(): Promise<Blob | null> {
     const w = container.clientWidth;
     const h = container.clientHeight;
@@ -618,12 +931,17 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     renderer.domElement.removeEventListener('pointerdown', onPointerDown);
     renderer.domElement.removeEventListener('pointerup', onPointerUp);
     clearParts();
+    outlineMaterial?.dispose();
     setFoldRig(null);
     buildPlate.dispose();
     controls.dispose();
-    pmrem.dispose();
+    pmrem?.dispose();
+    partsSetHooks.clear();
+    frameHooks.clear();
     renderer.dispose();
-    renderer.domElement.remove();
+    // dispose() frees three's own objects and leaves the context alive; this hands it back.
+    if (opts.forceContextLoss) renderer.forceContextLoss();
+    if (!opts.canvas) renderer.domElement.remove();
   }
 
   return {
@@ -633,15 +951,30 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       const m = materials[index];
       if (m) m.color = toColor(color);
     },
+    setPartGeometry(index, part) {
+      const mesh = partMeshes[index];
+      if (!mesh) return;
+      mesh.geometry.dispose();
+      mesh.geometry = partGeometry(part);
+      if (outlineMaterial) applyHighlight();
+    },
+    setPartVisible(index, on) {
+      const mesh = partMeshes[index];
+      if (mesh) mesh.visible = on;
+    },
     onPartPick(cb) {
       pickCb = cb;
     },
     highlightPart(index) {
-      selectedIndex = index;
+      selected = index === null ? [] : [index];
+      applyHighlight();
+    },
+    highlightParts(indices) {
+      selected = [...indices];
       applyHighlight();
     },
     clearHighlight() {
-      selectedIndex = null;
+      selected = [];
       hoveredIndex = null;
       applyHighlight();
     },
@@ -661,6 +994,17 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       m.position.set(position[0], position[1], position[2]);
       m.rotation.set(0, rotationY, 0);
     },
+    layer,
+    partMeshes: () => partMeshes.slice(),
+    onPartsSet(cb) {
+      partsSetHooks.add(cb);
+      return () => void partsSetHooks.delete(cb);
+    },
+    onFrame(cb) {
+      frameHooks.add(cb);
+      return () => void frameHooks.delete(cb);
+    },
+    setPaused,
     setFoldRig,
     settleFoldRig,
     setPlate: (choice) => buildPlate.setChoice(choice),
@@ -670,9 +1014,13 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     },
     renderToPng,
     renderCoverPng,
+    renderThumbnail,
     scene,
     camera,
     root,
+    controls,
+    renderer,
+    hasStencil,
     dispose,
   };
 }

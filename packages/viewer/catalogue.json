@@ -1,6 +1,6 @@
 {
   "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
   "blocks": [
-    { "name": "3D viewer", "category": "print3d", "use": ["createViewer"], "for": "The 3D stage: Z-up CAD camera, real materials, the build plate under the model, view presets, part picking and highlight, and picture grabs for covers." }
+    { "name": "3D viewer", "category": "print3d", "use": ["createViewer"], "for": "The 3D stage: Z-up CAD camera, real materials, the build plate under the model, view presets, part picking and highlight, and picture grabs for covers and cards; with options and hooks, each off by default, for a stage of an app's own (section caps, exploded layers, multi-select, a soft look, framing by fill)." }
   ]
 }
