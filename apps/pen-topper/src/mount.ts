@@ -1033,9 +1033,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           toast(indexed ? 'Exported to your library' : `Exported as ${fileName}`, { kind: 'ok' });
           return;
         }
-        // The cast is the TS 5.7 `Uint8Array<ArrayBufferLike>` vs `BlobPart` mismatch, not a
-        // real one: nothing here ever produces a SharedArrayBuffer-backed view.
-        downloadBlob(new Blob([bytes as BlobPart], { type: mime }), fileName);
+        downloadFile(bytes, fileName, mime);
       };
 
       if (setResults) {
@@ -1442,14 +1440,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
-  function downloadBlob(blob: Blob, name: string) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
   /** Put a saved parameter blob back on screen. Both load paths — the web's file picker
    *  and the host's project browser — come through here, so they cannot drift apart. */
   function applySettings(data: unknown): void {
