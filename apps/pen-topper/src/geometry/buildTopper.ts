@@ -1,6 +1,6 @@
 import type { BuildParams, PartMesh } from '../types';
 import type { LineBox } from '@vostok/fonts/textLayout';
-import { csOf, ringsOf, extrude } from '@vostok/manifold';
+import { csOf, ringsOf, extrude, withScope, type Keep } from '@vostok/manifold';
 import { boreFor, gripFor, HEX_CORNER_FACTOR } from '../state';
 import { snapLayers } from './noAms';
 import { identityVoids } from './identityMark';
@@ -39,28 +39,6 @@ import { identityVoids } from './identityMark';
   topper; a hole that does not admit the pen is not a topper. Raise the rib count to
   four for a hexagonal barrel — four never lines up with six.
 */
-
-/** Registers every WASM object so a throw cannot leak the heap. */
-function withScope<T>(fn: (keep: <M extends { delete(): void }>(m: M) => M) => T): T {
-  const created: { delete(): void }[] = [];
-  const keep = <M extends { delete(): void }>(m: M) => {
-    created.push(m);
-    return m;
-  };
-  try {
-    return fn(keep);
-  } finally {
-    for (const m of created) {
-      try {
-        m.delete();
-      } catch (e) {
-        console.warn('Error deleting manifold object:', e);
-      }
-    }
-  }
-}
-
-type Keep = <M extends { delete(): void }>(m: M) => M;
 
 function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace('#', '');

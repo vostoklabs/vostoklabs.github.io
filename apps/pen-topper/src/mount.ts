@@ -31,15 +31,18 @@ import {
   textareaField,
   filamentRow,
   fontChooser,
+  syncControls,
+  readProjectFile,
   el,
   type DesktopHost,
   type HostAsset,
+  type ValueRow,
 } from '@vostok/ui-kit';
 import { zipSync } from 'fflate';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
 import { mountPlatePicker, plateSize, loadPlateChoice } from '@vostok/plates';
-import { buildThreeMF, type ExportPart } from '@vostok/export';
+import { buildThreeMF, downloadFile, type ExportPart } from '@vostok/export';
 import {
   FONTS,
   ICONS,
@@ -933,42 +936,57 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     controls.layerHeight.classList.toggle('hidden', !swappable || settings.printMode !== 'noams');
   }
 
-  /** Push `settings` back into every control — after Load, or a shared link. */
-  function syncControls() {
-    controls.size.setValue(settings.size);
-    controls.plateThickness.setValue(settings.plateThickness);
-    controls.textThickness.setValue(settings.textThickness);
-    controls.outlineWidth.setValue(settings.outlineWidth);
-    controls.smoothing.setValue(settings.smoothing);
-    controls.chamfer.setValue(settings.chamferOn);
-    controls.chamferSize.setValue(settings.chamfer);
-    controls.socketAngle.setValue(settings.socketAngle);
-    controls.socketOffset.setValue(settings.socketOffset);
-    controls.barrelDia.setValue(settings.barrelDia);
-    controls.socketDepth.setValue(settings.socketDepth);
-    controls.wallThickness.setValue(settings.wallThickness);
-    controls.ribCount.setValue(settings.ribCount);
-    controls.ribHeight.setValue(settings.ribHeight);
-    controls.ribCount.setValue(settings.ribCount);
+  /**
+   * Push `settings` into every control — after Load, or a shared link — and keep only what the
+   * controls can show.
+   *
+   * The kit's `syncControls` does the one-to-one fields and writes each control's value back.
+   * `coerceSettings` only checks that a value has the right type, so without the read-back a file
+   * saying `size: 40` built 40 mm behind a slider showing 26. Fit is derived (it reads No ribs
+   * while there are none), so it follows by hand, with the colours and the font.
+   */
+  function showSettings() {
+    syncControls(settings, {
+      size: controls.size,
+      plateThickness: controls.plateThickness,
+      textThickness: controls.textThickness,
+      outlineWidth: controls.outlineWidth,
+      smoothing: controls.smoothing,
+      chamferOn: controls.chamfer,
+      chamfer: controls.chamferSize,
+      socketAngle: controls.socketAngle,
+      socketOffset: controls.socketOffset,
+      barrelDia: controls.barrelDia,
+      socketDepth: controls.socketDepth,
+      wallThickness: controls.wallThickness,
+      ribCount: controls.ribCount,
+      ribHeight: controls.ribHeight,
+      penPath: pathControl,
+      haloWidth: controls.haloWidth,
+      haloThickness: controls.haloThickness,
+      boldness: controls.boldness,
+      letterSpacing: controls.letterSpacing,
+      lineSpacing: controls.lineSpacing,
+      line2Scale: controls.line2Scale,
+      layerHeight: controls.layerHeight,
+      name: nameField,
+      secondLine: secondField,
+      pen: penSelect,
+      holeShape: holeShapeControl,
+      plateShape: shapeControl,
+      layout: layoutControl,
+      style: styleControl,
+      // Its options are exactly the three schemes; the kit's dropdown is typed as plain string.
+      colorScheme: colorSchemeField as ValueRow<TopperSettings['colorScheme']>,
+      printMode: printModeControl,
+    });
+    // With no ribs Fit reads No ribs, and `settings.fit` keeps the fit they come back at.
     fitControl.setValue(settings.ribCount <= 0 ? 'none' : settings.fit);
-    pathControl.setValue(settings.penPath);
-    controls.haloWidth.setValue(settings.haloWidth);
-    controls.haloThickness.setValue(settings.haloThickness);
-    controls.boldness.setValue(settings.boldness);
-    controls.letterSpacing.setValue(settings.letterSpacing);
-    controls.lineSpacing.setValue(settings.lineSpacing);
-    controls.line2Scale.setValue(settings.line2Scale);
-    controls.layerHeight.setValue(settings.layerHeight);
-    nameField.setValue(settings.name);
-    secondField.setValue(settings.secondLine);
-    penSelect.setValue(settings.pen);
-    holeShapeControl.setValue(settings.holeShape);
+    if (settings.ribCount > 0) settings.fit = fitControl.getValue();
     plateColorRow.setValue(settings.plateColor);
     haloColorRow.setValue(settings.haloColor);
     textColorRow.setValue(settings.textColor);
-    shapeControl.setValue(settings.plateShape);
     refreshShape(1);
-    layoutControl.setValue(settings.layout);
     fontControl.setSample(fontSample(), fontCheckText());
     fontControl.setValue(settings.font);
     refreshPath();
@@ -1049,10 +1067,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // different things is worse than either one alone. `Boolean(...)` and not `isDesktop()`:
     // a desktop host that does not offer the capability still needs these.
     hostOwnsProjects: Boolean(host?.registerProject),
-    onSave: () => downloadJSON(`${settings.name.trim() || 'pen'}-topper.json`, settings),
+    onSave: () =>
+      downloadFile(JSON.stringify(settings, null, 2), `${settings.name.trim() || 'pen'}-topper.json`, 'application/json'),
     onLoad: (file?: File) =>
       file &&
-      loadJSON(file, (data) => {
+      readProjectFile(file, (data) => {
         applySettings(data);
         toast('Project loaded', { kind: 'ok' });
       }),
@@ -1368,7 +1387,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const viewer = createViewer(stageCanvas);
   mountPlatePicker(shell.stage, viewer);
 
-  syncControls();
+  showSettings();
   worker.postMessage({ type: 'init' });
 
   /**
@@ -1431,31 +1450,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     URL.revokeObjectURL(a.href);
   }
 
-  function downloadJSON(name: string, data: unknown) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  function loadJSON(file: File, apply: (data: unknown) => void) {
-    const r = new FileReader();
-    r.onload = () => {
-      try {
-        apply(JSON.parse(r.result as string));
-      } catch {
-        toast('Invalid project file', { kind: 'error' });
-      }
-    };
-    r.readAsText(file);
-  }
-
   /** Put a saved parameter blob back on screen. Both load paths — the web's file picker
    *  and the host's project browser — come through here, so they cannot drift apart. */
   function applySettings(data: unknown): void {
     settings = coerceSettings(data);
-    syncControls();
+    showSettings();
     firstBuild = true;
     triggerRebuild();
   }
