@@ -1,5 +1,4 @@
-// Shared model exporters, promoted from the magnet generator's export/. The
-// clicker still carries its own 3MF writer.
+// Shared model exporters, promoted from the magnet generator's export/.
 //
 // The 3MF is authored as a SINGLE object with N pre-coloured, mating parts —
 // the shape Bambu Studio / OrcaSlicer import cleanly with each part on its own
