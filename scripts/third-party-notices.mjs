@@ -22,15 +22,26 @@
   downloads. That is the bundled typefaces and the symbol font above all — a glyph
   traced into an exported SVG is the plainest case — plus the runtime libraries the
   page ships.
+
+  What an app carries is read from its source (scripts/lib/bundle.mjs), not from its
+  dependency list: a set is named when the app's imports reach a file the asset
+  registry (assets.json) claims for it, and a library when the app depends on it
+  itself or a file its imports reach imports it. A library a shared package depends on
+  for a part the app never imports is not in its bundle, and is not named.
 */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join as joinPath } from 'node:path';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reach } from './lib/bundle.mjs';
+import { privateApps, privateFiles } from './lib/source.mjs';
+import { readRegistry, rowsClaiming } from './lib/assets.mjs';
+import { appTitle, generatorApps } from './licenses.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CHECK = process.argv.includes('--check');
+const ROWS = readRegistry();
 
 /** Never distributed, so there is no copy for a notice to travel with: kit-demo is the component
  *  gallery and the template is what `pnpm new:generator` copies, and the deploy publishes neither.
@@ -186,67 +197,27 @@ function licenceFileIn(dir) {
   return file ? readFileSync(join(dir, file), 'utf8').split('\r\n').join('\n').trim() : null;
 }
 
-/** The dependencies of one of our own workspace packages, read from packages/<x>/package.json.
- *  `@vostok/brand` is `config/`, not `packages/`, so it is looked up both ways. */
-function workspacePkg(name) {
-  const stem = name.replace(/^@vostok\//, '');
-  for (const dir of [join(ROOT, 'packages', stem), join(ROOT, 'config')]) {
-    const p = join(dir, 'package.json');
-    if (!existsSync(p)) continue;
-    const j = JSON.parse(readFileSync(p, 'utf8'));
-    if (j.name === name) return j;
-  }
-  return null;
-}
-
-/** Whether an app bundles one of our packages: as its own dependency, or as a dependency of
- *  another of ours that it depends on. */
-function dependsOn(pkg, name) {
-  const seen = new Set();
-  const reaches = (deps) => Object.keys(deps ?? {}).some((d) => {
-    if (d === name) return true;
-    if (!d.startsWith('@vostok/') || seen.has(d)) return false;
-    seen.add(d);
-    return reaches(workspacePkg(d)?.dependencies);
-  });
-  return reaches(pkg.dependencies);
-}
-
-/** Runtime deps worth naming: the ones whose code is in the shipped bundle.
+/** Runtime libraries worth naming: the ones whose code can be in the shipped bundle.
  *
- *  Workspace packages carry no third-party obligation OF THEIR OWN — they are ours — but
- *  their DEPENDENCIES do, and those are bundled just as thoroughly as a direct one. This
- *  walked direct dependencies only until 2026-09-22, and the gap was real: Laser Studio ships
- *  `pica` (MIT) through `@vostok/laser`, `nodeca/pica` is in the built bundle, and this file —
- *  the one that exists to name what is bundled — did not mention it. MIT asks that the notice
- *  travel with the distribution, so an omission here is the licence not being honoured, not a
- *  cosmetic gap. So: follow `@vostok/*` transitively and collect what they bring with them.
+ *  Workspace packages carry no third-party obligation OF THEIR OWN — they are ours — but the
+ *  libraries their code imports do, and those are bundled just as thoroughly as a direct one:
+ *  Laser Studio ships `pica` (MIT) through `@vostok/laser`, and an omission here is a licence
+ *  not honoured, not a cosmetic gap. So this names the app's own dependencies, and every
+ *  library a file its imports reach imports (scripts/lib/bundle.mjs), through any number of our
+ *  packages. A library one of our packages depends on only for a part the app never imports
+ *  cannot be in its bundle, and is not named.
  *
  *  Dependencies, never devDependencies: a bundler's own devDependency (esbuild, typescript) is
  *  not in the output. */
-function libsFor(appDir, pkg) {
-  const collected = new Set();
-  const seen = new Set();
-  /** Where each workspace package we walked through lives, so its node_modules can be searched
-   *  for the licences of what it brought. */
-  const ownerDirs = [];
-  const visit = (deps) => {
-    for (const d of Object.keys(deps ?? {})) {
-      if (!d.startsWith('@vostok/')) { collected.add(d); continue; }
-      if (seen.has(d)) continue;
-      seen.add(d);
-      const own = workspacePkg(d);
-      if (own) ownerDirs.push(join(ROOT, 'packages', d.replace(/^@vostok\//, '')));
-      visit(own?.dependencies);
-    }
-  };
-  visit(pkg.dependencies);
-  const deps = [...collected];
+function libsFor(appId, appDir, pkg) {
+  const { libs } = reach(appId);
+  const own = Object.keys(pkg.dependencies ?? {}).filter((d) => !d.startsWith('@vostok/'));
   const out = [];
   const texts = [];
   const unresolved = [];
-  for (const d of deps.sort()) {
-    const info = licenceOf(appDir, d, ownerDirs);
+  for (const d of [...new Set([...own, ...libs.keys()])].sort()) {
+    // The folders whose files import it, so their node_modules can be searched for its licence.
+    const info = licenceOf(appDir, d, [...(libs.get(d) ?? [])].map((dir) => join(ROOT, dir)));
     const label = `${d}${info?.version ? ` ${info.version}` : ''}`;
     if (info?.license) out.push(`  ${label} — ${info.license}`);
     else { out.push(`  ${d} — see its package for licence terms`); unresolved.push(d); }
@@ -350,33 +321,10 @@ ${mit}
 }
 
 /** The kit's own symbol set, `packages/ui-kit/src/symbols/catalog.json`: Fluent Emoji (High
- *  Contrast) and Tabler Icons (filled), both MIT, licence texts beside the data.
- *
- *  Every app depends on the kit, so the dependency cannot say who bundles the set; the source
- *  can. An app carries this section when a file under its `src/` names a value the catalog
- *  module exports. The names are read from that module, so an export added there is covered
- *  the day it lands. The walk is the disk, not git: a build that includes a gitignored folder
- *  bundles what that folder imports too, and a spare notice costs nothing. */
+ *  Contrast) and Tabler Icons (filled), both MIT, licence texts beside the data. Every app
+ *  depends on the kit, so the dependency cannot say who bundles the set; an app carries this
+ *  section when its imports reach the catalog, or a copy of it, by name. */
 const SYMBOLS_DIR = joinPath(ROOT, 'packages', 'ui-kit', 'src', 'symbols');
-
-function usesSymbolCatalog(appDir) {
-  const catalog = joinPath(SYMBOLS_DIR, 'catalog.ts');
-  if (!existsSync(catalog)) return false;
-  const names = [...readFileSync(catalog, 'utf8').matchAll(/^export (?:const|let|function) (\w+)/gm)].map((m) => m[1]);
-  if (!names.length) return false;
-  const named = new RegExp(`\\b(?:${names.join('|')})\\b`);
-  const walk = (dir) => {
-    if (!existsSync(dir)) return false;
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === 'node_modules') continue;
-      const path = joinPath(dir, entry.name);
-      if (entry.isDirectory()) { if (walk(path)) return true; continue; }
-      if (/\.(?:[cm]?[jt]s|tsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts') && named.test(readFileSync(path, 'utf8'))) return true;
-    }
-    return false;
-  };
-  return walk(joinPath(appDir, 'src'));
-}
 
 /** A licence file, indented two spaces like the rest of this file. The Fluent copy is indented
  *  upstream; its common indent comes off first, so the text reads as one block. */
@@ -420,9 +368,10 @@ const KIT_DIR = joinPath(ROOT, 'packages', 'ui-kit', 'src');
 
 /** The kit's own interface: the face its stylesheet sets every control in, and its icons
  *  (`icons.ts`). Every app that uses the kit bundles both, and neither comes from an npm
- *  dependency, so the walk in `libsFor` cannot see them. The OFL text is printed here unless the
- *  font appendix already carries it. */
-function kitSection(number, fontAppendix) {
+ *  dependency, so `libsFor` cannot see them. The OFL text is printed here unless the font
+ *  appendix already carries it. A page that exports nothing (the hub) does not say what an
+ *  export holds. */
+function kitSection(number, fontAppendix, exportsFiles) {
   const fontDir = joinPath(KIT_DIR, 'fonts');
   const files = readdirSync(fontDir).filter((f) => f.endsWith('.woff2')).sort();
   if (!files.length) throw new Error('packages/ui-kit/src/fonts holds no .woff2: the kit section needs updating');
@@ -433,8 +382,8 @@ function kitSection(number, fontAppendix) {
 ${number}. INTERFACE FONT AND ICONS
 ${'-'.repeat(60)}
 
-  The typeface and the icons of the app's own controls. Neither is part of a
-  file you export.
+${exportsFiles ? `  The typeface and the icons of the app's own controls. Neither is part of a
+  file you export.` : `  The typeface and the icons of the site's own controls.`}
 
   Chakra Petch, Google Fonts' build of its Latin characters
   (${files.join(', ')})
@@ -444,7 +393,8 @@ ${indent(notice)}
   Interface icons, drawn from Lucide and from Feather, the set Lucide grew out
   of: Lucide under the ISC licence and Feather under the MIT licence, both in
   full below as Lucide ships them. The GitHub mark is GitHub's own, from its
-  Octicons, under the MIT licence below them.
+  Octicons, under the MIT licence below them, and is used under GitHub's logo
+  guidelines (https://github.com/logos).
   https://lucide.dev
   https://feathericons.com
   https://github.com/primer/octicons
@@ -455,13 +405,36 @@ ${indentedLicence('octicons.LICENSE.txt', KIT_DIR)}
 ${fontAppendix ? '' : `\n${indent(body)}\n`}`;
 }
 
-export function noticesText(appName, pkg, appDir) {
-  const bundlesFonts = !!pkg.dependencies?.['@vostok/fonts'];
-  const bundlesPatterns = !!pkg.dependencies?.['@vostok/patterns'];
-  const bundlesSymbols = usesSymbolCatalog(appDir);
-  const bundlesKit = dependsOn(pkg, '@vostok/ui-kit');
+/** What an app's build can carry, read from its source (scripts/lib/bundle.mjs): the asset
+ *  registry's rows its imports reach, whether it reaches the faces of @vostok/fonts, and its
+ *  libraries. `withPrivate` reads a published app's gitignored files too, for a comparison only:
+ *  a published notices file has to come out the same on a public clone. */
+function carriedBy(appId, withPrivate = false) {
+  const { files, libs } = reach(appId, { withPrivate });
+  const rows = rowsClaiming(files, ROWS);
+  const kinds = new Set(ROWS.filter((r) => rows.has(r.id)).map((r) => r.kind));
+  return {
+    rows,
+    libs,
+    fonts: [...files].some((f) => /^packages\/fonts\/src\/fonts\/[^/]+\.ttf$/.test(f)),
+    patterns: kinds.has('patterns'),
+    symbols: kinds.has('symbols'),
+    kit: kinds.has('ui-icons') || kinds.has('ui-font'),
+  };
+}
+
+/**
+ * The notices of one app. `exportsFiles` is false for a page that makes nothing to download
+ * (the hub): its notices speak of a site, and say nothing about what an export holds.
+ */
+export function noticesText(appId, appName, pkg, appDir, exportsFiles = true) {
+  const has = carriedBy(appId);
+  const bundlesFonts = has.fonts;
+  const bundlesPatterns = has.patterns;
+  const bundlesSymbols = has.symbols;
+  const bundlesKit = has.kit;
   const fonts = bundlesFonts ? fontLines() : [];
-  const { lines: libs, texts: libTexts } = libsFor(appDir, pkg);
+  const { lines: libs, texts: libTexts } = libsFor(appId, appDir, pkg);
   const patternSection = bundlesPatterns ? patternTilesSection(bundlesFonts ? 3 : 1) : '';
   const symbolNumber = (bundlesFonts ? 2 : 0) + (bundlesPatterns ? 1 : 0) + 1;
   const symbolSection = bundlesSymbols ? symbolArtSection(symbolNumber) : '';
@@ -486,23 +459,18 @@ ${ICON_NOTICE}
   const facesNumber = symbolNumber + (bundlesSymbols ? 1 : 0);
   const appFaces = appTypefacesSection(appDir, facesNumber);
   const kitNumber = facesNumber + (appFaces ? 1 : 0);
-  const kit = bundlesKit ? kitSection(kitNumber, bundlesFonts) : '';
+  const kit = bundlesKit ? kitSection(kitNumber, bundlesFonts, exportsFiles) : '';
   const libHeading = `${kitNumber + (kit ? 1 : 0)}. RUNTIME LIBRARIES`;
-  return `THIRD-PARTY NOTICES
-${'='.repeat(60)}
-
-${appName}
-Copyright (c) ${YEAR} Vostok Labs
-
-This file lists the third-party material bundled into this application, and the
+  const intro = exportsFiles
+    ? `This file lists the third-party material bundled into this application, and the
 licences it is used under. It ships with every distribution of the app.
 
 Nothing here restricts what you may do with a file you EXPORT from this
-generator — see the application's own licence for that.
-
-${fontSections}${patternSection}${symbolSection}${appFaces}${kit}
-
-${libHeading}
+generator — see the application's own licence for that.`
+    : `This file lists the third-party material bundled into this site, and the
+licences it is used under. It ships with every copy of the site.`;
+  const libSection = libs.length
+    ? `${libHeading}
 ${'-'.repeat(60)}
 
   Every third-party library this application is built from, whether it is depended
@@ -511,10 +479,22 @@ ${'-'.repeat(60)}
   which features it uses, and an omitted notice is a licence not honoured while a
   spare one costs nobody anything.
 
-${libs.length ? libs.join('\n') : '  (none)'}
+${libs.join('\n')}
 
 
-${bundlesFonts ? fontAppendix() : ''}${libTexts.length ? `
+`
+    : '';
+  return `THIRD-PARTY NOTICES
+${'='.repeat(60)}
+
+${appName}
+Copyright (c) ${YEAR} Vostok Labs
+
+${intro}
+
+${fontSections}${patternSection}${symbolSection}${appFaces}${kit}
+
+${libSection}${bundlesFonts ? fontAppendix() : ''}${libTexts.length ? `
 ${'='.repeat(60)}
 LIBRARY LICENCES (full text)
 ${'='.repeat(60)}
@@ -523,13 +503,23 @@ ${libTexts.join('\n\n\n')}
 
 ` : ''}
 ${'='.repeat(60)}
-Questions about any of the above: see the project's licence, or get in touch.
+Questions about any of the above: ${exportsFiles ? "see the project's licence, or get in touch" : 'get in touch'}.
 `;
+}
+
+/** The title an app's page gives itself: what the hub is called, and what an app without a
+ *  description in its package.json is called. */
+function pageTitle(appDir) {
+  const index = join(appDir, 'index.html');
+  const m = existsSync(index) ? readFileSync(index, 'utf8').match(/<title>([^<]*)<\/title>/i) : null;
+  return m?.[1].trim() || null;
 }
 
 const appsDir = join(ROOT, 'apps');
 const stale = [];
 let written = 0;
+const generators = new Set(generatorApps());
+const hidden = privateFiles();
 
 for (const id of readdirSync(appsDir)) {
   if (SKIP.has(id)) continue;
@@ -540,11 +530,23 @@ for (const id of readdirSync(appsDir)) {
   // package. The clicker bundles Lucide (ISC), which wants its notice carried too. The kit's own
   // font and icons count as well: an app with no third-party dependency still bundles them.
   const thirdParty = Object.keys(pkg.dependencies ?? {}).filter((d) => !d.startsWith('@vostok/'));
-  if (!thirdParty.length && !dependsOn(pkg, '@vostok/ui-kit')) continue;
+  const has = carriedBy(id);
+  if (!thirdParty.length && !has.libs.size && !has.rows.size) continue;
+
+  // A published app's gitignored files can reach more than its published ones, and its notices
+  // file, which has to be the same on a public clone, cannot name what only they reach.
+  if (!privateApps().has(id) && hidden.some((f) => f.startsWith(`apps/${id}/`))) {
+    const all = carriedBy(id, true);
+    const more = [...[...all.libs.keys()].filter((l) => !has.libs.has(l) && !thirdParty.includes(l)), ...[...all.rows].filter((r) => !has.rows.has(r))];
+    if (more.length) console.warn(`  ! apps/${id}: its gitignored files reach ${more.join(', ')}, which its notices cannot name. Declare the library in the app's package.json, or reach the set from a published file.`);
+  }
 
   const publicDir = join(appsDir, id, 'public');
   const out = join(publicDir, 'THIRD-PARTY-NOTICES.txt');
-  const text = noticesText(pkg.description || id, pkg, join(appsDir, id));
+  const exportsFiles = generators.has(id);
+  const appDir = join(appsDir, id);
+  const name = pkg.description || (exportsFiles ? appTitle(appDir) : pageTitle(appDir)) || id;
+  const text = noticesText(id, name, pkg, appDir, exportsFiles);
 
   if (CHECK) {
     if (!existsSync(out)) { stale.push(`${id}: public/THIRD-PARTY-NOTICES.txt is missing`); continue; }

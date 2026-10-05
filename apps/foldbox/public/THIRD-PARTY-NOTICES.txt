@@ -68,7 +68,8 @@ Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allur
   Interface icons, drawn from Lucide and from Feather, the set Lucide grew out
   of: Lucide under the ISC licence and Feather under the MIT licence, both in
   full below as Lucide ships them. The GitHub mark is GitHub's own, from its
-  Octicons, under the MIT licence below them.
+  Octicons, under the MIT licence below them, and is used under GitHub's logo
+  guidelines (https://github.com/logos).
   https://lucide.dev
   https://feathericons.com
   https://github.com/primer/octicons

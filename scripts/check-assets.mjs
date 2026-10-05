@@ -32,7 +32,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { abs, ignored, privateApps } from './lib/source.mjs';
-import { ALLOWED, REGISTRY, PRIVATE_REGISTRY, assetKind, contradiction, embedded, fileHash, licenceAllowed, publicPaths, readRegistry, NOTICE_MARKS } from './lib/assets.mjs';
+import { ALLOWED, REGISTRY, PRIVATE_REGISTRY, assetKind, contradiction, embedded, hashOf, licenceAllowed, publicPaths, readRegistry, rowsClaiming, NOTICE_MARKS } from './lib/assets.mjs';
 import { assetFiles } from './assets.mjs';
 import { reach, appIds } from './lib/bundle.mjs';
 import { reservedFontNames, reservedNameIn } from '../packages/fonts/scripts/reserved-names.mjs';
@@ -65,17 +65,6 @@ const fail = (row, what, excusable = false) => {
   problems.push(`${row.id}: ${what}`);
 };
 
-const bufs = new Map();
-const read = (p) => {
-  if (!bufs.has(p)) bufs.set(p, readFileSync(abs(p)));
-  return bufs.get(p);
-};
-const hashes = new Map();
-const hashOf = (p) => {
-  if (!hashes.has(p)) hashes.set(p, fileHash(p, read(p)));
-  return hashes.get(p);
-};
-
 // The rows themselves
 const leaked = ignored(publicPaths());
 for (const row of rows) {
@@ -87,7 +76,7 @@ for (const row of rows) {
     if (!existsSync(abs(path))) { fail(row, `claims ${path}, which is not on disk: ${refresh(row)}`); continue; }
     if (hashOf(path) !== hash) { fail(row, `${path} is not the file this row was written for: ${refresh(row)}`); continue; }
     if (!assetKind(path)) continue;
-    const own = embedded(path, read(path));
+    const own = embedded(path, readFileSync(abs(path)));
     const why = contradiction(own.licence, row.licence);
     if (why) fail(row, `${path}: ${why}`, true);
     // OFL 3: no Modified Version may use a Reserved Font Name. An original carries its name
@@ -118,18 +107,8 @@ for (const path of files) {
 const stale = EXCEPTIONS.filter((e) => !excused.has(e.id));
 
 // Which apps carry each row: derived from their source, never stored.
-const carriers = new Map(rows.map((r) => [r.id, new Set()]));
-const rowFiles = new Set(rows.flatMap((r) => Object.keys(r.files)));
-const appsOf = new Map();
-for (const app of appIds()) {
-  const { files: reached } = reach(app);
-  for (const path of reached) {
-    if (!assetKind(path) && !rowFiles.has(path)) continue;
-    const ids = claims.get(hashOf(path)) ?? [];
-    for (const id of ids) carriers.get(id)?.add(app);
-  }
-}
-for (const [id, apps] of carriers) appsOf.set(id, [...apps].sort());
+const appsOf = new Map(rows.map((r) => [r.id, []]));
+for (const app of appIds()) for (const id of rowsClaiming(reach(app).files, rows)) appsOf.get(id)?.push(app);
 
 if (LIST) {
   const hidden = privateApps();

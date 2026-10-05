@@ -78,7 +78,71 @@ Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allur
   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-4. INTERFACE FONT AND ICONS
+4. SYMBOL ARTWORK
+------------------------------------------------------------
+
+  Monochrome symbols bundled as the symbol library's own set.
+
+  Fluent Emoji, High Contrast style
+  Copyright (c) Microsoft Corporation.
+  Licensed under the MIT License
+  https://github.com/microsoft/fluentui-emoji
+
+  Tabler Icons, filled set
+  Copyright (c) 2020-2026 Paweł Kuna
+  Licensed under the MIT License
+  https://github.com/tabler/tabler-icons
+
+  A symbol you place is traced into the file you export. The MIT licence attaches
+  to the software, not to a work made with it, so the file you download is yours
+  to use and to sell under this generator's own licence.
+
+  MIT License
+
+  Copyright (c) Microsoft Corporation.
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE
+
+  MIT License
+
+  Copyright (c) 2020-2026 Paweł Kuna
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+
+5. INTERFACE FONT AND ICONS
 ------------------------------------------------------------
 
   The typeface and the icons of the app's own controls. Neither is part of a
@@ -92,7 +156,8 @@ Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allur
   Interface icons, drawn from Lucide and from Feather, the set Lucide grew out
   of: Lucide under the ISC licence and Feather under the MIT licence, both in
   full below as Lucide ships them. The GitHub mark is GitHub's own, from its
-  Octicons, under the MIT licence below them.
+  Octicons, under the MIT licence below them, and is used under GitHub's logo
+  guidelines (https://github.com/logos).
   https://lucide.dev
   https://feathericons.com
   https://github.com/primer/octicons
@@ -164,7 +229,7 @@ Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allur
   SOFTWARE.
 
 
-5. RUNTIME LIBRARIES
+6. RUNTIME LIBRARIES
 ------------------------------------------------------------
 
   Every third-party library this application is built from, whether it is depended
@@ -176,7 +241,6 @@ Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allur
   d3-contour 4.0.2 — ISC
   fflate 0.8.3 — MIT
   manifold-3d 3.5.1 — Apache-2.0
-  onnxruntime-web 1.30.0 — MIT
   opentype.js 1.3.4 — MIT
   pica 10.0.2 — MIT
   qrcode-generator 1.5.2 — MIT

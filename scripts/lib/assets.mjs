@@ -112,6 +112,33 @@ export function recordAssets(writtenBy, rows) {
   writeRegistry([...kept, ...rows.map((r) => ({ ...r, writtenBy }))]);
 }
 
+const hashes = new Map();
+/** `fileHash` of a repo file, read once. */
+export function hashOf(path) {
+  if (!hashes.has(path)) hashes.set(path, fileHash(path));
+  return hashes.get(path);
+}
+
+/** The ids of the rows that claim any of `files` (repo paths, such as what an app's build
+ *  reaches): by the path a row names, or by the bytes of a copy. */
+export function rowsClaiming(files, rows = readRegistry()) {
+  const byPath = new Map();
+  const byHash = new Map();
+  for (const row of rows) {
+    for (const [path, hash] of Object.entries(row.files)) {
+      byPath.set(path, [...(byPath.get(path) ?? []), row.id]);
+      byHash.set(hash, [...(byHash.get(hash) ?? []), row.id]);
+    }
+  }
+  const ids = new Set();
+  for (const path of files) {
+    const named = byPath.get(path);
+    if (named) for (const id of named) ids.add(id);
+    else if (assetKind(path) && existsSync(abs(path))) for (const id of byHash.get(hashOf(path)) ?? []) ids.add(id);
+  }
+  return ids;
+}
+
 // ─────────────────────────── licence text inside a file ───────────────────────────
 
 /** The strings of a font's name table by name ID: Windows English first, then any Unicode
