@@ -7,7 +7,7 @@ import {
   appShell, topbarLinks, generatorHeader, qualityCallout, section, collapsibleSection, sampleGrid,
   sliderRow, toggleSwitch, segmentedControl, fontChooser, sidebarFooter, stageStatus,
   filamentRow, contrastRatio, syncControls,
-  toast, dialog, licenseAfterExport, el, readProjectFile,
+  toast, dialog, licenseAfterExport, el, readProjectFile, markProject, type ProjectShape,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
@@ -30,6 +30,14 @@ import { platePreviewSvg, type PreviewTheme } from './previews';
 
 let params: SignParams = { ...DEFAULTS, fontId: curatedFonts()[0]?.id ?? FONTS[0]!.id };
 let parts: ExportPart[] = [];
+
+/** A project file is these params: every one saved carries the first line and its size, so a
+ *  file without them, or one another app saved, is refused on Load. `satisfies` stops the build
+ *  when they are no longer params. */
+const PROJECT_FILE: ProjectShape = {
+  app: 'house-number',
+  keys: ['text', 'textSize'] satisfies (keyof SignParams)[],
+};
 
 /* ── 2 · Geometry, off the main thread ──────────────────────────────────────── */
 
@@ -859,14 +867,15 @@ const footer = sidebarFooter({
 
     licenseAfterExport();
   },
-  onSave: () => downloadFile(JSON.stringify(params, null, 2), 'house-number.json', 'application/json'),
+  onSave: () =>
+    downloadFile(JSON.stringify(markProject(PROJECT_FILE, params), null, 2), 'house-number.json', 'application/json'),
   onLoad: (file?: File) =>
     file && readProjectFile(file, (data) => {
       params = coerceSettings(data);
       showSettings();
       triggerRebuild(true);
       toast('Project loaded', { kind: 'ok' });
-    }),
+    }, PROJECT_FILE),
   onHelp: () => dialog({
     title: 'House & office numbers',
     content:

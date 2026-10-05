@@ -25,6 +25,8 @@ import {
   bareIconButton,
   createStore,
   readProjectFile,
+  markProject,
+  type ProjectShape,
 } from '@vostok/ui-kit';
 import { downloadFile } from '@vostok/export';
 import { BRAND } from '@vostok/brand';
@@ -143,6 +145,10 @@ const store = createStore<AppState>({
 
 const s = () => store.get().settings;
 const patch = (p: Partial<Settings>) => store.set({ settings: { ...s(), ...p } });
+
+/** A project file is the settings and the palette: every one saved carries both, so a file
+ *  without them, or one another app saved, is refused on Load. */
+const PROJECT_FILE: ProjectShape = { app: 'bubble-pop-generator', keys: ['settings', 'palette'] };
 
 // Only meaningful when the source is an image.
 let regionSet: RegionSet | null = null;
@@ -941,7 +947,7 @@ const footer = sidebarFooter({
   },
   onSave: () =>
     downloadFile(
-      JSON.stringify({ settings: s(), palette: store.get().palette }, null, 2),
+      JSON.stringify(markProject(PROJECT_FILE, { settings: s(), palette: store.get().palette }), null, 2),
       'bubble-pop-project.json',
       'application/json',
     ),
@@ -958,7 +964,7 @@ const footer = sidebarFooter({
       renderPalette();
       scheduleRebuild(0);
       toast('Project loaded.', { kind: 'ok' });
-    });
+    }, PROJECT_FILE);
   },
   onHelp: () =>
     dialog({

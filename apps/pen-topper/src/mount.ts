@@ -33,10 +33,12 @@ import {
   fontChooser,
   syncControls,
   readProjectFile,
+  markProject,
   el,
   type DesktopHost,
   type HostAsset,
   type ValueRow,
+  type ProjectShape,
 } from '@vostok/ui-kit';
 import { zipSync } from 'fflate';
 import { BRAND } from '@vostok/brand';
@@ -81,6 +83,14 @@ import { QUICK_PICKS, SYMBOL_GROUPS, searchGroup } from './symbols';
 import { MAX_NAMES, parseNames, setFileName, batchToParts, platesOf, batchWarnings } from './batch';
 import { pauseText } from './geometry/noAms';
 import type { BatchResult, GeometryResponse, PartMesh } from './types';
+
+/** A project file is these settings: every one saved carries the pen and its barrel diameter, so
+ *  a file without them, or one another app saved, is refused on Load. `satisfies` stops the build
+ *  when they are no longer settings. */
+const PROJECT_FILE: ProjectShape = {
+  app: 'pen-topper',
+  keys: ['pen', 'barrelDia'] satisfies (keyof TopperSettings)[],
+};
 
 /**
  * Builds the generator into `container` and returns its teardown.
@@ -1060,13 +1070,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // a desktop host that does not offer the capability still needs these.
     hostOwnsProjects: Boolean(host?.registerProject),
     onSave: () =>
-      downloadFile(JSON.stringify(settings, null, 2), `${settings.name.trim() || 'pen'}-topper.json`, 'application/json'),
+      downloadFile(
+        JSON.stringify(markProject(PROJECT_FILE, settings), null, 2),
+        `${settings.name.trim() || 'pen'}-topper.json`,
+        'application/json',
+      ),
     onLoad: (file?: File) =>
       file &&
       readProjectFile(file, (data) => {
         applySettings(data);
         toast('Project loaded', { kind: 'ok' });
-      }),
+      }, PROJECT_FILE),
     onHelp: () =>
       dialog({
         title: 'Pen Topper help',
