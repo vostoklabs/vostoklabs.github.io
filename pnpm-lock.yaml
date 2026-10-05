@@ -294,6 +294,9 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@vostok/manifold':
+        specifier: workspace:*
+        version: link:../../packages/manifold
       '@vostok/plates':
         specifier: workspace:*
         version: link:../../packages/plates

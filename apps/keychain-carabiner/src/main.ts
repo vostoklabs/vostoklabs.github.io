@@ -18,6 +18,7 @@ import {
   segmentedControl,
   selectField,
   toggleSwitch,
+  syncControls,
   button,
   buttonGrid,
   historyControls,
@@ -29,17 +30,19 @@ import {
   panelCredit,
   busyChip,
   readParamsFromHash,
+  readProjectFile,
   toast,
   dialog,
   licenseAfterExport,
   ICONS,
   el,
   type ThumbTileHandle,
+  type ValueRow,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
 import { mountPlatePicker, plateSize, loadPlateChoice } from '@vostok/plates';
-import { downloadThreeMF, type ExportPart } from '@vostok/export';
+import { downloadFile, downloadThreeMF, type ExportPart } from '@vostok/export';
 import {
   iconById,
   type IconChoice,
@@ -912,7 +915,7 @@ function commitHistory() {
 function restoreHistory(snap: string) {
   restoringHistory = true;
   settings = coerceSettings(JSON.parse(snap));
-  syncControls();
+  showSettings();
   // The old parts are still on screen and will be for a beat: repaint them now rather than
   // leave the model wearing the colours of a state that has been undone.
   applyColors();
@@ -1028,7 +1031,7 @@ const PRESETS: Preset[] = [
 function applyPreset(preset: Preset) {
   settings = coerceSettings({ ...DEFAULT_SETTINGS, ...preset.patch });
   fitPip();
-  syncControls();
+  showSettings();
   applyColors();
   triggerRebuild();
   toast(`${preset.name}`, { kind: 'ok' });
@@ -1075,48 +1078,61 @@ function syncVisibility() {
   modeHint.textContent = MODE_HINT[settings.mode];
 }
 
-/** Push `settings` back into every control — used after Load project and Reset. */
-function syncControls() {
-  modeControl.setValue(settings.mode);
-  controls.hookSize.setValue(settings.hookSize);
-  controls.attach.setValue(settings.attach);
-  controls.swivelStem.setValue(settings.swivelStem);
-  pipControls.linkCount.setValue(settings.pipLinkCount);
-  pipControls.linkSize.setValue(settings.pipLinkSize);
-  pipControls.aspect.setValue(settings.pipLinkAspect);
-  pipControls.bar.setValue(settings.pipLinkBar);
-  pipControls.thick.setValue(settings.pipLinkThick);
-  pipControls.connectorRings.setValue(settings.pipConnectorRings);
+/**
+ * Put `settings` on every control and keep only what the controls can show. Load project,
+ * Reset, a preset, undo and a share link all end here.
+ *
+ * The kit's `syncControls` does the one-to-one fields and writes each control's clamped,
+ * stepped value back, so a file saying `hookSize: 400` builds the 70 mm the slider shows
+ * rather than 400 behind it. The rest is by hand, and none of it can clamp: "Joins the hook"
+ * and the symbol switch stand for `pipAttached` and a non-empty `icon`, the second "Connector
+ * ring room" row repeats the first, and the shape, symbol and colour pickers show `settings`
+ * as it is.
+ */
+function showSettings() {
+  syncControls(settings, {
+    mode: modeControl,
+    hookSize: controls.hookSize,
+    // `selectField` is typed as any string; these three offer only their setting's values.
+    attach: controls.attach as ValueRow<Attach>,
+    swivelStem: controls.swivelStem,
+    pipLinkCount: pipControls.linkCount,
+    pipLinkSize: pipControls.linkSize,
+    pipLinkAspect: pipControls.aspect,
+    pipLinkBar: pipControls.bar,
+    pipLinkThick: pipControls.thick,
+    pipConnectorRings: pipControls.connectorRings,
+    pipRoot: pipControls.root,
+    hookBar: controls.hookBar,
+    hookThick: controls.hookThick,
+    gateFit: controls.gateFit,
+    loopBar: controls.loopBar,
+    iconRotate: controls.iconRotate,
+    iconRaise: controls.iconRaise,
+    oneColor: oneColorToggle,
+    iconSize: controls.iconSize,
+    iconAngle: controls.iconAngle,
+    iconOffset: controls.iconOffset,
+    linkCount: controls.linkCount,
+    linkSize: controls.linkSize,
+    linkBar: controls.linkBar,
+    linkThick: controls.linkThick,
+    connectorRings: controls.connectorRings,
+    connectorExtra: controls.connectorExtra,
+    charm: controls.charm,
+    charmMount: controls.charmMount as ValueRow<CharmMount>,
+    charmSize: controls.charmSize,
+    charmIconStyle: controls.charmIconStyle as ValueRow<CharmIconStyle>,
+    charmIconSize: controls.charmIconSize,
+    charmFill: controls.charmFill,
+    charmBar: controls.charmBar,
+    charmThick: controls.charmThick,
+    edge: controls.edge,
+    edgeSize: controls.edgeSize,
+  });
   pipControls.attached.setValue(settings.pipAttached ? 'grown' : 'ring');
-  pipControls.root.setValue(settings.pipRoot);
   pipControls.connectorExtra.setValue(settings.connectorExtra);
-  controls.hookBar.setValue(settings.hookBar);
-  controls.hookThick.setValue(settings.hookThick);
-  controls.gateFit.setValue(settings.gateFit);
-  controls.loopBar.setValue(settings.loopBar);
-  controls.iconRotate.setValue(settings.iconRotate);
   symbolToggle.setValue(!!settings.icon);
-  controls.iconRaise.setValue(settings.iconRaise);
-  oneColorToggle.setValue(settings.oneColor);
-  controls.iconSize.setValue(settings.iconSize);
-  controls.iconAngle.setValue(settings.iconAngle);
-  controls.iconOffset.setValue(settings.iconOffset);
-  controls.linkCount.setValue(settings.linkCount);
-  controls.linkSize.setValue(settings.linkSize);
-  controls.linkBar.setValue(settings.linkBar);
-  controls.linkThick.setValue(settings.linkThick);
-  controls.connectorRings.setValue(settings.connectorRings);
-  controls.connectorExtra.setValue(settings.connectorExtra);
-  controls.charm.setValue(settings.charm);
-  controls.charmMount.setValue(settings.charmMount);
-  controls.charmSize.setValue(settings.charmSize);
-  controls.charmIconStyle.setValue(settings.charmIconStyle);
-  controls.charmIconSize.setValue(settings.charmIconSize);
-  controls.charmFill.setValue(settings.charmFill);
-  controls.charmBar.setValue(settings.charmBar);
-  controls.charmThick.setValue(settings.charmThick);
-  controls.edge.setValue(settings.edge);
-  controls.edgeSize.setValue(settings.edgeSize);
   hookShapes.sync();
   linkShapes.sync();
   charmShapes.sync();
@@ -1133,7 +1149,7 @@ const resetButton = button({
   block: true,
   onClick: () => {
     settings = { ...DEFAULT_SETTINGS };
-    syncControls();
+    showSettings();
     applyColors();
     triggerRebuild();
     toast('Every setting back to the defaults', { kind: 'ok' });
@@ -1244,11 +1260,11 @@ const footer = sidebarFooter({
 
     licenseAfterExport();
   },
-  onSave: () => downloadJSON(`${exportSlug()}.json`, settings),
+  onSave: () => downloadFile(JSON.stringify(settings, null, 2), `${exportSlug()}.json`, 'application/json'),
   onLoad: (file?: File) =>
-    file && loadJSON(file, (data) => {
+    file && readProjectFile(file, (data) => {
       settings = coerceSettings(data);
-      syncControls();
+      showSettings();
       triggerRebuild();
       toast('Project loaded', { kind: 'ok' });
     }),
@@ -1565,7 +1581,10 @@ viewer.onPartPick((index) => {
   status.set(`Selected: ${shown()[index]?.name ?? 'part'}`);
 });
 
-syncControls();
+showSettings();
+// A share link's values may have just been clamped to what the controls can show, and that,
+// not the link as written, is where this session starts and where Refresh goes back to.
+history[0] = JSON.stringify(settings);
 paintHistory();
 worker.postMessage({ type: 'init' });
 
@@ -1649,24 +1668,4 @@ async function captureCover(): Promise<Uint8Array | undefined> {
   } catch {
     return undefined;
   }
-}
-
-function downloadJSON(name: string, data: unknown) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function loadJSON(file: File, apply: (data: unknown) => void) {
-  const r = new FileReader();
-  r.onload = () => {
-    try {
-      apply(JSON.parse(r.result as string));
-    } catch {
-      toast('Invalid project file', { kind: 'error' });
-    }
-  };
-  r.readAsText(file);
 }

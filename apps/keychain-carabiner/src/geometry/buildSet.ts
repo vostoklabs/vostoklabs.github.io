@@ -10,6 +10,7 @@ import { pipGeometry, pipLevels, pipLayout, pipMesh, PIP_MIN_BAND, PIP_Z_GAP, PI
  *  loop that spins wants more than a sliding fit. */
 const PIP_SWIVEL_GAP = 1.0;
 import { packShelf } from '@vostok/plates';
+import { withScope, type Keep } from '@vostok/manifold';
 
 /*
   The set, and how one construction makes all of it.
@@ -59,28 +60,6 @@ import { packShelf } from '@vostok/plates';
   imports anything from the app. A host that has its own shapes and glyphs calls `buildSet`
   with rings and contours and gets meshes.
 */
-
-type Keep = <M extends { delete(): void }>(m: M) => M;
-
-/** Registers every WASM object so a throw cannot leak the heap. */
-function withScope<T>(fn: (keep: Keep) => T): T {
-  const created: { delete(): void }[] = [];
-  const keep: Keep = (m) => {
-    created.push(m);
-    return m;
-  };
-  try {
-    return fn(keep);
-  } finally {
-    for (const m of created) {
-      try {
-        m.delete();
-      } catch (e) {
-        console.warn('Error deleting manifold object:', e);
-      }
-    }
-  }
-}
 
 export interface BuildResult {
   parts: PartMesh[];
@@ -404,7 +383,7 @@ interface Box {
   minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number;
 }
 
-function bboxOf(parts: PartMesh[]): Box {
+function meshBounds(parts: PartMesh[]): Box {
   const b: Box = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
   for (const p of parts) {
     for (let i = 0; i < p.positions.length; i += 3) {
@@ -1092,7 +1071,7 @@ export function buildSet(wasm: any, p: BuildParams): BuildResult {
       let connector: ReturnType<typeof splitRing> | null = null;
       let link: ReturnType<typeof splitRing> | null = null;
       const elementOf = (proto: { part: PartMesh; hole: HoleBox | null; ring: Ring; holePolys: number[][][] }, name: string, thick: number): ChainElement => {
-        const b = bboxOf([proto.part]);
+        const b = meshBounds([proto.part]);
         const hole = proto.hole ?? { minX: 0, maxX: 0, minY: 0, maxY: 0 };
         // Where the outline and the hole cross the centre line, top and bottom. The bar the
         // element hangs by is centred between the two on that line — a heart's centre-line
@@ -1127,7 +1106,7 @@ export function buildSet(wasm: any, p: BuildParams): BuildResult {
         // The whole interlocked chain is ONE element of the hanging chain: it hangs by the first
         // link's hole and hands over at the last link's, and it is rigid in the preview.
         const parts = pip.elements.map((e, k) => meshOf(pipLinkSolid(wasm, pip, k, edgeOf(p), keep), `Link ${k + 1}`, p.linkColor));
-        const b = bboxOf(parts);
+        const b = meshBounds(parts);
         const first = pip.elements[0]!, last = pip.elements[pip.elements.length - 1]!;
         const innerW = 2 * Math.max(...pip.geom.link.poly.map((q) => q[0])) - pip.geom.bar;
         chain.push({
@@ -1157,7 +1136,7 @@ export function buildSet(wasm: any, p: BuildParams): BuildResult {
     const printGroups: PartMesh[][] = [hookGroup.map((q) => clonePart(q))];
     if (charm) printGroups.push(charm.parts.map((q) => clonePart(q)));
     for (const e of chain) printGroups.push(e.parts.map((q) => clonePart(q)));
-    const boxes = printGroups.map((g) => bboxOf(g));
+    const boxes = printGroups.map((g) => meshBounds(g));
     const places = packShelf(boxes.map((b) => ({ w: b.maxX - b.minX, d: b.maxY - b.minY })), { plate: p.plate, margin: 6, gap: 4 });
     if (places.some((pl) => pl.plate > 0)) warn('The set does not fit on one plate at this size — shrink something or drop a few links.');
     const printOffset: [number, number] = [0, 0];
@@ -1167,7 +1146,7 @@ export function buildSet(wasm: any, p: BuildParams): BuildResult {
       if (i === 0) { printOffset[0] = at.x - b.minX; printOffset[1] = at.y - b.minY; }
     });
     const parts = printGroups.flat();
-    const all = bboxOf(parts);
+    const all = meshBounds(parts);
     const cx = (all.minX + all.maxX) / 2, cy = (all.minY + all.maxY) / 2;
     translateParts(parts, -cx, -cy);
     printOffset[0] -= cx;
@@ -1214,7 +1193,7 @@ export function buildSet(wasm: any, p: BuildParams): BuildResult {
       if (charm) {
         const g = charm.parts.map((q) => clonePart(q));
         const eye = charm.eye;
-        const cb = bboxOf(g);
+        const cb = meshBounds(g);
         if (!lastTurned) rotateAboutY(g, 90, eye[0], p.charmThick / 2);
         // The charm hangs by its loop: the loop's hole-top rests on the last hole-bottom.
         const dy = carry - (eye[1] + charmLoopId(p, lastThick) / 2);
@@ -1226,14 +1205,14 @@ export function buildSet(wasm: any, p: BuildParams): BuildResult {
     } else if (charm) {
       // No pivot to hang from (a solid hook, say): lay the charm beside the hook.
       const g = charm.parts.map((q) => clonePart(q));
-      const hb = bboxOf(asmHook), cb = bboxOf(g);
+      const hb = meshBounds(asmHook), cb = meshBounds(g);
       translateParts(g, hb.maxX + 6 - cb.minX, hb.minY - cb.minY, 0);
       assembled.push(...g);
     }
     // Stand it up: the set hangs, it does not lie on a plate. Print (x, y, z) → world
     // (x, −z, y): the hang axis becomes −Z, faces look along −Y, and the whole thing is
     // centred on X with its lowest point at z = 0.
-    const ab = bboxOf(assembled);
+    const ab = meshBounds(assembled);
     const acx = (ab.minX + ab.maxX) / 2;
     for (const q of assembled) {
       for (let i = 0; i < q.positions.length; i += 3) {
