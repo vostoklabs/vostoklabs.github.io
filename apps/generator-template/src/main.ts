@@ -27,9 +27,11 @@ import {
   buildLoop,
   syncControls,
   readProjectFile,
+  markProject,
   colorSwatch,
   ICONS,
   el,
+  type ProjectShape,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
@@ -69,6 +71,15 @@ import { CHANGELOG } from './changelog';
 // ---------------------------------------------------------------------------
 let settings: TagSettings = { ...DEFAULT_SETTINGS };
 let parts: ExportPart[] = [];
+
+/** A project file is these settings with the app's id: Save writes the id, and Load refuses a
+ *  file another app saved, or one without these keys. Keep to settings every saved file has had
+ *  (one added later would refuse the files saved before it); `satisfies` stops the build when
+ *  they are no longer settings. */
+const PROJECT_FILE: ProjectShape = {
+  app: 'generator-template',
+  keys: ['width', 'height'] satisfies (keyof TagSettings)[],
+};
 
 // ---------------------------------------------------------------------------
 // 2. REBUILD — the kit's build loop. It runs one build at a time, always from the
@@ -362,20 +373,22 @@ const footer = sidebarFooter({
     // Full modal on the first download, corner reminder after (invariant #3).
     licenseAfterExport();
   },
-  onSave: () => downloadFile(JSON.stringify(settings, null, 2), 'tag-project.json', 'application/json'),
+  onSave: () =>
+    downloadFile(JSON.stringify(markProject(PROJECT_FILE, settings), null, 2), 'tag-project.json', 'application/json'),
   // `sidebarFooter`'s onLoad hands back `File | undefined` — the picker can be dismissed
   // with nothing chosen. Guarding is what every shipped generator does, and without it the
   // template does not typecheck, which is a poor start for the thing everything is copied
-  // from.
-  onLoad: async (file?: File) => {
-    const data = file && (await readProjectFile(file));
-    if (data == null) return;
-    settings = coerceSettings(data);
-    showSettings();
-    syncColorInputs();
-    triggerRebuild(true);
-    toast('Project loaded', { kind: 'ok' });
-  },
+  // from. The kit runs the loader inside its own guard: a file another app saved, or one this
+  // app cannot use, gets one message instead of opening as defaults.
+  onLoad: (file?: File) =>
+    file &&
+    readProjectFile(file, (data) => {
+      settings = coerceSettings(data);
+      showSettings();
+      syncColorInputs();
+      triggerRebuild(true);
+      toast('Project loaded', { kind: 'ok' });
+    }, PROJECT_FILE),
   onHelp: () =>
     dialog({
       title: 'Generator Template help',

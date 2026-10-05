@@ -81,6 +81,9 @@ edit(
       .replace("storageKey: 'template-quality-callout'", `storageKey: '${id}-quality-callout'`)
       .replace("themeStorageKey: 'template-theme'", `themeStorageKey: '${id}-theme'`)
       .replace("generator: 'generator-template'", `generator: '${id}'`)
+      // The id written into every saved project. Missed, the app and the template open each
+      // other's project files.
+      .replace("app: 'generator-template'", `app: '${id}'`)
       // Provenance + what the user sees in their Downloads folder.
       .replace("application: 'Vostok Labs Generator Template'", `application: 'Vostok Labs ${title}'`)
       .replace("title: 'Tag',", `title: '${title}',`)
@@ -97,7 +100,8 @@ edit(
   [
     "'template-quality-callout'",
     "'template-theme'",
-    "generator: 'generator-template'",
+    // The template's id, anywhere: the provenance id and the project file's both carry it.
+    "'generator-template'",
     "'Vostok Labs Generator Template'",
     "title: 'Tag',",
     "'tag.3mf'",
