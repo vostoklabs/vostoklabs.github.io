@@ -76,6 +76,14 @@ interface Built { input: BuildInput; output: BuildOutput }
  *  seconds. It counts as failed, and the worker it is stuck in is replaced. */
 const BUILD_TIMEOUT_MS = 60_000;
 
+/** The next painted frame, or a quarter of a second, whichever comes first: a page that is not
+ *  painting (a tab in the background) gets no frame at all, and must not stop building for it. */
+const nextFrame = () =>
+  new Promise<void>((resolve) => {
+    const fallback = setTimeout(resolve, 250);
+    requestAnimationFrame(() => setTimeout(() => { clearTimeout(fallback); resolve(); }, 0));
+  });
+
 export function createEditor(opts: EditorOptions): HTMLElement {
   const t = opts.template;
   const values: Values = opts.values ? coerceValues(t, opts.values) : defaultsOf(t);
@@ -147,7 +155,7 @@ export function createEditor(opts: EditorOptions): HTMLElement {
     run: async () => {
       // One painted frame before the build starts, so the chip is on screen before any
       // synchronous template work can hold the main thread.
-      await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+      await nextFrame();
       const input = await buildInput();
       return { input, output: await build(input) };
     },
