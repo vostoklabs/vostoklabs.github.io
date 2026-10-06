@@ -1,11 +1,8 @@
-// The registry LEAF, by relative path, not the `@vostok/fonts` barrel.
-//
-// `vite.config.ts` imports this file too, and vite loads a config by bundling it with
-// esbuild and running it in Node: a RELATIVE import gets bundled, a bare specifier
-// stays external. Through the barrel, Node then had to resolve `@vostok/fonts` itself
-// and died on its extensionless `./registry` import, taking every build with it.
-// registry.ts imports nothing, so pulling it in directly costs nothing either.
-import { FONTS } from '../../../packages/fonts/src/registry';
+// The registry, not the `@vostok/fonts` barrel. `vite.config.ts` imports this file too, and
+// vite runs a config in Node, which loads a bare import as it is: the barrel reaches every
+// font file through Vite's glob, while the registry imports nothing and loads in Node by the
+// package's own name.
+import { FONTS } from '@vostok/fonts/registry';
 
 /** The heaviest face this app will ship, bytes.
  *

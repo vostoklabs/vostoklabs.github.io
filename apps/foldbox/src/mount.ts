@@ -43,7 +43,7 @@ import {
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
 import { createViewer } from '@vostok/viewer';
-import { FALLBACK_FONT_ID, FONTS, SYMBOL_GROUPS, fontFamilyFor, getFontUrl, searchGroup } from '@vostok/fonts';
+import { FALLBACK_FONT_ID, FONTS, SYMBOL_GROUPS, fontFamilyFor, installFontFaces, searchGroup } from '@vostok/fonts';
 import { LOGO_FEATURED, LOGO_FONTS, LOGO_TEXT_FONTS } from './logoFonts';
 import {
   DEFAULT_PARAMS,
@@ -121,32 +121,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   /** Everything the teardown has to undo, in the order it was set up. */
   const cleanups: (() => void)[] = [];
 
-  /* The `@font-face` rules for the faces the logo offers, built from the SAME asset URLs
-     `getFont` fetches the outlines from.
-     `@vostok/fonts/fonts.css` would have done this in one import, and that is what the
-     magnet generator and the keychain do — but it declares all 153 faces, and the offline
-     build inlines every asset it can see. Narrowing the stylesheet as well as the glob
-     still left two independent copies of every face in the page: 2.8 MB of base64 for
-     1.1 MB of fonts. One source, both jobs.
-
-     Registered through the FontFace API rather than written into a <style> element. The
-     MakerLab host's CSP is `style-src 'self'`, and under it Chromium refuses an inline
-     <style> outright: every tile would have fallen back to the system face while the glyph
-     outlines, which are fetched, still came out right. A FontFace added to `document.fonts`
-     is not a stylesheet, so no policy on styles applies, and it still loads lazily, the first
-     time something renders in that family. One code path in every build.
-     `document.fonts` outlives the container a host clears, so the faces are tracked. */
-  const fontFaces: FontFace[] = [];
-  for (const id of LOGO_FONTS) {
-    const url = getFontUrl(id);
-    if (!url) continue;
-    const face = new FontFace(fontFamilyFor(id), `url("${url}")`, { display: 'block' });
-    document.fonts.add(face);
-    fontFaces.push(face);
-  }
-  cleanups.push(() => {
-    for (const face of fontFaces) document.fonts.delete(face);
-  });
+  /* The faces the logo offers, declared to the document from the SAME files `getFont` reads
+     the outlines from, so the font tiles preview in them. Not `@vostok/fonts/fonts.css`: it
+     declares every face, and the offline build would then carry each one twice, once for the
+     sheet and once for the outlines. Declared through the FontFace API, which the MakerLab
+     host's `style-src 'self'` lets through where it refuses an inline <style>.
+     `document.fonts` outlives the container a host clears, so the teardown takes them away. */
+  cleanups.push(installFontFaces(LOGO_FONTS));
 
   /** Named, and not an inline closure, because the export path hands the same hook to a second
    *  `initMakerlab` when it finds the connection down. */

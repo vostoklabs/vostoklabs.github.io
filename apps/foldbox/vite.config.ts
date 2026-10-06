@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
-import { keepOnlyFonts } from '../../scripts/offline-config.mjs';
+import { keepOnlyFonts } from '@vostok/fonts/vite';
 import { LOGO_FONTS } from './src/logoFonts';
 
 // `virtual:cut-pack` — the build-mode seam. The DEFAULT build is print-only, and the
