@@ -106,8 +106,10 @@ export function fillDistance(radius: number, fovDeg: number, aspect: number, fil
   return radius / (fill * Math.tan(Math.min(vFov, hFov) / 2));
 }
 
-/** The way each preset looks at the model, as a unit vector from the model to the camera:
- *  the same quarters `presetPosition` uses, for framing by distance alone. */
+/** The way each preset looks at the model, as a unit vector from the model to the camera, for
+ *  framing by distance alone. A face-on view points where `presetPosition` puts the camera; the
+ *  three-quarter view is the cover's direction, which `presetPosition` lowers by half the model's
+ *  height, so the two agree only for a flat model. */
 export function presetDirection(preset: ViewPreset): THREE.Vector3 {
   switch (preset) {
     case 'front': return new THREE.Vector3(0, -1, 0.08).normalize();

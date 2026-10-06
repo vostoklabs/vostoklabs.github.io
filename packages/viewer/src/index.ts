@@ -60,8 +60,8 @@ export interface ViewerOptions {
   frame?: { fill: number };
   /**
    * The light. 'studio' (the default): a room environment, a key light and ACES tone mapping.
-   * 'soft': a hemisphere light with a white key and a cool fill, no environment and no tone
-   * mapping, the keycap generator's stage.
+   * 'soft': a sky light from above, a white key over the front right and a cool fill from behind
+   * on the left, with no environment and no tone mapping: even light, and no reflections.
    */
   look?: 'studio' | 'soft';
   /** Ask the context for a stencil buffer, which a section view's caps are drawn through.
@@ -147,7 +147,8 @@ export interface Viewer {
    *  how an animation moves a part without touching its geometry. Cleared by `setParts`. */
   setPartPose(index: number, position: [number, number, number], rotationY: number): void;
   /** The group a layer's parts are drawn in (`ViewerPart.layer`), made the first time it is
-   *  asked for and kept across `setParts`: move it, and its parts move. */
+   *  asked for and kept across `setParts`: move it, and its parts move. Every `setParts` empties
+   *  it as it empties the model group, so it holds the viewer's parts and nothing of the app's. */
   layer(name: string): THREE.Group;
   /** The parts' meshes, in part order. */
   partMeshes(): THREE.Mesh[];
@@ -270,8 +271,8 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
   let pmrem: THREE.PMREMGenerator | null = null;
   if (soft) {
-    // The keycap generator's stage, turned Z-up: sky from above, a white key over the front
-    // right shoulder, a cool fill from behind on the left.
+    // Sky from above, a white key over the front right shoulder, a cool fill from behind on
+    // the left.
     const sky = new THREE.HemisphereLight(0xffffff, 0x404654, 1.05);
     sky.position.set(0, 0, 1);
     scene.add(sky);
@@ -350,7 +351,8 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   function clearParts() {
     clearOutline();
     for (const child of [...root.children]) {
-      // A layer stays where the app put it; only its parts go.
+      // A layer's group stays where the app put it, emptied as the model group is: every child
+      // goes, and every mesh among them is disposed.
       if (child instanceof THREE.Group && [...layers.values()].includes(child)) {
         for (const part of [...child.children]) {
           child.remove(part);

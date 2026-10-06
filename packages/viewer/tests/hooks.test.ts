@@ -140,6 +140,13 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   v.setParts(PARTS.map((p, i) => (i ? { ...p, layer: 'top' } : p)));
   check('layer: a moved layer keeps its place, and its group, across setParts', v.layer('top') === top && top.position.equals(moved) && top.children.length === 2);
   check('layer: the model is seated with every layer in its place', v.root.position.equals(seatedPlain), `${v.root.position.toArray()} vs ${seatedPlain.toArray()}`);
+  // A layer is emptied by setParts as the model group is: whatever else is put in it goes too.
+  const extra = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
+  let extraFreed = false;
+  extra.geometry.addEventListener('dispose', () => void (extraFreed = true));
+  top.add(extra);
+  v.setParts(PARTS.map((p, i) => (i ? { ...p, layer: 'top' } : p)));
+  check('layer: emptied by every setParts, an object an app put in it removed and disposed', extra.parent === null && extraFreed && top.children.length === 2);
 
   const camera = v.camera.position.clone();
   const keep = v.partMeshes()[1]!;

@@ -108,6 +108,13 @@ check('a cover is shot from where the bounding sphere just fills the frame, plus
   const size = new THREE.Vector3(0, 0, 0);
   check('each face-on direction points the way its preset puts the camera',
     dirs.filter(([p]) => p !== 'iso').every(([p, d]) => presetPosition(p, c, size, 1).normalize().distanceTo(d) < 1e-12));
+  // The three-quarter view is the one that differs: its preset lowers the camera by half the
+  // model's height, which a direction alone cannot.
+  const at = new THREE.Vector3(1, -2, 5);
+  const flat = presetPosition('iso', at, new THREE.Vector3(30, 20, 0), 100).sub(at);
+  const tall = presetPosition('iso', at, new THREE.Vector3(30, 20, 12), 100).sub(at);
+  check('the three-quarter preset: the cover\'s direction for a flat model, lowered by half the height for a tall one',
+    flat.clone().normalize().distanceTo(presetDirection('iso')) < 1e-12 && near(flat.z - tall.z, 6), `${vec(flat)} / ${vec(tall)}`);
 }
 
 /* ------------------------------------------------------------------ report */
