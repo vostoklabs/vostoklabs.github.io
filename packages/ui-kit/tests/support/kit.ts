@@ -15,6 +15,8 @@ import { FakeElement } from './dom';
 export { buildLoop, workerClient, answerRequests, NothingBuiltError, BuildTimeoutError } from '../../src/build-loop';
 export { createStore } from '../../src/store';
 export { markProject, readProjectFile } from '../../src/components/project-file';
+// Data, not chrome: the filament shelf an app offers is the kit's own list.
+export { FILAMENTS } from '../../src/components/filament';
 
 /** What the app asked of the kit's chrome, oldest first. */
 export const kit = {
