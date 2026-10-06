@@ -141,6 +141,13 @@ for (const [file, char] of [['wallpoet.ttf', 'Ä'], ['jura.ttf', 'ị']]) {
   const off = disagreements(contours, 100);
   check(`${file.replace('.ttf', '')} ${char}: the islands fill as the font does, dots and all`, contours.length > 0 && off <= 10, `${off} of 10000 samples off`);
 }
+{
+  // Jura's + draws its bar twice, across the stem. At the middle of the bar the copies add nothing
+  // (the stem is ink already), so a reading taken there alone dropped the bar; its ends say keep it.
+  const contours = contoursOf('+', fontNamed('jura.ttf'));
+  const off = disagreements(contours, 100);
+  check('jura +: the bar drawn twice across the stem is kept', contours.length === 3 && off <= 10, `${off} of 10000 samples off`);
+}
 
 console.log(`\n${pass} passed, ${fails.length} failed`);
 if (fails.length) {

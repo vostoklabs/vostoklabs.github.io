@@ -256,10 +256,13 @@ function interiorPoint(ring: Ring): [number, number] {
  * A font fills by the NON-ZERO rule instead, `{ fill: 'nonzero' }`, and there a contour drawn twice
  * the SAME way round winds twice. Copies are then read by the winding they add: with w the winding
  * of every other contour at a point inside them and n their own net direction, the region inside
- * them winds w + n and the one around them w. They are an edge of the ink only where exactly one of
- * the two is 0, and then one copy stays, wound as n; otherwise they all go, a pair wound against
- * each other as before, and copies lying in the ink, which add nothing to it. Material Symbols'
- * `biotech` draws its eyepiece twice inside the body's counter, and the font fills it.
+ * them winds w + n and the one around them w. They are an edge of the ink where exactly one of the
+ * two is 0, and then one copy stays, wound as n; otherwise they all go, a pair wound against each
+ * other as before, and copies lying in the ink, which add nothing to it. w is read at points all
+ * round the inside of the copies, because another contour can cross them: Jura's "+" draws its
+ * bar twice across the stem, where the bar adds nothing, and only its ends are an edge of the ink.
+ * Material Symbols' `biotech` draws its eyepiece twice inside the body's counter, and the font
+ * fills it.
  */
 export function cancelCoincidentRings(rings: Ring[], opts: { fill?: 'evenodd' | 'nonzero' } = {}): Ring[] {
   if (rings.length < 2) return rings;
@@ -272,8 +275,9 @@ export function cancelCoincidentRings(rings: Ring[], opts: { fill?: 'evenodd' | 
   // down, one up, two different buckets, and a pair whose points are bit-for-bit identical was
   // never even compared. A candidate filter that can exclude a true match is not a filter.
   const bucket = new Map<string, number[]>();
+  const boxes = rings.map((r) => bboxOf([[r]]));
   rings.forEach((r, i) => {
-    const b = bboxOf([[r]]);
+    const b = boxes[i]!;
     const k = `${r.length}|${q(b.minX)},${q(b.minY)},${q(b.maxX)},${q(b.maxY)}`;
     bucket.set(k, [...(bucket.get(k) ?? []), i]);
   });
@@ -291,9 +295,31 @@ export function cancelCoincidentRings(rings: Ring[], opts: { fill?: 'evenodd' | 
         const n = same.reduce((s, i) => s + Math.sign(signedArea(rings[i]!)), 0);
         let keep = -1;
         if (n !== 0) {
-          const p = interiorPoint(rings[same[0]!]!);
-          const w = windingNumber(p, rings.filter((_, j) => !same.includes(j)));
-          if ((w === 0) !== (w + n === 0)) keep = same.find((i) => Math.sign(signedArea(rings[i]!)) === Math.sign(n))!;
+          // Read at a point inside the copies, and a hair in from the middle of their edges (all
+          // of them, or 32 to 63 spread evenly round a long copy). Only a contour whose box spans
+          // a point's height can wind round it, so the others are not walked (a font that draws
+          // every contour twice has hundreds).
+          const copy = rings[same[0]!]!;
+          const box = boxes[same[0]!]!;
+          const s = Math.sign(signedArea(copy));
+          const inset = 1e-6 * (box.maxX - box.minX + box.maxY - box.minY);
+          const probes: Pt[] = [interiorPoint(copy)];
+          const step = Math.max(1, Math.floor(copy.length / 32));
+          for (let k = 0; k < copy.length; k += step) {
+            const a = copy[k]!;
+            const b = copy[(k + 1) % copy.length]!;
+            const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+            // Inward: left of the edge on a counter-clockwise ring, right on a clockwise one.
+            if (len > 0) probes.push([(a[0] + b[0]) / 2 - ((b[1] - a[1]) / len) * s * inset, (a[1] + b[1]) / 2 + ((b[0] - a[0]) / len) * s * inset]);
+          }
+          const others = rings.flatMap((_, j) => (same.includes(j) ? [] : [j]));
+          for (const p of probes) {
+            const w = windingNumber(p, others.filter((j) => boxes[j]!.minY <= p[1] && p[1] < boxes[j]!.maxY).map((j) => rings[j]!));
+            if ((w === 0) !== (w + n === 0)) {
+              keep = same.find((i) => Math.sign(signedArea(rings[i]!)) === Math.sign(n))!;
+              break;
+            }
+          }
         }
         for (const i of same) if (i !== keep) drop.add(i);
       }
