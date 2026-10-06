@@ -6,7 +6,7 @@
 // consecutive. A hole is a polygon, and a polygon crossing the edge is not clipped here unless
 // it is convex (Sutherland–Hodgman against the region's rings is exact then) — the host owns
 // the general boolean, because it already has one and this package must not.
-import { insideShapes, isConvex, pointSegmentDistance, segmentCrossing, segmentDistance, signedArea } from './geom';
+import { insideShapes, insideUnion, isConvex, pointSegmentDistance, ringLength, segmentCrossing, segmentDistance, signedArea } from './geom';
 import type { Island, Pt, Polyline, Ring, Shapes } from './types';
 
 const EPS_T = 1e-7;
@@ -118,7 +118,7 @@ export class EdgeIndex {
 const lerp = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
 /** The maximal sub-intervals of a→b whose midpoint lies on material. */
-function insidePieces(a: Pt, b: Pt, index: EdgeIndex): [number, number][] {
+function insidePieces(a: Pt, b: Pt, index: EdgeIndex, inside: (p: Pt) => boolean): [number, number][] {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const len = Math.hypot(dx, dy);
@@ -135,7 +135,7 @@ function insidePieces(a: Pt, b: Pt, index: EdgeIndex): [number, number][] {
     const t1 = ts[i + 1]!;
     if ((t1 - t0) * len < 1e-6) continue;
     const m = (t0 + t1) / 2;
-    if (!index.inside([a[0] + dx * m, a[1] + dy * m])) continue;
+    if (!inside([a[0] + dx * m, a[1] + dy * m])) continue;
     const prev = out[out.length - 1];
     if (prev && t0 - prev[1] < EPS_T) prev[1] = t1;
     else out.push([t0, t1]);
@@ -155,7 +155,9 @@ export interface Run {
   closed: boolean;
 }
 
-export function clipRun(points: Pt[], index: EdgeIndex, isRing: boolean, minRun = MIN_RUN): Run[] {
+/** A run of points clipped to the index's region: on material is `inside`, the region's own
+ *  even-odd test unless the caller gives another. */
+export function clipRun(points: Pt[], index: EdgeIndex, isRing: boolean, minRun = MIN_RUN, inside: (p: Pt) => boolean = (p) => index.inside(p)): Run[] {
   const n = points.length;
   if (n < 2) return [];
   const segments = isRing ? n : n - 1;
@@ -166,7 +168,7 @@ export function clipRun(points: Pt[], index: EdgeIndex, isRing: boolean, minRun 
   for (let i = 0; i < segments; i++) {
     const a = points[i]!;
     const b = points[(i + 1) % n]!;
-    const pieces = insidePieces(a, b, index);
+    const pieces = insidePieces(a, b, index, inside);
     if (!pieces.length) {
       if (run) runs.push({ points: run, closed: false });
       run = null;
@@ -209,7 +211,18 @@ export interface ClipOptions {
    * rings were wanted, the laser lifting its head at each. Off, the points are walked as given.
    */
   compact?: boolean;
+  /**
+   * Which points count as on material. Off, even-odd across every ring of the region at once:
+   * the rule a built plate is drawn with, where a counter is a hole. On, inside any one island
+   * (its outer ring, not its holes): the rule a set of OVERLAPPING islands needs, such as the
+   * letters of a welded word before they are unioned, where even-odd reads the overlap as off.
+   */
+  union?: boolean;
 }
+
+/** The inside test the options ask for; none means the index's own even-odd one. */
+const insideFor = (index: EdgeIndex, opts: ClipOptions): ((p: Pt) => boolean) | undefined =>
+  opts.union ? (p) => insideUnion(index.shapes, p) : undefined;
 
 /** Two points this close are the same point: far under the three-decimal rounding of a font's
  *  outline, and under both thresholds a step of no length trips below. */
@@ -231,21 +244,44 @@ const indexOf = (region: EdgeIndex | Shapes): EdgeIndex => (region instanceof Ed
 /** The parts of each open polyline that lie on the region's material. */
 export function clipPolylines(polylines: Polyline[], region: EdgeIndex | Shapes, opts: ClipOptions = {}): Polyline[] {
   const index = indexOf(region);
-  return polylines.flatMap((p) => clipRun(opts.compact ? withoutRepeats(p, false) : p, index, false).map((r) => r.points));
+  const inside = insideFor(index, opts);
+  return polylines.flatMap((p) => clipRun(opts.compact ? withoutRepeats(p, false) : p, index, false, MIN_RUN, inside).map((r) => r.points));
 }
 
 /** Rings clipped as lines: a ring that survived whole stays closed, the rest become runs. */
 export function clipRingsAsLines(rings: Ring[], region: EdgeIndex | Shapes, opts: ClipOptions = {}): { closed: Ring[]; open: Polyline[] } {
   const index = indexOf(region);
+  const inside = insideFor(index, opts);
   const closed: Ring[] = [];
   const open: Polyline[] = [];
   for (const ring of rings) {
-    for (const run of clipRun(opts.compact ? withoutRepeats(ring, true) : ring, index, true)) {
+    for (const run of clipRun(opts.compact ? withoutRepeats(ring, true) : ring, index, true, MIN_RUN, inside)) {
       if (run.closed) closed.push(run.points);
       else open.push(run.points);
     }
   }
   return { closed, open };
+}
+
+/**
+ * `clipRingsAsLines` for rings kept in islands, as a layer of a design keeps them: a ring that
+ * survived whole comes back closed, an island of its own in `shapes`; every other run is an open
+ * line in `paths`. What a score layer goes through: a coaster's two rule circles stay closed when
+ * nothing was punched out of the plate, and come back as open arcs when something was.
+ */
+export function clipShapesToLines(shapes: Shapes, region: EdgeIndex | Shapes, opts: ClipOptions = {}): { shapes: Shapes; paths: Polyline[] } {
+  const { closed, open } = clipRingsAsLines(shapes.flat(), region, opts);
+  return { shapes: closed.map((ring) => [ring]), paths: open };
+}
+
+/** How much line there is, mm: every ring of `shapes` as a closed loop (its closing step
+ *  counted) and every run of `paths` as drawn. Tells a score that was trimmed from one that was
+ *  mostly thrown away. */
+export function lineLength(shapes: Shapes, paths: Polyline[] = []): number {
+  let sum = 0;
+  for (const island of shapes) for (const ring of island) sum += ringLength(ring, true);
+  for (const p of paths) sum += ringLength(p, false);
+  return sum;
 }
 
 /**

@@ -61,6 +61,8 @@ export interface ShapeApi {
   seg(a: Pt, b: Pt): Pt[];
   nestRings(rings: Ring[]): Shapes;
   poleOf(ring: Ring, precision?: number, holes?: Ring[], enough?: number): { at: Pt; radius: number };
+  // from the laser studio
+  insideUnion(shapes: Shapes, p: Pt): boolean;
 }
 
 /** mulberry32: a small seeded generator, so the corpus is the same on every machine. */
@@ -277,6 +279,12 @@ export function digests(api: ShapeApi): Record<string, string> {
     api.poleOf(c.dense[5]!, 0.02, [], 2),
     ...c.rings.filter((r) => r.length >= 3).slice(0, 30).map((r) => api.poleOf(r)),
     api.poleOf([[0, 0], [1, 1], [2, 2]]),
+  ]);
+  // The islands as above, and three that overlap: a rectangle, a triangle on it, and the same
+  // rectangle again the other way round, where even-odd and the union part company.
+  pin('insideUnion', (c) => [
+    ...c.shapes.map((s) => [...c.probes(s.flat()[0] ?? []), ...c.probes(s.flat()[1] ?? [])].map((p) => api.insideUnion(s, p))),
+    [...c.probes(c.rings[40]!), ...c.probes(c.rings[42]!)].map((p) => api.insideUnion([[c.rings[40]!], [c.rings[42]!], [c.rings[41]!]], p)),
   ]);
   return out;
 }

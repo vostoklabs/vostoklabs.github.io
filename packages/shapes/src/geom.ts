@@ -74,6 +74,19 @@ export function insideShapes(shapes: readonly (readonly (readonly Pt[])[])[], p:
   return inside;
 }
 
+/** Inside the UNION of the islands: inside some island's outer ring (its first) and not in one of
+ *  that island's holes. What overlapping outers need: under `insideShapes` a point covered by two
+ *  islands at once (a blank's ear over its body, two letters of a welded word) reads as outside. */
+export function insideUnion(shapes: readonly (readonly (readonly Pt[])[])[], p: Pt): boolean {
+  for (const island of shapes) {
+    if (!island[0] || !pointInRing(p, island[0])) continue;
+    let inHole = false;
+    for (let i = 1; i < island.length; i++) if (pointInRing(p, island[i]!)) inHole = !inHole;
+    if (!inHole) return true;
+  }
+  return false;
+}
+
 export function pointSegmentDistance(p: Pt, a: Pt, b: Pt): number {
   const vx = b[0] - a[0];
   const vy = b[1] - a[1];

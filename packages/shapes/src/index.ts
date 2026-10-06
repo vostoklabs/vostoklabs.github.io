@@ -40,6 +40,7 @@ export {
   boxCentre,
   pointInRing,
   insideShapes,
+  insideUnion,
   pointSegmentDistance,
   segmentCrossing,
   segmentsIntersect,

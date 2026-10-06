@@ -18,7 +18,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node tests/run.mjs && node tests/library-import.test.mjs",
+    "test": "node tests/run.mjs && node tests/library-import.test.mjs && node tests/clip-lines.test.mjs",
     "sheet": "node tests/sheet.mjs",
     "fetch-monster": "node scripts/fetch-pattern-monster.mjs"
   },

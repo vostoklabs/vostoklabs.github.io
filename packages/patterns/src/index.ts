@@ -44,6 +44,8 @@ export {
   EdgeIndex,
   clipPolylines,
   clipRingsAsLines,
+  clipShapesToLines,
+  lineLength,
   clipToConvex,
   clipHoleToRegion,
   clipIslandToRegion,

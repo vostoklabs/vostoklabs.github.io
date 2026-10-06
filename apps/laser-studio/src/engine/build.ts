@@ -30,8 +30,8 @@ import {
 } from '@vostok/laser';
 import type { CutImage } from '@vostok/export';
 import { LATTICE_STATUS, latticeFaces } from '@vostok/patterns/lattice';
+import { clipPolylines, clipShapesToLines, lineLength } from '@vostok/patterns/clip';
 import { OUTLINE_STATUS, type Blank, type BuildInput, type BuildObject, type BuildOutput, type DesignLayer, type KeyringSpec, type PartInput, type PartPlacement } from './types';
-import { clipPolylines, clipShapesToLines, lineLength } from './clip';
 import { distanceToOutline, finalHoleCentre, insideShapes, nearestBridge, nearestOutlinePoint } from './editorGeometry';
 import { buildRimResult } from './frame';
 import { MIN_BRIDGE, stencilPunch } from './stencil';
@@ -43,6 +43,10 @@ type Pt = [number, number];
 /** How far inside the plate a plain score is kept: enough that a rule drawn on the outline does
  *  not come back as a second burn along the cut. */
 const SCORE_INSET = 0.1;
+
+/** Every line is clipped with its steps of no length dropped first: a glyph's outline, rounded
+ *  to three decimals, repeats points, and a repeat walked as given reads as a gap in the line. */
+const LINES = { compact: true };
 
 /** The plate an empty hug-mode part shows, so the stage is never blank. */
 const EMPTY_PLATE = (): Shapes => [[roundedRectRing(40, 20, 4)]];
@@ -269,7 +273,7 @@ function outlineLayer(wasm: any, l: DesignLayer): DesignLayer {
     else if (insideShapes(o.zone, r[0]!)) traced.shapes.push([r]);
   }
   if (crossing.length) {
-    const clipped = clipShapesToLines(crossing, o.zone);
+    const clipped = clipShapesToLines(crossing, o.zone, LINES);
     traced.shapes.push(...clipped.shapes);
     traced.paths.push(...clipped.paths);
   }
@@ -555,7 +559,7 @@ function buildPiece(wasm: any, piece: PieceSpec): PieceResult {
     // never inset the way a score is — a seam has to END ON the outline or the pieces stay joined.
     // The layer's closed shapes, if it has any, carry on below as before.
     if (l.op === 'cut' && l.paths?.length) {
-      const paths = boundToBody ? clipPolylines(l.paths, plate) : l.paths;
+      const paths = boundToBody ? clipPolylines(l.paths, plate, LINES) : l.paths;
       if (!paths.length) warnings.push(`${l.label} lies outside the part.`);
       else {
         objects.push({ id: l.shapes.length ? `${l.id}-lines` : l.id, label: l.label, op: 'cut', shapes: [], paths });
@@ -594,10 +598,10 @@ function buildPiece(wasm: any, piece: PieceSpec): PieceResult {
       if (boundToBody && scoreInner?.of !== plate) scoreInner = { of: plate, shapes: offsetShapes(wasm, plate, -SCORE_INSET) };
       const inner = boundToBody ? scoreInner!.shapes : [];
       const region = boundToBody ? (inner.length ? inner : plate) : null;
-      const clipped = region ? clipShapesToLines(l.shapes, region) : { shapes: l.shapes, paths: [] as Pt[][] };
+      const clipped = region ? clipShapesToLines(l.shapes, region, LINES) : { shapes: l.shapes, paths: [] as Pt[][] };
       // A layer's own open runs (a pattern's lattice, a hinge scored rather than cut) are
       // clipped the same way and ride in the same object.
-      if (l.paths?.length) clipped.paths.push(...(region ? clipPolylines(l.paths, region) : l.paths));
+      if (l.paths?.length) clipped.paths.push(...(region ? clipPolylines(l.paths, region, LINES) : l.paths));
       if (!clipped.shapes.length && !clipped.paths.length) {
         warnings.push(`${l.label} lies outside the part.`);
         continue;
@@ -605,7 +609,7 @@ function buildPiece(wasm: any, piece: PieceSpec): PieceResult {
       if (region) {
         // Against the OUTER edge: a rule the keyring hole or a cut-out interrupts is not a rule
         // that ran off the part. Pure arithmetic, so what it measures is what was really lost.
-        const gauge = holey ? clipShapesToLines(l.shapes, fillHoles(region)) : clipped;
+        const gauge = holey ? clipShapesToLines(l.shapes, fillHoles(region), LINES) : clipped;
         const whole = lineLength(l.shapes);
         // A `fill` is a pattern covering the piece: being trimmed at the edge is the design.
         if (whole > 1e-6 && l.kind !== 'fill') lost(warnings, l.label, 1 - lineLength(gauge.shapes, gauge.paths) / whole);

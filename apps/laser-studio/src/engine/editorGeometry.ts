@@ -1,5 +1,5 @@
 import { bboxOf, holeCentre, signedArea, type Box, type Shapes, type Keyring } from '@vostok/laser';
-import { insideShapes, pointInRing } from '@vostok/shapes';
+import { insideShapes, insideUnion, pointInRing } from '@vostok/shapes';
 // The scan line lives next door (it was written for the topper's word spaces and legs, and it is
 // the same primitive a bridge needs): every material interval a row or a column crosses.
 import { columnSpans, rowSpans, type Span } from './cake-topper-geom';
@@ -389,23 +389,11 @@ function seamsOf(shapes: Shapes): Seams | null {
   return out;
 }
 
-/** Inside any island's outer ring and not in one of its holes (even-odd): the shapes core's, here
- *  where the editor's code has always imported it from. */
-export { insideShapes };
-
-/** Inside the UNION of the islands: true when any island holds the point (inside its outer
- *  ring, outside its holes). `insideShapes` is even-odd across every ring at once, which is
- *  right for a built plate and wrong for a blank whose ears and leaves still overlap its body —
- *  a point under both the head and an ear would read as outside. */
-export function insideUnion(shapes: Shapes, p: Pt): boolean {
-  for (const island of shapes) {
-    if (!island[0] || !pointInRing(p, island[0])) continue;
-    let inHole = false;
-    for (let i = 1; i < island.length; i++) if (pointInRing(p, island[i]!)) { inHole = !inHole; }
-    if (!inHole) return true;
-  }
-  return false;
-}
+/** Inside any island's outer ring and not in one of its holes (even-odd), and inside the UNION of
+ *  the islands (any island holds the point: a blank whose ears and leaves still overlap its body,
+ *  where even-odd reads a point under both the head and an ear as outside). The shapes core's,
+ *  here where the editor's code has always imported them from. */
+export { insideShapes, insideUnion };
 
 /** How many bands `unionIndex` files a shape's edges into, along each axis. */
 const UNION_BANDS = 64;

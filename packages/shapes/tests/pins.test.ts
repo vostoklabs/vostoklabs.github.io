@@ -4,7 +4,8 @@
   Every function this package took over answers exactly as it did where it came from. The
   laser engine's ring maths and the pattern engine's geometry were moved here; the digests below
   were taken by running tests/corpus.ts through those two files as they were, and the same corpus
-  through this package must give the same digests, bit for bit. A change that moves one of them
+  through this package must give the same digests, bit for bit. (The union test came later, from
+  the laser studio's editor geometry, pinned the same way.) A change that moves one of them
   moves every laser blank, pattern fill and cut file built on it, so it is a decision, made here
   on purpose, never a side effect.
 
@@ -67,6 +68,7 @@ const PINNED: Record<string, string> = {
   seg: '1fa744a9ac3f4f6b',
   nestRings: '966b4187773d85c4',
   poleOf: 'cd7df02965612c8a',
+  insideUnion: '2543d435b15a88ef',
 };
 
 // ---- 1. the moved functions, pinned

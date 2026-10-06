@@ -3,7 +3,7 @@
 // which the unions need; `buildKeychain` calls `seamPaths` for a layer with
 // `op: 'score', seams: true`.
 import { bboxOf, ringsOf, toCS, withScope, type Box, type Shapes } from '@vostok/laser';
-import { lineLength } from './clip';
+import { lineLength } from '@vostok/patterns/clip';
 import { insideShapes } from './editorGeometry';
 
 type Pt = [number, number];
