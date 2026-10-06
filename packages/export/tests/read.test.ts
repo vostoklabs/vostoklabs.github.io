@@ -125,6 +125,14 @@ check('no format for anything else', modelFormatOf('model.step') === null && mod
   const said = [throws(() => readModel(longer, 'long.stl')), throws(() => readModel(whole.subarray(0, whole.length - 10), 'short.stl'))];
   check('a binary STL longer or shorter than its triangle count says it is damaged',
     said.every((m) => m.startsWith('This binary STL is damaged') && m.includes('12 triangles') && m.includes(`${whole.length} bytes`)), said.join(' / '));
+  // Some writers pad the "solid" line to a fixed width with zero bytes: text all the same, so
+  // the zero byte alone does not make it a damaged binary file.
+  const zeros = 'solid part' + '\0'.repeat(70) + '\n facet normal 0 0 1\n  outer loop\n   vertex 0 0 0\n   vertex 1 0 0\n   vertex 0 1 0\n  endloop\n endfacet\nendsolid part\n';
+  const padded = strToU8(zeros);
+  check('an ASCII STL whose "solid" line is padded with zero bytes reads as text',
+    !throws(() => readModel(padded, 'padded.stl')) && same(readModel(padded, 'padded.stl').positions, [0, 0, 0, 1, 0, 0, 0, 1, 0]), throws(() => readModel(padded, 'padded.stl')));
+  const fewZeros = strToU8('solid part\0\0\0\0' + zeros.slice(80));
+  check('…and so does one with only a few', !throws(() => readModel(fewZeros, 'few.stl')) && readModel(fewZeros, 'few.stl').indices.length === 3, throws(() => readModel(fewZeros, 'few.stl')));
 }
 {
   const obj = '# a quad and a triangle\nv 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0 1.0\nvt 0 0\nf 1/1/1 2/1/1 3/1/1 4/1/1\nv 0 0 1\nf -1 -2 -3\n';

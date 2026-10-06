@@ -69,6 +69,7 @@ function readStl(data: Uint8Array): ModelMesh {
   // plenty of binary files begin their 80-byte header with "solid", and some ASCII writers
   // leave out the closing "endsolid".
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  let damaged: string | null = null;
   if (data.byteLength >= 84) {
     const count = view.getUint32(80, true);
     const size = 84 + count * 50;
@@ -82,10 +83,13 @@ function readStl(data: Uint8Array): ModelMesh {
       }
       return { positions, indices: soupIndices(count * 3) };
     }
-    // Binary all the same, at the wrong size: text has no zero byte, and a binary STL's count
-    // has one (its top byte, below 16.7 million triangles). Bytes went missing, or came after.
+    // Not the size a binary STL of that count is, so it is read as text. Only if no triangle is
+    // found there does a zero byte in the first 84 say what happened: a binary STL's count has
+    // one (its top byte, below 16.7 million triangles), so it was a binary file that lost bytes
+    // or gained some. Text can hold one too (a writer that pads its "solid" line with zeros), so
+    // the zero byte never decides on its own.
     if (data.subarray(0, 84).includes(0)) {
-      throw new Error(`This binary STL is damaged: its header gives ${count} triangles, which take ${size} bytes, but the file is ${data.byteLength} bytes.`);
+      damaged = `This binary STL is damaged: its header gives ${count} triangles, which take ${size} bytes, but the file is ${data.byteLength} bytes.`;
     }
   }
   const text = new TextDecoder().decode(data);
@@ -93,7 +97,7 @@ function readStl(data: Uint8Array): ModelMesh {
   const vertex = /vertex\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/g;
   for (let m = vertex.exec(text); m; m = vertex.exec(text)) coords.push(+m[1]!, +m[2]!, +m[3]!);
   coords.length -= coords.length % 9;
-  if (!coords.length) throw new Error('This STL has no triangles in it.');
+  if (!coords.length) throw new Error(damaged ?? 'This STL has no triangles in it.');
   return { positions: Float32Array.from(coords), indices: soupIndices(coords.length / 3) };
 }
 
