@@ -19,8 +19,8 @@ export interface CaptureCoverOptions {
    * What to hand back when the canvas cannot be read: the render or the read-back throws (a lost
    * WebGL context, a canvas a cross-origin picture has tainted), or what comes back is too short
    * to be a picture (128 characters or fewer: a canvas with no size reads back as `data:,`). The
-   * failure goes to the console. For a cover that must never cost the export, a blank picture
-   * say. Without it, a throw is the caller's and the read-back is returned as it came.
+   * failure goes to the console. For a cover that must never cost the export, such as a blank
+   * picture. Without it, a throw is the caller's and the read-back is returned as it came.
    */
   fallback?: string;
 }
