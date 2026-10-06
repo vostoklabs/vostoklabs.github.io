@@ -6,6 +6,7 @@
 // part of the outline ring that carries it, and `slotRing`/`tabRing` hand back plain rings for
 // the cases where the worker (or a `minus` layer) does the boolean.
 import type { CutRing } from '@vostok/export';
+import { rectRing } from '@vostok/shapes';
 
 export type SlotEdge = 'top' | 'bottom' | 'left' | 'right';
 
@@ -149,8 +150,6 @@ function band(cx: number, cy: number, width: number, t0: number, t1: number, fro
   };
 }
 
-const rectRing = (r: Rect): CutRing => [[r.minX, r.minY], [r.maxX, r.minY], [r.maxX, r.maxY], [r.minX, r.maxY]];
-
 /**
  * An open slot: `width` × `depth`, its open end on the part's edge at (cx, cy) and its closed
  * end `depth` INTO the part. `from: 'bottom'` opens downward at the bottom edge, so it spans
@@ -164,7 +163,7 @@ export function slotRing(
   o: { nodes?: boolean } = {},
 ): CutRing {
   const r = band(cx, cy, width, -OVERSHOOT, depth, from);
-  if (!o.nodes) return rectRing(r);
+  if (!o.nodes) return rectRing(r.minX, r.minY, r.maxX, r.maxY);
   // The two long walls carry nodes; the mouth end (OVERSHOOT outside the edge, then a lead-in)
   // and the closed end stay plain. Corners walked CCW: bottom-left, bottom-right, top-right,
   // top-left — so the bottom wall runs +x, the right wall +y, the top −x and the left −y.
@@ -217,7 +216,8 @@ export function slotHoleRing(cx: number, cy: number, across: number, along: numb
  * is chamfered 0.4 mm so it starts in the slot instead of catching on the lip.
  */
 export function tabRing(cx: number, cy: number, width: number, depth: number, from: SlotEdge): CutRing {
-  const ring = rectRing(band(cx, cy, width, -depth, OVERSHOOT, from));
+  const b = band(cx, cy, width, -depth, OVERSHOOT, from);
+  const ring = rectRing(b.minX, b.minY, b.maxX, b.maxY);
   const [ax, ay] = AXIS[from];
   const along = (p: [number, number]) => (p[0] - cx) * ax + (p[1] - cy) * ay;
   const free = Math.min(...ring.map(along));

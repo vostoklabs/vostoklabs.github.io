@@ -16,8 +16,9 @@ import { readSymbols } from '../symbols/model';
 //   — the edge treatment, or the ribbon hole resting at the same 12 o'clock the arc is centred
 //   on; the tighter of the two wins. The baseline gives way first, then the cap height shrinks
 //   toward a 4 mm floor until the string fits 140° of arc, then it warns.
-import { bboxOf, circleRing, placeShapes, polygonRing, starRing, type Box, type Pt, type Shapes } from '@vostok/laser';
+import { bboxOf, circleRing, placeShapes, polygonRing, starRing, type Pt, type Shapes } from '@vostok/laser';
 import { FONTS } from '@vostok/fonts';
+import { boxCentre } from '@vostok/shapes';
 import { applyCase, arcTextLayer, glyphLayers, symbolLayer, textLayer, type TextSpec } from '../engine/text';
 import { sizeForCapHeight } from '../engine/metrics';
 import { finalHoleCentre, fitBoxInside, holdInside, holeTrack } from '../engine/editorGeometry';
@@ -89,8 +90,6 @@ function markShapes(kind: string, size: number): Shapes | null {
   if (kind === 'star') return [[starRing(s, s, 4, 0.45)]];
   return null;
 }
-
-const boxCentre = (b: Box): Pt => [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2];
 
 function scaleAbout(shapes: Shapes, c: Pt, k: number): Shapes {
   return shapes.map((island) => island.map((ring) => ring.map(([x, y]): Pt => [c[0] + (x - c[0]) * k, c[1] + (y - c[1]) * k])));

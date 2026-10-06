@@ -141,6 +141,15 @@ export function circleRing(cx: number, cy: number, r: number, n = 64): Ring {
 }
 
 /**
+ * A rectangle from two opposite corners: (x0, y0), (x1, y0), (x1, y1), (x0, y1), in that order,
+ * so with x0 < x1 and y0 < y1 it runs counter-clockwise from the lower-left corner. The corners
+ * are used as given, nothing is worked out from them, so a box's own numbers land exactly.
+ */
+export function rectRing(x0: number, y0: number, x1: number, y1: number): Ring {
+  return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+}
+
+/**
  * Rounded rectangle, centred on the origin, or on `at`. `r` is clamped to half the shorter side.
  *
  * The edges are worked out first and every corner from them, so a rectangle placed by its

@@ -22,6 +22,7 @@
 //    the initial is a plain `keep: [topBand, bottomBand]` layer and `grow` does the welds.
 import { bboxOf, blankById, blankSilhouette, circleRing, mapShapes, placeShapes, roundedRectRing, scallopDiscRing, shapesSilhouette, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
+import { rectRing } from '@vostok/shapes';
 import { readSymbols } from '../symbols/model';
 import { textLayer } from '../engine/text';
 import type { DesignLayer, KeyringSpec } from '../engine/types';
@@ -42,7 +43,6 @@ const fmt = (n: number) => Number(n.toFixed(1)).toString();
 const NOMINAL = 100;
 
 const scale = (s: Shapes, k: number): Shapes => (Math.abs(k - 1) < 1e-9 ? s : mapShapes(s, ([x, y]) => [x * k, y * k]));
-const rectRing = (x0: number, y0: number, x1: number, y1: number): CutRing => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 
 // ------------------------------------------------------------------- the frame thumbs --
 

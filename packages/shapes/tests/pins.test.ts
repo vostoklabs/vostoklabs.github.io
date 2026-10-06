@@ -4,13 +4,13 @@
   Every function this package took over answers exactly as it did where it came from. The
   laser engine's ring maths and the pattern engine's geometry were moved here; the digests below
   were taken by running tests/corpus.ts through those two files as they were, and the same corpus
-  through this package must give the same digests, bit for bit. (The union test came later, from
-  the laser studio's editor geometry, pinned the same way.) A change that moves one of them
-  moves every laser blank, pattern fill and cut file built on it, so it is a decision, made here
-  on purpose, never a side effect.
+  through this package must give the same digests, bit for bit. (The union test and the
+  rectangle from two corners came later, from the laser studio's own copies, pinned the same
+  way.) A change that moves one of them moves every laser blank, pattern fill and cut file built
+  on it, so it is a decision, made here on purpose, never a side effect.
 
-  Then the parts that are new here: a rounded rectangle placed by its centre, and the box of
-  some rings with its width and height.
+  Then the parts that are new here: a rounded rectangle placed by its centre, the box of some
+  rings with its width and height, and a rectangle from two corners beside `rect`.
 */
 import * as S from '../src/index';
 import { digests, type ShapeApi } from './corpus';
@@ -69,6 +69,7 @@ const PINNED: Record<string, string> = {
   nestRings: '966b4187773d85c4',
   poleOf: 'cd7df02965612c8a',
   insideUnion: '2543d435b15a88ef',
+  rectRing: 'c2b5a976e642586c',
 };
 
 // ---- 1. the moved functions, pinned
@@ -124,6 +125,16 @@ for (const [w, h, r, seg] of [[20, 10, 3, 10], [57.3, 41.9, 2, 8], [0.7, 0.3, 0.
   const viaRings = S.ringBox(shapes.flat());
   const viaIslands = S.bboxOf(shapes);
   ok(viaRings.minX === viaIslands.minX && viaRings.maxY === viaIslands.maxY, 'the same box bboxOf gives for the same points');
+}
+
+// ---- 4. a rectangle from two corners
+
+{
+  ok(same(S.rectRing(1.5, -2, 7.25, 3), [[1.5, -2], [7.25, -2], [7.25, 3], [1.5, 3]]), 'rectRing: the corners as given, from (x0, y0) round to (x0, y1)');
+  ok(S.signedArea(S.rectRing(0, 0, 4, 3)) === 12, 'rectRing: lower-left to upper-right runs counter-clockwise');
+  for (const [cx, cy, w, h] of [[0, 0, 10, 6], [-3.3, 2.2, 0.1, 1e3], [13.1, -7.7, 57.3, 41.9]] as const) {
+    ok(same(S.rectRing(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), S.rect(cx, cy, w, h)), `${w} x ${h} at (${cx}, ${cy}): rect's corners, worked out the same way, are rectRing's, to the bit`);
+  }
 }
 
 console.log(`${checks - failed} passed, ${failed} failed`);

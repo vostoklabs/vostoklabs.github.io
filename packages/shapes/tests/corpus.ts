@@ -63,6 +63,7 @@ export interface ShapeApi {
   poleOf(ring: Ring, precision?: number, holes?: Ring[], enough?: number): { at: Pt; radius: number };
   // from the laser studio
   insideUnion(shapes: Shapes, p: Pt): boolean;
+  rectRing(x0: number, y0: number, x1: number, y1: number): Ring;
 }
 
 /** mulberry32: a small seeded generator, so the corpus is the same on every machine. */
@@ -286,6 +287,8 @@ export function digests(api: ShapeApi): Record<string, string> {
     ...c.shapes.map((s) => [...c.probes(s.flat()[0] ?? []), ...c.probes(s.flat()[1] ?? [])].map((p) => api.insideUnion(s, p))),
     [...c.probes(c.rings[40]!), ...c.probes(c.rings[42]!)].map((p) => api.insideUnion([[c.rings[40]!], [c.rings[42]!], [c.rings[41]!]], p)),
   ]);
+  // Corners either way round, decimals, far from the origin, a box of no size, and signed zeros.
+  pin('rectRing', () => [[0, 0, 10, 6], [10, 6, 0, 0], [-3.3, 2.2, 0.1, 1e3], [0.1, 0.2, 0.3, 0.7], [1e6, 1e6, 1e6 + 3.3, 1e6 + 1.7], [5, 5, 5, 5], [-0, 0, 0, -0]].map(([x0, y0, x1, y1]) => api.rectRing(x0!, y0!, x1!, y1!)));
   return out;
 }
 

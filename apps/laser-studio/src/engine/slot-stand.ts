@@ -91,9 +91,6 @@ function areaCentroid(ring: CutRing): { area: number; cx: number; cy: number } {
   return { area: Math.abs(a), cx: cx / (6 * a), cy: cy / (6 * a) };
 }
 
-const rectRing = (cx: number, cy: number, w: number, h: number): CutRing =>
-  [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
-
 /** A quarter circle from `fromDeg` to `fromDeg + 90`, both ends included. */
 function quarter(cx: number, cy: number, r: number, fromDeg: number, seg = 8): CutRing {
   const out: CutRing = [];

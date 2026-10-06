@@ -42,6 +42,7 @@
 // `NECK_MIN` = 3 mm (§2.1's tab width, 1× the stock): on the smallest cells the Knob size slider's
 // low end asks for less, and gets the floor — a 16 mm cell at 18 % would be a 1.8 mm neck.
 import { circleRing, heartRing, roundedRectRing, type Pt } from '@vostok/laser';
+import { pointInRing } from '@vostok/shapes';
 
 type Ring = Pt[];
 
@@ -134,17 +135,6 @@ function ringArea(r: Ring): number {
   return a / 2;
 }
 
-/** Even-odd point in ring. */
-function inside(ring: Ring, p: Pt): boolean {
-  let hit = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i]!;
-    const b = ring[j]!;
-    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) hit = !hit;
-  }
-  return hit;
-}
-
 function segDist(p: Pt, a: Pt, b: Pt): number {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
@@ -212,7 +202,7 @@ function insideRuns(a: Pt, b: Pt, ring: Ring): [number, number][] {
     const t1 = ts[i + 1]!;
     if (t1 - t0 < 1e-9) continue;
     const m = (t0 + t1) / 2;
-    if (!inside(ring, [a[0] + m * dx, a[1] + m * dy])) continue;
+    if (!pointInRing([a[0] + m * dx, a[1] + m * dy], ring)) continue;
     const last = runs[runs.length - 1];
     if (last && Math.abs(last[1] - t0) < 1e-9) last[1] = t1;
     else runs.push([t0, t1]);
@@ -524,7 +514,7 @@ function draw(e: GridEdge, knob: Knob | null, bow: number): Pick<Built, 'poly' |
 function clear(bump: Pt[], self: Built, all: Built[], outline: Ring): boolean {
   const near = all.filter((o) => o !== self);
   for (const p of bump) {
-    if (!inside(outline, p) || lineDist(p, outline, true) < KNOB_CLEAR) return false;
+    if (!pointInRing(p, outline) || lineDist(p, outline, true) < KNOB_CLEAR) return false;
     for (const o of near) {
       const b = o.box;
       if (p[0] < b.minX - SEAM_GAP || p[0] > b.maxX + SEAM_GAP || p[1] < b.minY - SEAM_GAP || p[1] > b.maxY + SEAM_GAP) continue;
