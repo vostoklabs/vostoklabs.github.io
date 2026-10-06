@@ -26,10 +26,10 @@ import { drawer } from '../src/components/drawer';
 
 let pass = 0;
 const fails: string[] = [];
-const check = (name: string, ok: boolean) => {
+const check = (name: string, ok: boolean, detail = '') => {
   if (ok) pass++;
   else fails.push(name);
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok || !detail ? '' : ` (${detail})`}`);
 };
 
 /** Markup with the counter ids renumbered from the start, so two builds compare. */
@@ -222,7 +222,11 @@ option('generatorHeader compact', 'vl-app-header--compact', (on) =>
 
   narrow.set(true);
   check('appShell phone: narrow, the export buttons go beside Settings', bar.firstElementChild === exportBlock && bar.children.length === 2);
-  check('appShell phone: narrow, Save and Load follow the panel’s content', projectFooter.parentNode === rightScroll && rightScroll.lastElementChild === projectFooter);
+  const tail = root.querySelector('.vl-app__phone-tail');
+  check('appShell phone: narrow, Save and Load follow the panel’s content, just after its scroll', !!tail && projectFooter.parentNode === tail && rightScroll.nextElementSibling === tail);
+  rightScroll.append(el('p', { text: 'added later' }));
+  const order = root.querySelector('.vl-panel--right')!.textContent;
+  check('appShell phone: narrow, content added to the scroll later still comes before them', order.indexOf('added later') < order.indexOf('Save'));
 
   const settingsButton = bar.querySelectorAll('button').find((b) => b.textContent.includes('Settings'))!;
   settingsButton.click();
@@ -246,6 +250,19 @@ option('generatorHeader compact', 'vl-app-header--compact', (on) =>
   narrow.set(false);
   check('appShell phone: going wide closes the drawer and puts the settings back', !mini(document.body).querySelector('.vl-drawer') && leftScroll.textContent === 'railmore');
   check('appShell phone: going wide puts the export and the footer back', footer.lastElementChild === projectFooter && projectFooter.firstElementChild === exportBlock && bar.children.length === 1);
+  check('appShell phone: going wide leaves the holder empty', !!tail && tail.childNodes.length === 0);
+
+  // A footer with more in it than the sidebar footer: on a wide screen nothing moves, at the
+  // start or after a trip to a narrow screen and back.
+  const note = el('p', { className: 'vl-hint', text: 'note' });
+  const busy = sidebarFooter({ formats: [{ id: 'svg', label: 'SVG' }], onExport() {}, onSave() {}, onLoad() {}, theme: false });
+  const withNote = appShell({ phone: true, left: { scroll: [el('p')] }, right: { scroll: [], footer: [busy, note] } });
+  const noteFooter = mini(withNote.root).querySelector('.vl-panel--right > .vl-panel__footer')!;
+  const roles = () => noteFooter.children.map((c) => c.className.split(' ')[0]).join();
+  check('appShell phone, wide at the start: the footer keeps its order, the bar in front', roles() === 'vl-app__phone-bar,vl-sidebar-footer,vl-hint', roles());
+  narrow.set(true);
+  narrow.set(false);
+  check('appShell phone: after narrow and back, the same order', roles() === 'vl-app__phone-bar,vl-sidebar-footer,vl-hint' && mini(busy).firstElementChild!.classList.contains('vl-export'), roles());
 
   const bare = shellWith(true, false);
   const made = mini(bare.root).querySelector('.vl-panel--right > .vl-panel__footer');

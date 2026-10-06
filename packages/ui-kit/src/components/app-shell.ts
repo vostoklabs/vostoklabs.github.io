@@ -116,6 +116,13 @@ function phoneLayout(left: PanelParts, right: PanelParts): void {
     ([...(parent?.children ?? [])] as HTMLElement[]).find((c) => c.classList.contains(cls)) ?? null;
   const projectFooter = childOf(footer, 'vl-sidebar-footer');
   const exportBlock = childOf(projectFooter, 'vl-export');
+  // Where they sit on a wide screen, so they go back exactly there and nothing else moves.
+  const footerNext = projectFooter?.nextElementSibling ?? null;
+  const exportNext = exportBlock?.nextElementSibling ?? null;
+  // On a narrow screen Save, Load and Help follow the panel's content, in a holder just after
+  // its scroll: content an app adds to the scroll later still comes before them.
+  const tail = el('div', { className: 'vl-app__phone-tail' });
+  right.panel.insertBefore(tail, right.scroll.nextElementSibling);
 
   let sheet: DrawerHandle | null = null;
   const openSettings = () => {
@@ -141,14 +148,21 @@ function phoneLayout(left: PanelParts, right: PanelParts): void {
   footer.prepend(bar);
 
   const narrow = window.matchMedia(NARROW);
+  /** Back before the sibling it had, while that sibling is still there. */
+  const restore = (node: HTMLElement, home: HTMLElement, next: Element | null) =>
+    home.insertBefore(node, next?.parentNode === home ? next : null);
+  // Moves only when the window crosses the edge: a wide screen at the start moves nothing.
+  let narrowNow = false;
   const place = () => {
-    if (narrow.matches) {
+    if (narrow.matches === narrowNow) return;
+    narrowNow = narrow.matches;
+    if (narrowNow) {
       if (exportBlock) bar.prepend(exportBlock);
-      if (projectFooter) right.scroll.append(projectFooter);
+      if (projectFooter) tail.append(projectFooter);
     } else {
       sheet?.close();
-      if (exportBlock) projectFooter?.prepend(exportBlock);
-      if (projectFooter) footer!.append(projectFooter);
+      if (exportBlock && projectFooter) restore(exportBlock, projectFooter, exportNext);
+      if (projectFooter) restore(projectFooter, footer!, footerNext);
     }
   };
   narrow.addEventListener('change', place);

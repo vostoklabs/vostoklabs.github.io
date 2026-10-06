@@ -268,3 +268,6 @@
 }
 /* The drawer's content: the left panel's settings, then its footer (Reset). */
 .vl-app__phone-sheet { display: flex; flex-direction: column; gap: var(--space-3); }
+/* Save, Load and Help on a narrow screen, after the panel's content and anything added to it
+   later. Empty on a wide screen, and then not there at all. */
+.vl-app__phone-tail:empty { display: none; }
