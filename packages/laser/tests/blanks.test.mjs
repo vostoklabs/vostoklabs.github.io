@@ -61,14 +61,20 @@ ok(thumbs === 'a46fc201fe62de89', `every blank thumbnail as before (${thumbs})`)
   const before = sha([B.scallopDiscRing(3), B.scallopDiscRing(2.5, 12), B.scallopDiscRing(4, 20, 6)]);
   ok(before === '2f03c43da1271c92', `the default ring as before (${before})`);
   ok(exact(B.scallopDiscRing(3, 16, 8, 0)) === exact(B.scallopDiscRing(3)), 'start 0 is the default ring, to the bit');
+  // Counts with no crest at 12 o'clock of their own (16 has one at the default, so it cannot
+  // tell a turned ring from an unturned one).
   const r = 3;
-  const n = 16;
-  const ring = B.scallopDiscRing(r, n, 8, Math.PI / 2);
-  const top = ring.reduce((a, p) => (p[1] > a[1] ? p : a));
-  const crest = r / Math.sin(Math.PI / n) + r;
-  ok(Math.abs(top[0]) < 1e-9 && Math.abs(top[1] - crest) < 1e-9, `start π/2: a crest at 12 o'clock (${top[0].toFixed(6)}, ${top[1].toFixed(6)})`);
-  const plain = B.scallopDiscRing(r, n);
-  ok(ring.length === plain.length, 'turning keeps the point count');
+  const highest = (ring) => ring.reduce((a, p) => (p[1] > a[1] ? p : a));
+  for (const n of [7, 10, 14]) {
+    const crest = r / Math.sin(Math.PI / n) + r;
+    const turned = B.scallopDiscRing(r, n, 8, Math.PI / 2);
+    const top = highest(turned);
+    ok(Math.abs(top[0]) < 1e-9 && Math.abs(top[1] - crest) < 1e-9, `${n} scallops, start π/2: a crest at 12 o'clock (${top[0].toFixed(6)}, ${top[1].toFixed(6)})`);
+    const plain = B.scallopDiscRing(r, n);
+    const plainTop = highest(plain);
+    ok(Math.abs(plainTop[0]) > 1, `${n} scallops at the default: no crest at 12 o'clock (the highest point is at x ${plainTop[0].toFixed(3)})`);
+    ok(turned.length === plain.length, `${n} scallops: turning keeps the point count`);
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
