@@ -20,7 +20,7 @@
 // assemble by flipping one over, and a flip is a rotation, so the image on the
 // underside still reads correctly. Reflecting the second half instead would
 // print a mirror-image copy that no longer matches its partner.
-import { csOf, ringsOf, extrude } from '@vostok/manifold';
+import { chamferCutter, csOf, ringsOf, extrude } from '@vostok/manifold';
 import type {
   BuildRegion,
   MagnetBuildParams,
@@ -434,19 +434,7 @@ export function buildMagnet(
 
   // ---------------------------------------------------------------------------
   function createEdgeBevelBlock(footprint: Section, r: number, zRef: number): Solid | null {
-    const outer = grow(footprint, 0.6);
-    const b = footprint.bounds();
-    const W = b.max[0] - b.min[0];
-    const H = b.max[1] - b.min[1];
-    const cx = (b.min[0] + b.max[0]) / 2;
-    const cy = (b.min[1] + b.max[1]) / 2;
-    const scaleX = W > 0.01 ? Math.max(0.01, (W - 2 * r) / W) : 1;
-    const scaleY = H > 0.01 ? Math.max(0.01, (H - 2 * r) / H) : 1;
-    const centeredOuter = track(outer.translate([-cx, -cy]));
-    const centeredFp = track(footprint.translate([-cx, -cy]));
-    const boundingVolume = track(extrude(wasm, centeredOuter, r + 0.02));
-    const partVolume = track(extrude(wasm, centeredFp, r + 0.02, 0, 0, [scaleX, scaleY]));
-    const cutter = track(track(boundingVolume.subtract(partVolume)).translate([cx, cy, 0]));
+    const cutter = track(chamferCutter(wasm, footprint, grow(footprint, 0.6), r));
     return track(cutter.translate([0, 0, zRef - r]));
   }
 

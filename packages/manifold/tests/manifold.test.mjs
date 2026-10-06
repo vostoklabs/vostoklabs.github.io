@@ -107,6 +107,46 @@ for (const [name, file] of BUILDS) {
     cs.delete();
   }
 
+  // ---- chamferCutter: the cutter the generators drew inline, to the byte -----
+  {
+    const shapes = [
+      ['a circle', [circle(0, 0, 20, 64)]],
+      ['a square with a hole', [[[-15, -15], [15, -15], [15, 15], [-15, 15]], circle(0, 0, 6, 32, true)]],
+      ['an L, off the origin', [[[5, 5], [35, 5], [35, 15], [15, 15], [15, 30], [5, 30]]]],
+    ];
+    for (const [label, rings] of shapes) {
+      const fp = M.csOf(wasm, rings, 'Positive');
+      const outer = fp.offset(0.6, 'Round', 2.0, 32);
+      for (const r of [0.5, 1.2]) {
+        const ours = M.chamferCutter(wasm, fp, outer, r);
+        // The sequence the clicker and the magnet generator each wrote out for themselves.
+        const b = fp.bounds();
+        const W = b.max[0] - b.min[0];
+        const H = b.max[1] - b.min[1];
+        const cx = (b.min[0] + b.max[0]) / 2;
+        const cy = (b.min[1] + b.max[1]) / 2;
+        const sx = W > 0.01 ? Math.max(0.01, (W - 2 * r) / W) : 1;
+        const sy = H > 0.01 ? Math.max(0.01, (H - 2 * r) / H) : 1;
+        const co = outer.translate([-cx, -cy]);
+        const cf = fp.translate([-cx, -cy]);
+        const bv = M.extrude(wasm, co, r + 0.02);
+        const pv = M.extrude(wasm, cf, r + 0.02, 0, 0, [sx, sy]);
+        const band = bv.subtract(pv);
+        const inline = band.translate([cx, cy, 0]);
+        check(`${name}: chamferCutter(${label}, r ${r}) is the cutter the generators drew, to the byte`, bytesOf(ours) === bytesOf(inline));
+        const bb = ours.boundingBox();
+        check(
+          `${name}: chamferCutter(${label}, r ${r}) stands on z = 0, r + 0.02 tall`,
+          Math.abs(bb.min[2]) < 1e-9 && Math.abs(bb.max[2] - (r + 0.02)) < 1e-9,
+          `z ${bb.min[2]}..${bb.max[2]}`,
+        );
+        for (const o of [ours, co, cf, bv, pv, band, inline]) o.delete();
+      }
+      outer.delete();
+      fp.delete();
+    }
+  }
+
   // ---- 2. nothing stays in the heap -----------------------------------------
   const big = [circle(0, 0, 20, 1000), circle(0, 0, 12, 600, true)];
   const src = M.csOf(wasm, big, 'Positive');
@@ -128,6 +168,14 @@ for (const [name, file] of BUILDS) {
     check(`${name}: the glue's ${label} leaks (the probe can see it)`, Number.isFinite(g) && g > 0, `${g.toFixed(0)} B a call`);
     const o = leakOf(ours);
     check(`${name}: ${label} leaves nothing in the heap`, Number.isFinite(o) && o <= 0, `${o.toFixed(0)} B a call`);
+  }
+  {
+    // chamferCutter has no glue twin to compare with: what matters is that the cutter it hands
+    // back is the only thing it leaves, and the caller frees that.
+    const srcOuter = src.offset(0.6, 'Round', 2.0, 32);
+    const o = leakOf(() => M.chamferCutter(wasm, src, srcOuter, 1).delete());
+    check(`${name}: chamferCutter leaves nothing in the heap`, Number.isFinite(o) && o <= 0, `${o.toFixed(0)} B a call`);
+    srcOuter.delete();
   }
   src.delete();
 }

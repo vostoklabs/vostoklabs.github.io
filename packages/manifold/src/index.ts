@@ -145,3 +145,35 @@ export function withScope<T>(fn: (keep: Keep) => T): T {
     }
   }
 }
+
+/**
+ * The solid to subtract from an extruded part to chamfer the edge of its `footprint` by `r`.
+ *
+ * One sloped face by a scaled extrusion, not a staircase of offsets: the band between `outer` and
+ * the footprint tapering inward, so it removes a triangle `r` wide and `r` tall at every point of
+ * the edge. `outer` is the footprint grown a little past the wall, so the cutter never shares a
+ * face with it (coplanar faces z-fight in a preview); the caller grows it the way it grows the
+ * rest of its sections. The cutter stands on z = 0, `r` + 0.02 mm tall and narrowing as it rises:
+ * moved to `top - r` it chamfers a top edge, and mirrored in z a bottom one.
+ *
+ * The taper scales the footprint about the middle of its bounds, so on a shape far from convex
+ * it is an approximation, as it always was in the generators that drew it this way. The caller
+ * owns the result; everything made on the way is freed here.
+ */
+export function chamferCutter(wasm: any, footprint: any, outer: any, r: number): any {
+  const b = footprint.bounds();
+  const W = b.max[0] - b.min[0];
+  const H = b.max[1] - b.min[1];
+  const cx = (b.min[0] + b.max[0]) / 2;
+  const cy = (b.min[1] + b.max[1]) / 2;
+  const scaleX = W > 0.01 ? Math.max(0.01, (W - 2 * r) / W) : 1;
+  const scaleY = H > 0.01 ? Math.max(0.01, (H - 2 * r) / H) : 1;
+  return withScope((keep) => {
+    // Centred first, so the extrusion's top scale pivots about the footprint's middle.
+    const centeredOuter = keep(outer.translate([-cx, -cy]));
+    const centeredFp = keep(footprint.translate([-cx, -cy]));
+    const boundingVolume = keep(extrude(wasm, centeredOuter, r + 0.02));
+    const partVolume = keep(extrude(wasm, centeredFp, r + 0.02, 0, 0, [scaleX, scaleY]));
+    return keep(boundingVolume.subtract(partVolume)).translate([cx, cy, 0]);
+  });
+}

@@ -17,6 +17,8 @@
 // small details stay crisp) and removed from the backing — clean even when flat.
 //
 // Frame: Z = 0 is the switch plate top. socket cuts downward; stem rises to +Z.
+import { chamferCutter, csOf, ringsOf, extrude } from '@vostok/manifold';
+import { ringBox } from '@vostok/shapes';
 import type { BuildParams, BuildRegion, ClickerPart, EdgeSetting, EdgeStyle, PartGroup, Ring, RGB, SwitchPlacement } from '../types';
 import { getMarkSeed, markVoids, hardcodedVoids } from './identityMark';
 import { applyStemFit } from './stemFit';
@@ -129,27 +131,11 @@ export function buildClicker(
     socketBB.max[1] - socketBB.min[1],
   );
 
-  // --- Normalized image bbox (trace centers it; longest side = 1) ---
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const ring of outline) {
-    for (const [x, y] of ring) {
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-  }
-  if (!isFinite(minX)) {
-    minX = -0.5;
-    maxX = 0.5;
-    minY = -0.5;
-    maxY = 0.5;
-  }
-  const nW = maxX - minX || 1;
-  const nH = maxY - minY || 1;
+  // --- Normalized image bbox (trace centers it; longest side = 1); no outline is a unit box ---
+  const outlineBox = ringBox(outline);
+  const noOutline = !Number.isFinite(outlineBox.minX);
+  const nW = (noOutline ? 1 : outlineBox.w) || 1;
+  const nH = (noOutline ? 1 : outlineBox.h) || 1;
 
   // --- Sizing. Image fits INSIDE the frame; the cap must be wide enough that the
   //     well (cap + tolerance) contains the switch socket. ---
@@ -277,7 +263,7 @@ export function buildClicker(
     const inverted = track(rect.subtract(cs));
     
     // Break the inverted shape into its disconnected islands
-    const islands = [...inverted.decompose()];
+    const islands = [...inverted.decompose()].map(track);
     
     if (islands.length <= 1) {
       return cs; // No holes found
@@ -314,7 +300,7 @@ export function buildClicker(
     }
     // Simplify the raw trace BEFORE any offset/boolean — the densest polygon in the
     // build, so trimming it here cascades a speedup through the entire pipeline.
-    return simp(track(new CrossSection(validRings, 'NonZero')), 0.03);
+    return simp(track(csOf(wasm, validRings, 'NonZero')), 0.03);
   };
 
   const roundedRect = (w: number, h: number, r: number): Section => {
@@ -340,7 +326,7 @@ export function buildClicker(
       const angle = (Math.PI / 3) * i + Math.PI / 6;
       pts.push([Math.cos(angle) * r, Math.sin(angle) * r]);
     }
-    return track(new CrossSection([pts], 'NonZero'));
+    return track(csOf(wasm, [pts], 'NonZero'));
   };
 
   const makeStar = (r: number, points = 5, innerFrac = 0.56): Section => {
@@ -354,7 +340,7 @@ export function buildClicker(
       const radius = i % 2 === 0 ? r : innerR;
       pts.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
     }
-    const sharp = track(new CrossSection([pts], 'NonZero'));
+    const sharp = track(csOf(wasm, [pts], 'NonZero'));
     // Opening-then-closing (−rr, +2rr, −rr nets to zero size) rounds the convex tips
     // and the concave valleys while keeping the star's overall radius.
     // Scaled by the point count: a radius sized for five points eats the short legs of a
@@ -380,7 +366,7 @@ export function buildClicker(
     if (!rings.length) return track(CrossSection.circle(rr, 160));
     // NonZero, not EvenOdd: a traced silhouette's rings may be wound either way, and EvenOdd
     // would punch a hole wherever two same-direction rings overlap.
-    let cs = simp(track(new CrossSection(rings, 'NonZero')), 0.02);
+    let cs = simp(track(csOf(wasm, rings, 'NonZero')), 0.02);
 
     /* Remove anything too thin to print or to press.
 
@@ -414,7 +400,7 @@ export function buildClicker(
    *  `NonZero` rather than `EvenOdd`: every ring there is a single simple closed curve, and
    *  EvenOdd would punch a hole anywhere one grazed itself. */
   const fromRing = (ring: [number, number][], rr: number): Section =>
-    track(new CrossSection([ring.map(([x, y]) => [x * rr, y * rr] as [number, number])], 'NonZero'));
+    track(csOf(wasm, [ring.map(([x, y]) => [x * rr, y * rr] as [number, number])], 'NonZero'));
 
   /** The knob shared by every parametric shape, clamped to the range this one accepts. */
   const sides = (fallback: number, lo: number, hi: number): number =>
@@ -477,7 +463,7 @@ export function buildClicker(
   const switchSpotOfSection = (cs: Section): [number, number] => {
     let rings: [number, number][][] = [];
     try {
-      rings = cs.toPolygons() as [number, number][][];
+      rings = ringsOf(cs) as [number, number][][];
     } catch {
       return [0, 0];
     }
@@ -637,7 +623,7 @@ export function buildClicker(
     // Then simplify: the round closing fills perimeter arcs with hundreds of points
     // that every later op would carry — collapse them to a print-invisible tolerance.
     const smoothingRadius = 4.0;
-    plate = simp(track(solidPlate.offset(smoothingRadius, 'Round', 2.0, 24).offset(-smoothingRadius, 'Round', 2.0, 24)), 0.05);
+    plate = simp(track(track(solidPlate.offset(smoothingRadius, 'Round', 2.0, 24)).offset(-smoothingRadius, 'Round', 2.0, 24)), 0.05);
   } else {
     // The geometric shapes scale linearly with their radius, so rather than guessing
     // a circumscribing radius (which clips the image on concave shapes like the star
@@ -930,46 +916,26 @@ export function buildClicker(
       // Actually, Manifold handles empty cross sections by returning an empty solid IF we don't crash.
       // Wait, Manifold.extrude DOES crash on empty CrossSection. 
       // Let's create a tiny solid and subtract it from itself to get a true empty solid.
-      const dummy = track(track(Manifold.extrude(track(CrossSection.circle(0.1, 3)), 0.1)).translate([0, 0, z]));
+      const dummy = track(track(extrude(wasm, track(CrossSection.circle(0.1, 3)), 0.1)).translate([0, 0, z]));
       return track(dummy.subtract(dummy));
     }
-    return track(track(Manifold.extrude(cs, Math.max(0.01, h))).translate([0, 0, z]));
+    return track(track(extrude(wasm, cs, Math.max(0.01, h))).translate([0, 0, z]));
   };
 
   // Build the solid to SUBTRACT from a part to bevel (chamfer) one of its horizontal
-  // edges, as a single-face true chamfer via scaled extrusion — no stepped staircase,
-  // so it stays cheap. `outer` grows the cutter past the wall so it never shares a
-  // coplanar face with it (coplanar faces z-fight in the preview).
+  // edges: the shelf's single-face chamfer cutter, grown 0.6 mm past the wall so it never
+  // shares a coplanar face with it (coplanar faces z-fight in the preview).
   //
   // (The old per-step fillet path was removed: only the default fixed chamfers run now,
   // so anything non-'none' is treated as a chamfer.)
   const createEdgeBevelBlock = (footprint: Section, r: number, _style: EdgeStyle, zRef: number, isBottom: boolean): Solid | null => {
-      const outer = grow(footprint, 0.6); // extends the cutter just beyond the wall
-
-      const b = footprint.bounds();
-      const W = b.max[0] - b.min[0];
-      const H = b.max[1] - b.min[1];
-      const cx = (b.min[0] + b.max[0]) / 2;
-      const cy = (b.min[1] + b.max[1]) / 2;
-
-      const scaleX = W > 0.01 ? Math.max(0.01, (W - 2 * r) / W) : 1;
-      const scaleY = H > 0.01 ? Math.max(0.01, (H - 2 * r) / H) : 1;
-
-      // Center the 2D sections so extrude's scaleTop pivots about the footprint center.
-      const centeredOuter = track(outer.translate([-cx, -cy]));
-      const centeredFp = track(footprint.translate([-cx, -cy]));
-
-      const boundingVolume = track(Manifold.extrude(centeredOuter, r + 0.02));
-      const partVolume = track(Manifold.extrude(centeredFp, r + 0.02, 0, 0, [scaleX, scaleY]));
-
-      let cutter = track(boundingVolume.subtract(partVolume));
-      cutter = track(cutter.translate([cx, cy, 0]));
+      let cutter = track(chamferCutter(wasm, footprint, grow(footprint, 0.6), r));
 
       if (isBottom) {
         // Mirror along Z so the chamfer slopes outwards toward the bottom face.
         cutter = track(
-          cutter.translate([0, 0, -(r + 0.02) / 2])
-            .scale([1, 1, -1])
+          track(track(cutter.translate([0, 0, -(r + 0.02) / 2]))
+            .scale([1, 1, -1]))
             .translate([0, 0, (r + 0.02) / 2]),
         );
       }
@@ -1012,7 +978,7 @@ export function buildClicker(
   for (const { r } of ordered) {
     const validRings = placeRings(r.rings).filter(ring => ring.length >= 3 && getRingArea(ring) > 0.001);
     if (validRings.length === 0) continue;
-    let cs: Section = simp(track(new CrossSection(validRings, 'NonZero')), 0.03);
+    let cs: Section = simp(track(csOf(wasm, validRings, 'NonZero')), 0.03);
     // Text boldness: fatten (or thin) the glyph in the plane, the same way a block legend
     // is. Thinning can erase a hairline stroke entirely; the empty check below drops it.
     const textBold = params.textBold ?? 0;
@@ -1347,9 +1313,10 @@ export function buildClicker(
 
   // Covert identity mark: subtract a seeded void constellation anchored to switch #0's
   // socket, buried in the always-solid ring (invisible on prints, visible in a slicer
-  // section view). Only active when VITE_MARK_SEED is set (deployed build); dev builds
-  // skip this tier. Each void is subtracted only if fully buried, so it can never pierce
-  // a surface regardless of design/size/switch offset.
+  // section view). Only when the build is given a seed (VITE_MARK_SEED): a build without
+  // one, and a node test, skip this tier, and the hardcoded tier below is there either way.
+  // Each void is subtracted only if fully buried, so it can never pierce a surface
+  // regardless of design/size/switch offset.
   const markSeed = getMarkSeed();
   if (markSeed && applied.length > 0) {
     const sw0 = applied[0];
@@ -1470,7 +1437,7 @@ export function buildClicker(
        them oppositely, which is exactly what NonZero needs) while two same-wound shapes simply
        merge. Holes AND overlaps, both right. */
     const mark: Section | null = markPolys.length
-      ? track(CrossSection.ofPolygons(markPolys, 'NonZero'))
+      ? track(csOf(wasm, markPolys, 'NonZero'))
       : null;
     if (mark && !sectionIsEmpty(mark)) {
       // From just below the underside up to MARK_DEPTH above it: the overshoot guarantees a
@@ -1630,7 +1597,7 @@ function edgePointAt(footprint: Section, angleDeg: number): { p: [number, number
   const dir: [number, number] = [Math.cos(rad), Math.sin(rad)];
   let rings: [number, number][][] = [];
   try {
-    rings = footprint.toPolygons() as [number, number][][];
+    rings = ringsOf(footprint) as [number, number][][];
   } catch {
     rings = [];
   }
