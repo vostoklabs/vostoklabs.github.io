@@ -1,5 +1,8 @@
-// Other weights of the library's families (Roboto Bold), for an app that draws with one by name:
-// the clicker's "Standard Bold" is Roboto Bold.
+// Other weights of the library's families, for an app that draws with one by name: Roboto Bold,
+// cut from the same Roboto 3 original as the library's Roboto, and flagged bold. It is not the
+// face the clicker's "Standard Bold" typeface was converted from: that is Roboto 2.137, under
+// Apache-2.0, and its letters advance up to about 0.4 % differently. Declare it to the page with
+// `installFontFaces(['roboto-bold'], { weight: '700' })`.
 //
 // Each file sits in fonts/weights/, outside the glob the library's faces come through, so no
 // font picker offers one and an app's build carries their files only once it imports this

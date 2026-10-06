@@ -364,9 +364,11 @@ const UPSTREAM = {
   'libertinus-sans': { file: 'ofl/libertinussans/LibertinusSans-Regular.ttf', cut: true, for: ['cyrillic', 'greek'] },
 };
 
-/** Other weights of a family the library lists, for an app that draws with one by name: the
- *  clicker's "Standard Bold" is Roboto Bold. Each lives in fonts/weights/, outside the library's
- *  glob, so no picker offers it and an app carries its file only once it imports
+/** Other weights of a family the library lists, for an app that draws with one by name: Roboto
+ *  Bold, cut from the same Roboto 3 original as the library's Roboto. (It is not the face the
+ *  clicker's "Standard Bold" typeface was converted from, which is Roboto 2.137 under Apache-2.0,
+ *  with letters advancing up to about 0.4 % differently.) Each lives in fonts/weights/, outside
+ *  the library's glob, so no picker offers it and an app carries its file only once it imports
  *  `@vostok/fonts/weights`. Fetched, cut, checked and recorded like every other face. */
 const WEIGHTS = new Set(['roboto-bold']);
 /** Where a face's file lives, and the same path from the repo root. */
@@ -621,8 +623,14 @@ function problemWith(buf, spec, familyReserved = []) {
   const reserved = [...familyReserved, ...reservedFontNames(`${nameOf(font, 'copyright')}\n${nameOf(font, 'license')}`)];
   const clash = reservedNameIn(FACE_NAMES.map((k) => nameOf(font, k)), reserved);
   if (clash) return `is named with the Reserved Font Name "${clash}"`;
+  if (spec.pin?.wght === 700 && !flaggedBold(font)) return 'is not flagged bold';
   return null;
 }
+
+/** A face's own flags say Bold: OS/2 fsSelection bit 5 on and bit 6 (Regular) off, and
+ *  head.macStyle bit 0 on. */
+const flaggedBold = (font) =>
+  (font.tables.os2.fsSelection & 0x20) !== 0 && (font.tables.os2.fsSelection & 0x40) === 0 && (font.tables.head.macStyle & 0x01) !== 0;
 
 const PINNED = GOOGLE_FONTS.split('/').pop();
 
@@ -746,6 +754,20 @@ function renameStyle(buf, to) {
   return withTables(buf, { name: Buffer.concat([table, ...records.map((x) => x.str)]) });
 }
 
+/** Flags a face pinned at 700 as its family's Bold. Instancing a variable file keeps the default
+ *  instance's flags, so Roboto fixed at 700 still said Regular (fsSelection 64, macStyle 0), and
+ *  whatever reads the flags rather than the weight (a font menu, a browser deciding whether to
+ *  embolden) takes it for one. Sets OS/2 fsSelection bit 5 (Bold) and clears bit 6 (Regular),
+ *  which may not be set beside it, and sets head.macStyle bit 0. */
+function markBold(buf) {
+  const t = tablesOf(buf);
+  const os2 = Buffer.from(buf.subarray(t['OS/2'].offset, t['OS/2'].offset + t['OS/2'].length));
+  os2.writeUInt16BE((os2.readUInt16BE(62) & ~0x40) | 0x20, 62);
+  const head = Buffer.from(buf.subarray(t.head.offset, t.head.offset + t.head.length));
+  head.writeUInt16BE(head.readUInt16BE(44) | 0x01, 44);
+  return withTables(buf, { 'OS/2': os2, head });
+}
+
 let subsetFont;
 /** The file UPSTREAM describes: the original, or the original cut, pinned and renamed. */
 async function makeFace(spec) {
@@ -762,7 +784,9 @@ async function makeFace(spec) {
     preserveNameIds: [7, 8, 9, 13, 14, 16, 17],
     ...(spec.pin ? { variationAxes: spec.pin } : {}),
   });
-  return spec.pin?.wght ? renameStyle(Buffer.from(cut), WEIGHT_NAMES[spec.pin.wght]) : Buffer.from(cut);
+  if (!spec.pin?.wght) return Buffer.from(cut);
+  const renamed = renameStyle(Buffer.from(cut), WEIGHT_NAMES[spec.pin.wght]);
+  return spec.pin.wght === 700 ? markBold(renamed) : renamed;
 }
 
 /** A face from UPSTREAM: made again only when the file on disk is missing or not the one the

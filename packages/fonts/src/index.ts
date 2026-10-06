@@ -111,13 +111,18 @@ export const loadedFont = (fontId: string): any => fontCache.get(fontId);
  * sheet and once for the outlines. A face added through the FontFace API is not a stylesheet, so
  * a host whose policy is `style-src 'self'` (which refuses an inline `<style>`) lets it through,
  * and it still loads lazily, the first time something is drawn in it.
+ *
+ * `weight` declares how heavy the faces are (`'700'` for Roboto Bold), so text set bold in that
+ * family is drawn with the face as it is, not emboldened again by the browser. Left out, the
+ * faces are declared without one, as before.
  */
-export function installFontFaces(fontIds: readonly string[], opts: { display?: FontDisplay } = {}): () => void {
+export function installFontFaces(fontIds: readonly string[], opts: { display?: FontDisplay; weight?: string } = {}): () => void {
   const faces: FontFace[] = [];
+  const descriptors: FontFaceDescriptors = { display: opts.display ?? 'block', ...(opts.weight ? { weight: opts.weight } : {}) };
   for (const id of fontIds) {
     const url = getFontUrl(id);
     if (!url) continue;
-    const face = new FontFace(fontFamilyFor(id), `url("${url}")`, { display: opts.display ?? 'block' });
+    const face = new FontFace(fontFamilyFor(id), `url("${url}")`, descriptors);
     document.fonts.add(face);
     faces.push(face);
   }

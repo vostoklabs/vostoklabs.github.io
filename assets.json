@@ -4117,7 +4117,7 @@
       "id": "font/roboto-bold",
       "kind": "font",
       "files": {
-        "packages/fonts/src/fonts/weights/roboto-bold.ttf": "281fe2ad13c85b75f1db0b2478dc9a55e819c35b7e97611188f913e2fa8f7bdc"
+        "packages/fonts/src/fonts/weights/roboto-bold.ttf": "2a9ebc67dcc0ab5f06290259197e70ea288196f3bf99f57af389ccd2c428ce53"
       },
       "licence": "OFL-1.1",
       "copyright": "Copyright 2011 The Roboto Project Authors (https://github.com/googlefonts/roboto-classic)",

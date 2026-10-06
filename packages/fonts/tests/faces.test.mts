@@ -29,7 +29,7 @@ function ok(cond: unknown, msg: string): void {
 // ---- installFontFaces, against a stand-in for the page's font set
 
 class FakeFace {
-  constructor(readonly family: string, readonly source: string, readonly descriptors: { display?: string }) {}
+  constructor(readonly family: string, readonly source: string, readonly descriptors: { display?: string; weight?: string }) {}
 }
 const added = new Set<FakeFace>();
 (globalThis as any).FontFace = FakeFace;
@@ -40,12 +40,15 @@ const faces = [...added];
 ok(faces.length === 2, `two faces declared, the unknown one skipped (${faces.length})`);
 ok(faces[0]?.family === 'VL-anton' && faces[1]?.family === 'VL-roboto', `named by fontFamilyFor: ${faces.map((f) => f.family).join(', ')}`);
 ok(faces[0]?.source === `url("${getFontUrl('anton')}")`, 'from the same file getFont reads');
-ok(faces.every((f) => f.descriptors.display === 'block'), 'display block by default');
+ok(faces.every((f) => f.descriptors.display === 'block' && !('weight' in f.descriptors)), 'display block by default, and no weight declared');
 remove();
 ok(added.size === 0, 'the disposer takes every one of them away');
 const removeSwap = installFontFaces(['anton'], { display: 'swap' });
 ok([...added][0]?.descriptors.display === 'swap', 'display as asked');
 removeSwap();
+const removeBold = installFontFaces(['roboto'], { weight: '700' });
+ok([...added][0]?.descriptors.weight === '700' && [...added][0]?.descriptors.display === 'block', 'a weight, declared as asked, so bold text is not emboldened again');
+removeBold();
 ok(installFontFaces([])() === undefined && added.size === 0, 'no faces, nothing declared, a disposer all the same');
 
 // ---- preload, then read without waiting
@@ -68,6 +71,11 @@ const bold = await getFont('roboto-bold');
 const regular = await getFont('roboto');
 ok(bold.tables.os2.usWeightClass === 700 && regular.tables.os2.usWeightClass === 400, `a bold face beside the regular (${bold.tables.os2.usWeightClass} / ${regular.tables.os2.usWeightClass})`);
 ok(bold.charToGlyph('A').advanceWidth > regular.charToGlyph('A').advanceWidth, 'and its letters are wider');
+// The face's own flags say what it is: OS/2 fsSelection bit 5 (Bold) on and bit 6 (Regular) off,
+// head.macStyle bit 0 on. Instancing kept Regular's flags until the recipe set them.
+const flags = (f: any) => ({ bold: (f.tables.os2.fsSelection & 0x20) !== 0, regular: (f.tables.os2.fsSelection & 0x40) !== 0, mac: f.tables.head.macStyle & 0x01 });
+ok(JSON.stringify(flags(bold)) === JSON.stringify({ bold: true, regular: false, mac: 1 }), `Roboto Bold is flagged bold: ${JSON.stringify(flags(bold))}`);
+ok(JSON.stringify(flags(regular)) === JSON.stringify({ bold: false, regular: true, mac: 0 }), `and Roboto Regular as it was: ${JSON.stringify(flags(regular))}`);
 
 // ---- the symbol font through its own door
 
