@@ -72,7 +72,9 @@ export interface BuildLoop<R> {
    * It becomes `latest`, and `settled()` hands it to an export as if a build had made it, but
    * nothing runs and `onResult` is not called: the app shows it itself. Only for the settings
    * the loop started with, or was last `invalidate()`d to: once a build has been asked for, a
-   * seed no longer matches the settings and is refused. Returns whether it was taken.
+   * seed no longer matches the settings and is refused. A build asked for before that
+   * `invalidate()` and still waiting to run refuses it too, as it would replace the seed a
+   * moment later. Returns whether it was taken.
    */
   seed(result: R): boolean;
   /**
@@ -279,7 +281,7 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
       return new Promise<R>((resolve, reject) => waiters.push({ resolve, reject }));
     },
     seed(result) {
-      if (disposed || asked) return false;
+      if (disposed || asked || dirty) return false;
       latest = result;
       return true;
     },

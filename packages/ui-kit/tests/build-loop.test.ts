@@ -338,6 +338,28 @@ test('seed: taken again after invalidate(), for the new design', async () => {
   assert((await loop.settled()) === 'another design', 'and settled() hands it over');
 });
 
+test('seed: refused while a build asked for before invalidate() still waits to run, which then lands', async () => {
+  let runs = 0;
+  const loop = buildLoop({ run: () => { runs++; return 'built'; } });
+  loop.request();
+  loop.invalidate();
+  assert(loop.seed('prebuilt') === false, 'a build is still coming: the seed would be replaced by it');
+  assert((await within(loop.settled())) === 'built', 'export must get the build that ran');
+  assert(runs === 1, `one build, got ${runs}`);
+});
+
+test('seed: after invalidate() while a build runs, the seed is taken and the late build is dropped', async () => {
+  const m = manualRun<string>();
+  const loop = buildLoop({ run: m.run });
+  loop.request();
+  await tick();
+  loop.invalidate();
+  assert(loop.seed('another design'), 'nothing is waiting to run, so the seed is for the new settings');
+  m.calls[0]!.resolve('the old design');
+  assert((await within(loop.settled())) === 'another design', 'export must get the seed, not the old build');
+  assert(m.calls.length === 1, `nothing else builds, got ${m.calls.length - 1}`);
+});
+
 test('seed: a seeded result is held to diagnose like a build', async () => {
   const loop = buildLoop<string[]>({ run: () => [], diagnose: (r) => r.map((message) => ({ level: 'error' as const, message })) });
   loop.seed(['It is bigger than the plate.']);
