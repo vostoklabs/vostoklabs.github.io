@@ -311,6 +311,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   const styleCards = sourceCards<StyleId>({
     options: STYLE_OPTIONS.map((s) => ({ value: s.id, label: s.short, icon: styleIcon(s.id) })),
+    // Up to twelve styles: small tiles, the icon over a name that may take two lines.
+    layout: 'tiles',
     value: params.style,
     onChange: (id) => {
       params = { ...params, style: id };
@@ -1401,7 +1403,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---------------------------------------------------------------------------
   // 6. STAGE — flat dieline, or the box folding itself
   // ---------------------------------------------------------------------------
-  const status = stageStatus('Building…');
+  // Top-left: the bottom centre holds the fold panel for good, and on a narrow stage the
+  // status line down there overlapped it every time.
+  const status = stageStatus('Building…', { position: 'top' });
   const stageCanvas = el('div', { className: 'fb-stage-canvas' });
   const flat = createFlatView();
 
@@ -1547,6 +1551,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const dielineSwitches = el('div', { className: 'fb-dieline-switches' }, [
     toggleSwitch({
       label: 'Panel names',
+      compact: true,
       checked: showLabels,
       onChange: (v) => {
         showLabels = v;
@@ -1555,6 +1560,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }),
     toggleSwitch({
       label: 'Sheet outline',
+      compact: true,
       checked: showSheet,
       onChange: (v) => {
         showSheet = v;
@@ -1571,6 +1577,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     title: 'Fold',
     body: [foldRow],
     open: true,
+    titleHidden: true,
   });
   // A title reading "Fold" over a button reading "Fold it", plus a line explaining
   // that a slider is draggable, made the panel 147 px — a fifth of the stage, sitting

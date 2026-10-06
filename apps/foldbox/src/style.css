@@ -330,73 +330,21 @@ body {
   color: var(--red);
 }
 
-/* The style picker carries eight options, which is more than the shared source-card
-   ROW is sized for. The kit's card is icon-left / label-right, which is right for a
-   full-width row and wrong for a 70 px tile: the label has nowhere to go, so it
-   clipped ("Maile", "Divide") and broke mid-word ("Tuck car-ton").
-   Stack it instead — icon over a centred label, two lines allowed, no hyphenation.
-   Kept local rather than pushed into the kit: only this app has eight sources to
-   pick from, and the kit's row is still right for the apps that have three. */
-.vl-source-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(4.6rem, 1fr));
-  gap: var(--space-2);
-  align-items: stretch;
-}
-
-.vl-source-card {
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--space-1);
-  /* icon 26 + gap 4 + one line 16 + padding 16. Two columns, not three: at three
-     the tile is 72 px and "Tuck carton" wraps, which makes every tile in its row
-     taller and buys nothing. */
-  min-height: 4rem;
-  padding: var(--space-2) var(--space-1);
-  text-align: center;
-}
-
-.vl-source-card__icon {
-  width: 26px;
-  height: 26px;
-}
-
-.vl-source-card__label {
-  flex-grow: 0;
-  font-size: 13px;
-  line-height: 1.2;
-  /* Never hyphenate and never clip: a tile that cannot show its own name is worse
-     than a tile one line taller. */
-  hyphens: manual;
-  overflow-wrap: normal;
-}
-
-
 /* ------------------------------------------------------- stage fold panel -- */
 
 /* The fold control is a play button and a scrubber; a heading over it and a line
-   under it explaining that sliders slide made the panel a fifth of the stage. */
+   under it explaining that sliders slide made the panel a fifth of the stage. The
+   heading comes off the screen through the panel's own option (`titleHidden`). */
 .fb-panel--bare {
   gap: 0;
   padding-block: var(--space-3);
 }
 
-.fb-panel--bare .vl-stage-panel__title {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 /* Two groups on one line: what the colours mean on the left, the switches on the right.
    It used to be one flat wrap of three items, so the first switch sat beside the legend
    and the second dropped to a line of its own — the legend and the switches read as one
-   ragged list rather than as two things. `.vl-switch-row` is `space-between` and stretches
-   to whatever box it is in, so each still has to be told to take only the width it needs. */
+   ragged list rather than as two things. The switches are compact ones, which take only
+   the width they need. */
 .fb-dieline-body {
   display: flex;
   flex-wrap: wrap;
@@ -415,28 +363,8 @@ body {
   gap: var(--space-1);
 }
 
-.fb-dieline-switches > .vl-switch-row {
-  flex: 0 0 auto;
-  gap: var(--space-2);
-}
-
-.fb-dieline-body .vl-switch-label {
-  font-size: 14px;
-}
-
 /* The colour key keeps its chips together and wraps as a block, so it cannot interleave
    with the switches on a narrow stage. */
 .fb-legend {
   flex: 0 1 auto;
-}
-
-/* The status line moves to the top-left, under the stage label.
-   The kit parks it bottom-left because the nav hint holds the opposite corner — but
-   this app has no nav hint and does have a permanent bottom-centre panel, and on a
-   narrow stage a 45%-wide status and a 344 px centred panel overlap every time. Up
-   here it collides with nothing and sits where the eye enters the frame. */
-.vl-stage-status {
-  top: 3.1rem;
-  bottom: auto;
-  max-width: min(70ch, 60%);
 }
