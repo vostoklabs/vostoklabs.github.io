@@ -1,9 +1,9 @@
 // Clipping lines to a region, keeping holes off its edge, and merging the duplicate segments
 // a tiled lattice draws. Pure; nothing here needs a polygon library.
 //
-// Lines are clipped AS LINES (the studio's clip.ts, lifted): split every segment where it
-// crosses a region edge, keep a piece when its midpoint is on material, merge what is
-// consecutive. A hole is a polygon, and a polygon crossing the edge is not clipped here unless
+// Lines are clipped AS LINES: split every segment where it crosses a region edge, keep a piece
+// when its midpoint is on material (even-odd, or inside any one island of a set that overlaps),
+// merge what is consecutive. A hole is a polygon, and a polygon crossing the edge is not clipped here unless
 // it is convex (Sutherland–Hodgman against the region's rings is exact then) — the host owns
 // the general boolean, because it already has one and this package must not.
 import { insideShapes, insideUnion, isConvex, pointSegmentDistance, ringLength, segmentCrossing, segmentDistance, signedArea } from './geom';
