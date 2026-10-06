@@ -2,6 +2,7 @@ import {
   SYMBOL_CATEGORIES,
   SYMBOL_SETS,
   listSymbols,
+  outlinePath,
   searchSymbols,
   symbolById,
   symbolPath,
@@ -12,6 +13,7 @@ import {
   type SymbolSetId,
 } from '@vostok/symbols';
 import { svgNode } from '../dom';
+import { withMyIcons } from './my-icons';
 import { openSymbolLibrary, type SymbolLibraryEntry, type SymbolLibraryHandle, type SymbolLibraryOptions } from './symbol-library';
 
 /*
@@ -27,10 +29,12 @@ import { openSymbolLibrary, type SymbolLibraryEntry, type SymbolLibraryHandle, t
 */
 
 export interface SymbolChoice {
-  /** `set:name`, e.g. `fluent:cat-face`: what `symbolById` / `symbolShapes` take. */
+  /** `set:name`, e.g. `fluent:cat-face`: what `symbolById` / `symbolShapes` take. A pick from My
+   *  icons carries the icon's own id, which only its shapes stand for: keep them. */
   id: string;
   label: string;
-  set: SymbolSetId;
+  /** `mine` for a pick from My icons. */
+  set: SymbolSetId | 'mine';
   /** Islands (an outer ring, then its holes), centred, longest side 1, Y up. */
   shapes: Shapes;
   /** Material only: the icon font's character, for an app that types the symbol into text. */
@@ -46,24 +50,39 @@ export interface SymbolChooserOptions extends SymbolFilter {
   title?: string;
   /** Default 'popular'. */
   initialCategory?: string;
-  /** An "Import your own SVG" button beside the search; the app traces the file. */
-  upload?: SymbolLibraryOptions['upload'];
+  /** An "Import your own SVG" button beside the search; the app traces the file and does with it
+   *  what it does. With `myIcons`, the icon `onFile` resolves to (the traced file: its `label` and
+   *  `shapes`, and an `id` if the app names it) is kept under My icons. */
+  upload?: {
+    label?: string;
+    accept?: string;
+    onFile(file: File, close: () => void): Promise<{ id?: string; label: string; shapes: Shapes } | null | void>;
+  };
+  /**
+   * "My icons": the icons the customer imported, kept in this browser under `key`
+   * (localStorage), newest first, 40 at most. They are a category after Popular and are searched
+   * with the rest; a pick from them comes back with `set: 'mine'`. Off by default.
+   */
+  myIcons?: { key: string };
 }
 
 const SOURCE = new Map(SYMBOL_SETS.map((s) => [s.id, s.label]));
 const entryOf = (e: SymbolEntry): SymbolLibraryEntry => ({ id: e.id, label: e.label, source: SOURCE.get(e.set) });
 
-/** A symbol's drawing, about tile size, in the text colour. */
-export async function symbolDrawing(id: string): Promise<SVGSVGElement> {
-  return svgNode('svg', { viewBox: '-0.55 -0.55 1.1 1.1', 'aria-hidden': 'true', focusable: 'false' }, [
-    svgNode('path', { d: await symbolPath(id), fill: 'currentColor' }),
-  ]);
+/** Path data in the symbol frame, about tile size, in the text colour. */
+const drawn = (d: string): SVGSVGElement =>
+  svgNode('svg', { viewBox: '-0.55 -0.55 1.1 1.1', 'aria-hidden': 'true', focusable: 'false' }, [svgNode('path', { d, fill: 'currentColor' })]);
+
+/** A symbol's drawing, about tile size, in the text colour: by its id, or from its shapes (a pick
+ *  from My icons, which no id in the library names). */
+export async function symbolDrawing(symbol: string | Shapes): Promise<SVGSVGElement> {
+  return drawn(typeof symbol === 'string' ? await symbolPath(symbol) : outlinePath(symbol));
 }
 
 /** Open the symbol picker. */
 export function openSymbolChooser(opts: SymbolChooserOptions): SymbolLibraryHandle {
   const filter: SymbolFilter = { sets: opts.sets, solidOnly: opts.solidOnly };
-  return openSymbolLibrary({
+  const library: SymbolLibraryOptions = {
     title: opts.title ?? 'Symbols & icons',
     categories: [...SYMBOL_CATEGORIES],
     initialCategory: opts.initialCategory ?? 'popular',
@@ -76,5 +95,13 @@ export function openSymbolChooser(opts: SymbolChooserOptions): SymbolLibraryHand
     },
     anchor: opts.anchor,
     upload: opts.upload,
-  });
+  };
+  if (!opts.myIcons) return openSymbolLibrary(library);
+  return openSymbolLibrary(
+    withMyIcons(library, {
+      key: opts.myIcons.key,
+      draw: (shapes) => drawn(outlinePath(shapes)),
+      onPick: (icon) => opts.onPick({ id: icon.id, label: icon.label, set: 'mine', shapes: icon.shapes }),
+    }),
+  );
 }

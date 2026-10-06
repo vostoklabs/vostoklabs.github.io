@@ -106,7 +106,7 @@ import {
   type SvgImportPart,
   type SymbolTransform,
 } from '@vostok/ui-kit';
-import { openSymbolChooser, symbolDrawing } from '@vostok/ui-kit/symbols';
+import { openSymbolChooser, symbolDrawing, type SymbolChoice } from '@vostok/ui-kit/symbols';
 // The symbol rules on their own, as code with no DOM takes them.
 import { nextSymbolChar, shiftSymbol } from '@vostok/ui-kit/symbol-rules';
 import './demo.css';
@@ -1083,18 +1083,37 @@ const shapePickerButton = symbolPickerButton({
    the pick from the same library, as an app's preview would. */
 const chosenArt = el('span', { className: 'kit-chosen-symbol', attrs: { 'aria-hidden': 'true' } });
 const chosenText = el('p', { className: 'vl-hint', text: 'Nothing picked yet.' });
+async function showChoice(choice: SymbolChoice): Promise<void> {
+  chosenArt.replaceChildren(await symbolDrawing(choice.set === 'mine' ? choice.shapes : choice.id));
+  const holes = choice.shapes.reduce((n, island) => n + island.length - 1, 0);
+  chosenText.textContent = `${choice.label} (${choice.id}): ${choice.shapes.length} piece${choice.shapes.length === 1 ? '' : 's'}, ${holes} hole${holes === 1 ? '' : 's'}`;
+}
 const chooseSymbolButton = button({
   label: 'Choose a symbol',
   icon: ICONS.plus,
   emphasis: 'secondary',
+  onClick: () => openSymbolChooser({ anchor: chooseSymbolButton, onPick: showChoice }),
+});
+/* With My icons. An app traces the SVG a customer imports; this page stands in for the tracer,
+   and whatever file it is given comes back as a hexagonal tag with a hole, named after the file.
+   The page shows it as it would a pick, and hands it back to be kept. */
+const DEMO_TAG = [[polyPoints(6, 0.5, 0.5, 0, 0, 0), polyPoints(16, 0.12, 0.12, 0, 0.24, 0).reverse()]];
+const chooseMineButton = button({
+  label: 'Choose, with My icons',
+  icon: ICONS.plus,
+  emphasis: 'secondary',
   onClick: () =>
     openSymbolChooser({
-      anchor: chooseSymbolButton,
-      onPick: async (choice) => {
-        chosenArt.replaceChildren(await symbolDrawing(choice.id));
-        const holes = choice.shapes.reduce((n, island) => n + island.length - 1, 0);
-        chosenText.textContent = `${choice.label} (${choice.id}): ${choice.shapes.length} piece${choice.shapes.length === 1 ? '' : 's'}, ${holes} hole${holes === 1 ? '' : 's'}`;
+      anchor: chooseMineButton,
+      myIcons: { key: 'kit-demo-my-icons' },
+      upload: {
+        onFile: async (file) => {
+          const traced = { label: file.name.replace(/\.svg$/i, ''), shapes: DEMO_TAG };
+          await showChoice({ id: 'just imported', set: 'mine', ...traced });
+          return traced;
+        },
       },
+      onPick: showChoice,
     }),
 });
 
@@ -1225,12 +1244,14 @@ app.append(
     panel(row(shapePickerButton), shapeChoice),
   ),
   entry(
-    'openSymbolChooser()',
+    'openSymbolChooser() · openSymbolChooser({ myIcons })',
     'Symbol chooser',
     'THE symbol picker: Material Symbols, Tabler Icons and Fluent Emoji in one window, with one set ' +
       'of categories and one search. The pick comes back as closed shapes, centred and one unit ' +
-      'across, ready to scale, cut or extrude, and the tiles are drawn from those same shapes.',
-    panel(row(chooseSymbolButton), el('div', { className: 'kit-chosen' }, [chosenArt, chosenText])),
+      'across, ready to scale, cut or extrude, and the tiles are drawn from those same shapes. With ' +
+      'myIcons, the SVGs a customer imports are kept in their browser (40 at most) and offered again ' +
+      'under My icons; the import itself runs through the app as before.',
+    panel(row(chooseSymbolButton, chooseMineButton), el('div', { className: 'kit-chosen' }, [chosenArt, chosenText])),
   ),
   entry(
     'symbolTextField() · openSymbolLibrary() · symbolInspector()',

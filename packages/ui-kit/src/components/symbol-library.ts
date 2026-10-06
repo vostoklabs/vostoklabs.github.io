@@ -43,8 +43,9 @@ export interface SymbolLibraryOptions {
   onPick(entry: SymbolLibraryEntry): void | Promise<void>;
   /** An "Import your own SVG" button beside the search. `onFile` gets the file and the
    *  library's `close`, to call before opening a window of its own. The library closes when
-   *  `onFile` resolves; a rejection is reported as a toast and leaves it open. */
-  upload?: { label?: string; accept?: string; onFile(file: File, close: () => void): Promise<void> };
+   *  `onFile` resolves, whatever it resolves to; a rejection is reported as a toast and leaves
+   *  it open. */
+  upload?: { label?: string; accept?: string; onFile(file: File, close: () => void): Promise<unknown> };
   /** The button that opened it. With one, on a screen wider than 760 px, the library opens
    *  as a dropdown under it rather than in the middle of the screen. */
   anchor?: HTMLElement;
