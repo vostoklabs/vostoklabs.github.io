@@ -90,6 +90,28 @@ function logged(fn: () => void): unknown[] {
   });
   check('fallback: a render that throws gives the fallback, and nothing is read back', got === BLANK && lost.calls.join() === 'render');
   check('fallback: an empty string is a fallback too (a caller that wants "no picture")', captureCover(stand('data:,').renderer, {}, {}, { fallback: '' }) === '');
+  let quiet = '';
+  const none = logged(() => {
+    quiet = captureCover(stand(undefined as unknown as string).renderer, {}, {}, { fallback: BLANK });
+  });
+  check('fallback: a read-back that is no string at all gives the fallback, with nothing logged', quiet === BLANK && none.length === 0, `${none.length} logged`);
+}
+
+/* ---------------------------------------------------- a caller in JavaScript */
+
+{
+  const { renderer, calls } = stand(PICTURE);
+  let got = '';
+  let thrown = '';
+  try {
+    got = captureCover(renderer, {}, {}, null as unknown as string);
+  } catch (e) {
+    thrown = (e as Error).message;
+  }
+  check('null as the last argument is a PNG, as it always was', !thrown && got === PICTURE && calls.join() === 'render,read image/png', thrown || calls.join());
+  const undef = stand(PICTURE);
+  captureCover(undef.renderer, {}, {}, undefined);
+  check('undefined as the last argument is a PNG', undef.calls.join() === 'render,read image/png');
 }
 
 console.log(`\ncover image: ${pass} passed, ${fails.length} failed`);

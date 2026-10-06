@@ -26,14 +26,14 @@ export interface CaptureCoverOptions {
 }
 
 /** Render one fresh frame and capture it as a data URL (PNG by default). The last argument is the
- *  format, or the options. */
+ *  format, or the options; null is a PNG, as it always was. */
 export function captureCover(
   renderer: RendererLike,
   scene: unknown,
   camera: unknown,
   options: string | CaptureCoverOptions = {},
 ): string {
-  const { mimeType = 'image/png', fallback } = typeof options === 'string' ? { mimeType: options } : options;
+  const { mimeType = 'image/png', fallback } = typeof options === 'string' ? { mimeType: options } : (options ?? {});
   if (fallback === undefined) {
     renderer.render(scene, camera);
     return renderer.domElement.toDataURL(mimeType);
@@ -41,7 +41,8 @@ export function captureCover(
   try {
     renderer.render(scene, camera);
     const url = renderer.domElement.toDataURL(mimeType);
-    return url.length > 128 ? url : fallback;
+    // A read-back that is not a picture at all (a stand-in canvas) is no failure to report.
+    return url && url.length > 128 ? url : fallback;
   } catch (err) {
     console.error('Cover capture failed:', err);
     return fallback;
