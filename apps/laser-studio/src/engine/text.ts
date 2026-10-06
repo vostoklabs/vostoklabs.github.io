@@ -3,7 +3,7 @@
 // is likely to expose.
 import { bboxOf, buildSymbol, centreShapes, islandsFromContours, placeShapes, type Box, type Shapes } from '@vostok/laser';
 import { FALLBACK_FONT_ID, getFont, getHorizontalContours, getVerticalContours, pathCommandsToPolygons } from '@vostok/fonts';
-import { pointInRing } from '@vostok/patterns';
+import { pointInRing } from '@vostok/shapes';
 import { withSymbols, symbolIslands, type SymbolMap } from '../symbols/model';
 import { unionIndex, unionOutlineDistance, type UnionIndex } from './editorGeometry';
 import type { DesignLayer, OpChoice } from './types';
@@ -519,7 +519,7 @@ function inscribedDiameter(ring: readonly [number, number][]): number {
   for (let iy = 0; iy <= steps; iy++) {
     for (let ix = 0; ix <= steps; ix++) {
       const p: [number, number] = [b.minX + ((b.maxX - b.minX) * ix) / steps, b.minY + ((b.maxY - b.minY) * iy) / steps];
-      if (!pointInRing(p, ring as [number, number][])) continue;
+      if (!pointInRing(p, ring)) continue;
       const d = ringDistance(p, ring);
       if (d > best) { best = d; at = p; }
     }
@@ -530,7 +530,7 @@ function inscribedDiameter(ring: readonly [number, number][]): number {
     let moved = false;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const p: [number, number] = [at[0] + dx * step, at[1] + dy * step];
-      if (!pointInRing(p, ring as [number, number][])) continue;
+      if (!pointInRing(p, ring)) continue;
       const d = ringDistance(p, ring);
       if (d > best) { best = d; at = p; moved = true; }
     }

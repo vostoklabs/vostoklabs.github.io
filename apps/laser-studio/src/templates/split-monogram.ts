@@ -20,7 +20,7 @@
 //
 //  * solid body (`disc` / `scallop`) — the frame is the plate and the lettering is layers, so
 //    the initial is a plain `keep: [topBand, bottomBand]` layer and `grow` does the welds.
-import { bboxOf, blankById, blankSilhouette, circleRing, mapShapes, placeShapes, roundedRectRing, scallopDiscRing, type Shapes } from '@vostok/laser';
+import { bboxOf, blankById, blankSilhouette, circleRing, mapShapes, placeShapes, roundedRectRing, scallopDiscRing, shapesSilhouette, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
 import { readSymbols } from '../symbols/model';
 import { textLayer } from '../engine/text';
@@ -55,16 +55,6 @@ function ringFrameThumb(widthPct: number): string {
   const r = R * (1 - widthPct / 100);
   const arc = (rad: number, sweep: 0 | 1) => `M${20 + rad} 20 A${rad} ${rad} 0 1 ${sweep} ${20 - rad} 20 A${rad} ${rad} 0 1 ${sweep} ${20 + rad} 20 Z`;
   return `${arc(R, 0)} ${arc(r, 1)}`;
-}
-
-/** Islands → a 40 × 40 path, the way `blankSilhouette` does it, for shapes with no blank. */
-function shapesThumbPath(shapes: Shapes): string {
-  const b = bboxOf(shapes);
-  const k = 34 / Math.max(b.maxX - b.minX, b.maxY - b.minY, 1e-6);
-  const cx = (b.minX + b.maxX) / 2;
-  const cy = (b.minY + b.maxY) / 2;
-  const n = (val: number) => val.toFixed(2);
-  return shapes.flat().map((r) => `M ${r.map(([x, y]) => `${n(20 + (x - cx) * k)} ${n(20 - (y - cy) * k)}`).join(' L ')} Z`).join(' ');
 }
 
 const silhouetteOf = (id: string): string | undefined => {
@@ -296,11 +286,11 @@ export const splitMonogram: TemplateDef = {
       options: [
         { value: 'none', label: 'None', svgPath: NO_FRAME_THUMB },
         { value: 'ring', label: 'Ring', svgPath: ringFrameThumb(9) },
-        { value: 'disc', label: 'Disc', svgPath: silhouetteOf('circle') ?? shapesThumbPath(discShapes(20)) },
-        { value: 'scallop', label: 'Scallop', svgPath: silhouetteOf('scallop-disc') ?? shapesThumbPath([[scallopDiscRing(6, 16)]]) },
+        { value: 'disc', label: 'Disc', svgPath: silhouetteOf('circle') ?? shapesSilhouette(discShapes(20)) },
+        { value: 'scallop', label: 'Scallop', svgPath: silhouetteOf('scallop-disc') ?? shapesSilhouette([[scallopDiscRing(6, 16)]]) },
         // Fatter leaves than the real wreath cuts: at icon scale a 0.16 R leaf is two pixels and
         // the tile is a plain ring, which is exactly what Ring's tile already shows.
-        { value: 'laurel', label: 'Laurel', svgPath: shapesThumbPath(laurelWreathShapes({ R: 100, pairs: 7, openDeg: 28, ribW: 6, leafMax: 0.3, leafRatio: 0.45 }).shapes) },
+        { value: 'laurel', label: 'Laurel', svgPath: shapesSilhouette(laurelWreathShapes({ R: 100, pairs: 7, openDeg: 28, ribW: 6, leafMax: 0.3, leafRatio: 0.45 }).shapes) },
       ],
       help: 'A disc or scallop adds an Engrave or Cut choice.',
     },

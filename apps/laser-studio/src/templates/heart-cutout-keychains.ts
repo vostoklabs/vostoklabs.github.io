@@ -38,6 +38,7 @@
 // anything ≥ 3 mm on 3 mm stock.
 import { bboxOf, heartRing, placeShapes, roundedRectRing, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
+import { pointInRing } from '@vostok/shapes';
 import { fitShapes, symbolLayer, textLayer } from '../engine/text';
 import { sizeForCapHeight } from '../engine/metrics';
 import { finalHoleCentre, keyringCentre } from '../engine/editorGeometry';
@@ -221,17 +222,6 @@ function barRing(W: number, H: number, corner: number, side: Side, heart: CutRin
 
 // ------------------------------------------------------------------ clearances --
 
-/** Is `p` inside the ring (even–odd)? */
-function inRing(ring: CutRing, p: Pt): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!;
-    const [xj, yj] = ring[j]!;
-    if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
 const boxDist = (b: Box, p: Pt) => Math.hypot(Math.max(b.minX - p[0], 0, p[0] - b.maxX), Math.max(b.minY - p[1], 0, p[1] - b.maxY));
 
 function segDist(p: Pt, a: Pt, b: Pt): number {
@@ -246,7 +236,7 @@ function segDist(p: Pt, a: Pt, b: Pt): number {
  *  the nearest pair is a ring vertex against the box, or a box corner against a ring edge. */
 function airBetween(ring: CutRing, b: Box): number {
   const corners: Pt[] = [[b.minX, b.minY], [b.maxX, b.minY], [b.maxX, b.maxY], [b.minX, b.maxY]];
-  if (corners.some((c) => inRing(ring, c))) return 0;
+  if (corners.some((c) => pointInRing(c, ring))) return 0;
   let best = Infinity;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const p = ring[i]!;

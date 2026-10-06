@@ -36,6 +36,7 @@
 // (≤ 0.34) or well past them (≥ 0.48), never on them.
 // `tests/node/snowflake.test.mjs` measures all of it on the welded outline.
 import { circleRing, type Pt, type Shapes } from '@vostok/laser';
+import { pointInRing } from '@vostok/shapes';
 
 type Ring = Pt[];
 
@@ -187,16 +188,6 @@ function meet(p: Pt, d: Pt, q: Pt, e: Pt): Pt {
   return add(p, d, t);
 }
 
-/** Whether `p` lies inside `ring` (even–odd). */
-function inside(ring: Ring, [px, py]: Pt): boolean {
-  let c = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!, [xj, yj] = ring[j]!;
-    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-}
-
 // ------------------------------------------------------------------ lines into wood --
 
 /**
@@ -265,7 +256,7 @@ export function joins(rings: Ring[], r = JOIN, base?: Ring, straight = false): R
   const box = all.map((q) => q.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]));
   const hit = (k: number, [x, y]: Pt) => x > box[k]![0] && x < box[k]![2] && y > box[k]![1] && y < box[k]![3];
   const round = all.map(circleOf);
-  const covered = (p: Pt, i: number, j: number) => all.some((q, k) => k !== i && k !== j && hit(k, p) && inside(q, p));
+  const covered = (p: Pt, i: number, j: number) => all.some((q, k) => k !== i && k !== j && hit(k, p) && pointInRing(p, q));
   const out: Ring[] = [];
   for (let i = 0; i < (base ? 1 : all.length); i++) {
     for (let j = i + 1; j < all.length; j++) {

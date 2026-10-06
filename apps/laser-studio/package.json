@@ -22,6 +22,7 @@
     "@vostok/fonts": "workspace:*",
     "@vostok/laser": "workspace:*",
     "@vostok/patterns": "workspace:*",
+    "@vostok/shapes": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "manifold-3d": "^3.0.1",
     "qrcode-generator": "^1.4.4"

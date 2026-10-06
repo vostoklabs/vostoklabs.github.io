@@ -59,7 +59,7 @@ import {
   type Pt,
   type Shapes,
 } from '@vostok/laser';
-import { pointInRing } from '@vostok/patterns';
+import { pointInRing } from '@vostok/shapes';
 import type { CutRing } from '@vostok/export';
 import { rimWidthFor } from '../engine/frame';
 import { sizeForCapHeight } from '../engine/metrics';

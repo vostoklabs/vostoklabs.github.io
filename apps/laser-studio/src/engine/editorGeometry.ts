@@ -1,4 +1,5 @@
 import { bboxOf, holeCentre, signedArea, type Box, type Shapes, type Keyring } from '@vostok/laser';
+import { insideShapes, pointInRing } from '@vostok/shapes';
 // The scan line lives next door (it was written for the topper's word spaces and legs, and it is
 // the same primitive a bridge needs): every material interval a row or a column crosses.
 import { columnSpans, rowSpans, type Span } from './cake-topper-geom';
@@ -388,12 +389,9 @@ function seamsOf(shapes: Shapes): Seams | null {
   return out;
 }
 
-/** Inside any island's outer ring and not in one of its holes (even-odd). */
-export function insideShapes(shapes: Shapes, p: Pt): boolean {
-  let inside = false;
-  for (const island of shapes) for (const ring of island) if (pointInRing(p, ring)) inside = !inside;
-  return inside;
-}
+/** Inside any island's outer ring and not in one of its holes (even-odd): the shapes core's, here
+ *  where the editor's code has always imported it from. */
+export { insideShapes };
 
 /** Inside the UNION of the islands: true when any island holds the point (inside its outer
  *  ring, outside its holes). `insideShapes` is even-odd across every ring at once, which is
@@ -407,16 +405,6 @@ export function insideUnion(shapes: Shapes, p: Pt): boolean {
     if (!inHole) return true;
   }
   return false;
-}
-
-function pointInRing(p: Pt, ring: Pt[]): boolean {
-  let c = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!;
-    const [xj, yj] = ring[j]!;
-    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
 }
 
 /** How many bands `unionIndex` files a shape's edges into, along each axis. */

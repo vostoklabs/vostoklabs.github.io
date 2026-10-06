@@ -371,6 +371,9 @@ importers:
       '@vostok/patterns':
         specifier: workspace:*
         version: link:../../packages/patterns
+      '@vostok/shapes':
+        specifier: workspace:*
+        version: link:../../packages/shapes
       '@vostok/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit

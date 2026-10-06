@@ -36,7 +36,7 @@
 // RIM of front round each one is what bulges the outline.
 import { bboxOf, cancelCoincidentRings, filletRing, mapShapes, placeShapes, signedArea, type Box, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
-import { pointInRing } from '@vostok/patterns';
+import { pointInRing } from '@vostok/shapes';
 import { FALLBACK_FONT_ID, getFont, getHorizontalContours, iconById } from '@vostok/fonts';
 import { BED, FRAME_NOTE, GAP, framePieces, holeClear, type FrameGeometry } from '../engine/photo-frame';
 import { sizeForCapHeight } from '../engine/metrics';

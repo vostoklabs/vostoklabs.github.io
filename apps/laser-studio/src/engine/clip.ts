@@ -138,7 +138,7 @@ function compact(points: Pt[], isRing: boolean): Pt[] {
 /** One kept run. `closed` means the whole ring survived and is still a ring. */
 interface Run { points: Pt[]; closed: boolean }
 
-function clipOne(raw: Pt[], polygons: Shapes, edges: Edge[], isRing: boolean, inside = insideShapes): Run[] {
+function clipOne(raw: Pt[], polygons: Shapes, edges: Edge[], isRing: boolean, inside: (s: Shapes, p: Pt) => boolean = insideShapes): Run[] {
   const points = compact(raw, isRing);
   const n = points.length;
   if (n < 2 || !polygons.length) return [];

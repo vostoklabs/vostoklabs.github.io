@@ -94,6 +94,7 @@
 //   return { ...pieces, keyring: NO_KEYRING };
 import { bboxOf, filletRing, roundedRectRing, type Box, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
+import { pointInRing } from '@vostok/shapes';
 import { FIT, slotHoleRing, slotWidth, tabWidth } from './slots';
 import type { Blank, DesignLayer, PartInput, Pose } from './types';
 
@@ -402,16 +403,6 @@ export function frameGeometry(i: FrameInput): FrameGeometry {
 
 const inBox = ([x, y]: Pt, b: Box) => x > b.minX && x < b.maxX && y > b.minY && y < b.maxY;
 
-function inRing([x, y]: Pt, ring: CutRing): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!;
-    const [xj, yj] = ring[j]!;
-    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
 function crosses(p: Pt, q: Pt, a: Pt, b: Pt): boolean {
   const o = (u: Pt, v: Pt, w: Pt) => (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0]);
   return o(p, q, a) * o(p, q, b) < 0 && o(a, b, p) * o(a, b, q) < 0;
@@ -422,7 +413,7 @@ function crosses(p: Pt, q: Pt, a: Pt, b: Pt): boolean {
 export function ringHitsBox(ring: CutRing, b: Box): boolean {
   if (ring.some((p) => inBox(p, b))) return true;
   const corners: Pt[] = [[b.minX, b.minY], [b.maxX, b.minY], [b.maxX, b.maxY], [b.minX, b.maxY]];
-  if (corners.some((p) => inRing(p, ring))) return true;
+  if (corners.some((p) => pointInRing(p, ring))) return true;
   for (let i = 0; i < ring.length; i++) {
     const p = ring[i]!;
     const q = ring[(i + 1) % ring.length]!;

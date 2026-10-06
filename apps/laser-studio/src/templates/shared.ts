@@ -6,7 +6,7 @@
 // defaults, the labels and the one knob that makes it itself.
 import { bboxOf, blankById, blankDetail, buildBlank, circleRing, cornerLabel, placeShapes, textBoxOf, type BlankCategory, type BlankParams, type Box, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
-import { pointInRing } from '@vostok/patterns';
+import { pointInRing } from '@vostok/shapes';
 import { MIN_COUNTER, smallestCounter, textLayer, type ConnectSpec, type TextSpec } from '../engine/text';
 import { sizeForCapHeight } from '../engine/metrics';
 import { finalHoleCentre, fitBoxInside, insideUnion } from '../engine/editorGeometry';

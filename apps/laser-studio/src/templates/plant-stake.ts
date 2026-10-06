@@ -33,7 +33,7 @@
 // Batch mode is the product: one name per line, a sheet of stakes.
 import { bboxOf, placeShapes, type Box, type Pt, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
-import { pointInRing } from '@vostok/patterns';
+import { pointInRing } from '@vostok/shapes';
 import { readSymbols } from '../symbols/model';
 import { MIN_COUNTER, applyCase, glyphLayers, textLayer } from '../engine/text';
 import { sizeForCapHeight } from '../engine/metrics';
