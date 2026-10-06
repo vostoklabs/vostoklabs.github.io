@@ -22,7 +22,7 @@ writeFileSync(entry, [
   `export { contractProblems } from '${pkg}/src/contract.ts';`,
   `export { MATERIAL_SOLID, MATERIAL_FONT_SHA256 } from '${pkg}/src/material-solid.ts';`,
   `export { pathCommandsToPolygons } from '@vostok/fonts/textLayout';`,
-  `export { POPULAR as FONTS_POPULAR } from '@vostok/fonts';`,
+  `export { POPULAR as FONTS_POPULAR } from '${pkg}/../fonts/src/symbolGroups.ts';`,
   `export { csOf } from '${pkg}/../manifold/src/index.ts';`,
 ].join('\n'));
 const outfile = `${tmp}/symbols-test-${process.pid}.mjs`;
