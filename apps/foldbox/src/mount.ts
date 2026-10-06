@@ -27,7 +27,6 @@ import {
   textField,
   fontPicker as kitFontPicker,
   dropZone,
-  symbolPickerButton,
   toast,
   dialog,
   readProjectFile,
@@ -42,8 +41,9 @@ import {
   type ProjectShape,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
+import { openSymbolChooser } from '@vostok/ui-kit/symbols';
 import { createViewer } from '@vostok/viewer';
-import { FALLBACK_FONT_ID, FONTS, SYMBOL_GROUPS, fontFamilyFor, installFontFaces, searchGroup } from '@vostok/fonts';
+import { FONTS, fontFamilyFor, installFontFaces } from '@vostok/fonts';
 import { LOGO_FEATURED, LOGO_FONTS, LOGO_TEXT_FONTS } from './logoFonts';
 import {
   DEFAULT_PARAMS,
@@ -749,29 +749,30 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
   cleanups.push(() => clearTimeout(artworkQueued));
 
-  const logoSymbols = symbolPickerButton({
-    items: searchGroup('', 'popular').map((i) => ({ id: i.id, label: i.label, char: i.char, cats: i.cats })),
-    categories: SYMBOL_GROUPS.map((g) => ({ id: g.id, label: g.id === 'all' ? 'Everything' : g.label })),
-    defaultCategory: 'popular',
-    fontFamily: fontFamilyFor(FALLBACK_FONT_ID),
-    search: (q, cat) => searchGroup(q, cat).map((i) => ({ id: i.id, label: i.label, char: i.char, cats: i.cats })),
+  /* The one symbol chooser, on the Material set: those are the symbols the text's fallback face
+     draws, so a pick goes into the words as its character and comes out of the same glyph
+     outlines as the letters around it. A dialog underneath, which teardown closes. */
+  const logoSymbols = button({
     label: 'Symbol',
-    className: 'vl-btn vl-btn--secondary fb-logo-sym',
-    title: 'Add a symbol to the words',
-    // A modal rather than the default drawer: teardown closes dialogs, and a stray
-    // drawer would outlive the generator — the keychain's note, same reason.
-    placement: 'modal',
-    hint: 'Every symbol is one solid shape, so it engraves and prints like a letter.',
-    onPick: (item) => {
-      // Appended rather than inserted at a caret: the field is one line and the symbol
-      // almost always goes at one end, and tracking a caret through a modal is what the
-      // keychain needed a pointerdown capture for.
-      const next = params.logoText + item.char;
-      params = { ...params, logoText: next };
-      logoText.setValue(next);
-      fontPicker.setSample(next.trim() || 'Your word');
-      void refreshArtwork();
-    },
+    emphasis: 'secondary',
+    className: 'fb-logo-sym',
+    onClick: () =>
+      openSymbolChooser({
+        sets: ['material'],
+        title: 'Add a symbol to the words',
+        anchor: logoSymbols,
+        onPick: (choice) => {
+          if (!choice.char) return;
+          // Appended rather than inserted at a caret: the field is one line and the symbol
+          // almost always goes at one end, and tracking a caret through a modal is what the
+          // keychain needed a pointerdown capture for.
+          const next = params.logoText + choice.char;
+          params = { ...params, logoText: next };
+          logoText.setValue(next);
+          fontPicker.setSample(next.trim() || 'Your word');
+          void refreshArtwork();
+        },
+      }),
   });
 
   /** The faces, each previewing the user's own word.
