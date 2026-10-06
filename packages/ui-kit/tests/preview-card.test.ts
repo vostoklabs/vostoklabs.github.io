@@ -8,7 +8,7 @@ import './support/install-mini-dom';
 import { html, miniStorage, type MiniElement } from './support/mini-dom';
 import { el } from '../src/dom';
 import { previewCard } from '../src/components/preview-card';
-import { zoomControl } from '../src/components/zoom-control';
+import { zoomControl, type ZoomControl } from '../src/components/zoom-control';
 import { lengthUnits } from '../src/components/length-units';
 import { stageStatus } from '../src/components/stage';
 
@@ -32,8 +32,8 @@ const mini = (n: unknown) => n as MiniElement;
   const value = root.querySelector('.vl-zoom-control__value')!;
   check('zoomControl: a toolbar named Zoom', root.getAttribute('role') === 'toolbar' && root.getAttribute('aria-label') === 'Zoom');
   check(
-    'zoomControl: zoom out, the number, zoom in, fit, in that order',
-    root.children.map((c) => c.getAttribute('aria-label') ?? c.className).join(' | ') === 'Zoom out | vl-zoom-control__value | Zoom in | Fit it all in view',
+    'zoomControl: zoom out, the number, zoom in, fit, in that order, then what is said',
+    root.children.map((c) => c.getAttribute('aria-label') ?? c.className).join(' | ') === 'Zoom out | vl-zoom-control__value | Zoom in | Fit it all in view | vl-zoom-control__said',
   );
   check('zoomControl: starts at 100%', value.textContent === '100%');
   buttons[1]!.click();
@@ -43,9 +43,33 @@ const mini = (n: unknown) => n as MiniElement;
   check('zoomControl: a button does not move the number by itself (the view says where it went)', value.textContent === '100%');
   zoom.set(1.5625);
   check('zoomControl: set() shows the view’s zoom, rounded', value.textContent === '156%');
-  check('zoomControl: the number is a live region', value.getAttribute('aria-live') === 'polite');
   check('zoomControl: no inline style', !html(root).includes(' style="'));
   check('zoomControl: value starts where it is told', mini(zoomControl({ onZoom() {}, onFit() {}, value: 0.5 }).root).querySelector('.vl-zoom-control__value')!.textContent === '50%');
+}
+
+{
+  // A view that reports its zoom straight back, as a real one does.
+  let at = 1;
+  let zoom: ZoomControl | undefined;
+  zoom = zoomControl({ onZoom: (f) => zoom!.set((at *= f)), onFit: () => zoom!.set((at = 0.5)) });
+  const root = mini(zoom.root);
+  const [out, , fit] = root.querySelectorAll('button');
+  const value = root.querySelector('.vl-zoom-control__value')!;
+  const said = root.querySelector('.vl-zoom-control__said');
+  check('zoomControl: the number is not a live region', value.getAttribute('aria-live') === null);
+  check('zoomControl: what is said is a polite live region, and says nothing at first', said?.getAttribute('aria-live') === 'polite' && said.textContent === '');
+  zoom.set((at = 1.1));
+  zoom.set((at = 1.2));
+  zoom.set((at = 1.3));
+  check('zoomControl: a wheel or a pinch moves the number and says nothing', value.textContent === '130%' && said?.textContent === '');
+  root.querySelectorAll('button')[1]!.click();
+  check('zoomControl: a press on Zoom in says the zoom it led to', value.textContent === '163%' && said?.textContent === '163%');
+  zoom.set((at = 1.7));
+  check('zoomControl: only that once: the wheel after it says nothing new', value.textContent === '170%' && said?.textContent === '163%');
+  out!.click();
+  check('zoomControl: Zoom out says where it went', said?.textContent === '136%');
+  fit!.click();
+  check('zoomControl: Fit says the zoom it fit to', said?.textContent === '50%');
 }
 
 /* -------------------------------------------------------------------- previewCard */

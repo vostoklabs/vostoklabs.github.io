@@ -11,8 +11,10 @@ import { el } from '../src/dom';
 import { ICONS } from '../src/icons';
 import { appShell } from '../src/components/app-shell';
 import { settingsRail } from '../src/components/settings-rail';
+import { zoomControl } from '../src/components/zoom-control';
 import { previewCard } from '../src/components/preview-card';
 import { stageStatus } from '../src/components/stage';
+import { iconButton } from '../src/components/button';
 
 let pass = 0;
 const fails: string[] = [];
@@ -74,6 +76,30 @@ const RAIL = () => [
   check('card: the bar wraps on a phone only', v(card.bar, 'flex-wrap', 1280) === '' && v(card.bar, 'flex-wrap', 800) === '' && v(card.bar, 'flex-wrap', 390) === 'wrap');
   card.statusBelow(true);
   check('card, statusBelow: in the flow under the strips', v(status.root, 'position', 1280) === 'static' && v(status.root, 'margin-left', 1280) === '16px' && v(status.root, 'margin-bottom', 1280) === '12px');
+}
+
+/* ------------------------------------------------- the zoom tools and density */
+
+{
+  const zoom = zoomControl({ onZoom() {}, onFit() {} });
+  mount(el('section', { className: 'vl-stage' }, [zoom.root]));
+  const button = zoom.root.querySelector('.vl-btn--icon')!;
+  check('zoom tools: a size down from the panel\'s icon buttons, 30 px', v(button, 'width', 1280) === '30px' && v(button, 'height', 1280) === '30px', v(button, 'width', 1280));
+  const panelButton = mount(iconButton({ icon: ICONS.zoomIn, label: 'Zoom in' }));
+  check('the panel\'s icon button, for the record: 38 px', v(panelButton, 'width', 1280) === '38px');
+
+  miniDocument.documentElement.setAttribute('data-density', 'compact');
+  mount(el('section', { className: 'vl-stage' }, [zoom.root]));
+  check('compact density: the zoom tools follow it down, never bigger than its 28 px icon buttons', v(button, 'width', 1280) === '28px', v(button, 'width', 1280));
+  mount(panelButton);
+  check('compact density: the panel\'s icon button is 28 px', v(panelButton, 'width', 1280) === '28px');
+  miniDocument.documentElement.removeAttribute('data-density');
+
+  mount(el('section', { className: 'vl-stage' }, [zoom.root]));
+  const said = zoom.root.querySelector('.vl-zoom-control__said');
+  check('zoom tools: what a press led to is said from a region that is not drawn', !!said && v(said, 'position', 1280) === 'absolute' && v(said, 'clip-path', 1280) === 'inset(50%)' && v(said, 'width', 1280) === '1px');
+  const number = zoom.root.querySelector('.vl-zoom-control__value');
+  check('zoom tools: the number is drawn on a desktop and not on a phone, as before', v(number, 'display', 1280) === '' && v(number, 'display', 390) === 'none');
 }
 
 console.log(`\nkit css: ${pass} passed, ${fails.length} failed`);

@@ -130,6 +130,7 @@
   --field-fs: var(--fs-base);       /* 17.5px — what `font: inherit` already gave */
   --label-fs: var(--fs-medium);     /* 15px — field labels, control captions */
   --icon-btn-size: 38px;
+  --icon-btn-size-small: 30px;      /* a cluster floating on a picture: the zoom tools */
 }
 
 :root[data-density='compact'] {
@@ -142,4 +143,5 @@
   --field-fs: var(--fs-compact);
   --label-fs: var(--fs-small);      /* 12px */
   --icon-btn-size: 28px;
+  --icon-btn-size-small: 28px;      /* never larger than the density's own icon buttons */
 }

@@ -754,8 +754,10 @@ details.vl-section--collapsible[open] > summary {
 
 /* `stagePanel({ titleHidden: true })`: the title is read out and not drawn. A panel whose one
    control labels itself does not need a heading over it, and a heading on a panel that sits on
-   the model is a fifth of the stage. Out of the flow, so the panel's gap closes up behind it. */
-.vl-stage-panel--title-hidden > .vl-stage-panel__title {
+   the model is a fifth of the stage. Out of the flow, so the panel's gap closes up behind it.
+   The zoom tools' announcement (`zoomControl()`, below) is hidden the same way. */
+.vl-stage-panel--title-hidden > .vl-stage-panel__title,
+.vl-zoom-control__said {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -839,8 +841,9 @@ details.vl-section--collapsible[open] > summary {
 
 /* ------------------------------------------------------ stage overlay: zoom tools */
 /* `zoomControl()`: zoom out, the zoom, zoom in, fit, floating in the bottom-right corner of the
-   box it is placed in. Its buttons a size down from the panel's icon buttons, which would make a
-   cluster on a picture as tall as a toolbar. On a phone the cluster moves to the top-right corner
+   box it is placed in. Its buttons are a size down from the panel's icon buttons (the
+   `--icon-btn-size-small` token, which follows the density): those would make a cluster on a
+   picture as tall as a toolbar. On a phone the cluster moves to the top-right corner
    and drops the number, clear of the status line along the bottom; a pinch zooms there anyway. */
 .vl-zoom-control {
   position: absolute;
@@ -855,7 +858,7 @@ details.vl-section--collapsible[open] > summary {
   border-radius: 10px;
   background: var(--panel);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-  --icon-btn-size: 30px;
+  --icon-btn-size: var(--icon-btn-size-small);
 }
 /* A steady width, so the buttons do not move as the number changes. */
 .vl-zoom-control__value {

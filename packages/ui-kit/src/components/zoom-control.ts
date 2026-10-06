@@ -23,22 +23,36 @@ export interface ZoomControlOptions {
 
 export interface ZoomControl {
   root: HTMLElement;
-  /** Show the zoom the view is at now, 1 for 100 %. Fires nothing. */
+  /** Show the zoom the view is at now, 1 for 100 %. Fires nothing. After a press on one of the
+   *  buttons, the zoom set next is also said to a screen reader; a wheel or a pinch is not. */
   set(zoom: number): void;
 }
 
 export function zoomControl(opts: ZoomControlOptions): ZoomControl {
-  // A live region: the number is the one answer a screen reader gets to "Zoom in".
-  const value = el('span', { className: 'vl-zoom-control__value', attrs: { 'aria-live': 'polite' } });
+  const value = el('span', { className: 'vl-zoom-control__value' });
+  // The zoom a button press led to is the one answer a screen reader gets to "Zoom in", so it is
+  // said from a hidden live region of its own. Not from the number: a wheel or a pinch moves that
+  // many times a second, and as a live region it read out every step.
+  const said = el('span', { className: 'vl-zoom-control__said', attrs: { 'aria-live': 'polite' } });
+  let pressed = false;
   const set = (zoom: number) => {
     value.textContent = `${Math.round(zoom * 100)}%`;
+    if (!pressed) return;
+    pressed = false;
+    said.textContent = value.textContent;
   };
   set(opts.value ?? 1);
+  /** A button's action: the zoom the view reports next is said. */
+  const press = (ask: () => void) => () => {
+    pressed = true;
+    ask();
+  };
   const root = el('div', { className: 'vl-zoom-control', attrs: { role: 'toolbar', 'aria-label': 'Zoom' } }, [
-    iconButton({ icon: ICONS.zoomOut, label: 'Zoom out', onClick: () => opts.onZoom(0.8) }),
+    iconButton({ icon: ICONS.zoomOut, label: 'Zoom out', onClick: press(() => opts.onZoom(0.8)) }),
     value,
-    iconButton({ icon: ICONS.zoomIn, label: 'Zoom in', onClick: () => opts.onZoom(1.25) }),
-    iconButton({ icon: ICONS.maximize, label: 'Fit it all in view', onClick: () => opts.onFit() }),
+    iconButton({ icon: ICONS.zoomIn, label: 'Zoom in', onClick: press(() => opts.onZoom(1.25)) }),
+    iconButton({ icon: ICONS.maximize, label: 'Fit it all in view', onClick: press(() => opts.onFit()) }),
+    said,
   ]);
   return { root, set };
 }
