@@ -37,6 +37,7 @@
     "@vostok/export": "workspace:*",
     "@vostok/fonts": "workspace:*",
     "@vostok/shapes": "workspace:*",
+    "@vostok/trace": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "@vostok/viewer": "workspace:*",
     "fflate": "^0.8.3",

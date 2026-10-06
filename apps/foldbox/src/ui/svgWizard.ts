@@ -17,7 +17,7 @@
  *    the stroke, and that is also why an outline has nothing to print as a second colour.
  */
 import { openSvgImport, themeColor, type SvgImportChoice, type SvgImportTrace } from '@vostok/ui-kit';
-import { describeSvg, svgArtwork, type SvgModes } from './svgLogo';
+import { logoParts, svgArtwork, type SvgModes } from './svgLogo';
 import type { Artwork, Poly } from '../types';
 
 /** The preview box. The artwork spans roughly ±0.5, so this is the art with air round it. */
@@ -72,7 +72,7 @@ function toTrace(art: Artwork): SvgImportTrace {
 /** Show the file, show what the box will get, and let the user fix the difference.
  *  Resolves with the modes to trace with, or null if they cancel. */
 export async function openSvgWizard(svgText: string, name: string): Promise<SvgModes | null> {
-  const { parts, issues } = describeSvg(svgText);
+  const { parts, issues } = logoParts(svgText);
   const modesOf = (choices: Record<number, SvgImportChoice>): SvgModes => {
     const modes: SvgModes = {};
     for (const [index, choice] of Object.entries(choices)) modes[index] = choice.mode;

@@ -133,6 +133,9 @@ importers:
       '@vostok/shapes':
         specifier: workspace:*
         version: link:../../packages/shapes
+      '@vostok/trace':
+        specifier: workspace:*
+        version: link:../../packages/trace
       '@vostok/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
