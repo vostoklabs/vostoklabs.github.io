@@ -59,8 +59,22 @@ const fnv = (s: string): string => {
   return h.toString(16).padStart(8, '0');
 };
 
-/** A WebGL call as compared: what is in a float array, and any number with a fraction, left out. */
-const glLine = (line: string) => line.replace(/(Float(?:32|64)Array\[\d+\])#[0-9a-f]+/g, '$1').replace(/-?\d+\.\d+(?:e[-+]?\d+)?/g, '~');
+/** A step's WebGL calls as compared: what is in a float array, and any number with a fraction,
+ *  left out; the buffers, textures, programs... it names numbered in the order the step first
+ *  names them, so a step that makes one more or one fewer does not renumber every step after it. */
+function glLines(lines: string[]): string {
+  const names = new Map<string, string>();
+  const name = (handle: string, kind: string) => {
+    if (!names.has(handle)) names.set(handle, `${kind}:${names.size + 1}`);
+    return names.get(handle)!;
+  };
+  return lines
+    .map((line) => line
+      .replace(/(Float(?:32|64)Array\[\d+\])#[0-9a-f]+/g, '$1')
+      .replace(/-?\d+\.\d+(?:e[-+]?\d+)?/g, '~')
+      .replace(/\b(buffer|texture|framebuffer|renderbuffer|program|shader|vao|query|sampler|sync)\d+\b/g, name))
+    .join('\n');
+}
 
 /** How many of one kind of WebGL object are alive: made and not yet deleted. */
 const alive = (kind: string) => page.log.filter((l) => l.startsWith(`create${kind}(`)).length - page.log.filter((l) => l.startsWith(`delete${kind}(`)).length;
@@ -152,7 +166,7 @@ async function step(name: string, v: Viewer, act: () => unknown, extra?: () => R
     camera: `${vec(v.camera.position)} looking at ${vec(v.controls.target)}${v.controls.enabled ? '' : ', orbit off'}`,
     scene: fnv(scenes[name]),
     frames: `${frames.join(' | ') || 'none'}; ${page.pendingFrames()} waiting`,
-    gl: `${lines.length} calls #${fnv(lines.map(glLine).join('\n'))}`,
+    gl: `${lines.length} calls #${fnv(glLines(lines))}`,
     held: heldOf(v),
     ...extra?.(),
   };
@@ -285,196 +299,196 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "60 -60 45 looking at 0 0 0",
     "scene": "7c06a07c",
     "frames": "none; 1 waiting",
-    "gl": "716 calls #893feb1b",
+    "gl": "716 calls #3a77ce0b",
     "held": "15 geometries, 2 textures, 6 programs (12 users), 41 buffers, 17 vertex arrays, 6 GL textures"
   },
   "A: the first frame": {
     "camera": "60 -60 45 looking at 0 0 0",
     "scene": "7c06a07c",
     "frames": "60 -60 45 at 800x600, 3 draws; 1 waiting",
-    "gl": "15 calls #59c412a2",
+    "gl": "15 calls #e7fbae8c",
     "held": "15 geometries, 2 textures, 6 programs (12 users), 41 buffers, 17 vertex arrays, 6 GL textures"
   },
   "A: parts, framed": {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "1d441999",
     "frames": "59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "61 calls #ac19f2f0",
+    "gl": "61 calls #6b910d7d",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: a part grows": {
     "camera": "96.1588 -96.1588 65.821 looking at 0 0 10",
     "scene": "e55391e7",
     "frames": "96.1588 -96.1588 65.821 at 800x600, 6 draws; 1 waiting",
-    "gl": "71 calls #f8180a0f",
+    "gl": "71 calls #55b62730",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: and shrinks": {
     "camera": "96.1588 -96.1588 65.821 looking at 0 0 10",
     "scene": "edfd50c6",
     "frames": "96.1588 -96.1588 65.821 at 800x600, 4 draws; 1 waiting",
-    "gl": "53 calls #f2ab54d3",
+    "gl": "53 calls #8dfbbc12",
     "held": "16 geometries, 2 textures, 7 programs (13 users), 43 buffers, 18 vertex arrays, 6 GL textures"
   },
   "A: no parts": {
     "camera": "96.1588 -96.1588 65.821 looking at 0 0 10",
     "scene": "c6cb97e1",
     "frames": "96.1588 -96.1588 65.821 at 800x600, 3 draws; 1 waiting",
-    "gl": "19 calls #a812daa1",
+    "gl": "19 calls #34ebc1fd",
     "held": "15 geometries, 2 textures, 6 programs (12 users), 41 buffers, 17 vertex arrays, 6 GL textures"
   },
   "A: parts again": {
     "camera": "96.1588 -96.1588 65.821 looking at 0 0 10",
     "scene": "ec0432dc",
     "frames": "96.1588 -96.1588 65.821 at 800x600, 6 draws; 1 waiting",
-    "gl": "61 calls #a5c685fb",
+    "gl": "61 calls #6b910d7d",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: anchored": {
     "camera": "96.1588 -96.1588 65.821 looking at 0 0 10",
     "scene": "63000349",
     "frames": "96.1588 -96.1588 65.821 at 800x600, 6 draws; 1 waiting",
-    "gl": "71 calls #1b125b46",
+    "gl": "71 calls #55b62730",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: anchored and framed": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "be6277e6",
     "frames": "57 -55 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "71 calls #3cba4e41",
+    "gl": "71 calls #55b62730",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: the front view": {
     "camera": "-2 -55 14.72 looking at -2 4 10",
     "scene": "e5bc9334",
     "frames": "-2 -55 14.72 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #bccb3ffc",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: the top view": {
     "camera": "-2 -0.72 69 looking at -2 4 10",
     "scene": "e5bc9334",
     "frames": "-2 -0.72 69 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #bccb3ffc",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: the left view": {
     "camera": "-61 4 14.72 looking at -2 4 10",
     "scene": "e5bc9334",
     "frames": "-61 4 14.72 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #bccb3ffc",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: the iso view": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "be6277e6",
     "frames": "57 -55 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #bccb3ffc",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: a colour": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "2c7f650f",
     "frames": "57 -55 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #bccb3ffc",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: an offset": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "7b61790a",
     "frames": "57 -55 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #bccb3ffc",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: a pose": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "f2280eac",
     "frames": "57 -55 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #bccb3ffc",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: the plate hidden": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "5919610e",
     "frames": "57 -55 44.25 at 800x600, 3 draws; 1 waiting",
-    "gl": "10 calls #97820fbf",
+    "gl": "10 calls #fc3d0331",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: shown, an A1 mini": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "58920883",
     "frames": "57 -55 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "84 calls #6fdabca1",
+    "gl": "84 calls #e994941d",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: the grid": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "ed2cad00",
     "frames": "57 -55 44.25 at 800x600, 4 draws; 1 waiting",
-    "gl": "50 calls #ba4568a2",
+    "gl": "50 calls #038e037e",
     "held": "16 geometries, 2 textures, 6 programs (13 users), 44 buffers, 18 vertex arrays, 6 GL textures"
   },
   "A: the light theme": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "3de87cff",
     "frames": "57 -55 44.25 at 800x600, 4 draws; 1 waiting",
-    "gl": "45 calls #fdd86297",
+    "gl": "45 calls #b64077f5",
     "held": "16 geometries, 2 textures, 6 programs (13 users), 44 buffers, 18 vertex arrays, 6 GL textures"
   },
   "A: the dark theme": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "ed2cad00",
     "frames": "57 -55 44.25 at 800x600, 4 draws; 1 waiting",
-    "gl": "45 calls #2299aef7",
+    "gl": "45 calls #b64077f5",
     "held": "16 geometries, 2 textures, 6 programs (13 users), 44 buffers, 18 vertex arrays, 6 GL textures"
   },
   "A: back to the A1": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "f2280eac",
     "frames": "57 -55 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "78 calls #abde33ee",
+    "gl": "78 calls #d9e3c8b3",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: orbit off": {
     "camera": "57 -55 44.25 looking at -2 4 10, orbit off",
     "scene": "f2280eac",
     "frames": "57 -55 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #5f7ae9cc",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: orbit on": {
     "camera": "57 -55 44.25 looking at -2 4 10",
     "scene": "f2280eac",
     "frames": "57 -55 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #5f7ae9cc",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: framed again": {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "1d441999",
     "frames": "59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "71 calls #eac10ed4",
+    "gl": "71 calls #55b62730",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: hover": {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "22066c71",
     "frames": "59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #abd73fc0",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: the pointer leaves": {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "ad117275",
     "frames": "59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #abd73fc0",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: a tap on a part": {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "bf3fcdfb",
     "frames": "59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #abd73fc0",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures",
     "picks": "2"
   },
@@ -482,7 +496,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "ad117275",
     "frames": "59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #abd73fc0",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures",
     "picks": "none"
   },
@@ -490,7 +504,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "ad117275",
     "frames": "59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #abd73fc0",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures",
     "picks": "none"
   },
@@ -506,7 +520,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "499f82cf",
     "frames": "59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #abd73fc0",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures",
     "picks": "2"
   },
@@ -514,7 +528,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "499f82cf",
     "frames": "32.5152 -32.5152 34.3864 at 300x300, 3 draws | 59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "33 calls #41eb765b",
+    "gl": "33 calls #9cb6deef",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures",
     "pictures": "toBlob(image/png) 300x300"
   },
@@ -522,7 +536,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "499f82cf",
     "frames": "32.5152 -32.5152 34.3864 at 512x512, 3 draws | 59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "33 calls #0284a095",
+    "gl": "33 calls #8c3392c9",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures",
     "pictures": "toBlob(image/png) 512x512"
   },
@@ -530,7 +544,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "499f82cf",
     "frames": "59 -59 44.25 at 1600x1200, 6 draws; 1 waiting",
-    "gl": "26 calls #cc5f91d3",
+    "gl": "26 calls #95eab825",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures",
     "pictures": "toBlob(image/png) 1600x1200"
   },
@@ -538,7 +552,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "499f82cf",
     "frames": "28.2741 -28.2741 31.2056 at 128x128, 3 draws | 59 -59 44.25 at 800x600, 6 draws | 59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "58 calls #179e34ee",
+    "gl": "58 calls #b08d51b8",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures",
     "pictures": "toDataURL(image/png) 128x128"
   },
@@ -546,7 +560,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "499f82cf",
     "frames": "95.6853 -45.6853 78.014 at 64x64, 2 draws | 59 -59 44.25 at 800x600, 6 draws | 59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "94 calls #e9d282ea",
+    "gl": "75 calls #5aa8f965",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures",
     "pictures": "toDataURL(image/png) 64x64"
   },
@@ -554,28 +568,28 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "59 -59 44.25 looking at 0 0 10",
     "scene": "499f82cf",
     "frames": "59 -59 44.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "32 calls #2f01f23e",
+    "gl": "32 calls #3f2147a4",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: a fold rig": {
     "camera": "110.5499 -110.5499 64.9251 looking at 0 0 0.75",
     "scene": "d074ca78",
     "frames": "110.5499 -110.5499 64.9251 at 800x600, 5 draws; 1 waiting",
-    "gl": "76 calls #83c9c497",
+    "gl": "76 calls #19d4d768",
     "held": "17 geometries, 2 textures, 7 programs (14 users), 49 buffers, 19 vertex arrays, 6 GL textures"
   },
   "A: the fold moves": {
     "camera": "110.5499 -110.5499 64.9251 looking at 0 0 0.75",
     "scene": "0b31730d",
     "frames": "110.5499 -110.5499 64.9251 at 800x600, 5 draws; 1 waiting",
-    "gl": "20 calls #ad68b7d7",
+    "gl": "20 calls #1c6afe3d",
     "held": "17 geometries, 2 textures, 7 programs (14 users), 49 buffers, 19 vertex arrays, 6 GL textures"
   },
   "A: a cover of the rig": {
     "camera": "110.5499 -110.5499 64.9251 looking at 0 0 0.75",
     "scene": "0b31730d",
     "frames": "71.7898 -86.5877 66.2641 at 256x256, 2 draws | 110.5499 -110.5499 64.9251 at 800x600, 5 draws; 1 waiting",
-    "gl": "29 calls #c03343b1",
+    "gl": "29 calls #7789cbba",
     "held": "17 geometries, 2 textures, 7 programs (14 users), 49 buffers, 19 vertex arrays, 6 GL textures",
     "pictures": "toBlob(image/png) 256x256"
   },
@@ -583,7 +597,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "110.5499 -110.5499 64.9251 looking at 0 0 0.75",
     "scene": "0b31730d",
     "frames": "62.4259 -77.2238 59.2412 at 96x96, 2 draws | 110.5499 -110.5499 64.9251 at 800x600, 5 draws | 110.5499 -110.5499 64.9251 at 800x600, 5 draws; 1 waiting",
-    "gl": "51 calls #8ef73377",
+    "gl": "51 calls #6a99c1d2",
     "held": "17 geometries, 2 textures, 7 programs (14 users), 49 buffers, 19 vertex arrays, 6 GL textures",
     "pictures": "toDataURL(image/png) 96x96"
   },
@@ -591,7 +605,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "110.5499 -110.5499 64.9251 looking at 0 0 0.75",
     "scene": "81f49aab",
     "frames": "110.5499 -110.5499 64.9251 at 800x600, 6 draws; 1 waiting",
-    "gl": "72 calls #249c193c",
+    "gl": "72 calls #c55cba6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: paused": {
@@ -605,21 +619,21 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "110.5499 -110.5499 64.9251 looking at 0 0 0.75",
     "scene": "81f49aab",
     "frames": "110.5499 -110.5499 64.9251 at 800x600, 6 draws | 110.5499 -110.5499 64.9251 at 800x600, 6 draws; 1 waiting",
-    "gl": "44 calls #44ae023f",
+    "gl": "44 calls #2445fb19",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: resumed while running": {
     "camera": "110.5499 -110.5499 64.9251 looking at 0 0 0.75",
     "scene": "81f49aab",
     "frames": "110.5499 -110.5499 64.9251 at 800x600, 6 draws; 1 waiting",
-    "gl": "22 calls #d506dc5e",
+    "gl": "22 calls #21e76a6a",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 47 buffers, 20 vertex arrays, 6 GL textures"
   },
   "A: disposed": {
     "camera": "110.5499 -110.5499 64.9251 looking at 0 0 0.75",
     "scene": "c92b9868",
     "frames": "none; 0 waiting",
-    "gl": "71 calls #30fe3764",
+    "gl": "71 calls #ad0689e9",
     "held": "1 geometries, 1 textures, 3 programs (8 users), 3 buffers, 0 vertex arrays, 5 GL textures",
     "page": "0 in the stage, 0 window listeners, 0 contexts lost"
   },
@@ -627,28 +641,28 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "60 -60 45 looking at 0 0 0",
     "scene": "7c06a07c",
     "frames": "60 -60 45 at 800x600, 3 draws; 1 waiting",
-    "gl": "731 calls #dd99d9c0",
+    "gl": "731 calls #97f17ddd",
     "held": "15 geometries, 2 textures, 6 programs (12 users), 44 buffers, 17 vertex arrays, 11 GL textures"
   },
   "B: a fold rig on the grid": {
     "camera": "95.5783 -95.5783 72.4338 looking at 0 0 0.75",
     "scene": "5b25ab7e",
     "frames": "95.5783 -95.5783 72.4338 at 800x600, 3 draws; 1 waiting",
-    "gl": "93 calls #dfc6d54e",
+    "gl": "93 calls #40f09213",
     "held": "15 geometries, 2 textures, 6 programs (12 users), 49 buffers, 17 vertex arrays, 11 GL textures"
   },
   "B: the fold moves": {
     "camera": "95.5783 -95.5783 72.4338 looking at 0 0 0.75",
     "scene": "afe8e71c",
     "frames": "95.5783 -95.5783 72.4338 at 800x600, 3 draws; 1 waiting",
-    "gl": "11 calls #0e742c23",
+    "gl": "11 calls #d65b65be",
     "held": "15 geometries, 2 textures, 6 programs (12 users), 49 buffers, 17 vertex arrays, 11 GL textures"
   },
   "B: a cover": {
     "camera": "95.5783 -95.5783 72.4338 looking at 0 0 0.75",
     "scene": "afe8e71c",
     "frames": "78.7429 -88.0745 73.2189 at 384x384, 2 draws | 95.5783 -95.5783 72.4338 at 800x600, 3 draws; 1 waiting",
-    "gl": "19 calls #7d299686",
+    "gl": "19 calls #8ec19da2",
     "held": "15 geometries, 2 textures, 6 programs (12 users), 49 buffers, 17 vertex arrays, 11 GL textures",
     "pictures": "toBlob(image/png) 384x384"
   },
@@ -656,42 +670,42 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "95.5783 -95.5783 72.4338 looking at 0 0 0.75",
     "scene": "5db31613",
     "frames": "none; 0 waiting",
-    "gl": "66 calls #e8e3fade",
+    "gl": "66 calls #c6be0fe9",
     "held": "1 geometries, 1 textures, 3 programs (8 users), 6 buffers, 0 vertex arrays, 10 GL textures"
   },
   "C: made, no plate": {
     "camera": "60 -60 45 looking at 0 0 0",
     "scene": "976cf441",
     "frames": "60 -60 45 at 800x600, 0 draws; 1 waiting",
-    "gl": "717 calls #9466d662",
+    "gl": "717 calls #76e39a12",
     "held": "15 geometries, 2 textures, 6 programs (12 users), 47 buffers, 17 vertex arrays, 16 GL textures"
   },
   "C: parts, anchored and framed": {
     "camera": "46 -42 35.25 looking at -1 5 10",
     "scene": "fcc2f3a0",
     "frames": "46 -42 35.25 at 800x600, 3 draws; 1 waiting",
-    "gl": "49 calls #065a589d",
+    "gl": "49 calls #5963e6e2",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 53 buffers, 20 vertex arrays, 16 GL textures"
   },
   "C: a drag on a plane": {
     "camera": "46 -42 35.25 looking at -1 5 10",
     "scene": "c3200e75",
     "frames": "46 -42 35.25 at 800x600, 3 draws; 1 waiting",
-    "gl": "7 calls #1f5f7a57",
+    "gl": "7 calls #2d2fd8cc",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 53 buffers, 20 vertex arrays, 16 GL textures"
   },
   "C: the plate for printing": {
     "camera": "46 -42 35.25 looking at -1 5 10",
     "scene": "d0003b45",
     "frames": "46 -42 35.25 at 800x600, 6 draws; 1 waiting",
-    "gl": "69 calls #799cfcb8",
+    "gl": "69 calls #5e99d9d7",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 53 buffers, 20 vertex arrays, 16 GL textures"
   },
   "C: a picture of the view": {
     "camera": "46 -42 35.25 looking at -1 5 10",
     "scene": "d0003b45",
     "frames": "46 -42 35.25 at 1600x1200, 6 draws; 1 waiting",
-    "gl": "26 calls #f591e567",
+    "gl": "26 calls #95eab825",
     "held": "18 geometries, 2 textures, 7 programs (15 users), 53 buffers, 20 vertex arrays, 16 GL textures",
     "pictures": "toBlob(image/png) 1600x1200"
   },
@@ -699,7 +713,7 @@ const GOLDEN: Record<string, Record_> = {
     "camera": "46 -42 35.25 looking at -1 5 10",
     "scene": "b1532c81",
     "frames": "none; 0 waiting",
-    "gl": "71 calls #3d8ce16d",
+    "gl": "71 calls #ad0689e9",
     "held": "1 geometries, 1 textures, 3 programs (8 users), 9 buffers, 0 vertex arrays, 15 GL textures"
   }
 };

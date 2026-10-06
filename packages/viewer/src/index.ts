@@ -230,6 +230,12 @@ function toColor(rgb: RGB): THREE.Color {
   return new THREE.Color().setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
 }
 
+/** The material a part is drawn with, on the stage and in a thumbnail alike: both sides of every
+ *  face, so a mesh with a face wound the wrong way still reads as solid. */
+function partMaterial(color: RGB): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: toColor(color), metalness: 0, roughness: 0.5, side: THREE.DoubleSide });
+}
+
 export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): Viewer {
   const FRAME_MUL = opts.frameMul ?? 2.2;
   const FRAME_PAD = opts.framePad ?? 15;
@@ -459,12 +465,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i]!;
-      const mat = new THREE.MeshStandardMaterial({
-        color: toColor(p.color),
-        metalness: 0,
-        roughness: 0.5,
-        side: THREE.DoubleSide,
-      });
+      const mat = partMaterial(p.color);
       materials.push(mat);
       const mesh = new THREE.Mesh(partGeometry(p), mat);
       mesh.userData.partIndex = i;
@@ -903,10 +904,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
         const box = new THREE.Box3();
         if (parts) {
           shot = new THREE.Group();
-          for (const p of parts) {
-            const mat = new THREE.MeshStandardMaterial({ color: toColor(p.color), metalness: 0, roughness: 0.5 });
-            shot.add(new THREE.Mesh(partGeometry(p), mat));
-          }
+          for (const p of parts) shot.add(new THREE.Mesh(partGeometry(p), partMaterial(p.color)));
           scene.add(shot);
           root.visible = false;
           rig.visible = false;

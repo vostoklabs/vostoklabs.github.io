@@ -296,9 +296,21 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
 
   const meshesBefore = v.scene.getObjectsByProperty('type', 'Mesh').length;
   shots.length = 0;
+  let drawnWith: THREE.MeshStandardMaterial[] = [];
+  const shoot = v.renderer.render;
+  v.renderer.render = (scene, camera) => {
+    if (!drawnWith.length) drawnWith = scene.getObjectsByProperty('type', 'Mesh').filter((m) => m.parent !== v.root && m.parent?.parent === scene && (m.parent as THREE.Group).isGroup && !m.parent.renderOrder).map((m) => (m as THREE.Mesh).material as THREE.MeshStandardMaterial);
+    shoot(scene, camera);
+  };
   v.renderThumbnail(64, [tetra(0, 0, 0, 50, RED)]);
+  v.renderer.render = shoot;
   check('thumbnail of other parts: drawn without the model, framed on them, then freed', !shots[0]!.model && v.root.visible
     && v.scene.getObjectsByProperty('type', 'Mesh').length === meshesBefore && shots[0]!.at.length() > 100, `camera ${shots[0]!.at.length().toFixed(1)} mm out`);
+  // Drawn as the stage draws a part: both sides of every face, the same finish.
+  const stageMaterial = v.partMeshes()[0]!.material as THREE.MeshStandardMaterial;
+  const finish = (m: THREE.MeshStandardMaterial) => `side ${m.side}, metalness ${m.metalness}, roughness ${m.roughness}, #${m.color.getHexString()}`;
+  check('thumbnail of other parts: drawn with the material the stage uses', drawnWith.length === 1 && finish(drawnWith[0]!) === finish(stageMaterial),
+    `${drawnWith.map(finish).join('; ')} vs ${finish(stageMaterial)}`);
 
   // A model that lives in a fold rig alone is framed too, as the cover frames it.
   v.setParts([]);
