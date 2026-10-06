@@ -86,6 +86,9 @@ import {
   printExport,
 } from './export/makerlabArtifacts';
 import { buildObjMtl, bytesToArrayBuffer, downloadFile, textToArrayBuffer } from '@vostok/export';
+// How long to wait for the host before the UI admits it does not know: the shelf's, one figure
+// for every MakerLab app.
+import { EXPORT_TIMEOUT_MS } from '@vostok/export/makerlab';
 import {
   buildPrintable,
   buildPrintableFile,
@@ -1834,8 +1837,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *  big enough to read on a model page, small enough that the data URL stays tens of
    *  kilobytes rather than megabytes. */
   const COVER_EDGE_PX = 512;
-  /** How long to wait for the host before the UI admits it does not know. */
-  const EXPORT_TIMEOUT_MS = 60_000;
   const TIMED_OUT = Symbol('makerlab export timeout');
 
   /** A real render of the box for the host's cover image, as a PNG data URL.
@@ -1850,7 +1851,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *  Never throws. A cover that will not render is cosmetic; the zip or the OBJ underneath it
    *  is the thing the user asked for, and it is already built by the time this runs. So a
    *  failure falls back to a valid 1 × 1 PNG and the export still goes. */
-  async function coverDataUrl(): Promise<string> {
+  async function renderCoverDataUrl(): Promise<string> {
     try {
       const hidden = stageCanvas.classList.contains('hidden');
       stageCanvas.classList.remove('hidden');
@@ -1986,7 +1987,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
               fileName: `${baseName}.obj`,
               buffer: textToArrayBuffer(obj),
               mtl,
-              coverImage: await coverDataUrl(),
+              coverImage: await renderCoverDataUrl(),
               description:
                 `${name}, printed flat as a ${stats.sheetMm.toFixed(2)} mm sheet with ` +
                 `${stats.hingeMm.toFixed(2)} mm fold grooves. Print at 0.2 mm layers, no supports. ` +
@@ -2017,7 +2018,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             cutExport({
               fileName: `${files.baseName}.zip`,
               buffer: bytesToArrayBuffer(files.zip),
-              coverImage: await coverDataUrl(),
+              coverImage: await renderCoverDataUrl(),
               description: `${name}: cut files (SVG, DXF and a README with the settings). ${LICENSE_NOTE}`,
             }),
             'the cut files',

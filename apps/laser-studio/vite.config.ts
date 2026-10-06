@@ -49,6 +49,7 @@ function makerlabPlugin(enabled: boolean) {
         'export const isReady = () => false;',
         'export const can = () => false;',
         'export async function sdkExport() { throw new Error("Not available in this build"); }',
+        'export const isExportCancelled = () => false;',
         'export async function sdkToast() {}',
         // The paid seam, hard-locked. It exists so the call sites and the types are identical
         // in both builds; it cannot unlock anything, and no build that ships today asks it to.

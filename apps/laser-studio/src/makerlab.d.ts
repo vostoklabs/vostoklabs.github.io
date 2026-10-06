@@ -24,6 +24,10 @@ declare module 'virtual:makerlab' {
 
   export const MAKERLAB: boolean;
   export function isEmbedded(): boolean;
+  /** The handshake, one at a time: while one is in flight or connected, a later call returns that
+   *  same one, so an export can wait for it. Only a handshake that failed, or one that has since
+   *  lost the host, is replaced (the old one closed first) by one fresh attempt per call. The
+   *  first caller's hooks are kept. */
   export function initMakerlab(hooks?: { onDisconnect?: () => void }): Promise<object | null>;
   export function isReady(): boolean;
   export function can(capability: string): boolean;
@@ -40,6 +44,9 @@ declare module 'virtual:makerlab' {
   }
 
   export function sdkExport(options: MakerlabExportOptions): Promise<MakerlabExportResult>;
+  /** True when an export ended because the customer closed the export window: a choice, not a
+   *  failure. Always false outside the embedded build. */
+  export function isExportCancelled(outcome: unknown): boolean;
   export function sdkToast(options: {
     message: string;
     type?: 'success' | 'info' | 'warning' | 'error';

@@ -28,6 +28,9 @@ import {
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
 import { downloadFile } from '@vostok/export';
+// 1x1 transparent PNG — last-resort cover if the canvas can't be read (the shelf's, shared with
+// every MakerLab app). In practice preserveDrawingBuffer makes the real capture succeed.
+import { BLANK_COVER } from '@vostok/export/makerlab';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadKeycap } from './keycap.js';
@@ -1600,10 +1603,6 @@ export function mount(container, host) {
     return parts.map((p) => ({ ...p, geom: p.geom.clone().applyMatrix4(m) }));
   }
 
-  // 1x1 transparent PNG — last-resort cover if the canvas can't be read. In practice
-  // preserveDrawingBuffer makes the real capture succeed.
-  const BLANK_COVER =
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
   // Grab the live preview as a PNG data URL for the MakerLab export cover. Render once first so
   // the buffer holds the current frame at the moment of capture.

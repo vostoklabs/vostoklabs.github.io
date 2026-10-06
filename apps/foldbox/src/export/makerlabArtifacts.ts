@@ -12,8 +12,11 @@ import type {
   MakerlabExportOptions,
   MakerlabLayerHeight,
   MakerlabObjArtifact,
-  MakerlabZipArtifact,
 } from 'virtual:makerlab';
+
+// The cut files' zip artifact, its 2D call and the blank cover are the shelf's ("MakerLab
+// export"), shared with every laser app that sends a cut file to MakerLab.
+export { BLANK_COVER, cutArtifact, cutExport } from '@vostok/export/makerlab';
 
 /** The one layer height the MakerLab build prints at, and the enum string the host takes.
  *
@@ -28,14 +31,6 @@ import type {
  *  close on the host side (makerlab/README.md), not something to pre-distort geometry for. */
 export const MAKERLAB_LAYER_HEIGHT_MM = 0.2;
 export const MAKERLAB_LAYER_HEIGHT: MakerlabLayerHeight = '0.2';
-
-/** A 1x1 transparent PNG, for when the cover render fails.
- *
- *  `coverImage` is required on every artifact, so a cover that will not render must not be
- *  allowed to throw away an export the app has already built correctly. A blank thumbnail is
- *  cosmetic; the box file is not. Same placeholder, same reason, as the keycap generator's. */
-export const BLANK_COVER =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 /** The sentence under the export buttons. Follows the make mode the user is on, not the
  *  build: the MakerWorld embed carries both halves.
@@ -79,37 +74,13 @@ export function printArtifact(input: {
   };
 }
 
-/** The cut files, as the host's zip artifact. */
-export function cutArtifact(input: {
-  fileName: string;
-  buffer: ArrayBuffer;
-  coverImage: string;
-  description: string;
-}): MakerlabZipArtifact {
-  return {
-    fileName: input.fileName,
-    format: 'zip',
-    buffer: input.buffer,
-    coverImage: input.coverImage,
-    description: input.description,
-  };
-}
-
 /** The whole `export()` call for the printed sheet.
  *
- *  `printerType` belongs to the call, not the artifact, which is why these two wrappers exist
- *  beside the artifact builders. `'3D'` is the host's default and is written out anyway: the
+ *  `printerType` belongs to the call, not the artifact, which is why this wrapper exists
+ *  beside the artifact builder (the cut files' twin, `cutExport`, is the shelf's). `'3D'` is the host's default and is written out anyway: the
  *  sheet is a print, and the host has to ask which printer and nozzle before it can turn the
  *  OBJ into a 3MF for it. */
 export function printExport(input: Parameters<typeof printArtifact>[0]): MakerlabExportOptions {
   return { printerType: '3D', artifacts: [printArtifact(input)] };
 }
 
-/** The whole `export()` call for the cut files.
- *
- *  `'2D'` (Wilde, 2026-09-17): the host skips the FDM printer and nozzle picker and opens the
- *  download dialog directly. A laser or a blade cutter is not a choice on that panel, so before
- *  this every zip export walked the user through picking a printer it would never use. */
-export function cutExport(input: Parameters<typeof cutArtifact>[0]): MakerlabExportOptions {
-  return { printerType: '2D', artifacts: [cutArtifact(input)] };
-}

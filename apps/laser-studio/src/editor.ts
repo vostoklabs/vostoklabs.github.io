@@ -22,13 +22,15 @@ import { BRAND } from '@vostok/brand';
 import {
   MAKERLAB,
   initMakerlab,
-  isEmbedded as mlEmbedded,
-  isReady as mlReady,
-  can as mlCan,
+  isEmbedded,
+  isReady,
+  can,
   sdkExport,
+  isExportCancelled,
   sdkToast,
 } from 'virtual:makerlab';
-import { BLANK_COVER, coverDataUrl, cutExport, cutZip, readmeText } from './export/makerlabArtifacts';
+import { HOST_LICENCE_NOTE, exportToHost, type HostLink } from '@vostok/export/makerlab';
+import { coverDataUrl, cutExport, cutFileStem, cutZip, readmeText } from './export/makerlabArtifacts';
 import { build } from './engine/engine';
 import { mergeBatch, sheetOf, sheetsClause } from './engine/batch';
 import type { BuildInput, BuildOutput, KeyringSpec } from './engine/types';
@@ -49,14 +51,13 @@ export interface EditorOptions {
   onSwitch(id: string, carry: Values): void;
 }
 
-/** How long to wait for the host before the UI admits it does not know; see `sendToMakerlab`. */
-const EXPORT_TIMEOUT_MS = 60_000;
-/** A sentinel with its own identity, so a real result can never be mistaken for it. */
-const TIMED_OUT = Symbol('makerlab-export-timeout');
-
-/** The licence, in one line, for the artifact's description and the README inside the zip.
- *  The URL comes from @vostok/brand and is never written out here (invariant #4). */
-const LICENSE_NOTE = `Free for personal use; selling what you make from it requires a commercial license: ${BRAND.urls.mwCommercial}`;
+/** The glue, as the shelf's `exportToHost` takes it. In every build but the embedded one these
+ *  are the stub's no-ops, and `MAKERLAB` keeps the call from ever being made. */
+const HOST: HostLink = {
+  isEmbedded, isReady, can, isCancelled: isExportCancelled, hostToast: sdkToast,
+  connect: () => initMakerlab(),
+  send: (options) => sdkExport(options),
+};
 
 export function createEditor(opts: EditorOptions): HTMLElement {
   const t = opts.template;
@@ -180,53 +181,6 @@ export function createEditor(opts: EditorOptions): HTMLElement {
 
   // -- export / save / load / help / theme, the standard footer ---------------------------
 
-  /** Hand the zip to the host and say what happened. Resolves true on success.
-   *
-   *  The kit's export panel re-enables its button in a `finally`, so a host that never
-   *  answers would leave it greyed with a spinner on it and nothing but a reload to fix. Hence
-   *  the race: at a minute the UI comes back and says honestly that it does not know. The
-   *  original promise is still listened to, because the host may simply be slow, and a late
-   *  success should be reported rather than contradicted. */
-  async function sendToMakerlab(options: Parameters<typeof sdkExport>[0]): Promise<boolean> {
-    status.set('Sending to MakerLab…', 'busy');
-    const pending = sdkExport(options);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timedOut = new Promise<typeof TIMED_OUT>((resolve) => {
-      timer = setTimeout(() => resolve(TIMED_OUT), EXPORT_TIMEOUT_MS);
-    });
-    const res = await Promise.race([pending, timedOut]);
-    clearTimeout(timer);
-
-    if (res === TIMED_OUT) {
-      void pending.then(
-        (late) => {
-          if (late.success) {
-            status.set('Sent the cut file to MakerLab', 'idle');
-            toast('MakerLab answered after all: the cut file is sent.', { kind: 'ok' });
-          } else {
-            status.set(`Export failed: ${late.errorMessage ?? late.errorCode}`, 'error');
-          }
-        },
-        (err: unknown) => status.set(`Export failed: ${(err as Error).message}`, 'error'),
-      );
-      const msg = 'MakerLab has not answered. Check MakerLab’s own export window, or reload the MakerWorld page and try again.';
-      status.set(msg, 'error');
-      toast(msg, { kind: 'error' });
-      return false;
-    }
-
-    if (res.success) {
-      status.set('Sent the cut file to MakerLab', 'idle');
-      void sdkToast({ message: 'Exported the cut file', type: 'success' });
-      return true;
-    }
-    const why = res.errorMessage ?? res.errorCode;
-    status.set(`Export failed: ${why}`, 'error');
-    void sdkToast({ message: 'Export failed', type: 'error' });
-    toast(`Export failed: ${why}`, { kind: 'error' });
-    return false;
-  }
-
   const footer = sidebarFooter({
     // Inside the host the label starts with "Export", which the kit passes through untouched:
     // the embedded build has no download path, the file goes to MakerLab.
@@ -237,53 +191,36 @@ export function createEditor(opts: EditorOptions): HTMLElement {
       const stem = (t.fileName?.(values) ?? t.id).replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || t.id;
 
       if (MAKERLAB) {
-        /* Embedded, but the host may not be answering.
-
-           The embedded build has no download path and no outbound links, so there is no
-           download fallback and no licence modal.
-
-           One reconnect first, which costs a moment and can only help. The fallback asks for a
-           full page reload. */
-        if (!(mlReady() && mlCan('export'))) {
-          if (mlEmbedded()) {
-            status.set('Reconnecting to MakerLab…', 'busy');
-            await initMakerlab();
-          }
-          if (!(mlReady() && mlCan('export'))) {
-            const msg = 'Not connected to MakerLab, so the file cannot be sent. Reload the whole MakerWorld page, not just this panel, and try again.';
-            status.set(msg, 'error');
-            toast(msg, { kind: 'error' });
-            return;
-          }
-        }
-
+        /* The embedded build has no download path and no outbound links, so there is no
+           download fallback and no licence modal: the licence rides in the artifact's
+           description, in the README inside the zip, and in the toast below, in words. */
         const svg = buildLaserStudioSvg(output, import.meta.env.VITE_BUILD_ID);
         const scores = output.objects.some((o) => o.op === 'score');
-        const buffer = cutZip({
-          svg,
-          svgName: `${stem}.svg`,
-          readme: readmeText({
-            design: t.name,
-            fileName: `${stem}.svg`,
-            note: fileNoteFor(scores),
-            licence: LICENSE_NOTE,
-            buildId: import.meta.env.VITE_BUILD_ID,
-          }),
-        });
-        const sent = await sendToMakerlab(
-          cutExport({
-            fileName: `${stem}.zip`,
-            buffer,
-            coverImage: await coverDataUrl(svg).catch(() => BLANK_COVER),
-            description: `${t.name}: the cut file as an SVG in millimetres, with a README of what each colour does. ${LICENSE_NOTE}`,
+        // One stem for the zip and the SVG in it (the stem can be the customer's own text).
+        const fileStem = cutFileStem(stem, t.id);
+        const sent = await exportToHost(
+          HOST,
+          { status: (text, kind) => status.set(text, kind), toast: (text, kind) => toast(text, { kind }) },
+          async () => cutExport({
+            fileName: `${fileStem}.zip`,
+            buffer: cutZip({
+              svg,
+              svgName: `${fileStem}.svg`,
+              readme: readmeText({
+                design: t.name,
+                fileName: `${fileStem}.svg`,
+                note: fileNoteFor(scores),
+                licence: HOST_LICENCE_NOTE,
+                buildId: import.meta.env.VITE_BUILD_ID,
+              }),
+            }),
+            coverImage: await coverDataUrl(svg),
+            description: `${t.name}: the cut file as an SVG in millimetres, with a README of what each colour does. ${HOST_LICENCE_NOTE}`,
           }),
         );
-        // The licence has to be SAID somewhere, and the embedded build has no outbound links,
-        // so it is not a modal with a link in it. It rides in the artifact's description, in the
-        // README inside the zip, and here in words.
         if (sent) {
           toast(
-            `Sent ${stem}.zip to MakerLab: the SVG and a sheet explaining its colours. `
+            `Sent ${fileStem}.zip to MakerLab: the SVG and a sheet explaining its colours. `
               + 'Free for personal use; selling what you cut needs a commercial licence.',
             { kind: 'ok' },
           );
@@ -318,7 +255,7 @@ export function createEditor(opts: EditorOptions): HTMLElement {
               // No Save/Open and no download path in the embedded build — so the sentence
               // that describes them would be describing buttons that are not on screen.
               ? 'Drag the dashed ring on the preview to move the hole; arrow keys nudge it. Export cut file sends the SVG to MakerLab, in millimetres, zipped with a sheet saying what each colour does.'
-              : 'Drag the dashed ring on the preview to move the hole; arrow keys nudge it. Download SVG saves millimetres, ready for LightBurn, xTool or Bambu Suite. Save keeps your settings as a small file you can load again.',
+              : 'Drag the dashed ring on the preview to move the hole; arrow keys nudge it. Download SVG saves millimetres, ready for Bambu Suite or any laser software that reads SVG. Save keeps your settings as a small file you can load again.',
           }),
         ]),
         actions: [{ label: 'Got it', primary: true }],

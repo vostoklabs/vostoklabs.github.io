@@ -6,11 +6,12 @@
   "description": "Shared model exporters: multi-part 3MF (Bambu/Orca filament slots), binary STL, OBJ, the laser cut file and the zip; ./read reads STL, OBJ and 3MF back.",
   "exports": {
     ".": "./src/index.ts",
-    "./read": "./src/read.ts"
+    "./read": "./src/read.ts",
+    "./makerlab": "./src/makerlab.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "check": "esbuild src/bambuProfile.check.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/bambuProfile.check.mjs --log-level=error && node node_modules/.cache/bambuProfile.check.mjs && esbuild tests/three-mf.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/three-mf.test.mjs --log-level=error && node node_modules/.cache/three-mf.test.mjs && esbuild tests/obj.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/obj.test.mjs --log-level=error && node node_modules/.cache/obj.test.mjs && esbuild tests/zip.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/zip.test.mjs --log-level=error && node node_modules/.cache/zip.test.mjs && esbuild tests/read.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/read.test.mjs --log-level=error && node node_modules/.cache/read.test.mjs",
+    "check": "esbuild src/bambuProfile.check.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/bambuProfile.check.mjs --log-level=error && node node_modules/.cache/bambuProfile.check.mjs && esbuild tests/three-mf.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/three-mf.test.mjs --log-level=error && node node_modules/.cache/three-mf.test.mjs && esbuild tests/makerlab.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/makerlab.test.mjs --log-level=error && node node_modules/.cache/makerlab.test.mjs && esbuild tests/obj.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/obj.test.mjs --log-level=error && node node_modules/.cache/obj.test.mjs && esbuild tests/zip.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/zip.test.mjs --log-level=error && node node_modules/.cache/zip.test.mjs && esbuild tests/read.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/read.test.mjs --log-level=error && node node_modules/.cache/read.test.mjs",
     "profile:build": "node scripts/build-bambu-profile.mjs"
   },
   "dependencies": {
