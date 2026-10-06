@@ -13,9 +13,7 @@
  * SVGLoader supports; anything else in a block is ignored by both. Paint set on a `<g>` lands on
  * the `<g>` and inherits through SVGLoader exactly as before.
  *
- * Ported from the keycap generator (`apps/keycap-generator/src/logo.js`), which found this
- * first and still carries its own JS copy. The fold-up box is the second app to need it, so the
- * shared copy is here; moving the keycap onto it is separate work.
+ * The keycap generator's legends and the fold-up box's logos both read their SVGs through it.
  *
  * `getElementsByTagName` rather than `querySelectorAll`, so a headless test parsing with xmldom
  * (which lacks the latter) still works.

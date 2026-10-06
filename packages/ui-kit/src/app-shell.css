@@ -20,8 +20,8 @@
 }
 .vl-app > .vl-topbar { grid-column: 1 / -1; }
 
-/* `appShell({ contained: true })`: fill the box it is placed in, not the window. A preview of
-   the shell inside a page (kit-demo) is the case; an app never sets it. */
+/* `appShell({ contained: true })`: fill the box it is placed in, not the window. kit-demo uses
+   it to preview the shell inside a page; the keycap generator uses it to fill its own frame. */
 .vl-app.vl-app--contained { min-height: 0; max-height: none; height: 100%; }
 
 /* No topbar — an embedded build, where the host draws its own chrome.

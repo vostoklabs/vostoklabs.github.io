@@ -8,8 +8,7 @@
  *
  * A template string rather than DOM-building code on purpose: it is a straight lift of the
  * markup that was already there, so the diff is reviewable and the two builds cannot drift
- * apart in how the page is structured. `main.js` finds everything by id, and the ids are
- * unchanged.
+ * apart in how the page is structured. `mount.js` finds everything by id.
  */
 export const TEMPLATE = `
     <header id="topbar"></header>
