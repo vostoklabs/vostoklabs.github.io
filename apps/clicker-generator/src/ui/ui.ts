@@ -40,6 +40,7 @@ import {
   toast,
   uploadCta,
   colorPopover,
+  closeColorPopover,
   paletteRow,
 } from '@vostok/ui-kit';
 import { MAKERLAB, SELLER_PACK, isUnlocked } from 'virtual:makerlab';
@@ -2971,11 +2972,13 @@ export function createUi(
     /**
      * Undoes everything this UI put outside its two sidebars.
      *
-     * The selector sweep at the end is for the transient overlays — a colour popover, the
-     * welcome modal, a tutorial card — which each already remove themselves on close, but
-     * only if the user ever closes them. Unmounting mid-modal has to clear them too.
+     * An open colour picker is closed first, as its own close does, so its listeners leave the
+     * document with it. The selector sweep at the end is for the other transient overlays — the
+     * welcome modal, a tutorial card — which each already remove themselves on close, but only
+     * if the user ever closes them. Unmounting mid-modal has to clear them too.
      */
     dispose: () => {
+      closeColorPopover();
       for (const fn of cleanups.reverse()) {
         try { fn(); } catch { /* one failure must not strand the rest */ }
       }

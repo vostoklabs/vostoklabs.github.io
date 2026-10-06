@@ -7,11 +7,10 @@
  * matches. Swatches also survive the round trip — the hex ends up in the 3MF's filament
  * list, and a palette entry is a colour a slicer can actually map to a slot.
  *
- * The list itself already existed three times over — `apps/clicker-generator/src/types.ts`,
- * `apps/magnet-generator/src/types.ts` (commented "same list as the clicker") and
- * bubble-pop's — with no shared copy. This is that list, in the one place the generators
- * agree on. Those three should import it from here and drop their own; until they do, keep
- * the values identical.
+ * The list itself already existed three times over — the clicker's, `apps/magnet-generator/
+ * src/types.ts` (commented "same list as the clicker") and bubble-pop's — with no shared copy.
+ * This is that list, in the one place the generators agree on. The clicker takes it from here
+ * now; the other two should too, and drop their own. Until they do, keep the values identical.
  */
 import { el } from '../dom';
 import { withAccess, type ValueRow } from './controls';
