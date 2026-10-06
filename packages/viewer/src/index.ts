@@ -153,7 +153,8 @@ export interface Viewer {
   onPartsSet(cb: (meshes: THREE.Mesh[], parts: ViewerPart[]) => void): () => void;
   /** Called once a frame, before the frame is drawn. Returns a function that stops it. */
   onFrame(cb: () => void): () => void;
-  /** Stop drawing while something covers the stage, and start again. */
+  /** Stop drawing while something covers the stage, and start again. A disposed viewer stays
+   *  stopped. */
   setPaused(paused: boolean): void;
   /** Show or hide the build plate. */
   setPlateVisible(on: boolean): void;
@@ -706,6 +707,8 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   resizeObserver.observe(container);
 
   let raf = 0;
+  /** Set by `dispose`: nothing starts the loop again after it. */
+  let disposed = false;
   /** True while `renderCoverPng` owns the canvas. The self-heal below would otherwise
    *  resize the drawing buffer back to the viewport between the cover render and the
    *  `toBlob` that reads it — which clears it, and the cover comes back blank. */
@@ -755,6 +758,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   /** Stop drawing, or start again. Two render loops running at once is double the GPU's work
    *  for a scene nobody can see, and the extra pressure is what makes a browser drop a context. */
   function setPaused(paused: boolean) {
+    if (disposed) return;
     if (paused) {
       cancelAnimationFrame(raf);
       raf = 0;
@@ -970,7 +974,9 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   }
 
   function dispose() {
+    disposed = true;
     cancelAnimationFrame(raf);
+    raf = 0;
     themeObserver?.disconnect();
     window.removeEventListener('resize', onResize);
     resizeObserver.disconnect();

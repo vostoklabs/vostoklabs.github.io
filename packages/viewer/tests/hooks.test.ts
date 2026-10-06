@@ -259,6 +259,27 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   v.dispose();
   check('dispose: the window keeps none of its listeners', page.window.listenerCount() === 0);
 }
+{
+  // A disposed viewer stays stopped, whatever pausing and resuming its app does after.
+  const draws = (count: number) => {
+    const before = page.log.length;
+    page.frame(count);
+    return page.log.slice(before).filter((l) => l.startsWith('draw')).length;
+  };
+  const pausedFirst = createViewer(stage);
+  pausedFirst.setParts(PARTS);
+  pausedFirst.setPaused(true);
+  pausedFirst.dispose();
+  pausedFirst.setPaused(false);
+  check('dispose: a paused viewer is not started again by a resume', page.pendingFrames() === 0 && draws(2) === 0, `${page.pendingFrames()} frames waiting`);
+  const running = createViewer(stage);
+  running.setParts(PARTS);
+  page.frame();
+  running.dispose();
+  running.setPaused(true);
+  running.setPaused(false);
+  check('dispose: nor a running one by a pause and a resume', page.pendingFrames() === 0 && draws(2) === 0, `${page.pendingFrames()} frames waiting`);
+}
 
 /* ------------------------------------------------------------------ pictures */
 
