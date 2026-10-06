@@ -20,7 +20,7 @@
 // as one zip: an SVG per sheet, holding that sheet's pieces and nothing else, and a README saying
 // which is which (`cutFiles`). A sheet IS one material, so a run laid out a colour at a time
 // names each file's material: `<stem>-sheet-2-dark.svg`.
-import { buildCutSvg, buildZip, downloadFile, type CutLayer } from '@vostok/export';
+import { buildCutSvg, downloadCut, type CutLayer } from '@vostok/export';
 import { OPS, OP_ORDER, bboxOf, type Box, type Shapes } from '@vostok/laser';
 import type { BuildObject, BuildOutput } from '../engine/types';
 
@@ -173,9 +173,10 @@ export function cutFiles(out: BuildOutput, stem: string, opts: { design: string;
   return [...svgs, { name: 'README.txt', text: readme }];
 }
 
-/** Save the cut file: the one SVG, or a zip of the sheets and their README. */
+/** Save the cut file through the shelf's `downloadCut`: the one SVG, or a zip of the sheets and
+ *  their README. */
 export function downloadCutFiles(out: BuildOutput, stem: string, opts: Parameters<typeof cutFiles>[2]): void {
   const files = cutFiles(out, stem, opts);
-  if (files.length === 1) downloadFile(files[0]!.text, files[0]!.name, 'image/svg+xml');
-  else downloadFile(buildZip(Object.fromEntries(files.map((f) => [f.name, f.text]))), `${stem}.zip`, 'application/zip');
+  const readme = files.find((f) => f.name === 'README.txt');
+  downloadCut(files.filter((f) => f !== readme), stem, readme?.text);
 }

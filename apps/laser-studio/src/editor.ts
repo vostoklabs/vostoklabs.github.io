@@ -17,8 +17,12 @@ import {
   dialog,
   licenseAfterExport,
   el,
+  buildLoop,
+  markProject,
+  readProjectFile,
 } from '@vostok/ui-kit';
 import { BRAND } from '@vostok/brand';
+import { downloadFile } from '@vostok/export';
 import {
   MAKERLAB,
   initMakerlab,
@@ -59,10 +63,17 @@ const HOST: HostLink = {
   send: (options) => sdkExport(options),
 };
 
+/** A Laser Studio project file: the template it was made with and its values, with `app` in
+ *  front. A file saved before `app` was written carries both keys, so it still opens; another
+ *  generator's file, or `{}`, is refused. */
+const PROJECT = { app: 'laser-studio', keys: ['template', 'values'] } as const;
+
+/** One build as the screen shows it: what the template asked for, and what the worker made of it. */
+interface Built { input: BuildInput; output: BuildOutput }
+
 export function createEditor(opts: EditorOptions): HTMLElement {
   const t = opts.template;
   const values: Values = opts.values ? coerceValues(t, opts.values) : defaultsOf(t);
-  let output: BuildOutput | null = null;
   const hasKeyring = t.fields.some((f) => f.key === 'ringMode');
   const keyring = (): KeyringSpec | null => (hasKeyring ? keyringFrom(values) : null);
 
@@ -104,9 +115,7 @@ export function createEditor(opts: EditorOptions): HTMLElement {
     const pieces = out.status ? ` · ${out.status}` : out.parts.length > 1 ? ` · ${out.parts.length} pieces` : '';
     status.set(`${units.formatSize(out.bbox.maxX - out.bbox.minX, out.bbox.maxY - out.bbox.minY)}${pieces}${sheetsClause(out)} · ${ops.join(' + ')}${warn ? ` · ${warn}` : ''}`, warn ? 'warn' : 'idle');
   }
-  const stopUnits = units.onChange(() => { if (output) describe(output); });
-
-  // -- rebuild: coalesce a burst of edits, drop stale results ----------------------------
+  // -- rebuild: the kit's build loop -------------------------------------------------------
   /**
    * What to build: the design once, or — in Batch — once per name, merged into one run laid out
    * on the chosen sheet. Every setting reaches every copy because every copy is built from the
@@ -124,39 +133,46 @@ export function createEditor(opts: EditorOptions): HTMLElement {
     return mergeBatch(inputs, names, sheetOf(str(values, '__sheet')), b.noun, values.__colours === 'together' ? 'together' : 'separate');
   }
 
-  let timer = 0;
-  let serial = 0;
-  function rebuild(immediate = false) {
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const mine = ++serial;
-      status.set('Building…', 'busy');
-      busy.show();
+  // One build at a time, at most one more waiting behind it, always from the values as they are
+  // when it starts; a burst of edits within 120 ms is one build. `settled()` is the design on
+  // screen, for the export.
+  const loop = buildLoop<Built>({
+    debounceMs: 120,
+    run: async () => {
       // One painted frame before the build starts, so the chip is on screen before any
       // synchronous template work can hold the main thread.
       await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-      if (mine !== serial) return;
-      try {
-        const input = await buildInput();
-        const out = await build(input);
-        if (mine !== serial) return;
-        output = out;
-        // How many colours the design is cut from: Batch offers to separate them when it is more than one.
-        form.setColourCount(new Set([input.material ?? 'light', ...(input.parts ?? []).map((p) => p.material ?? 'light')]).size);
-        // No Ring control (a design with its own fixed hole — pet tag, matching keychains) →
-        // no drag handle: a drag would write ringDx/ringDy the form does not declare and snap
-        // back.
-        preview.render(out, hasKeyring ? keyring() : null);
-        describe(out);
-      } catch (err) {
-        if (mine !== serial) return;
-        status.set(`Could not build it: ${(err as Error).message}`, 'error');
-        console.error(err);
-      } finally {
-        if (mine === serial) busy.hide();
-      }
-    }, immediate ? 0 : 120);
+      const input = await buildInput();
+      return { input, output: await build(input) };
+    },
+    onStart: () => {
+      status.set('Building…', 'busy');
+      busy.show();
+    },
+    onResult: ({ input, output }) => {
+      // How many colours the design is cut from: Batch offers to separate them when it is more than one.
+      form.setColourCount(new Set([input.material ?? 'light', ...(input.parts ?? []).map((p) => p.material ?? 'light')]).size);
+      // No Ring control (a design with its own fixed hole — pet tag, matching keychains) →
+      // no drag handle: a drag would write ringDx/ringDy the form does not declare and snap
+      // back.
+      preview.render(output, hasKeyring ? keyring() : null);
+      describe(output);
+    },
+    onError: (err) => {
+      status.set(`Could not build it: ${err.message}`, 'error');
+      console.error(err);
+    },
+    onIdle: () => busy.hide(),
+  });
+  /** The values changed: build them, now or after the quiet time. */
+  function rebuild(immediate = false) {
+    loop.request();
+    if (immediate) loop.flush();
   }
+  const stopUnits = units.onChange(() => {
+    const shown = loop.latest;
+    if (shown) describe(shown.output);
+  });
 
   // -- the form ---------------------------------------------------------------------------
   const form = renderForm({
@@ -171,8 +187,9 @@ export function createEditor(opts: EditorOptions): HTMLElement {
     },
   });
   /** Everything this editor subscribed to, dropped in one place — a form still listening to the
-   *  unit switch after the gallery is back re-formats controls nobody can see. */
-  const leave = () => { stopUnits(); form.dispose(); };
+   *  unit switch after the gallery is back re-formats controls nobody can see, and a build still
+   *  queued would draw into a stage nobody can see. */
+  const leave = () => { stopUnits(); form.dispose(); loop.dispose(); };
   const back = button({ label: 'All templates', icon: ICONS.arrowLeft, emphasis: 'ghost', title: 'Back to the gallery', onClick: () => { leave(); opts.onBack(); } });
   const reset = button({
     label: 'Reset this design', icon: ICONS.rotateLeft, emphasis: 'ghost',
@@ -187,7 +204,16 @@ export function createEditor(opts: EditorOptions): HTMLElement {
     formats: [{ id: 'svg', label: MAKERLAB ? 'Export cut file' : 'SVG' }],
     onExport: async (format) => {
       if (format !== 'svg') throw new Error('Unknown format: ' + format);
-      if (!output || !output.objects.length) return toast('Nothing to export yet — type something first.', { kind: 'warn' });
+      // The design on screen: a click inside the quiet time waits for the build that matches the
+      // values, and a build that failed refuses the export in its own words (the panel shows the
+      // message) rather than sending the design before it.
+      let output: BuildOutput;
+      try {
+        ({ output } = await loop.settled());
+      } catch (err) {
+        throw new Error(`Could not build it: ${(err as Error).message}`);
+      }
+      if (!output.objects.length) return toast('Nothing to export yet — type something first.', { kind: 'warn' });
       const stem = (t.fileName?.(values) ?? t.id).replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || t.id;
 
       if (MAKERLAB) {
@@ -234,16 +260,18 @@ export function createEditor(opts: EditorOptions): HTMLElement {
     },
     // The embedded build has no download path, so the kit hides Save and Open there.
     hostOwnsProjects: MAKERLAB,
-    onSave: () => downloadJSON(`${t.id}.laser-studio.json`, { template: t.id, values }),
-    onLoad: (file?: File) =>
-      file && loadJSON(file, (data) => {
+    onSave: () => downloadFile(JSON.stringify(markProject(PROJECT, { template: t.id, values }), null, 2), `${t.id}.laser-studio.json`, 'application/json'),
+    onLoad: (file?: File) => {
+      if (!file) return;
+      void readProjectFile(file, (data) => {
         const d = data as { template?: string; values?: Values };
         if (d.template && d.template !== t.id) { leave(); opts.onSwitch(d.template, d.values ?? {}); return; }
         Object.assign(values, coerceValues(t, d.values));
         form.sync();
         rebuild(true);
         toast('Project loaded', { kind: 'ok' });
-      }),
+      }, PROJECT);
+    },
     onHelp: () =>
       dialog({
         title: 'Laser Studio help',
@@ -288,20 +316,4 @@ export function createEditor(opts: EditorOptions): HTMLElement {
   shell.root.classList.add('ls-editor');
   rebuild(true);
   return shell.root;
-}
-
-function downloadJSON(name: string, data: unknown) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function loadJSON(file: File, apply: (data: unknown) => void) {
-  const r = new FileReader();
-  r.onload = () => {
-    try { apply(JSON.parse(r.result as string)); } catch { toast('Invalid project file', { kind: 'error' }); }
-  };
-  r.readAsText(file);
 }

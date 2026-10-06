@@ -336,8 +336,7 @@ export interface BuildOutput {
   status?: string;
 }
 
-export type WorkerRequest = { type: 'build'; id: number; input: BuildInput };
-export type WorkerResponse =
-  | { type: 'ready' }
-  | { type: 'built'; id: number; output: BuildOutput; ms: number }
-  | { type: 'error'; id: number; message: string };
+/** What the main thread asks the geometry worker (`workerClient` adds the id, `answerRequests`
+ *  answers it): a build, or, once at the start, to load the kernel before the first build. A
+ *  build is answered with its `BuildOutput`, a warm-up with null. */
+export type WorkerRequest = { type: 'build'; input: BuildInput } | { type: 'warm' };

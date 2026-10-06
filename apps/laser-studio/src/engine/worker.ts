@@ -1,9 +1,11 @@
 // The geometry worker: owns the manifold WASM kernel, answers one `build` at a time. The main
-// thread never blocks on a boolean. Same skeleton as the clicker's.
+// thread never blocks on a boolean. Every request gets exactly one reply carrying its id, the
+// output or the error (`answerRequests`), so a build that fails is heard about, never waited on.
 import Module from 'manifold-3d';
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
+import { answerRequests } from '@vostok/ui-kit/build-loop';
 import { buildKeychain } from './build';
-import type { WorkerRequest, WorkerResponse } from './types';
+import type { BuildOutput, WorkerRequest } from './types';
 
 type Wasm = Awaited<ReturnType<typeof Module>>;
 let modulePromise: Promise<Wasm> | null = null;
@@ -30,25 +32,16 @@ function getModule(): Promise<Wasm> {
   return modulePromise;
 }
 
-const post = (msg: WorkerResponse) => (self as unknown as Worker).postMessage(msg);
-
-self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
-  const msg = e.data;
-  if (msg.type !== 'build') return;
+answerRequests<WorkerRequest, BuildOutput | null>(async (req) => {
   try {
+    // The kernel loads inside the request that needs it, so a load that fails fails that request.
     const wasm = await getModule();
-    const started = performance.now();
-    const output = buildKeychain(wasm, msg.input);
-    post({ type: 'built', id: msg.id, output, ms: Math.round(performance.now() - started) });
+    return req.type === 'warm' ? null : buildKeychain(wasm, req.input);
   } catch (err) {
     // A trap inside the WASM (an out-of-bounds read deep in a boolean) leaves the module's heap
     // in no state to trust: every later call on it fails the same way. Drop it, so the next
     // build starts a fresh kernel instead of the page needing a reload.
     if (err instanceof WebAssembly.RuntimeError) modulePromise = null;
-    post({ type: 'error', id: msg.id, message: err instanceof Error ? err.message : String(err) });
+    throw err;
   }
-};
-
-getModule()
-  .then(() => post({ type: 'ready' }))
-  .catch((err) => console.error('manifold failed to start', err));
+});
