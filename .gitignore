@@ -92,7 +92,14 @@ apps/foldbox/README.internal.md
 !apps/pen-topper/tests/**
 !apps/foldbox/tests/
 apps/foldbox/tests/*
+!apps/foldbox/tests/corners.mts
+!apps/foldbox/tests/fold.mts
+!apps/foldbox/tests/hang.mts
+!apps/foldbox/tests/net.mts
 !apps/foldbox/tests/poly.mts
+!apps/foldbox/tests/print.mts
+!apps/foldbox/tests/sink.mts
+!apps/foldbox/tests/thin.mts
 !packages/ui-kit/tests/
 !packages/ui-kit/tests/**
 !packages/fonts/tests/

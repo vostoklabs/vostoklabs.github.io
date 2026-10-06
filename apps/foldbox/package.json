@@ -30,7 +30,7 @@
     "test:marks": "esbuild tests/marks.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/marks.mjs --log-level=error && node node_modules/.cache/marks.mjs",
     "test:makerlab": "esbuild tests/makerlab.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/makerlab.mjs --log-level=error && node node_modules/.cache/makerlab.mjs",
     "test:poly": "esbuild tests/poly.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/poly.mjs --log-level=error && node node_modules/.cache/poly.mjs",
-    "test:public": "pnpm run test:poly"
+    "test:public": "pnpm run test:poly && pnpm run test:net && pnpm run test:fold && pnpm run test:corners && pnpm run test:sink && pnpm run test:print && pnpm run test:thin && pnpm run test:hang"
   },
   "dependencies": {
     "@vostok/brand": "workspace:*",
