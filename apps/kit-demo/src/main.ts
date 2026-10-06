@@ -1769,7 +1769,8 @@ app.append(
     'Drawer',
     'A panel that slides in at the edge instead of over the middle. There is no backdrop and ' +
       'nothing goes inert, so the stage behind keeps working while you choose. One at a time; ' +
-      'Escape or the cross closes it and focus goes back where it was. On a phone it is a bottom sheet.',
+      'Escape or the cross closes it and focus goes back where it was. On a phone it is a bottom sheet. ' +
+      'A sheet whose own controls open drawers stays under them (staysUnder), as the phone Settings sheet does.',
     row(
       button({
         label: 'Open drawer',
@@ -1785,6 +1786,30 @@ app.append(
               ],
             }),
             onClose: () => toast('Drawer closed'),
+          }),
+      }),
+      button({
+        label: 'Open a sheet that stays under',
+        emphasis: 'secondary',
+        onClick: () =>
+          drawer({
+            title: 'Settings',
+            staysUnder: true,
+            focusFirst: true,
+            content: section({
+              title: '',
+              body: [
+                button({
+                  label: 'Choose a colour',
+                  onClick: () =>
+                    drawer({
+                      title: 'Colour',
+                      content: el('p', { className: 'vl-hint', text: 'Escape closes this one; Settings is still there under it.' }),
+                    }),
+                }),
+                el('p', { className: 'vl-hint', text: 'The drawer this button opens goes over this sheet, not in place of it.' }),
+              ],
+            }),
           }),
       }),
     ),

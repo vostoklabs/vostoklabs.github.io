@@ -19,12 +19,13 @@ export interface DrawerOptions {
   /** Called after it closes, however it was closed. */
   onClose?: () => void;
   /**
-   * Stay open when another drawer opens: the new one goes on top, Escape closes the top one
-   * first, and this one is still there when it goes. For a sheet whose own controls open
-   * drawers (the phone layout's Settings sheet, where Insert symbol opens a picker).
-   * `closeAllDrawers()` still closes it. Default false: opening a drawer closes every other.
+   * Stay under a drawer that opens over it, rather than close: the new one goes on top, Escape
+   * closes the top one first, and this one is still there when it goes. For a sheet whose own
+   * controls open drawers (the phone layout's Settings sheet, where Insert symbol opens a
+   * picker). `closeAllDrawers()` still closes it. Default false: opening a drawer closes every
+   * other. (Not the symbol picker's `stayOpen`, which keeps a picker open after a pick.)
    */
-  stayOpen?: boolean;
+  staysUnder?: boolean;
   /**
    * Take the keyboard focus as it opens: the first control in the content that is showing, or
    * the close button when there is none. For a drawer someone opened in order to use it (the
@@ -121,7 +122,7 @@ export function drawer(opts: DrawerOptions): DrawerHandle {
   document.addEventListener('keydown', onKey);
   document.body.append(root);
   openDrawers.add(handle);
-  if (opts.stayOpen) staying.add(handle);
+  if (opts.staysUnder) staying.add(handle);
   if (opts.focusFirst) {
     const first = [...body.querySelectorAll<HTMLElement>(FOCUSABLE)].find((n) => !n.closest('[hidden]'));
     (first ?? close).focus();

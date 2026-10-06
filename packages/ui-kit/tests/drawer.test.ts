@@ -36,23 +36,28 @@ const escape = () => miniDocument.documentElement.dispatchEvent({ type: 'keydown
   check('Escape closes it', open() === '');
 }
 
-/* ---------------------------------------------------------------- stayOpen */
+/* -------------------------------------------------------------- staysUnder */
 
 {
-  drawer({ title: 'Settings', content: el('div', {}, [button({ label: 'Shape' })]), stayOpen: true });
+  drawer({ title: 'Settings', content: el('div', {}, [button({ label: 'Shape' })]), staysUnder: true });
   drawer({ title: 'Symbols', content: 'A grid' });
-  check('stayOpen: still open under a drawer its controls opened', open() === 'Settings,Symbols');
+  check('staysUnder: still open under a drawer its controls opened', open() === 'Settings,Symbols');
   escape();
-  check('stayOpen: Escape closes the drawer on top, and only that one', open() === 'Settings');
+  check('staysUnder: Escape closes the drawer on top, and only that one', open() === 'Settings');
   drawer({ title: 'Fonts', content: 'Cards' });
   drawer({ title: 'Colours', content: 'Swatches' });
-  check('stayOpen: a drawer that does not stay still gives way to the next one over the sheet', open() === 'Settings,Colours');
+  check('staysUnder: a drawer that does not stay still gives way to the next one over the sheet', open() === 'Settings,Colours');
   escape();
   escape();
-  check('stayOpen: then Escape closes the sheet itself', open() === '');
-  drawer({ title: 'Settings', content: 'Rows', stayOpen: true });
+  check('staysUnder: then Escape closes the sheet itself', open() === '');
+  drawer({ title: 'Settings', content: 'Rows', staysUnder: true });
   closeAllDrawers();
-  check('stayOpen: closeAllDrawers() still closes it', open() === '');
+  check('staysUnder: closeAllDrawers() still closes it', open() === '');
+  // The symbol picker's `stayOpen` (open after a pick) is another thing, and no drawer reads it.
+  drawer({ title: 'Settings', content: 'Rows', ...({ stayOpen: true } as object) });
+  drawer({ title: 'Symbols', content: 'A grid' });
+  check('the old name stayOpen means nothing to a drawer', open() === 'Symbols');
+  closeAllDrawers();
 }
 
 /* ---------------------------------------------------------------- focusFirst */

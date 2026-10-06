@@ -134,7 +134,7 @@ function phoneLayout(left: PanelParts, right: PanelParts): void {
     sheet = drawer({
       title: 'Settings',
       content,
-      stayOpen: true,
+      staysUnder: true,
       focusFirst: true,
       onClose: () => {
         for (const { home, nodes } of homes) home.append(...nodes);
