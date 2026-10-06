@@ -44,7 +44,7 @@ import { inflateSync } from 'node:zlib';
 import Module from 'manifold-3d';
 
 const { processImage } = await import('@vostok/trace');
-const { parse3MF } = await import('../src/geometry/threemfImport.ts');
+const { readModel } = await import('@vostok/export/read');
 const { buildClicker } = await import('../src/geometry/buildClicker.ts');
 type BuildParams = import('../src/types.ts').BuildParams;
 type BuildRegion = import('../src/types.ts').BuildRegion;
@@ -100,8 +100,8 @@ const asset = (p: string) => readFileSync(join(appDir, 'public/assets', p)).buff
 const wasm = await Module();
 wasm.setup();
 function prep(buf: ArrayBuffer, dropTopToZero: boolean) {
-  const raw = parse3MF(buf);
-  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.vertProperties, triVerts: raw.triVerts });
+  const raw = readModel(buf, 'asset.3mf');
+  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.positions, triVerts: raw.indices });
   mesh.merge();
   const solid = wasm.Manifold.ofMesh(mesh);
   const bb = solid.boundingBox();

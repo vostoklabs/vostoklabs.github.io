@@ -25,7 +25,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Module from 'manifold-3d';
-import { parse3MF } from '../src/geometry/threemfImport.ts';
+import { readModel } from '@vostok/export/read';
 import { buildBlocks } from '../src/geometry/buildBlocks.ts';
 import type { BuildParams, BuildRegion, ClickerPart } from '../src/types.ts';
 
@@ -37,8 +37,8 @@ wasm.setup();
 
 /** The socket, normalised as the worker does it: XY-centred, top face at Z 0. */
 function normalisedSocket(buf: ArrayBuffer) {
-  const raw = parse3MF(buf);
-  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.vertProperties, triVerts: raw.triVerts });
+  const raw = readModel(buf, 'asset.3mf');
+  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.positions, triVerts: raw.indices });
   mesh.merge();
   const s = wasm.Manifold.ofMesh(mesh);
   const bb = s.boundingBox();

@@ -17,7 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Module from 'manifold-3d';
-import { parse3MF } from '../src/geometry/threemfImport.ts';
+import { readModel } from '@vostok/export/read';
 import { buildClicker } from '../src/geometry/buildClicker.ts';
 import { parseLetter } from '../src/image/letter.ts';
 import type { BuildParams, BuildRegion } from '../src/types.ts';
@@ -29,8 +29,8 @@ const wasm = await Module();
 wasm.setup();
 
 function prep(buf: ArrayBuffer, dropTopToZero: boolean) {
-  const raw = parse3MF(buf);
-  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.vertProperties, triVerts: raw.triVerts });
+  const raw = readModel(buf, 'asset.3mf');
+  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.positions, triVerts: raw.indices });
   mesh.merge();
   const solid = wasm.Manifold.ofMesh(mesh);
   const bb = solid.boundingBox();

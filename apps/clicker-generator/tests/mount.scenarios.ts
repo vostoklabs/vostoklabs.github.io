@@ -616,7 +616,7 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   const exp = press();
   await clock.advance(200);
   check('a model that fails to open while Export waits: Export is answered', exp.done, describe(exp));
-  check('…and the status says why', status() === 'Could not open that model: That file has no triangles', status());
+  check('…and the status says why, and that the design on screen stays', status() === 'Could not open that model: That file has no triangles. The design on screen is unchanged.', status());
   check('…and the picture still on screen is not credited to a model', written()[0] === 'built:image:cc=4|w=40|st=0' && seen.downloads[0]?.opts.sourceModel === undefined, `${describe(exp)}, credited to ${seen.downloads[0]?.opts.sourceModel}`);
   finish(unmount);
 }
@@ -632,6 +632,7 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   const exp = press();
   await clock.advance(10);
   check('another model that then fails to open: Export writes the cut still on screen, credited to its own model', written()[0] === 'model:slice|size=60|st=0' && seen.downloads[0]?.opts.sourceModel === 'figure.stl', `${describe(exp)}, credited to ${seen.downloads[0]?.opts.sourceModel}`);
+  check('…and the status says so, in the reader\'s own words', status() === 'Could not open that model: That file has no triangles. The design on screen is unchanged.', status());
   finish(unmount);
 }
 

@@ -23,7 +23,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Module from 'manifold-3d';
-import { parse3MF } from '../src/geometry/threemfImport.ts';
+import { readModel } from '@vostok/export/read';
 import { buildBlocks, BLOCK_POCKET_MM } from '../src/geometry/buildBlocks.ts';
 import { BODY_DIMS, buildKeyBody, keyPitch, wellSize, type KeyCell } from '../src/geometry/keyBody.ts';
 import type { BlockStyle, BlockTexture, BuildParams, BuildRegion, ClickerPart } from '../src/types.ts';
@@ -35,8 +35,8 @@ const wasm: any = await Module();
 wasm.setup();
 
 function normalisedSocket(buf: ArrayBuffer) {
-  const raw = parse3MF(buf);
-  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.vertProperties, triVerts: raw.triVerts });
+  const raw = readModel(buf, 'asset.3mf');
+  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.positions, triVerts: raw.indices });
   mesh.merge();
   const s = wasm.Manifold.ofMesh(mesh);
   const bb = s.boundingBox();

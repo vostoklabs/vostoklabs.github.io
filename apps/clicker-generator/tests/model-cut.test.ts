@@ -35,8 +35,7 @@ import { join } from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import Module from 'manifold-3d';
 
-const { parse3MF } = await import('../src/geometry/threemfImport.ts');
-const { parseModel } = await import('../src/model/parse.ts');
+const { readModel } = await import('@vostok/export/read');
 const { prepareModel } = await import('../src/model/prepare.ts');
 const { MODEL_SAMPLES } = await import('../src/model/samples.ts');
 const { makeSwitchKit, measureSwitchBands, measurePostSeat, seatPost, switchBody, place, scope, FALLBACK_POST_SEAT } = await import('../src/model/switchKit.ts');
@@ -58,8 +57,8 @@ const check = (name: string, ok: boolean, detail: string) => {
 
 // ---- The switch, normalised the way the worker's `init` does it ----
 function solidOf(buf: ArrayBuffer) {
-  const raw = parse3MF(buf);
-  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.vertProperties, triVerts: raw.triVerts });
+  const raw = readModel(buf, 'asset.3mf');
+  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.positions, triVerts: raw.indices });
   mesh.merge();
   return wasm.Manifold.ofMesh(mesh);
 }
@@ -71,9 +70,9 @@ const socket = socketRaw.translate([-(sbb.min[0] + sbb.max[0]) / 2, -(sbb.min[1]
 const tcx = (tbb.min[0] + tbb.max[0]) / 2;
 const tcy = (tbb.min[1] + tbb.max[1]) / 2;
 const stem = stemRaw.translate([-tcx, -tcy, 0]);
-const sw = parse3MF(asset('switch/mx/mx-switch.3mf'));
+const sw = readModel(asset('switch/mx/mx-switch.3mf'), 'mx-switch.3mf');
 {
-  const v = sw.vertProperties;
+  const v = sw.positions;
   let maxE = 0;
   for (let i = 0; i < v.length; i += 3) {
     v[i] -= tcx;
@@ -86,8 +85,8 @@ const sw = parse3MF(asset('switch/mx/mx-switch.3mf'));
   }
   for (let i = 0; i < v.length; i += 3) v[i + 2] -= seatZ;
 }
-const bands = measureSwitchBands(sw.vertProperties, sw.triVerts);
-const seat = measurePostSeat(sw.vertProperties, sw.triVerts);
+const bands = measureSwitchBands(sw.positions, sw.indices);
+const seat = measurePostSeat(sw.positions, sw.indices);
 const kit = makeSwitchKit(socket, seatPost(stem, seat ?? FALLBACK_POST_SEAT), bands);
 
 // 1. The envelope
@@ -155,23 +154,23 @@ const near = (a: number, b: number, rel: number) => Math.abs(a - b) <= Math.abs(
   const vol = sphere.volume();
   const { pos, tri } = meshOf(sphere);
 
-  const bin = prepareModel(wasm, parseModel(binarySTL(pos, tri), 'ball.stl'), 'ball.stl');
+  const bin = prepareModel(wasm, readModel(binarySTL(pos, tri), 'ball.stl'), 'ball.stl');
   check('binary STL', near(bin.solid.volume(), vol, 0.001) && bin.info.notes.length === 0,
     `${bin.solid.volume().toFixed(0)} vs ${vol.toFixed(0)} mm³, notes: ${bin.info.notes.join(' / ') || 'none'}`);
   bin.solid.delete();
 
-  const asc = prepareModel(wasm, parseModel(asciiSTL(pos, tri), 'ball.stl'), 'ball.stl');
+  const asc = prepareModel(wasm, readModel(asciiSTL(pos, tri), 'ball.stl'), 'ball.stl');
   check('ASCII STL', near(asc.solid.volume(), vol, 0.001), `${asc.solid.volume().toFixed(0)} mm³`);
   asc.solid.delete();
 
-  const inv = prepareModel(wasm, parseModel(binarySTL(pos, tri, true), 'inv.stl'), 'inv.stl');
+  const inv = prepareModel(wasm, readModel(binarySTL(pos, tri, true), 'inv.stl'), 'inv.stl');
   check('inside-out STL turned', near(inv.solid.volume(), vol, 0.001) && inv.info.notes.some((n) => /inside-out/.test(n)),
     `${inv.solid.volume().toFixed(0)} mm³, ${inv.info.notes.join(' / ')}`);
   inv.solid.delete();
 
   // Holes: six triangles gone, so ofMesh refuses it and the voxel rebuild has to run.
   const holed = tri.slice(18);
-  const rep = prepareModel(wasm, parseModel(binarySTL(pos, holed), 'holed.stl'), 'holed.stl');
+  const rep = prepareModel(wasm, readModel(binarySTL(pos, holed), 'holed.stl'), 'holed.stl');
   check('holed mesh rebuilt', near(rep.solid.volume(), vol, 0.04) && rep.solid.status() === 'NoError'
     && rep.info.notes.some((n) => /rebuilt/.test(n)),
     `${rep.solid.volume().toFixed(0)} vs ${vol.toFixed(0)} mm³, ${rep.info.triangles} tris, ${rep.info.notes.join(' / ')}`);
@@ -185,7 +184,7 @@ const near = (a: number, b: number, rel: number) => Math.abs(a - b) <= Math.abs(
   const pos2 = new Float32Array([...ma.pos, ...mb.pos]);
   const off = ma.pos.length / 3;
   const tri2 = new Uint32Array([...ma.tri, ...Array.from(mb.tri, (i) => i + off)]);
-  const ov = prepareModel(wasm, parseModel(binarySTL(pos2, tri2), 'two.stl'), 'two.stl');
+  const ov = prepareModel(wasm, readModel(binarySTL(pos2, tri2), 'two.stl'), 'two.stl');
   check('overlapping shells joined', near(ov.solid.volume(), 1875, 0.001) && ov.info.notes.some((n) => /joined/.test(n)),
     `${ov.solid.volume().toFixed(0)} mm³ (1875 expected), ${ov.info.notes.join(' / ')}`);
   ov.solid.delete();
@@ -199,7 +198,7 @@ const near = (a: number, b: number, rel: number) => Math.abs(a - b) <= Math.abs(
     'f 1 4 3 2', 'f 5 6 7 8', 'f 1 2 6 5',
     'f -6/1/1 -5/2/2 -1/3/3 -2/4/4', 'f -5 -8 -4 -1', 'f -7 -6 -2 -3',
   ].join('\n');
-  const o = prepareModel(wasm, parseModel(strToU8(obj).buffer as ArrayBuffer, 'cube.obj'), 'cube.obj');
+  const o = prepareModel(wasm, readModel(strToU8(obj).buffer as ArrayBuffer, 'cube.obj'), 'cube.obj');
   check('OBJ quads + negative indices', near(o.solid.volume(), 1000, 0.001), `${o.solid.volume().toFixed(1)} mm³`);
   o.solid.delete();
 
@@ -221,7 +220,7 @@ const near = (a: number, b: number, rel: number) => Math.abs(a - b) <= Math.abs(
     + `<component p:path="/3D/Objects/object_1.model" objectid="1" transform="1 0 0 0 1 0 0 0 1 2 0 0"/>`
     + `</components></object></resources><build><item objectid="2" transform="1 0 0 0 1 0 0 0 1 0 3 0"/></build></model>`;
   const zip = zipSync({ '3D/3dmodel.model': strToU8(root), '3D/Objects/object_1.model': strToU8(part) });
-  const raw = parseModel(zip.buffer as ArrayBuffer, 'part.3mf');
+  const raw = readModel(zip.buffer as ArrayBuffer, 'part.3mf');
   let mx = -Infinity;
   let my = -Infinity;
   for (let i = 0; i < raw.positions.length; i += 3) {
@@ -458,7 +457,7 @@ for (const c of CASES) {
 for (const sample of MODEL_SAMPLES) {
   const bytes = readFileSync(join(appDir, 'public/assets/samples', `${sample.id}.3mf`));
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  const prep = prepareModel(wasm, parseModel(buf, `${sample.id}.3mf`), `${sample.id}.3mf`);
+  const prep = prepareModel(wasm, readModel(buf, `${sample.id}.3mf`), `${sample.id}.3mf`);
   const longest = Math.max(...prep.info.sizeMm);
   const sizeMm = longest >= 25 && longest <= 150 ? Math.round(longest) : 45;
   const out = buildModelClicker(wasm, kit, prep.solid, { ...DEFAULT_MODEL_CUT, sizeMm, ...sample.preset } as ModelCutParams);

@@ -1,30 +1,27 @@
 /*
-  The shelf's model reader against the clicker's own two, file by file.
+  Every model file the clicker opens, read through the shelf's reader, pinned.
 
     node apps/clicker-generator/tests/suites.mjs golden/readers      (part of pnpm test)
 
-  The clicker reads its MX assets with geometry/threemfImport.ts and an uploaded model with
-  model/parse.ts. `readModel` (@vostok/export, "Model reader") reads the same files here, and
-  each is compared array for array with the clicker's reader for it: the MX socket, stem and
-  switch (written in metres), every Model-mode sample, and an upload of each shape the
-  clicker's own suite reads (binary and ASCII STL, an OBJ with quads and negative indices).
-  Each result is also pinned by hash.
+  The clicker reads its MX assets (the socket, stem and switch, written in metres), its Model-mode
+  samples and every uploaded model with `readModel` (@vostok/export, "Model reader"), in the
+  geometry worker. It used to read them with two readers of its own, and before those went this
+  test compared `readModel` with both, array for array: the same floats and the same triangles for
+  every file below. The hashes are what all three gave, so a change to what the clicker reads
+  fails here, file by file: the MX assets, every Model-mode sample, and an upload of each shape the
+  clicker's own suites read (binary and ASCII STL, an OBJ with quads and negative indices, a file
+  with no extension).
 
-  Where the upload reader rounds a vertex to a float before it scales or places it, the two can
-  differ by a float's last place (nanometres): a 3MF in any unit but millimetres, and a part
-  placed by a transform. The shelf's reader scales and places the double and rounds once, so its
-  vertex is as close to where the file puts it, or closer. It also keeps a -0 in the file, where
-  the upload reader writes 0. None of the files above has any of these: the samples are in
-  millimetres and placed by no transform, and the MX assets, in metres, go through the asset
-  reader, which rounds once too. The cases that differ are held to a bound at the end.
+  Where the old upload reader rounded a vertex to a float before it scaled or placed it, the shelf
+  scales and places the double and rounds once: a 3MF in another unit, or a part placed by a
+  transform, comes out where the file puts it, to a float's last place. A -0 in the file is kept.
+  Those cases are held to where the file puts them at the end.
 */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { readModel } from '@vostok/export/read';
-import { parse3MF } from '../../src/geometry/threemfImport.ts';
-import { parseModel } from '../../src/model/parse.ts';
 import { MODEL_SAMPLES } from '../../src/model/samples.ts';
 
 const APP = join(process.cwd(), 'apps/clicker-generator');
@@ -42,15 +39,10 @@ const check = (name: string, ok: boolean, detail = '') => {
 };
 
 const bytes = (a: ArrayBufferView) => new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
-const sameBytes = (a: ArrayBufferView, b: ArrayBufferView) => {
-  const x = bytes(a);
-  const y = bytes(b);
-  return x.length === y.length && x.every((v, i) => v === y[i]);
-};
 const hash = (m: { positions: Float32Array; indices: Uint32Array }) =>
   createHash('sha256').update(bytes(m.positions)).update(bytes(m.indices)).digest('hex').slice(0, 16);
 
-/** The shelf reader's output for each file, hashed: what the clicker reads today. */
+/** What the clicker read for each file, its own readers and the shelf's alike. */
 const GOLDEN: Record<string, string> = {
   'MX mx-socket.3mf': '06c865c2dda6be23',
   'MX mx-stem.3mf': '70e0a0abaf9c1e11',
@@ -67,32 +59,19 @@ const GOLDEN: Record<string, string> = {
 };
 
 const actual: Record<string, string> = {};
-function compare(name: string, file: string, theirs: { positions: Float32Array; indices: Uint32Array }, data: ArrayBuffer) {
-  const ours = readModel(data, file);
-  actual[name] = hash(ours);
-  check(
-    `${name}: the same floats and the same triangles as the clicker's reader`,
-    sameBytes(ours.positions, theirs.positions) && sameBytes(ours.indices, theirs.indices),
-    `${ours.positions.length / 3} vertices, ${ours.indices.length / 3} triangles`,
-  );
-  check(`${name}: unchanged`, actual[name] === GOLDEN[name], actual[name]);
+function pin(name: string, file: string, data: ArrayBuffer) {
+  const mesh = readModel(data, file);
+  actual[name] = hash(mesh);
+  check(`${name}: read as the clicker always read it`, actual[name] === GOLDEN[name], `${mesh.positions.length / 3} vertices, ${mesh.indices.length / 3} triangles, ${actual[name]}`);
 }
 
 /* ------------------------------------------------------------------ the MX assets (metres) */
 
-for (const file of ['mx-socket.3mf', 'mx-stem.3mf', 'mx-switch.3mf']) {
-  const data = asset(`switch/mx/${file}`);
-  const theirs = parse3MF(data);
-  compare(`MX ${file}`, file, { positions: theirs.vertProperties, indices: theirs.triVerts }, data);
-}
+for (const file of ['mx-socket.3mf', 'mx-stem.3mf', 'mx-switch.3mf']) pin(`MX ${file}`, file, asset(`switch/mx/${file}`));
 
 /* ------------------------------------------------------------------ the Model-mode samples */
 
-for (const sample of MODEL_SAMPLES) {
-  const file = `${sample.id}.3mf`;
-  const data = asset(`samples/${file}`);
-  compare(`sample ${file}`, file, parseModel(data, file), data);
-}
+for (const sample of MODEL_SAMPLES) pin(`sample ${sample.id}.3mf`, `${sample.id}.3mf`, asset(`samples/${sample.id}.3mf`));
 
 /* ------------------------------------------------------------------ uploads the clicker reads */
 
@@ -156,14 +135,21 @@ for (const [name, file, data] of [
   ['OBJ, quads and negative indices', 'cube.obj', cubeObj],
   ['a file with no extension (STL)', 'ball', binarySTL()],
 ] as [string, string, ArrayBuffer][]) {
-  compare(name, file, parseModel(data, file), data);
+  pin(name, file, data);
 }
 
-/* ------------------------------------------------------------------ a part placed by a transform */
+/* ------------------------------------------------------------------ read where the file puts it */
+
+/** The largest distance, mm, between what was read and where the file puts each vertex. */
+function worst(positions: Float32Array, exact: number[]): number {
+  let w = 0;
+  for (let i = 0; i < positions.length; i++) w = Math.max(w, Math.abs(positions[i]! - exact[i]!));
+  return w;
+}
 
 {
   // Bambu's production layout: a part in its own file, pulled in by a component with a turn and
-  // a shift, in centimetres; off-grid numbers, so the two orders of rounding can disagree.
+  // a shift, in centimetres; off-grid numbers, so rounding before placing would show.
   const verts: number[][] = [];
   const tris: number[][] = [];
   for (let i = 0; i < 40; i++) verts.push([Math.cos(i * 0.7) * 1.37, Math.sin(i * 1.3) * 2.11, (i % 7) * 0.333]);
@@ -176,9 +162,7 @@ for (const [name, file, data] of [
     + '<object id="2" type="model"><components><component p:path="/3D/Objects/object_1.model" objectid="1" transform="0.8 0.6 0 -0.6 0.8 0 0 0 1 2.0137 -1.31 0.25"/></components></object>'
     + '</resources><build><item objectid="2" transform="1 0 0 0 1 0 0 0 1 12.7 3.3 0"/></build></model>';
   const zip = zipSync({ '3D/3dmodel.model': strToU8(root), '3D/Objects/object_1.model': strToU8(part) });
-  const data = zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer;
-  const theirs = parseModel(data, 'part.3mf');
-  const ours = readModel(data, 'part.3mf');
+  const mesh = readModel(zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer, 'part.3mf');
   // Where each vertex really is: the decimals in the file, turned, shifted and scaled in doubles.
   const exact: number[] = [];
   for (const [x, y, z] of verts) {
@@ -186,53 +170,28 @@ for (const [name, file, data] of [
     const cy = (x! * 0.6 + y! * 0.8 - 1.31) * 10;
     exact.push(cx + 127, cy + 33, (z! + 0.25) * 10);
   }
-  let moved = 0;
-  let worst = 0;
-  let closer = true;
-  for (let i = 0; i < ours.positions.length; i++) {
-    const d = Math.abs(ours.positions[i]! - theirs.positions[i]!);
-    if (d) moved++;
-    worst = Math.max(worst, d);
-    if (Math.abs(ours.positions[i]! - exact[i]!) > Math.abs(theirs.positions[i]! - exact[i]!)) closer = false;
-  }
-  check('placed by a transform: the same triangles', sameBytes(ours.indices, theirs.indices));
-  check('placed by a transform: every vertex as close to where the file puts it, or closer', ours.positions.length === theirs.positions.length && closer,
-    `${moved} of ${ours.positions.length} coordinates differ, by at most ${worst.toExponential(1)} mm`);
-  check('placed by a transform: and by less than a micron', worst < 1e-3, `${worst.toExponential(1)} mm`);
+  check('placed by a transform: the triangles as written', mesh.indices.join() === tris.flat().join());
+  const w = worst(mesh.positions, exact);
+  check('placed by a transform: every vertex where the file puts it, to a float\'s last place', mesh.positions.length === exact.length && w < 2e-5, `at most ${w.toExponential(1)} mm off`);
 }
 
-/* ------------------------------------------------------------------ a unit other than millimetres, and a -0 */
-
 {
-  // No transform, but in centimetres: the upload reader rounds before it scales, the shelf's after.
+  // No transform, but in centimetres: scaled as a double, rounded once.
   const verts: number[][] = [];
   for (let i = 0; i < 40; i++) verts.push([Math.cos(i * 0.9) * 2.37, Math.sin(i * 1.1) * 1.91, (i % 5) * 0.271]);
   const model = '<?xml version="1.0"?><model unit="centimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1" type="model"><mesh><vertices>'
     + verts.map(([x, y, z]) => `<vertex x="${x}" y="${y}" z="${z}"/>`).join('')
     + '</vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object></resources><build><item objectid="1"/></build></model>';
   const zip = zipSync({ '3D/3dmodel.model': strToU8(model) });
-  const data = zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer;
-  const theirs = parseModel(data, 'cm.3mf');
-  const ours = readModel(data, 'cm.3mf');
+  const mesh = readModel(zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer, 'cm.3mf');
   const exact = verts.flat().map((v) => v * 10);
-  let moved = 0;
-  let worst = 0;
-  let closer = ours.positions.length === theirs.positions.length;
-  for (let i = 0; i < ours.positions.length; i++) {
-    const d = Math.abs(ours.positions[i]! - theirs.positions[i]!);
-    if (d) moved++;
-    worst = Math.max(worst, d);
-    if (Math.abs(ours.positions[i]! - exact[i]!) > Math.abs(theirs.positions[i]! - exact[i]!)) closer = false;
-  }
-  check('in centimetres: the two differ in the last place, the shelf\'s as close to the file or closer, by less than a micron',
-    moved > 0 && closer && worst < 1e-3, `${moved} of ${ours.positions.length} coordinates differ, by at most ${worst.toExponential(1)} mm`);
+  const fround = mesh.positions.every((p, i) => p === Math.fround(exact[i]!));
+  check('in centimetres: every coordinate the file\'s, scaled, then rounded to a float once', mesh.positions.length === exact.length && fround);
 
   // A -0 written in the file.
   const signed = zipSync({ '3D/3dmodel.model': strToU8(model.replace(/x="[^"]*"/, 'x="-0"')) });
-  const signedData = signed.buffer.slice(signed.byteOffset, signed.byteOffset + signed.byteLength) as ArrayBuffer;
-  const ourZero = readModel(signedData, 'zero.3mf').positions[0]!;
-  const theirZero = parseModel(signedData, 'zero.3mf').positions[0]!;
-  check('a -0: the shelf\'s reader keeps it, the upload reader writes 0', Object.is(ourZero, -0) && Object.is(theirZero, 0), `${Object.is(ourZero, -0) ? '-0' : ourZero} / ${Object.is(theirZero, -0) ? '-0' : theirZero}`);
+  const zero = readModel(signed.buffer.slice(signed.byteOffset, signed.byteOffset + signed.byteLength) as ArrayBuffer, 'zero.3mf').positions[0]!;
+  check('a -0 in the file is kept', Object.is(zero, -0), Object.is(zero, -0) ? '-0' : String(zero));
 }
 
 /* ------------------------------------------------------------------ report */

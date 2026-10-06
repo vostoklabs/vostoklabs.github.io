@@ -58,14 +58,13 @@ class FrozenDate extends RealDate {
 globalThis.Date = FrozenDate as DateConstructor;
 
 const { processImage, parseSvg } = await import('@vostok/trace');
-const { parse3MF } = await import('../../src/geometry/threemfImport.ts');
+const { readModel } = await import('@vostok/export/read');
 const { buildClicker } = await import('../../src/geometry/buildClicker.ts');
 const { buildBlocks } = await import('../../src/geometry/buildBlocks.ts');
 const { buildFitStrip, FIT_TEST_FONT_ID, FIT_TEST_STEP_MM, fitTestLabel, fitTestLadder } = await import('../../src/geometry/fitStrip.ts');
 const { arrangeBlocks, blockBuildParams, tracedSymbols } = await import('../../src/geometry/blockLayout.ts');
 const { parseLetter, parseBlockChain } = await import('../../src/image/letter.ts');
 const { LUCIDE_ICONS, buildSvg } = await import('../../src/image/lucideIcons.ts');
-const { parseModel } = await import('../../src/model/parse.ts');
 const { prepareModel } = await import('../../src/model/prepare.ts');
 const { MODEL_SAMPLES } = await import('../../src/model/samples.ts');
 const { FALLBACK_POST_SEAT, makeSwitchKit, measurePostSeat, measureSwitchBands, seatPost } = await import('../../src/model/switchKit.ts');
@@ -97,8 +96,8 @@ wasm.setup();
 
 /** An MX asset as a solid, the way the worker's `assetToSolid` makes it. */
 function assetSolid(path: string) {
-  const raw = parse3MF(bytesOf(file(path)));
-  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.vertProperties, triVerts: raw.triVerts });
+  const raw = readModel(bytesOf(file(path)), path);
+  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.positions, triVerts: raw.indices });
   mesh.merge();
   return wasm.Manifold.ofMesh(mesh);
 }
@@ -116,9 +115,9 @@ stemRaw.delete();
 
 // The display switch, seated on its shoulder: Model mode measures its envelope and the slider
 // the keycap post rests on.
-const sw = parse3MF(bytesOf(file('switch/mx/mx-switch.3mf')));
+const sw = readModel(bytesOf(file('switch/mx/mx-switch.3mf')), 'mx-switch.3mf');
 {
-  const v = sw.vertProperties;
+  const v = sw.positions;
   let widest = 0;
   for (let i = 0; i < v.length; i += 3) {
     v[i] -= tcx;
@@ -133,8 +132,8 @@ const sw = parse3MF(bytesOf(file('switch/mx/mx-switch.3mf')));
 }
 const kit = makeSwitchKit(
   socket,
-  seatPost(stem, measurePostSeat(sw.vertProperties, sw.triVerts) ?? FALLBACK_POST_SEAT),
-  measureSwitchBands(sw.vertProperties, sw.triVerts),
+  seatPost(stem, measurePostSeat(sw.positions, sw.indices) ?? FALLBACK_POST_SEAT),
+  measureSwitchBands(sw.positions, sw.indices),
 );
 
 const keycapJson = JSON.parse(file('keycap.json').toString('utf-8'));
@@ -291,7 +290,7 @@ function sampleCut(id: string, over: Partial<ModelCutParams> = {}) {
   const sample = MODEL_SAMPLES.find((s) => s.id === id);
   if (!sample) throw new Error(`no sample "${id}"`);
   const name = `${id}.3mf`;
-  const prep = prepareModel(wasm, parseModel(bytesOf(file(`samples/${name}`)), name), name);
+  const prep = prepareModel(wasm, readModel(bytesOf(file(`samples/${name}`)), name), name);
   const longest = Math.max(...prep.info.sizeMm);
   const sizeMm = longest >= 25 && longest <= 150 ? Math.round(longest) : 45;
   const out = buildModelClicker(wasm, kit, prep.solid, { ...DEFAULT_MODEL_CUT, sizeMm, ...sample.preset, ...over } as ModelCutParams);

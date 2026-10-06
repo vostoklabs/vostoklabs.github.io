@@ -2,11 +2,10 @@
 // All CSG happens here so the UI thread never blocks.
 import Module from 'manifold-3d';
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
-import { parse3MF } from '../geometry/threemfImport';
+import { readModel } from '@vostok/export/read';
 import { buildFitStrip } from '../geometry/fitStrip';
 import { buildClicker } from '../geometry/buildClicker';
 import { buildBlocks, type KeycapAsset } from '../geometry/buildBlocks';
-import { parseModel } from '../model/parse';
 import { prepareModel } from '../model/prepare';
 import { FALLBACK_POST_SEAT, makeSwitchKit, measurePostSeat, measureSwitchBands, seatPost, type EnvelopeBand } from '../model/switchKit';
 import { buildModelClicker } from '../model/buildModel';
@@ -43,11 +42,11 @@ function post(msg: GeometryResponse, transfer: Transferable[] = []) {
 }
 
 function assetToSolid(wasm: any, buf: ArrayBuffer): { solid: any; info: string; xy: number } {
-  const raw = parse3MF(buf);
+  const raw = readModel(buf, 'asset.3mf');
   const mesh = new wasm.Mesh({
     numProp: 3,
-    vertProperties: raw.vertProperties,
-    triVerts: raw.triVerts,
+    vertProperties: raw.positions,
+    triVerts: raw.indices,
   });
   mesh.merge();
   const solid = wasm.Manifold.ofMesh(mesh);
@@ -111,8 +110,8 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       //    shoulder that rests on the plate) to Z = 0 (the socket top / plate plane).
       //    This is robust to the asset's authored Z, and lands the plunger at the cap
       //    underside (the stem top), so the switch seats in the socket and meets the cap.
-      const sw = parse3MF(msg.switch);
-      const v = sw.vertProperties;
+      const sw = readModel(msg.switch, 'switch.3mf');
+      const v = sw.positions;
       let maxExtent = 0;
       for (let i = 0; i < v.length; i += 3) {
         v[i] -= tcx;
@@ -135,11 +134,11 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
         if (v[i + 2] > zmax) zmax = v[i + 2];
       }
       // Measured here, before the buffers are handed to the main thread below.
-      switchBands = measureSwitchBands(v, sw.triVerts);
+      switchBands = measureSwitchBands(v, sw.indices);
       modelStem?.delete?.();
-      modelStem = seatPost(stem, measurePostSeat(v, sw.triVerts) ?? FALLBACK_POST_SEAT);
-      const switchMesh = { vertProperties: v, triVerts: sw.triVerts, numProp: 3 as const };
-      const switchInfo = `${(sw.triVerts.length / 3) | 0} tris, seated +${(-seatZ).toFixed(
+      modelStem = seatPost(stem, measurePostSeat(v, sw.indices) ?? FALLBACK_POST_SEAT);
+      const switchMesh = { vertProperties: v, triVerts: sw.indices, numProp: 3 as const };
+      const switchInfo = `${(sw.indices.length / 3) | 0} tris, seated +${(-seatZ).toFixed(
         2,
       )}mm, Z[${zmin.toFixed(2)},${zmax.toFixed(2)}]`;
       /* The clear column an MX switch needs, in millimetres, measured off the socket asset
@@ -194,7 +193,7 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
 
     if (msg.type === 'importModel') {
       // The samples come this way too: they are 3MF files, read like any upload.
-      const prepared = prepareModel(wasm, parseModel(msg.bytes, msg.name), msg.name);
+      const prepared = prepareModel(wasm, readModel(msg.bytes, msg.name), msg.name);
       modelBase?.delete?.();
       modelBase = prepared.solid;
       post({ type: 'modelInfo', info: prepared.info });

@@ -4,7 +4,7 @@
 //
 // Runs once per upload, in the worker. The result is cached there and every rebuild is a
 // transform of it plus the cutter, so none of this is paid twice.
-import type { RawModel } from './parse';
+import type { ModelMesh } from '@vostok/export/read';
 import type { ModelInfo } from './types';
 import { remeshByVoxels } from './repair';
 
@@ -21,7 +21,7 @@ export interface PreparedModel {
   info: ModelInfo;
 }
 
-export function prepareModel(wasm: Wasm, raw: RawModel, name: string): PreparedModel {
+export function prepareModel(wasm: Wasm, raw: ModelMesh, name: string): PreparedModel {
   const notes: string[] = [];
   const fileTriangles = Math.floor(raw.indices.length / 3);
   const welded = weld(raw.positions, raw.indices);

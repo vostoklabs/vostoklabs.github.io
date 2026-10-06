@@ -17,7 +17,7 @@ import type { CutterOverlay, Viewer } from '../viewer/viewer';
 import { createModelPanel, type ModelPanel } from './modelPanel';
 import type { CutterKind, ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
 import { FIRST_SAMPLE, sampleById, sampleFile, type SampleId } from '../model/samples';
-import { modelFormatOf } from '../model/parse';
+import { modelFormatOf } from '@vostok/export/read';
 import { assetUrl } from '../assets';
 
 interface Store {
@@ -242,13 +242,15 @@ export function createModelMode(deps: ModelModeDeps) {
   }
 
   /** A worker error while a model was loading is an import failure: say it plainly and forget
-   *  the file, so the next build does not run against a model that never arrived. */
+   *  the file, so the next build does not run against a model that never arrived. Whatever was
+   *  on screen before stays there and exports as it was, credited as it was, and the status says
+   *  so, so the design on screen is not taken for the file that failed. */
   function onError(message: string): boolean {
     if (!loading) return false;
     loading = false;
-    const reason = message.split('\n')[0].replace(/^\w*Error:\s*/, '');
+    const reason = message.split('\n')[0].replace(/^\w*Error:\s*/, '').replace(/[.\s]+$/, '');
     loaded = null;
-    store.set({ building: false, modelInfo: null, status: `Could not open that model: ${reason}` });
+    store.set({ building: false, modelInfo: null, status: `Could not open that model: ${reason}. The design on screen is unchanged.` });
     return true;
   }
 

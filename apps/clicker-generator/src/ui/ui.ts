@@ -56,7 +56,7 @@ import { openShapePicker } from './shapePicker';
 import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from '../geometry/stemFit';
 import { FIT_TEST_STEP_OPTIONS } from '../geometry/fitStrip';
 import type { ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
-import { modelFormatOf } from '../model/parse';
+import { modelFormatOf } from '@vostok/export/read';
 import { arrangeBlocks, GRID_MAX, isLineLayout, keysPerRow, type BlockArrangement, type BlockLayout, type BlockSymbol } from '../geometry/blockLayout';
 import { assetUrl } from '../assets';
 import { lookOf, lookRings } from '../image/symbolRings';

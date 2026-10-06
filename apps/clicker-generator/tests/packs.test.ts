@@ -29,7 +29,7 @@ import { DOMParser } from '@xmldom/xmldom';
 (globalThis as any).DOMParser = DOMParser;
 
 const { parseSvg } = await import('@vostok/trace');
-const { parse3MF } = await import('../src/geometry/threemfImport.ts');
+const { readModel } = await import('@vostok/export/read');
 const { buildClicker } = await import('../src/geometry/buildClicker.ts');
 const { HALLOWEEN } = await import('../src/packs/halloween.ts');
 const { designIsVector, inSeason } = await import('../src/packs/types.ts');
@@ -44,8 +44,8 @@ const wasm = await Module();
 wasm.setup();
 
 function prep(buf: ArrayBuffer, dropTopToZero: boolean) {
-  const raw = parse3MF(buf);
-  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.vertProperties, triVerts: raw.triVerts });
+  const raw = readModel(buf, 'asset.3mf');
+  const mesh = new wasm.Mesh({ numProp: 3, vertProperties: raw.positions, triVerts: raw.indices });
   mesh.merge();
   const solid = wasm.Manifold.ofMesh(mesh);
   const bb = solid.boundingBox();
