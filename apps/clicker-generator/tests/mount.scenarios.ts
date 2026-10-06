@@ -211,6 +211,19 @@ async function until(ready: () => boolean) {
 }
 
 {
+  // An edit, then the clicker is unmounted while the undo history still waits to record it.
+  const unmount = await fresh();
+  ui().onImportMode('model'); // a new subject: its first build starts the undo history
+  await clock.advance(100);
+  seen.modelPanel.setCut({ ...seen.state.modelCut, sizeMm: 50 }, false);
+  await clock.advance(200); // built; the history records it 350 ms after the last change
+  const last = seen.state;
+  finish(unmount);
+  await clock.advance(1000);
+  check('unmounted, a clicker redraws nothing: a timer still running then does not reach its sidebars', !!last && seen.state === last, seen.state === last ? '' : `redrawn, canUndo ${seen.state?.canUndo}`);
+}
+
+{
   const unmount = await fresh();
   ui().onWidth(40);
   const exp = press();

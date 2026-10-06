@@ -1472,7 +1472,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   window.addEventListener('keydown', onWindowKeydown);
   cleanups.push(() => window.removeEventListener('keydown', onWindowKeydown));
 
-  store.subscribe((s) => {
+  // Undone on unmount: a timer still running then (the undo history's commit) sets the store,
+  // and a removed clicker must not redraw its sidebars or poke an export that has gone.
+  cleanups.push(store.subscribe((s) => {
     ui.update(s);
     modelMode.sync(s);
 
@@ -1490,7 +1492,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // The fit test opening or closing changes what Export waits for, and Model mode says a
     // model failed to arrive only through the store.
     onScreen.poke();
-  });
+  }));
   ui.update(store.get());
   modelMode.sync(store.get());
 
