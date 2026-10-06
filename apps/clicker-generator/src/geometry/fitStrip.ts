@@ -21,7 +21,7 @@
 // The row is shown in the preview and goes out through the normal Export button (mount.ts,
 // `enterFitTest`), never as a download of its own: MakerLab's sandbox has no downloads, and the
 // export path is also where the provenance and the licence nudge live.
-import { csOf, extrude } from '@vostok/manifold';
+import { csOf, extrude, withScope, type Keep } from '@vostok/manifold';
 import type { ClickerPart, RGB, Ring } from '../types';
 import { applyStemFit, STEM_FIT_MAX_MM, STEM_FIT_MIN_MM } from './stemFit';
 
@@ -116,17 +116,18 @@ export function computeRowLayout(widths: number[], gapMm = FIT_TEST_GAP_MM): num
 
 // ---------------------------------------------------------------- geometry
 
+/** The strip's parts. Everything manifold makes on the way is freed before this returns, and
+ *  when a build throws part way through. */
 export function buildFitStrip(
   wasm: Wasm,
   stem: Solid,
   opts: FitStripOptions,
 ): { parts: ClickerPart[]; warnings: string[] } {
+  return withScope((track) => buildStripTracked(track, wasm, stem, opts));
+}
+
+function buildStripTracked(track: Keep, wasm: Wasm, stem: Solid, opts: FitStripOptions): ReturnType<typeof buildFitStrip> {
   const { Manifold } = wasm;
-  const trash: { delete(): void }[] = [];
-  const track = <T extends { delete(): void }>(o: T): T => {
-    trash.push(o);
-    return o;
-  };
 
   // The worker hands the stem over XY-centred with its authored Z: min Z is the open end that
   // takes the switch, max Z the end that joins the cap.
@@ -218,9 +219,5 @@ export function buildFitStrip(
   });
 
   if (failed.length) warnings.push(`Stem fit could not be applied to piece ${failed.join(', ')}.`);
-
-  for (const o of trash) {
-    try { o.delete(); } catch { /* already gone */ }
-  }
   return { parts, warnings };
 }

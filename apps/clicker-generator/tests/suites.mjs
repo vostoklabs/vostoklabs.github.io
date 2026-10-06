@@ -44,6 +44,7 @@ const SUITES = {
   packs: ['manifold', 'xmldom'],
   plating: [],
   quantize: ['env'],
+  'rebuild-heap': ['manifold', 'xmldom'],
   'seller-features': ['manifold'],
   shapes: ['manifold', 'env'],
   'svg-bg-removal': ['xmldom'],

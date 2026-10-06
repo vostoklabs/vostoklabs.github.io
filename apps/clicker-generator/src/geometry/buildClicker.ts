@@ -17,7 +17,7 @@
 // small details stay crisp) and removed from the backing — clean even when flat.
 //
 // Frame: Z = 0 is the switch plate top. socket cuts downward; stem rises to +Z.
-import { chamferCutter, csOf, ringsOf, extrude } from '@vostok/manifold';
+import { chamferCutter, csOf, ringsOf, extrude, withScope, type Keep } from '@vostok/manifold';
 import { ringBox } from '@vostok/shapes';
 import type { BuildParams, BuildRegion, ClickerPart, EdgeSetting, EdgeStyle, PartGroup, Ring, RGB, SwitchPlacement } from '../types';
 import { getMarkSeed, markVoids, hardcodedVoids } from './identityMark';
@@ -62,6 +62,8 @@ const OVERHANG_OK = 2;
 */
 const SIZE_TRIES = 6;
 
+/** The clicker's parts. Everything manifold makes on the way is freed before this returns, and
+ *  when a build throws part way through. */
 export function buildClicker(
   wasm: Wasm,
   socket: Solid,
@@ -70,12 +72,19 @@ export function buildClicker(
   outline: Ring[],
   params: BuildParams,
 ): { parts: ClickerPart[]; switchPlacements: SwitchPlacement[]; warnings: string[] } {
+  return withScope((track) => buildTracked(track, wasm, socket, stem, regions, outline, params));
+}
+
+function buildTracked(
+  track: Keep,
+  wasm: Wasm,
+  socket: Solid,
+  stem: Solid,
+  regions: BuildRegion[],
+  outline: Ring[],
+  params: BuildParams,
+): ReturnType<typeof buildClicker> {
   const { Manifold, CrossSection } = wasm;
-  const trash: { delete(): void }[] = [];
-  const track = <T extends { delete(): void }>(o: T): T => {
-    trash.push(o);
-    return o;
-  };
 
   // Traced outlines carry thousands of vertices, and round offsets (esp. the plate
   // closing) balloon that further. Every downstream offset/extrude/boolean scales with
@@ -1485,14 +1494,6 @@ export function buildClicker(
           }
         }
       }
-    }
-  }
-
-  for (const o of trash) {
-    try {
-      o.delete();
-    } catch {
-      /* already freed */
     }
   }
 
