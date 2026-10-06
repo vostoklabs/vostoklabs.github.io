@@ -80,6 +80,19 @@ export interface DropZoneOptions {
   /** Inline SVG for the big icon; defaults to an upload arrow. */
   icon?: string;
   onFiles: (files: File[]) => void;
+  /**
+   * A file picker of the host's own, opened instead of the browser's file dialog when the zone
+   * is clicked or activated from the keyboard. The file it gives goes to `onFiles`; null (the
+   * person backed out) does nothing. It is handed `browse`, which opens the browser's dialog,
+   * for when there is no host: `pick: (browse) => chooseFile(host, { kind: 'image' }, browse)`.
+   */
+  pick?: (browse: () => void) => Promise<File | null>;
+  /**
+   * Leave a drop to the page's own drop handler, one on the window that sorts every dropped
+   * file by its type, instead of taking it: the zone still shows it is a target, and `onFiles`
+   * gets only what a click picks. Default false: the zone takes the drop and stops it there.
+   */
+  bubble?: boolean;
 }
 
 const UPLOAD_ICON =
@@ -108,12 +121,20 @@ export function dropZone(opts: DropZoneOptions): HTMLElement {
     if (list.length) opts.onFiles(opts.multiple ? list : list.slice(0, 1));
   };
 
-  root.addEventListener('click', () => input.click());
+  const browse = () => input.click();
+  const open = () => {
+    if (!opts.pick) return browse();
+    void opts.pick(browse).then((file) => {
+      if (file) opts.onFiles([file]);
+    });
+  };
+
+  root.addEventListener('click', open);
   root.addEventListener('keydown', (e) => {
     const k = (e as KeyboardEvent).key;
     if (k === 'Enter' || k === ' ') {
       e.preventDefault();
-      input.click();
+      open();
     }
   });
   input.addEventListener('change', () => {
@@ -129,13 +150,15 @@ export function dropZone(opts: DropZoneOptions): HTMLElement {
   root.addEventListener('dragleave', () => root.classList.remove('is-over'));
   root.addEventListener('drop', (e) => {
     e.preventDefault();
+    root.classList.remove('is-over');
+    // `bubble`: the page's own handler takes the drop, and sorts it by type.
+    if (opts.bubble) return;
     /* Stop here. A zone that has taken a drop owns it: `onFiles` is required, so there is
        never a caller waiting for the event further up. Without this the clicker's window-level
        drop handler (its catch-all for files dropped anywhere on the page) ALSO received a logo
        dropped on the Seller tools' zone and imported it as the main design, so one drop opened
        two import wizards — the second of them replacing the user's artwork with their logo. */
     e.stopPropagation();
-    root.classList.remove('is-over');
     emit((e as DragEvent).dataTransfer?.files ?? null);
   });
 

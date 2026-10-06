@@ -954,6 +954,37 @@ const svgImportButton = button({
   },
 });
 
+/* A zone on a page that routes files itself. The panel stands in for the window: its own drop
+   handler sorts what is dropped by type, so the zone leaves drops to it (bubble). A click goes to
+   a host's own picker (pick); this page stands in for the host, whose picker hands back the badge
+   from the SVG wizard below. */
+const routedNote = el('p', { className: 'vl-hint', text: 'Drop any file on this panel, or click the zone.' });
+const routeOf = (f: File) =>
+  /\.svg$/i.test(f.name) ? 'an SVG, so it goes to the SVG import'
+  : /\.(stl|3mf|obj)$/i.test(f.name) ? 'a model, so it goes to the model cutter'
+  : /\.(ttf|otf)$/i.test(f.name) ? 'a font, so it joins the font list'
+  : f.type.startsWith('image/') ? 'a picture, so it goes to the image import'
+  : 'not a file this page takes';
+const routedPanel = panel(
+  dropZone({
+    title: 'Drop a file',
+    text: 'or click to pick one',
+    note: 'A picture, an SVG, a font or a model',
+    bubble: true,
+    pick: async () => new File([SAMPLE_SVG], 'badge.svg', { type: 'image/svg+xml' }),
+    onFiles: ([f]) => {
+      if (f) routedNote.textContent = `Picked ${f.name}: ${routeOf(f)}.`;
+    },
+  }),
+  routedNote,
+);
+routedPanel.addEventListener('dragover', (e) => e.preventDefault());
+routedPanel.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const f = (e as DragEvent).dataTransfer?.files?.[0];
+  if (f) routedNote.textContent = `Dropped ${f.name}: ${routeOf(f)}.`;
+});
+
 app.append(
   group('Inputs'),
   entry(
@@ -978,6 +1009,14 @@ app.append(
       'and keeps the drop to itself so a page-wide drop handler never takes the same file twice. ' +
       'Once a file is in, uploadCta() is the slim row that replaces it. Try any image.',
     panel(dropSlot),
+  ),
+  entry(
+    'dropZone({ pick, bubble })',
+    'Drop zone on a page that sorts files',
+    'For a page whose own drop handler sorts every file by type: bubble leaves a drop to it, and the ' +
+      'zone only shows it is a target. pick opens a host’s own file picker in place of the ' +
+      'browser’s dialog; here the page stands in for the host and its picker hands back an SVG.',
+    routedPanel,
   ),
   entry(
     'sampleGrid() · thumbGrid()',
