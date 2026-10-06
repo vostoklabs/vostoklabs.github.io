@@ -162,9 +162,8 @@ function unionAndFree(api, pieces) {
 // ---------------------------------------------------------------- component splitting
 //
 // Same union-find grouping `scaleStemComponentsXY` (src/meshUtils.js) uses to isolate each
-// stem in a multi-stem body — reimplemented here (rather than imported) so this module has no
-// repo-internal dependency, matching src/fitTest.js's own reason for not importing
-// src/manifold.js.
+// stem in a multi-stem body. Written out here because that function keeps its grouping inside
+// and hands back only the scaled geometry, where this module needs the components themselves.
 
 function splitComponents(positions, indices) {
   const nv = positions.length / 3;

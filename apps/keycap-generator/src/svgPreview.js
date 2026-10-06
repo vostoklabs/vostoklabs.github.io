@@ -8,13 +8,13 @@
  *
  * What comes out is a NEW SVG with the choices written into it as fill/stroke styles (see
  * `applySvgChoices`). That is deliberate: the single cap, the paid dual legend and the paid
- * keyboard set all read an uploaded tile's markup and call `parseSvg` on it themselves, and the
+ * keyboard set all read an uploaded tile's markup and call `parseLogo` on it themselves, and the
  * set stores the markup by content id. Baking the choice into the file means all three inherit
  * it with no new plumbing, the tile's thumbnail shows what will print, and a saved board
  * carries the decision inside the artwork it already keeps.
  */
 import { openSvgImport } from '@vostok/ui-kit';
-import { applySvgChoices, describeSvg, flattenSvgStyles, parseSvg } from './logo.js';
+import { applySvgChoices, describeLogo, flattenSvgStyles, parseLogo } from './logo.js';
 
 // The file's own colours do not matter to a one-colour legend, so the trace is drawn in the
 // same ink as a black-on-transparent icon: what most uploads are, and what the checkerboard
@@ -22,12 +22,12 @@ import { applySvgChoices, describeSvg, flattenSvgStyles, parseSvg } from './logo
 const INK = '#111';
 
 /**
- * A `parseSvg` result as paths the wizard can paint: the contours the carve will extrude and
+ * A `parseLogo` result as paths the wizard can paint: the contours the carve will extrude and
  * the ribbon triangles a stroke becomes.
  *
  * All contours go into ONE path so a hole is a hole — see `SvgImportPath.d`.
  *
- * @param {ReturnType<typeof parseSvg>} legend
+ * @param {ReturnType<typeof parseLogo>} legend
  * @returns {import('@vostok/ui-kit').SvgImportTrace}
  */
 function traceToPaths(legend) {
@@ -81,7 +81,7 @@ export async function openSvgPreview(svgText, name) {
   // reports as a violation per element. The wizard repaints on every toggle, so it works from the
   // flattened copy; the file itself is still what the "Your file" pane shows.
   const flat = flattenSvgStyles(svgText);
-  const { parts, issues } = describeSvg(flat);
+  const { parts, issues } = describeLogo(flat);
   // The legend is one colour, so no part carries a `hex` and no row gets a swatch.
   const choices = await openSvgImport({
     svgText,
@@ -91,7 +91,7 @@ export async function openSvgPreview(svgText, name) {
     thinAt: 'keycap size',
     trace: (chosen) => {
       try {
-        return traceToPaths(parseSvg(applySvgChoices(flat, modesOf(chosen))));
+        return traceToPaths(parseLogo(applySvgChoices(flat, modesOf(chosen))));
       } catch (err) {
         // "No drawable paths" is the expected result of switching every part off.
         if (!/No drawable/.test(err?.message ?? '')) console.error('[svg] preview trace failed', err);

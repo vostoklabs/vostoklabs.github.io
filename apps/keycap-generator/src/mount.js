@@ -34,7 +34,7 @@ import { BLANK_COVER } from '@vostok/export/makerlab';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadKeycap } from './keycap.js';
-import { parseSvg, logoFootprint } from './logo.js';
+import { parseLogo, logoFootprint } from './logo.js';
 import { openSvgPreview } from './svgPreview.js';
 import { FONT_OPTIONS, importFontFile, parseLetter, loadBundledFonts } from './letter.js';
 import { buildBodies } from './geometry.js';
@@ -1181,7 +1181,7 @@ export function mount(container, host) {
     el.classList.add('active');
     setStatus('Loading icon…');
     try {
-      currentLegend = { ...parseSvg(await getText()), name };
+      currentLegend = { ...parseLogo(await getText()), name };
       lastIconSelection = { el, getText, name };
       updateSizeMax();
       doRegen();
@@ -1496,7 +1496,7 @@ export function mount(container, host) {
     let firstEl = null;
     for (const file of files) {
       // Per file, and reported. The whole loop used to run unguarded: a file the tracer threw
-      // on (applySvgChoices parses it a second time, and unlike describeSvg it does not catch)
+      // on (applySvgChoices parses it a second time, and unlike describeLogo it does not catch)
       // rejected the promise, nothing was shown, and the rest of the selection was dropped.
       try {
         const text = await openSvgPreview(await file.text(), file.name.replace(/\.svg$/i, ''));

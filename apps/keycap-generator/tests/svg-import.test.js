@@ -11,7 +11,7 @@
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 globalThis.DOMParser = DOMParser;
 globalThis.XMLSerializer = XMLSerializer;
-const { describeSvg, applySvgChoices, parseSvg, flattenSvgStyles } = await import('../src/logo.js');
+const { describeLogo, applySvgChoices, parseLogo, flattenSvgStyles } = await import('../src/logo.js');
 
 let failures = 0;
 const check = (name, ok, detail) => {
@@ -53,58 +53,58 @@ const whiteOnBlack = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 1
 </svg>`;
 
 // ---------------------------------------------------------------- describe
-const d = describeSvg(sdCard);
+const d = describeLogo(sdCard);
 check('the sd-card file lists its two parts, biggest first',
   d.parts.length === 2 && d.parts[0].kind === 'none' && d.parts[1].kind === 'fill',
   d.parts.map((p) => `${p.index}:${p.kind}`).join(' '));
-const w = describeSvg(whiteOnBlack);
-check('the two things parseSvg drops on its own are reported, with the reason',
+const w = describeLogo(whiteOnBlack);
+check('the two things parseLogo drops on its own are reported, with the reason',
   w.parts.find((p) => p.index === 0)?.why === 'artboard' && w.parts.find((p) => p.index === 1)?.why === 'white',
   w.parts.map((p) => `${p.index}:${p.kind}/${p.why ?? '-'}`).join(' '));
 check('a stroke reports its width, so the preview can say how thin it prints',
-  describeSvg(strokeOnly).parts.every((p) => p.kind === 'stroke' && p.strokeWidth === 2),
-  describeSvg(strokeOnly).parts.map((p) => p.strokeWidth).join(','));
+  describeLogo(strokeOnly).parts.every((p) => p.kind === 'stroke' && p.strokeWidth === 2),
+  describeLogo(strokeOnly).parts.map((p) => p.strokeWidth).join(','));
 check('a file that is not an SVG fails with a sentence',
-  describeSvg('nope').issues.length === 1, describeSvg('nope').issues[0] ?? '(threw)');
+  describeLogo('nope').issues.length === 1, describeLogo('nope').issues[0] ?? '(threw)');
 
 // ---------------------------------------------------------------- untouched behaviour
-const plain = parseSvg(sdCard);
+const plain = parseLogo(sdCard);
 check('an untouched file still parses as before: one shape, its hole and the pins as contours',
   plain.contours.length === 5 && plain.strokeGeoms.length === 0,
   `${plain.contours.length} contours, ${plain.strokeGeoms.length} ribbons`);
 check('and white-on-black still drops the artboard and the white shape without being asked',
-  (() => { try { parseSvg(whiteOnBlack); return false; } catch (e) { return /No drawable/.test(e.message); } })(),
+  (() => { try { parseLogo(whiteOnBlack); return false; } catch (e) { return /No drawable/.test(e.message); } })(),
   'throws "No drawable paths" — which is what the preview turns into an Off row you can flip');
 
 // ---------------------------------------------------------------- apply
-const asDrawn = parseSvg(applySvgChoices(sdCard, { 0: 'off', 1: 'fill' }));
+const asDrawn = parseLogo(applySvgChoices(sdCard, { 0: 'off', 1: 'fill' }));
 check('the default choices reproduce the file exactly',
   Math.abs(solid(asDrawn) - solid(plain)) < 1e-6 && asDrawn.contours.length === 5,
   `solid ${solid(plain).toFixed(2)} -> ${solid(asDrawn).toFixed(2)}`);
-const outlined = parseSvg(applySvgChoices(sdCard, { 0: 'off', 1: 'outline' }));
+const outlined = parseLogo(applySvgChoices(sdCard, { 0: 'off', 1: 'outline' }));
 check('a filled part can be drawn as an outline instead',
   outlined.contours.length === 0 && outlined.strokeGeoms.length > 0 && triArea(outlined) < solid(plain) * 0.6,
   `${outlined.strokeGeoms.length} ribbons, area ${triArea(outlined).toFixed(2)} vs solid ${solid(plain).toFixed(2)}`);
-const square = parseSvg(applySvgChoices(sdCard, { 0: 'fill', 1: 'fill' }));
+const square = parseLogo(applySvgChoices(sdCard, { 0: 'fill', 1: 'fill' }));
 check('and the artboard rect CAN be filled when the user says so — the preview shows the square',
   square.contours.length === 6 && solid(square) > solid(plain) + 500,
   `${square.contours.length} contours, solid ${solid(square).toFixed(0)}`);
-const filledStrokes = parseSvg(applySvgChoices(strokeOnly, { 0: 'fill', 1: 'fill' }));
-const ribbonStrokes = parseSvg(strokeOnly);
+const filledStrokes = parseLogo(applySvgChoices(strokeOnly, { 0: 'fill', 1: 'fill' }));
+const ribbonStrokes = parseLogo(strokeOnly);
 check('filling an outline drawing produces solid shapes rather than ribbons',
   filledStrokes.strokeGeoms.length === 0 && solid(filledStrokes) > triArea(ribbonStrokes) * 3,
   `ribbons ${triArea(ribbonStrokes).toFixed(0)} -> solid ${solid(filledStrokes).toFixed(0)}`);
-const mixed = parseSvg(applySvgChoices(strokeOnly, { 0: 'fill', 1: 'outline' }));
+const mixed = parseLogo(applySvgChoices(strokeOnly, { 0: 'fill', 1: 'outline' }));
 check('one outline can be filled while another stays an outline',
   mixed.contours.length > 0 && mixed.strokeGeoms.length > 0, `${mixed.contours.length} contours + ${mixed.strokeGeoms.length} ribbons`);
-const whiteKept = parseSvg(applySvgChoices(whiteOnBlack, { 0: 'off', 1: 'fill' }));
+const whiteKept = parseLogo(applySvgChoices(whiteOnBlack, { 0: 'off', 1: 'fill' }));
 check('a white shape the user set to Fill is kept — the heuristic stands down for a chosen file',
   whiteKept.contours.length === 1 && solid(whiteKept) > 2000,
   `${whiteKept.contours.length} contour, solid ${solid(whiteKept).toFixed(0)}`);
 const rewritten = applySvgChoices(sdCard, { 0: 'off', 1: 'outline' });
 check('an off part stays in the file, hidden, so indices do not shift',
-  describeSvg(rewritten).parts.length === 2 && /visibility="hidden"/.test(rewritten),
-  `${describeSvg(rewritten).parts.length} parts after rewrite`);
+  describeLogo(rewritten).parts.length === 2 && /visibility="hidden"/.test(rewritten),
+  `${describeLogo(rewritten).parts.length} parts after rewrite`);
 check('the rewritten file is stamped, and the choice is written as attributes with no inline style left',
   /data-vl-chosen="1"/.test(rewritten) && /stroke="#000"/.test(rewritten) && !/style=/.test(rewritten),
   rewritten.slice(0, 120).replace(/\n/g, ' '));
@@ -124,8 +124,8 @@ check('a class rule on a group, and a style attribute, become presentation attri
 check('and the style block and the style attribute are gone',
   !/<style/.test(flat) && !/style=/.test(flat), flat.replace(/\s+/g, ' ').slice(0, 120));
 check('so the class-styled outline is described as an outline, 3 wide',
-  describeSvg(classOutline).parts.some((p) => p.kind === 'stroke' && p.strokeWidth === 3),
-  describeSvg(classOutline).parts.map((p) => `${p.kind}/${p.strokeWidth ?? '-'}/${p.why ?? '-'}`).join(' '));
+  describeLogo(classOutline).parts.some((p) => p.kind === 'stroke' && p.strokeWidth === 3),
+  describeLogo(classOutline).parts.map((p) => `${p.kind}/${p.strokeWidth ?? '-'}/${p.why ?? '-'}`).join(' '));
 check('a file with no styles to resolve comes back byte-for-byte',
   flattenSvgStyles(strokeOnly) === strokeOnly, 'untouched');
 
@@ -138,7 +138,7 @@ const scaledArtboard = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 
   <g transform="scale(2)"><rect width="24" height="24" fill="#cccccc"/></g>
   <path fill="#000" d="M4 4h8v8H4z"/>
 </svg>`;
-const scaledParts = describeSvg(scaledArtboard).parts;
+const scaledParts = describeLogo(scaledArtboard).parts;
 check('a full-bleed rect inside a scaled group is recognised as the artboard',
   scaledParts[0].why === 'artboard',
   `biggest part: area ${scaledParts[0].area}, why ${scaledParts[0].why}`);
@@ -148,30 +148,50 @@ const translatedArtboard = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
   <path fill="#000" d="M4 4h8v8H4z"/>
 </svg>`;
 check('so is one that is larger than the artboard and offset over it',
-  describeSvg(translatedArtboard).parts[0].why === 'artboard',
-  JSON.stringify(describeSvg(translatedArtboard).parts[0]));
+  describeLogo(translatedArtboard).parts[0].why === 'artboard',
+  JSON.stringify(describeLogo(translatedArtboard).parts[0]));
 
 const smallScaledRect = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
   <g transform="scale(2)"><rect width="6" height="6" fill="#cccccc"/></g>
   <path fill="#000" d="M4 4h8v8H4z"/>
 </svg>`;
 check('a small rect under the same transform is NOT the artboard',
-  describeSvg(smallScaledRect).parts.every((p) => p.why !== 'artboard'),
-  JSON.stringify(describeSvg(smallScaledRect).parts));
+  describeLogo(smallScaledRect).parts.every((p) => p.why !== 'artboard'),
+  JSON.stringify(describeLogo(smallScaledRect).parts));
 
 const plainArtboard = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
   <rect width="48" height="48" fill="#ffffff"/>
   <path fill="#000" d="M4 4h8v8H4z"/>
 </svg>`;
 check('and an untransformed full-bleed rect still is',
-  describeSvg(plainArtboard).parts[0].why === 'artboard',
-  JSON.stringify(describeSvg(plainArtboard).parts[0]));
+  describeLogo(plainArtboard).parts[0].why === 'artboard',
+  JSON.stringify(describeLogo(plainArtboard).parts[0]));
 
 // The whole point of flagging it: the carve drops it, so the legend is the icon alone.
-const carvedScaled = parseSvg(scaledArtboard);
+const carvedScaled = parseLogo(scaledArtboard);
 check('and the carve drops it, leaving just the icon',
   carvedScaled.contours.length === 1,
   `${carvedScaled.contours.length} contours`);
+
+// --- a part the file hid at zero opacity --------------------------------------------------
+// It paints nothing, so it is described as invisible and left out of the carve; turned on in the
+// window, the choice is written at full opacity, so it is carved after all.
+const hidden = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect x="10" y="10" width="30" height="30" fill="#000" fill-opacity="0"/>
+  <path d="M60 90 L90 60" fill="none" stroke="#000" stroke-width="4" opacity="0"/>
+  <circle cx="70" cy="30" r="15" fill="#000"/>
+</svg>`;
+check('a fill or a stroke at zero opacity is described as painting nothing',
+  describeLogo(hidden).parts.filter((p) => p.kind === 'none').map((p) => p.index).sort().join(',') === '0,1',
+  describeLogo(hidden).parts.map((p) => `${p.index}:${p.kind}`).join(' '));
+const hiddenAsFiled = parseLogo(hidden);
+check('and is left out of the carve: the disc alone',
+  hiddenAsFiled.contours.length === 1 && hiddenAsFiled.strokeGeoms.length === 0,
+  `${hiddenAsFiled.contours.length} contour, ${hiddenAsFiled.strokeGeoms.length} ribbons`);
+const hiddenTurnedOn = parseLogo(applySvgChoices(hidden, { 0: 'fill', 1: 'outline', 2: 'fill' }));
+check('turned on in the window, both are carved: the square filled, the line as a ribbon',
+  hiddenTurnedOn.contours.length === 2 && hiddenTurnedOn.strokeGeoms.length === 1 && solid(hiddenTurnedOn) > solid(hiddenAsFiled) + 850,
+  `${hiddenTurnedOn.contours.length} contours, ${hiddenTurnedOn.strokeGeoms.length} ribbon, solid ${solid(hiddenAsFiled).toFixed(0)} -> ${solid(hiddenTurnedOn).toFixed(0)}`);
 
 console.log(failures ? `\n${failures} FAILED` : '\nthe keycap importer describes, the choice is written into the file, and every reader gets it');
 process.exit(failures ? 1 : 0);

@@ -88,7 +88,7 @@ await build({
   stdin: {
     contents: [
       "export { loadKeycap } from './src/keycap.js';",
-      "export { parseSvg } from './src/logo.js';",
+      "export { parseLogo } from './src/logo.js';",
       "export { parseLetter, loadBundledFonts } from './src/letter.js';",
       "export { LUCIDE_ICONS, buildSvg } from './src/lucideIcons.js';",
       "export { buildBodies } from './src/geometry.js';",
@@ -248,9 +248,9 @@ async function legendFor(spec, unit) {
   if (spec.kind === 'lucide') {
     const ic = app.LUCIDE_ICONS.find((x) => x.name === spec.name);
     if (!ic) throw new Error(`no lucide icon "${spec.name}"`);
-    return { ...app.parseSvg(app.buildSvg(ic.node)), name: ic.name };
+    return { ...app.parseLogo(app.buildSvg(ic.node)), name: ic.name };
   }
-  if (spec.kind === 'svg') return { ...app.parseSvg(SVGS[spec.name]), name: spec.name };
+  if (spec.kind === 'svg') return { ...app.parseLogo(SVGS[spec.name]), name: spec.name };
   // mount.js letterMaxLen(): 4 characters on a 1u, more on a longer cap.
   return app.parseLetter(spec.text, FONTS[spec.font], Math.max(4, Math.round((unit || 1) * 4)));
 }
