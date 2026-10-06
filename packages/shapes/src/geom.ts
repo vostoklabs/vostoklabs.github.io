@@ -87,6 +87,21 @@ export function insideUnion(shapes: readonly (readonly (readonly Pt[])[])[], p: 
   return false;
 }
 
+/** How many times the rings wind round `p`, counter-clockwise counting up. Inside is not 0 under
+ *  the non-zero rule a font is filled by, where a contour drawn twice the same way winds twice. */
+export function windingNumber(p: Pt, rings: readonly (readonly Pt[])[]): number {
+  let w = 0;
+  for (const r of rings) {
+    for (let i = 0; i < r.length; i++) {
+      const a = r[i]!;
+      const b = r[(i + 1) % r.length]!;
+      const cross = (b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1]);
+      if (a[1] <= p[1]) { if (b[1] > p[1] && cross > 0) w++; } else if (b[1] <= p[1] && cross < 0) w--;
+    }
+  }
+  return w;
+}
+
 export function pointSegmentDistance(p: Pt, a: Pt, b: Pt): number {
   const vx = b[0] - a[0];
   const vy = b[1] - a[1];

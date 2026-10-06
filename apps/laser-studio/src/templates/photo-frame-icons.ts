@@ -36,7 +36,7 @@
 // RIM of front round each one is what bulges the outline.
 import { bboxOf, cancelCoincidentRings, filletRing, mapShapes, placeShapes, signedArea, type Box, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
-import { pointInRing } from '@vostok/shapes';
+import { pointInRing, windingNumber } from '@vostok/shapes';
 import { FALLBACK_FONT_ID, getFont, getHorizontalContours, iconById } from '@vostok/fonts';
 import { BED, FRAME_NOTE, GAP, framePieces, holeClear, type FrameGeometry } from '../engine/photo-frame';
 import { sizeForCapHeight } from '../engine/metrics';
@@ -231,20 +231,6 @@ const DRAWN: Record<string, () => CutRing[]> = {
 // in the hole, and the wrench engraved a crescent, the tree its whole canopy, the tent its body.
 // So each ring asks the winding itself: just inside it and just outside it, at edges all round.
 
-/** How many times the rings wind round `p`: ink wherever it is not 0. */
-function windingAt(p: Pt, rings: CutRing[]): number {
-  let w = 0;
-  for (const r of rings) {
-    for (let i = 0; i < r.length; i++) {
-      const a = r[i]!;
-      const b = r[(i + 1) % r.length]!;
-      const cross = (b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1]);
-      if (a[1] <= p[1]) { if (b[1] > p[1] && cross > 0) w++; } else if (b[1] <= p[1] && cross < 0) w--;
-    }
-  }
-  return w;
-}
-
 /** The same shape drawn twice, a hair apart and wound opposite ways (2 % of its area and size).
  *  Under non-zero the pair encloses only the hairline between them — a drawing artefact of the
  *  filled icons, not a counter — so it cancels, as an exact copy does (`cancelCoincidentRings`). */
@@ -293,8 +279,8 @@ function glyphInk(contours: number[][][]): Shapes {
       const n: Pt = [-(b[1] - a[1]) * s * e, (b[0] - a[0]) * s * e];
       const m: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       const inner: Pt = [m[0] + n[0], m[1] + n[1]];
-      const wIn = windingAt(inner, rings);
-      const wOut = windingAt([m[0] - n[0], m[1] - n[1]], rings);
+      const wIn = windingNumber(inner, rings);
+      const wOut = windingNumber([m[0] - n[0], m[1] - n[1]], rings);
       if (wIn !== 0 && wOut === 0) out++;
       else if (wIn === 0 && wOut !== 0) { hole++; probe ??= inner; }
     }

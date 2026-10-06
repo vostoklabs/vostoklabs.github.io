@@ -64,6 +64,7 @@ export interface ShapeApi {
   // from the laser studio
   insideUnion(shapes: Shapes, p: Pt): boolean;
   rectRing(x0: number, y0: number, x1: number, y1: number): Ring;
+  windingNumber(p: Pt, rings: Ring[]): number;
 }
 
 /** mulberry32: a small seeded generator, so the corpus is the same on every machine. */
@@ -289,6 +290,18 @@ export function digests(api: ShapeApi): Record<string, string> {
   ]);
   // Corners either way round, decimals, far from the origin, a box of no size, and signed zeros.
   pin('rectRing', () => [[0, 0, 10, 6], [10, 6, 0, 0], [-3.3, 2.2, 0.1, 1e3], [0.1, 0.2, 0.3, 0.7], [1e6, 1e6, 1e6 + 3.3, 1e6 + 1.7], [5, 5, 5, 5], [-0, 0, 0, -0]].map(([x0, y0, x1, y1]) => api.rectRing(x0!, y0!, x1!, y1!)));
+  // The winding round the islands' points, the overlapping three, each set of coincident rings
+  // (a ring with its reverse winds 0, three copies 3) and the font contours, a smiley drawn twice
+  // among them.
+  pin('windingNumber', (c) => [
+    ...c.shapes.map((s) => [...c.probes(s.flat()[0] ?? []), ...c.probes(s.flat()[1] ?? [])].map((p) => api.windingNumber(p, s.flat()))),
+    [...c.probes(c.rings[40]!), ...c.probes(c.rings[42]!)].map((p) => api.windingNumber(p, [c.rings[40]!, c.rings[42]!, c.rings[41]!])),
+    ...c.coincident.map((set) => c.probes(set[0]!).map((p) => api.windingNumber(p, set))),
+    ...c.contours.map((set) => {
+      const rings = set.filter((r) => r.length >= 3).map((r) => r.map(([x, y]): Pt => [x!, y!]));
+      return rings.flatMap((r) => c.probes(r)).map((p) => api.windingNumber(p, rings));
+    }),
+  ]);
   return out;
 }
 

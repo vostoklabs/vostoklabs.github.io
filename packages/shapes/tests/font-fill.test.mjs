@@ -33,20 +33,6 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail && !ok ? ' — ' + detail : ''}`);
 };
 
-/** How many times the contours wind round p. */
-function winding(p, contours) {
-  let w = 0;
-  for (const r of contours) {
-    for (let i = 0; i < r.length; i++) {
-      const a = r[i];
-      const b = r[(i + 1) % r.length];
-      const cross = (b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1]);
-      if (a[1] <= p[1]) { if (b[1] > p[1] && cross > 0) w++; } else if (b[1] <= p[1] && cross < 0) w--;
-    }
-  }
-  return w;
-}
-
 /** Grid points where the islands and the font's fill disagree. */
 function disagreements(contours, n = 80) {
   const islands = S.islandsFromContours(contours);
@@ -57,7 +43,7 @@ function disagreements(contours, n = 80) {
     for (let j = 0; j < n; j++) {
       // Offset by an odd fraction, so no sample sits on an edge drawn on round numbers.
       const p = [b.minX + (b.maxX - b.minX) * ((i + 0.5137) / n), b.minY + (b.maxY - b.minY) * ((j + 0.5291) / n)];
-      if ((winding(p, rings) !== 0) !== S.insideUnion(islands, p)) off++;
+      if ((S.windingNumber(p, rings) !== 0) !== S.insideUnion(islands, p)) off++;
     }
   }
   return off;

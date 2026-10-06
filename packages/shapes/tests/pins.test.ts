@@ -4,9 +4,9 @@
   Every function this package took over answers exactly as it did where it came from. The
   laser engine's ring maths and the pattern engine's geometry were moved here; the digests below
   were taken by running tests/corpus.ts through those two files as they were, and the same corpus
-  through this package must give the same digests, bit for bit. (The union test and the
-  rectangle from two corners came later, from the laser studio's own copies, pinned the same
-  way.) A change that moves one of them moves every laser blank, pattern fill and cut file built
+  through this package must give the same digests, bit for bit. (The union test, the
+  rectangle from two corners and the winding number came later, from the laser studio's own
+  copies, pinned the same way.) A change that moves one of them moves every laser blank, pattern fill and cut file built
   on it, so it is a decision, made here on purpose, never a side effect.
 
   Then the parts that are new here: a rounded rectangle placed by its centre, the box of some
@@ -70,6 +70,7 @@ const PINNED: Record<string, string> = {
   poleOf: 'cd7df02965612c8a',
   insideUnion: '2543d435b15a88ef',
   rectRing: 'c2b5a976e642586c',
+  windingNumber: 'dc61f51501017ec1',
 };
 
 // ---- 1. the moved functions, pinned

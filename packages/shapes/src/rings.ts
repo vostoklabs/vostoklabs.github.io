@@ -1,7 +1,7 @@
 // Pure ring maths, no DOM and no WASM, so every rule here can be asserted headless.
 // A ring is a closed polygon, first point NOT repeated. Islands are `Ring[][]`: one outer
 // ring plus its holes, in any order and either winding — the contract `buildCutSvg` takes.
-import { pointInRing } from './geom';
+import { pointInRing, windingNumber } from './geom';
 import type { Box, Pt, Ring, SizedBox } from './types';
 
 export function signedArea(ring: Ring): number {
@@ -292,8 +292,7 @@ export function cancelCoincidentRings(rings: Ring[], opts: { fill?: 'evenodd' | 
         let keep = -1;
         if (n !== 0) {
           const p = interiorPoint(rings[same[0]!]!);
-          let w = 0;
-          rings.forEach((r, j) => { if (!same.includes(j)) w += windingOf(r, p); });
+          const w = windingNumber(p, rings.filter((_, j) => !same.includes(j)));
           if ((w === 0) !== (w + n === 0)) keep = same.find((i) => Math.sign(signedArea(rings[i]!)) === Math.sign(n))!;
         }
         for (const i of same) if (i !== keep) drop.add(i);
@@ -309,18 +308,6 @@ export function cancelCoincidentRings(rings: Ring[], opts: { fill?: 'evenodd' | 
     }
   }
   return drop.size ? rings.filter((_, i) => !drop.has(i)) : rings;
-}
-
-/** How many times one ring winds round `p`, counter-clockwise counting up. */
-function windingOf(ring: Ring, p: Pt): number {
-  let w = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i]!;
-    const b = ring[(i + 1) % ring.length]!;
-    const cross = (b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1]);
-    if (a[1] <= p[1]) { if (b[1] > p[1] && cross > 0) w++; } else if (b[1] <= p[1] && cross < 0) w--;
-  }
-  return w;
 }
 
 /** A ring's identity, independent of where it starts and which way it is wound. */

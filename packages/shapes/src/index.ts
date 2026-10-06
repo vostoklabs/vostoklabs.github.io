@@ -42,6 +42,7 @@ export {
   pointInRing,
   insideShapes,
   insideUnion,
+  windingNumber,
   pointSegmentDistance,
   segmentCrossing,
   segmentsIntersect,
