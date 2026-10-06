@@ -390,8 +390,10 @@ export function createExports(ctx) {
       console.error(e);
       setStatus('Could not generate the alphabet set (try a simpler font or smaller size).', 'err');
     } finally {
+      // The lock back first, and the live preview rebuilt for the current inputs: nothing after
+      // it in this block can then keep the loop held, and with it every later Export.
+      ctx.end();
       ctx.setBusy(null);
-      ctx.end(); // the lock back, and the live preview rebuilt for the current inputs
       updateAlphabetAvailability();
     }
   }

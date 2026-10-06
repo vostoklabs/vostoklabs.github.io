@@ -273,11 +273,15 @@ const statuses = [];
 let chip = null;
 let chipTexts = 0;
 let breakChipAt = 0; // the chip's Nth relabel throws, for a batch that fails half way
+let breakChipClear = false; // clearing the chip throws once, for a batch whose clean-up fails
 const exportsApi = app.createExports({
   $: (id) => elements[id],
   host: undefined,
   setStatus: (msg, kind = '') => statuses.push(`${kind}:${msg}`),
-  setBusy: (text, cancel) => { chip = text == null ? null : { text, cancel }; },
+  setBusy: (text, cancel) => {
+    if (text == null && breakChipClear) { breakChipClear = false; throw new Error('the chip would not clear'); }
+    chip = text == null ? null : { text, cancel };
+  },
   busyText: () => { chipTexts++; if (chipTexts === breakChipAt) throw new Error('the chip broke'); },
   cover: () => '',
   pro: () => null,
@@ -352,6 +356,21 @@ panel.legend = icon('copy');
 loop.request();
 await exportsApi.runPrimaryExport();
 check('…and the next Export is sent', globalThis.__downloads.at(-1)?.name === 'keycap-copy-standard-profile.3mf');
+
+// ------------------------------------------------------------------ a set whose clean-up throws
+// The set gives the loop back before anything else in its `finally`, so even a chip that will not
+// clear cannot keep every later Export waiting.
+const chipsBeforeClean = chipTexts;
+const cleanupThrows = button.listeners.click();
+await until(() => chipTexts > chipsBeforeClean, 'the set to start');
+breakChipClear = true;
+chip.cancel();
+const cleanupError = await Promise.race([cleanupThrows.then(() => null, (e) => e), sleep(15000).then(() => 'still waiting')]);
+const holdAfterCleanup = loop.hold();
+check('a set whose chip will not clear still gives the loop back', cleanupError instanceof Error && typeof holdAfterCleanup === 'function', `${cleanupError?.message ?? cleanupError}, the loop ${holdAfterCleanup ? 'is free' : 'is still held'}`);
+holdAfterCleanup?.();
+breakChipClear = false;
+if (lock.held()) lock.end(); // after a failure above, so the rest of the run does not wait for good
 
 // ------------------------------------------------------------------ the set waits for a carve
 // A set pressed while a carve runs used to be dropped without a word; it now starts after it.
