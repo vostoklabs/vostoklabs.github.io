@@ -30,7 +30,8 @@ export function modelFormatOf(name: string): ModelFormat | null {
  * Every coordinate is read as a double and scaled to millimetres (and placed, in a 3MF) before
  * it is rounded to a float once. Rounding first and scaling after moves a vertex of a file
  * written in metres by a unit in the last place, and a solid made from it is no longer the
- * same solid.
+ * same solid. Each file of a 3MF is read in its own unit, and a placement in the unit of the
+ * file that wrote it.
  *
  * STL and OBJ come back as written (an STL as a triangle soup, three vertices per triangle);
  * welding, repair and orientation are the caller's business. A file with no triangles throws,
@@ -227,9 +228,19 @@ function read3mf(data: Uint8Array): ModelMesh {
 
   const coords: number[] = [];
   const triangles: number[] = [];
-  const emit = (file: string | null, id: string, t: Transform, depth: number) => {
+  /** A transform written in one file's unit, in another's: its turn has no unit, its shift is a
+   *  length. Between files of one unit it is the transform itself. */
+  const inUnitOf = (t: Transform, from: ModelPart, to: ModelPart): Transform => {
+    if (from.scale === to.scale) return t;
+    const k = from.scale / to.scale;
+    return [...t.slice(0, 9), t[9]! * k, t[10]! * k, t[11]! * k];
+  };
+  /** Emit object `id` of `file`, placed by `written`: a transform in the unit of `from`, the file
+   *  that wrote it (the root for a build item, the object's owner for a component). */
+  const emit = (from: ModelPart, file: string | null, id: string, written: Transform, depth: number) => {
     if (depth > 16) return; // a component cycle would never end
     const part = (file && parts.get(file)) || root;
+    const t = inUnitOf(written, from, part);
     const mesh = part.meshes.get(id);
     if (mesh) {
       const first = coords.length / 3;
@@ -250,11 +261,11 @@ function read3mf(data: Uint8Array): ModelMesh {
       for (const v of mesh.triangles) triangles.push(first + v);
     }
     for (const ref of part.components.get(id) ?? []) {
-      emit(ref.path ? keyOf(ref.path) : file, ref.id, compose(ref.transform, t), depth + 1);
+      emit(part, ref.path ? keyOf(ref.path) : file, ref.id, compose(ref.transform, t), depth + 1);
     }
   };
   const items = root.items.length ? root.items : [...root.meshes.keys()].map((id) => ({ id, path: null, transform: IDENTITY }));
-  for (const item of items) emit(item.path ? keyOf(item.path) : null, item.id, item.transform, 0);
+  for (const item of items) emit(root, item.path ? keyOf(item.path) : null, item.id, item.transform, 0);
   if (!triangles.length) throw new Error('This 3MF has no triangles in it.');
   // The one rounding: everything above is in doubles.
   return { positions: Float32Array.from(coords), indices: Uint32Array.from(triangles) };

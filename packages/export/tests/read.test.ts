@@ -151,6 +151,35 @@ check('no format for anything else', modelFormatOf('model.step') === null && mod
   check('a 3MF with no model says so', throws(() => readModel(zipSync({ 'readme.txt': strToU8('hi') }), 'none.3mf')) === 'This 3MF has no model in it.');
 }
 {
+  // Each file of a 3MF has its own unit, and a transform is in the unit of the file it is
+  // written in: a placement in centimetres moves a part drawn in millimetres by centimetres.
+  const NS = 'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06"';
+  const tetraXml = (id: number, s: number) => `<object id="${id}" type="model"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="${s}" y="0" z="0"/>`
+    + `<vertex x="0" y="${s}" z="0"/><vertex x="0" y="0" z="${s}"/></vertices><triangles><triangle v1="0" v2="2" v3="1"/><triangle v1="0" v2="1" v3="3"/>`
+    + '<triangle v1="1" v2="2" v3="3"/><triangle v1="0" v2="3" v3="2"/></triangles></mesh></object>';
+  const file = (unit: string, objects: string, build = '') => `<?xml version="1.0"?><model unit="${unit}" ${NS}><resources>${objects}</resources><build>${build}</build></model>`;
+
+  // The root in centimetres turns the part a quarter and moves it (1, 2, 3) cm; the part is in mm.
+  const mm = readModel(zipSync({
+    '3D/3dmodel.model': strToU8(file('centimeter', '<object id="5" type="model"><components><component p:path="/3D/Objects/a.model" objectid="1"/></components></object>',
+      '<item objectid="5" transform="0 1 0 -1 0 0 0 0 1 1 2 3"/>')),
+    '3D/Objects/a.model': strToU8(file('millimeter', tetraXml(1, 10))),
+  }), 'units.3mf');
+  check('3MF: a placement is in the unit of the file that wrote it, the part in its own',
+    worst(mm.positions, [10, 20, 30, 10, 30, 30, 0, 20, 30, 10, 20, 40]) === 0, [...mm.positions].join(' '));
+
+  // Two steps: the root in inches moves an object 1 in along y; that object, in a file in
+  // metres, places a part 0.01 m along x; the part is 1 mm a side, in metres.
+  const deep = readModel(zipSync({
+    '3D/3dmodel.model': strToU8(file('inch', '<object id="7" type="model"><components><component p:path="/3D/Objects/b.model" objectid="2" transform="1 0 0 0 1 0 0 0 1 0 1 0"/></components></object>',
+      '<item objectid="7"/>')),
+    '3D/Objects/b.model': strToU8(file('meter', '<object id="2" type="model"><components><component objectid="3" transform="1 0 0 0 1 0 0 0 1 0.01 0 0"/></components></object>'
+      + tetraXml(3, 0.001))),
+  }), 'deep.3mf');
+  check('3MF: and so at every step of a part placed through two files',
+    worst(deep.positions, [10, 25.4, 0, 11, 25.4, 0, 10, 26.4, 0, 10, 25.4, 1]) <= 1e-5, [...deep.positions].join(' '));
+}
+{
   const zip = buildThreeMF(PARTS, { title: 'x', generator: 'read-test' });
   check('no extension: a zip is read as a 3MF', readModel(zip, 'download').indices.length === allIndices(PARTS).length);
   check('no extension: "v" lines are read as an OBJ', readModel(strToU8('# hi\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n'), 'x').indices.length === 3);
