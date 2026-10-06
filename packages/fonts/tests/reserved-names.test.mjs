@@ -93,7 +93,13 @@ const name = (font, key) => (font.names[key]?.en ?? '').replace(/\s+/g, ' ').tri
 const silent = [];
 const lost = [];
 let declared = 0;
-for (const f of readdirSync(DIR).filter((x) => x.endsWith('.ttf'))) {
+// The library's faces and the other weights beside them (fonts/weights/), every file that ships.
+const faces = [
+  ...readdirSync(DIR).filter((x) => x.endsWith('.ttf')),
+  ...readdirSync(`${DIR}/weights`).filter((x) => x.endsWith('.ttf')).map((x) => `weights/${x}`),
+];
+ok(faces.includes('weights/roboto-bold.ttf'), 'the other weights are read too');
+for (const f of faces) {
   const b = readFileSync(`${DIR}/${f}`);
   const font = opentype.parse(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
   const text = `${name(font, 'copyright')}\n${name(font, 'license')}`;

@@ -110,38 +110,77 @@ const ICON_NOTICE = `  Material Symbols (Rounded), instanced at FILL=1 and subse
  *  ours, and it differs per family. The subsetter strips name ID 13 (the licence
  *  description) from every file — all 242 of them — so the binaries no longer
  *  self-describe, which makes this file the only place the obligation can be met. */
-function fontCopyrights() {
+function fontCopyrights({ library = true, weights = [] } = {}) {
   const dir = joinPath(ROOT, 'packages', 'fonts', 'src', 'fonts');
   const out = [];
-  for (const f of readdirSync(dir).filter((x) => x.endsWith('.ttf')).sort()) {
-    const buf = readFileSync(joinPath(dir, f));
-    const tables = buf.readUInt16BE(4);
-    let off = 12, nameOff = -1;
-    for (let i = 0; i < tables; i++) {
-      if (buf.toString('ascii', off, off + 4) === 'name') nameOff = buf.readUInt32BE(off + 8);
-      off += 16;
-    }
-    if (nameOff < 0) continue;
-    const count = buf.readUInt16BE(nameOff + 2);
-    const strOff = nameOff + buf.readUInt16BE(nameOff + 4);
-    let best = '';
-    for (let i = 0; i < count; i++) {
-      const rec = nameOff + 6 + i * 12;
-      const pid = buf.readUInt16BE(rec);
-      if (buf.readUInt16BE(rec + 6) !== 0) continue; // name ID 0 = copyright
-      const len = buf.readUInt16BE(rec + 8), o = buf.readUInt16BE(rec + 10);
-      const rawStr = buf.subarray(strOff + o, strOff + o + len);
-      const val = pid === 3 || pid === 0
-        ? Buffer.from(rawStr).swap16().toString('utf16le')
-        : rawStr.toString('latin1');
-      if (val.length > best.length) best = val;
-    }
+  // The library's faces, and the other weights (fonts/weights/) the app carries, by file name.
+  const base = (f) => f.replace(/^weights\//, '');
+  const files = [
+    ...(library ? readdirSync(dir).filter((x) => x.endsWith('.ttf')) : []),
+    ...weights.map((id) => `weights/${id}.ttf`),
+  ].sort((a, b) => (base(a) < base(b) ? -1 : base(a) > base(b) ? 1 : 0));
+  for (const f of files) {
+    let best = nameRecord(readFileSync(joinPath(dir, f)), 0); // name ID 0 = copyright
+    if (best === null) continue;
     // A face whose file holds no copyright notice has its family's, recorded in the asset
     // registry from the family's OFL.txt.
     if (!best.trim()) best = ROWS.find((r) => `packages/fonts/src/fonts/${f}` in r.files)?.copyright ?? '';
-    if (best.trim()) out.push(`  ${f.replace('.ttf', '')}: ${best.replace(/\s+/g, ' ').trim()}`);
+    if (best.trim()) out.push(`  ${base(f).replace('.ttf', '')}: ${best.replace(/\s+/g, ' ').trim()}`);
   }
   return out;
+}
+
+/** The longest string a TTF's name table holds under `id` ('' when it has none), or null when
+ *  the file has no name table at all. */
+function nameRecord(buf, id) {
+  const tables = buf.readUInt16BE(4);
+  let off = 12, nameOff = -1;
+  for (let i = 0; i < tables; i++) {
+    if (buf.toString('ascii', off, off + 4) === 'name') nameOff = buf.readUInt32BE(off + 8);
+    off += 16;
+  }
+  if (nameOff < 0) return null;
+  const count = buf.readUInt16BE(nameOff + 2);
+  const strOff = nameOff + buf.readUInt16BE(nameOff + 4);
+  let best = '';
+  for (let i = 0; i < count; i++) {
+    const rec = nameOff + 6 + i * 12;
+    const pid = buf.readUInt16BE(rec);
+    if (buf.readUInt16BE(rec + 6) !== id) continue;
+    const len = buf.readUInt16BE(rec + 8), o = buf.readUInt16BE(rec + 10);
+    const rawStr = buf.subarray(strOff + o, strOff + o + len);
+    const val = pid === 3 || pid === 0
+      ? Buffer.from(rawStr).swap16().toString('utf16le')
+      : rawStr.toString('latin1');
+    if (val.length > best.length) best = val;
+  }
+  return best;
+}
+
+/** The typeface text, with a paragraph for the other weights an app carries: each is cut the
+ *  way its family is, from the same original, and fixed at its own weight, where the text above
+ *  says the cut faces are fixed at Regular. Unchanged for an app that carries none. */
+function fontLicences(weights) {
+  if (!weights.length) return FONT_LICENCES;
+  const dir = joinPath(ROOT, 'packages', 'fonts', 'src', 'fonts', 'weights');
+  const faces = weights.map((id) => {
+    const buf = readFileSync(joinPath(dir, `${id}.ttf`));
+    return { name: nameRecord(buf, 4) || id, style: nameRecord(buf, 2) || '' };
+  });
+  const sentence = faces.length === 1
+    ? `${faces[0].name} was cut by Vostok Labs the same way from the same original, fixed at its ${faces[0].style ? `${faces[0].style} ` : 'own '}weight.`
+    : `${faces.map((f) => f.name).join(', ')} were cut by Vostok Labs the same way from the same originals, each fixed at its own weight.`;
+  const words = sentence.split(' ');
+  const lines = [''];
+  for (const w of words) {
+    const last = lines.length - 1;
+    if (lines[last] && `  ${lines[last]} ${w}`.length > 80) lines.push(w);
+    else lines[last] = lines[last] ? `${lines[last]} ${w}` : w;
+  }
+  const paragraph = lines.map((l) => `  ${l}`).join('\n');
+  const after = '  ours, and every file stays under its original licence.';
+  if (!FONT_LICENCES.includes(after)) throw new Error('FONT_LICENCES changed: place the other weights again');
+  return FONT_LICENCES.replace(after, `${after}\n\n${paragraph}`);
 }
 
 /** The licence texts themselves, so a copy of the app carries them rather than a URL
@@ -272,7 +311,7 @@ ${blocks.join('\n\n')}
 // ─────────────────────────────── emit ───────────────────────────────
 
 /** Per-font copyrights + the two licence texts in full. */
-function fontAppendix() {
+function fontAppendix(has) {
   const { oflBody, apache } = licenceTexts();
   return `
 
@@ -280,7 +319,7 @@ ${'='.repeat(60)}
 APPENDIX A — COPYRIGHT NOTICES FOR EACH BUNDLED FACE
 ${'='.repeat(60)}
 
-${fontCopyrights().join('\n')}
+${fontCopyrights({ library: has.fonts, weights: has.weights }).join('\n')}
 
 
 ${'='.repeat(60)}
@@ -423,6 +462,8 @@ function carriedBy(appId, withPrivate = false) {
     rows,
     libs,
     fonts: [...files].some((f) => /^packages\/fonts\/src\/fonts\/[^/]+\.ttf$/.test(f)),
+    // The other weights, outside the library: carried only by an app that imports them.
+    weights: [...files].map((f) => /^packages\/fonts\/src\/fonts\/weights\/([^/]+)\.ttf$/.exec(f)?.[1]).filter(Boolean).sort(),
     patterns: kinds.has('patterns'),
     symbols: kinds.has('symbols'),
     kit: kinds.has('ui-icons') || kinds.has('ui-font'),
@@ -435,11 +476,12 @@ function carriedBy(appId, withPrivate = false) {
  */
 export function noticesText(appId, appName, pkg, appDir, exportsFiles = true) {
   const has = carriedBy(appId);
-  const bundlesFonts = has.fonts;
+  const bundlesFonts = has.fonts || has.weights.length > 0;
   const bundlesPatterns = has.patterns;
   const bundlesSymbols = has.symbols;
   const bundlesKit = has.kit;
-  const fonts = bundlesFonts ? fontLines() : [];
+  // The library's families; an app carrying only other weights names those.
+  const fonts = has.fonts ? fontLines() : has.weights;
   const { lines: libs, texts: libTexts } = libsFor(appId, appDir, pkg);
   const patternSection = bundlesPatterns ? patternTilesSection(bundlesFonts ? 3 : 1) : '';
   const symbolNumber = (bundlesFonts ? 2 : 0) + (bundlesPatterns ? 1 : 0) + 1;
@@ -450,7 +492,7 @@ export function noticesText(appId, appName, pkg, appDir, exportsFiles = true) {
 1. TYPEFACES  (${fonts.length} families)
 ${'-'.repeat(60)}
 
-${FONT_LICENCES}
+${fontLicences(has.weights)}
 
 ${fonts.join(', ')}.
 
@@ -500,7 +542,7 @@ ${intro}
 
 ${fontSections}${patternSection}${symbolSection}${appFaces}${kit}
 
-${libSection}${bundlesFonts ? fontAppendix() : ''}${libTexts.length ? `
+${libSection}${bundlesFonts ? fontAppendix(has) : ''}${libTexts.length ? `
 ${'='.repeat(60)}
 LIBRARY LICENCES (full text)
 ${'='.repeat(60)}
