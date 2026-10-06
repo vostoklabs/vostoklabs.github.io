@@ -764,7 +764,8 @@ export function objWriter(opts: ObjMtlOptions = {}): ObjWriter {
     const key = byExtruder ? `slot ${n}` : `color ${colour}`;
     let m = materials.byKey.get(key);
     if (!m) {
-      m = { name: `filament${n}`, color: p.color };
+      // A copy: `buildMtl` reads it later, and a caller may refill one array for every part.
+      m = { name: `filament${n}`, color: [p.color[0], p.color[1], p.color[2]] };
       materials.byKey.set(key, m);
     }
     return m.name;

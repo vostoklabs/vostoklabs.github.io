@@ -132,6 +132,21 @@ for (const [name, [parts, opts]] of Object.entries(CASES)) {
   writer.add(ONE_GROUP[0]!);
   check('isEmpty: true until a part with a vertex in it is written', emptyBefore && emptyAfterNothing && !writer.isEmpty);
 }
+{
+  // A colour is read when its part is written: a caller that fills one array for every part's
+  // colour still gets each material in the colour it was given.
+  const scratch: RGB = [10, 20, 30];
+  const writer = objWriter();
+  writer.add(part('first', scratch, [0, 0, 0, 1]));
+  scratch[0] = 200;
+  scratch[1] = 100;
+  scratch[2] = 50;
+  writer.add(part('second', scratch, [2, 0, 0, 1]));
+  scratch.fill(0);
+  const mtl = buildMtl(writer.materials);
+  check('a colour array the caller reuses: each material keeps the colour it was given',
+    mtl === 'newmtl filament1\nKd 0.0392 0.0784 0.1176\n\nnewmtl filament2\nKd 0.7843 0.3922 0.1961\n', JSON.stringify(mtl));
+}
 
 /* ------------------------------------------------------------------ one table, several plates */
 
