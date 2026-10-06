@@ -6,7 +6,7 @@
 // Everything else is a form's illustration. The same drawing at thumbnail size is what the
 // gallery shows — the glued-up stack for a two-layer design (`assembledLayout`).
 import { OPS, bboxOf, burnStyle, materialById, type Box } from '@vostok/laser';
-import { themeColor, el, segmentedControl, sliderRow, button } from '@vostok/ui-kit';
+import { themeColor, el, svgNode, segmentedControl, sliderRow, button } from '@vostok/ui-kit';
 import { isStaleChunk, staleSaidHere } from './stale';
 import type { BuildOutput, KeyringSpec } from './engine/types';
 import { assembledLayout, assembledPieces, type Assembled } from './assembled';
@@ -33,12 +33,6 @@ function webglBlocked(): boolean {
 }
 type Pt = [number, number];
 
-const svgEl = (tag: string, attrs: Record<string, string | number> = {}): SVGElement => {
-  const n = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
-  return n;
-};
-
 function pathD(shapes: [number, number][][][]): string {
   return shapes.flat().filter((r) => r.length >= 3).map((r) => `M ${r.map(([x, y]) => `${num(x)} ${num(y)}`).join(' L ')} Z`).join(' ');
 }
@@ -60,26 +54,26 @@ function palette(mode: ViewMode): Palette {
 
 /** The part alone, Y up flipped for the screen. Shared by the preview and the gallery. */
 function drawPart(into: SVGElement, out: BuildOutput, p: Palette): SVGGElement {
-  const g = svgEl('g', { class: 'ls-part', transform: 'scale(1,-1)' }) as SVGGElement;
+  const g = svgNode('g', { class: 'ls-part', transform: 'scale(1,-1)' }) as SVGGElement;
   if (out.plate.length) {
-    g.append(svgEl('path', { class: 'ls-plate', d: pathD(out.plate as never), 'fill-rule': 'evenodd', fill: p.plate, stroke: p.plateStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
+    g.append(svgNode('path', { class: 'ls-plate', d: pathD(out.plate as never), 'fill-rule': 'evenodd', fill: p.plate, stroke: p.plateStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
   }
   for (const o of out.objects) {
     if (o.id === 'plate') continue;
     if (o.image) {
       const img = o.image;
-      const wrap = svgEl('g', { transform: `translate(0 ${num(2 * img.y + img.height)}) scale(1,-1)` });
-      wrap.append(svgEl('image', { href: img.href, x: num(img.x), y: num(img.y), width: num(img.width), height: num(img.height), preserveAspectRatio: 'none' }));
+      const wrap = svgNode('g', { transform: `translate(0 ${num(2 * img.y + img.height)}) scale(1,-1)` });
+      wrap.append(svgNode('image', { href: img.href, x: num(img.x), y: num(img.y), width: num(img.width), height: num(img.height), preserveAspectRatio: 'none' }));
       g.append(wrap);
       continue;
     }
     const fill = OPS[o.op].mode === 'fill';
     const colour = o.op === 'engrave' ? p.engrave : o.op === 'score' ? p.score : p.cut;
     if (o.shapes.length) {
-      g.append(svgEl('path', { class: 'ls-object', 'data-op': o.op, d: pathD(o.shapes as never), 'fill-rule': 'evenodd', fill: fill ? colour : 'none', stroke: fill ? 'none' : colour, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
+      g.append(svgNode('path', { class: 'ls-object', 'data-op': o.op, d: pathD(o.shapes as never), 'fill-rule': 'evenodd', fill: fill ? colour : 'none', stroke: fill ? 'none' : colour, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
     }
     if (o.paths?.length) {
-      g.append(svgEl('path', { class: 'ls-object', 'data-op': o.op, d: openD(o.paths as never), fill: 'none', stroke: colour, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
+      g.append(svgNode('path', { class: 'ls-object', 'data-op': o.op, d: openD(o.paths as never), fill: 'none', stroke: colour, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
     }
   }
   into.append(g);
@@ -101,7 +95,7 @@ const CARD: Palette = { plate: '#b58e63', plateStroke: '#7a5f3d', engrave: '#3a2
 /** The stack glued up: each piece's outline and marks moved from the sheet to its assembled
  *  position, the dark sheet under the light one. What a two-layer design's card shows. */
 function drawAssembled(into: SVGElement, out: BuildOutput, asm: Assembled): SVGGElement {
-  const g = svgEl('g', { class: 'ls-part ls-part--assembled', transform: 'scale(1,-1)' }) as SVGGElement;
+  const g = svgNode('g', { class: 'ls-part ls-part--assembled', transform: 'scale(1,-1)' }) as SVGGElement;
   const light = palette('preview');
   const within = (b: Box, box: Box) => b.minX >= box.minX - 0.05 && b.maxX <= box.maxX + 0.05 && b.minY >= box.minY - 0.05 && b.maxY <= box.maxY + 0.05;
   for (const { part, dx, dy } of asm.pieces) {
@@ -110,10 +104,10 @@ function drawAssembled(into: SVGElement, out: BuildOutput, asm: Assembled): SVGG
     // way of saying so. An unfilled dashed outline with its marks faded reads as "and there is
     // another one of these behind"; a solid copy nudged up and left reads as a second product.
     const ghost = part.previewStyle === 'dashed';
-    const gg = svgEl('g', { transform: `translate(${num(dx)} ${num(dy)})`, ...(ghost ? { opacity: 0.5 } : {}) });
+    const gg = svgNode('g', { transform: `translate(${num(dx)} ${num(dy)})`, ...(ghost ? { opacity: 0.5 } : {}) });
     const islands = out.plate.filter((isl) => within(bboxOf([isl]), part.box));
     if (islands.length) {
-      gg.append(svgEl('path', {
+      gg.append(svgNode('path', {
         d: pathD(islands as never), 'fill-rule': 'evenodd',
         fill: ghost ? 'none' : p.plate, stroke: p.plateStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke',
         ...(ghost ? { 'stroke-dasharray': '4 3' } : {}),
@@ -126,8 +120,8 @@ function drawAssembled(into: SVGElement, out: BuildOutput, asm: Assembled): SVGG
       if (prefix ? !o.id.startsWith(prefix) : o.id.includes(':')) continue;
       const fill = OPS[o.op].mode === 'fill';
       const colour = o.op === 'engrave' ? p.engrave : o.op === 'score' ? p.score : p.cut;
-      if (o.shapes.length) gg.append(svgEl('path', { d: pathD(o.shapes as never), 'fill-rule': 'evenodd', fill: fill ? colour : 'none', stroke: fill ? 'none' : colour, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
-      if (o.paths?.length) gg.append(svgEl('path', { d: openD(o.paths as never), fill: 'none', stroke: colour, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
+      if (o.shapes.length) gg.append(svgNode('path', { d: pathD(o.shapes as never), 'fill-rule': 'evenodd', fill: fill ? colour : 'none', stroke: fill ? 'none' : colour, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
+      if (o.paths?.length) gg.append(svgNode('path', { d: openD(o.paths as never), fill: 'none', stroke: colour, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
     }
     g.append(gg);
   }
@@ -142,7 +136,7 @@ export function thumbSvg(out: BuildOutput, pad = 0.12): SVGSVGElement {
   const w = Math.max(b.maxX - b.minX, 1);
   const h = Math.max(b.maxY - b.minY, 1);
   const p = Math.max(w, h) * pad;
-  const svg = svgEl('svg', { viewBox: `${num(b.minX - p)} ${num(-b.maxY - p)} ${num(w + 2 * p)} ${num(h + 2 * p)}`, preserveAspectRatio: 'xMidYMid meet' }) as SVGSVGElement;
+  const svg = svgNode('svg', { viewBox: `${num(b.minX - p)} ${num(-b.maxY - p)} ${num(w + 2 * p)} ${num(h + 2 * p)}`, preserveAspectRatio: 'xMidYMid meet' }) as SVGSVGElement;
   // The material look, not the cut-file colours. A card answers "what do I get", and at card
   // size the file palette turns a scored design into red-and-blue noise — the connected-text
   // card read as a broken tool when the tool was fine.
@@ -181,7 +175,7 @@ export interface Preview {
 
 /** The editor's stage: the view switch, rulers, a light grid, the part, the hole handle. */
 export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Preview {
-  const svg = svgEl('svg', { class: 'ls-preview__svg', preserveAspectRatio: 'xMidYMid meet' }) as SVGSVGElement;
+  const svg = svgNode('svg', { class: 'ls-preview__svg', preserveAspectRatio: 'xMidYMid meet' }) as SVGSVGElement;
   let mode: ViewMode = 'preview';
   /** Everything a mode change does to the stage, in one place. */
   const applyMode = (m: ViewMode) => {
@@ -330,11 +324,11 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
     const grid: string[] = [];
     for (let x = b.minX - Math.ceil((b.minX - rulerX) / step) * step; x <= x0 + vw; x += step) if (x >= rulerX) grid.push(`M ${num(x)} ${num(-rulerY)} V ${num(-y0)}`);
     for (let y = b.minY - Math.ceil((b.minY - y0) / step) * step; y <= rulerY; y += step) if (y >= y0) grid.push(`M ${num(rulerX)} ${num(-y)} H ${num(x0 + vw)}`);
-    if(mode === 'preview') svg.append(svgEl('path', { d: grid.join(' '), fill: 'none', stroke: line, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', opacity: 0.22 }));
+    if(mode === 'preview') svg.append(svgNode('path', { d: grid.join(' '), fill: 'none', stroke: line, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', opacity: 0.22 }));
 
-    const rulers = svgEl('g', { fill: muted, 'font-size': num(fs), 'font-family': 'inherit' });
-    const tick = (x1: number, y1: number, x2: number, y2: number) => svgEl('path', { d: `M ${num(x1)} ${num(y1)} L ${num(x2)} ${num(y2)}`, stroke: muted, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' });
-    const label = (x: number, y: number, text: string, anchor = 'middle') => { const t = svgEl('text', { x: num(x), y: num(y), 'text-anchor': anchor }); t.textContent = text; return t; };
+    const rulers = svgNode('g', { fill: muted, 'font-size': num(fs), 'font-family': 'inherit' });
+    const tick = (x1: number, y1: number, x2: number, y2: number) => svgNode('path', { d: `M ${num(x1)} ${num(y1)} L ${num(x2)} ${num(y2)}`, stroke: muted, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' });
+    const label = (x: number, y: number, text: string, anchor = 'middle') => { const t = svgNode('text', { x: num(x), y: num(y), 'text-anchor': anchor }); t.textContent = text; return t; };
     rulers.append(tick(rulerX, -rulerY, x0 + vw, -rulerY));
     rulers.append(tick(rulerX, -rulerY, rulerX, -y0));
     for (let x = b.minX - Math.ceil((b.minX - rulerX) / step) * step; x <= x0 + vw; x += step) {
@@ -353,10 +347,10 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
     // A batch names its sheet: a dashed page guide per sheet, drawn under the parts and never
     // exported — furniture, not geometry.
     if (mode === 'preview' && out.sheets && out.sheets.pages.length) {
-      const guides = svgEl('g', { class: 'ls-sheet-guides', fill: 'none', stroke: muted, 'stroke-width': 1, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke', opacity: 0.7 });
+      const guides = svgNode('g', { class: 'ls-sheet-guides', fill: 'none', stroke: muted, 'stroke-width': 1, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke', opacity: 0.7 });
       out.sheets.pages.forEach((pg, i) => {
-        guides.append(svgEl('rect', { x: num(pg.minX), y: num(-pg.maxY), width: num(pg.maxX - pg.minX), height: num(pg.maxY - pg.minY), rx: 1 }));
-        const t = svgEl('text', { x: num(pg.minX + 2), y: num(-pg.maxY - fs * 0.5), 'font-size': num(fs * 0.85), fill: muted, stroke: 'none', 'font-family': 'inherit' });
+        guides.append(svgNode('rect', { x: num(pg.minX), y: num(-pg.maxY), width: num(pg.maxX - pg.minX), height: num(pg.maxY - pg.minY), rx: 1 }));
+        const t = svgNode('text', { x: num(pg.minX + 2), y: num(-pg.maxY - fs * 0.5), 'font-size': num(fs * 0.85), fill: muted, stroke: 'none', 'font-family': 'inherit' });
         // A run laid out a colour at a time says which colour each sheet is.
         const material = out.sheets?.materials?.[i];
         t.textContent = `Sheet ${i + 1}${material ? ` · ${material}` : ''} · ${Math.round(pg.maxX - pg.minX)} × ${Math.round(pg.maxY - pg.minY)} mm`;
@@ -376,24 +370,24 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
     if (mode === 'preview' && out.parts.length > 1) {
       const gap = labelGap(out.parts);
       const labelFs = Math.min(3.5, 0.7 * gap);
-      const labels = svgEl('g', { class: 'ls-part-labels', fill: muted, 'font-size': num(labelFs), 'font-family': 'inherit', 'text-anchor': 'middle' });
+      const labels = svgNode('g', { class: 'ls-part-labels', fill: muted, 'font-size': num(labelFs), 'font-family': 'inherit', 'text-anchor': 'middle' });
       for (const part of out.parts) {
         if (!part.label) continue;
         if (gap >= 2.5) {
-          const t = svgEl('text', { x: num((part.box.minX + part.box.maxX) / 2), y: num(-(part.box.minY - labelFs * 1.1)) });
+          const t = svgNode('text', { x: num((part.box.minX + part.box.maxX) / 2), y: num(-(part.box.minY - labelFs * 1.1)) });
           t.textContent = part.label;
           labels.append(t);
           continue;
         }
         // Nowhere to write it: an invisible patch over the piece carrying the name on hover.
         // Pointer events reach the `svg` either way, so the hole drag is untouched.
-        const hit = svgEl('rect', {
+        const hit = svgNode('rect', {
           x: num(part.box.minX), y: num(-part.box.maxY),
           width: num(Math.max(part.box.maxX - part.box.minX, 0.01)),
           height: num(Math.max(part.box.maxY - part.box.minY, 0.01)),
           fill: 'none', 'pointer-events': 'all',
         });
-        const title = svgEl('title');
+        const title = svgNode('title');
         title.textContent = part.label;
         hit.append(title);
         labels.append(hit);
@@ -407,10 +401,10 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
       holeGap = distanceToOutline(out.body, out.hole.centre);
       const [cx, cy] = out.hole.centre;
       if (k.mode === 'outside') {
-        lugC = svgEl('circle', { class: 'ls-lug', cx: num(cx), cy: num(cy), r: num(k.dia / 2 + k.ring), fill: 'none', stroke: accent, 'stroke-width': 1, 'stroke-dasharray': '2 2', 'vector-effect': 'non-scaling-stroke', opacity: 0.6 }) as SVGCircleElement;
+        lugC = svgNode('circle', { class: 'ls-lug', cx: num(cx), cy: num(cy), r: num(k.dia / 2 + k.ring), fill: 'none', stroke: accent, 'stroke-width': 1, 'stroke-dasharray': '2 2', 'vector-effect': 'non-scaling-stroke', opacity: 0.6 }) as SVGCircleElement;
         partG.append(lugC);
       }
-      holeC = svgEl('circle', {
+      holeC = svgNode('circle', {
         class: 'ls-hole', cx: num(cx), cy: num(cy), r: num(k.dia / 2 + 1.5),
         fill: 'none', stroke: accent, 'stroke-width': 1.5, 'stroke-dasharray': '3 2', 'vector-effect': 'non-scaling-stroke',
         tabindex: '0', role: 'slider', 'aria-label': 'Keyring position — drag to move it, arrow keys to nudge',
@@ -450,7 +444,7 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
     const line = (at: number | null, el: SVGElement | null, vertical: boolean): SVGElement | null => {
       if (at === null) { el?.remove(); return null; }
       // Under the lug and the handle, so the ring stays the thing being held.
-      const g = el ?? (partG!.insertBefore(svgEl('line', { class: 'ls-snap-guide' }), lugC ?? holeC ?? null) as SVGElement);
+      const g = el ?? (partG!.insertBefore(svgNode('line', { class: 'ls-snap-guide' }), lugC ?? holeC ?? null) as SVGElement);
       const ends = vertical ? { x1: at, y1: view.minY, x2: at, y2: view.maxY } : { x1: view.minX, y1: at, x2: view.maxX, y2: at };
       for (const [k, v] of Object.entries(ends)) g.setAttribute(k, num(v));
       return g;
@@ -550,14 +544,14 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
     if (!drag.ghost) {
       (partG.querySelector('.ls-plate') as SVGElement | null)?.setAttribute('visibility', 'hidden');
       const id = `ls-ghost-${Math.random().toString(36).slice(2)}`;
-      const mask = svgEl('mask', { id, maskUnits: 'userSpaceOnUse', x: -10000, y: -10000, width: 20000, height: 20000 });
-      mask.append(svgEl('rect', { x: -10000, y: -10000, width: 20000, height: 20000, fill: 'white' }));
-      mask.append(svgEl('circle', { class: 'ls-ghost__hole', r: num(keyring.dia / 2), fill: 'black' }));
-      const painted = svgEl('g', { mask: `url(#${id})` });
-      if (keyring.mode === 'outside') painted.append(svgEl('circle', { class: 'ls-ghost__lug', r: num(keyring.dia / 2 + keyring.ring), fill: p.plate, stroke: p.plateStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
-      painted.append(svgEl('path', { d: pathD(last.body as never), 'fill-rule': 'evenodd', fill: p.plate, stroke: p.plateStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
-      const cut = svgEl('circle', { class: 'ls-ghost__cut', r: num(keyring.dia / 2), fill: 'none', stroke: p.plateStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' });
-      drag.ghost = svgEl('g', { class: 'ls-ghost' }) as SVGGElement;
+      const mask = svgNode('mask', { id, maskUnits: 'userSpaceOnUse', x: -10000, y: -10000, width: 20000, height: 20000 });
+      mask.append(svgNode('rect', { x: -10000, y: -10000, width: 20000, height: 20000, fill: 'white' }));
+      mask.append(svgNode('circle', { class: 'ls-ghost__hole', r: num(keyring.dia / 2), fill: 'black' }));
+      const painted = svgNode('g', { mask: `url(#${id})` });
+      if (keyring.mode === 'outside') painted.append(svgNode('circle', { class: 'ls-ghost__lug', r: num(keyring.dia / 2 + keyring.ring), fill: p.plate, stroke: p.plateStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
+      painted.append(svgNode('path', { d: pathD(last.body as never), 'fill-rule': 'evenodd', fill: p.plate, stroke: p.plateStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
+      const cut = svgNode('circle', { class: 'ls-ghost__cut', r: num(keyring.dia / 2), fill: 'none', stroke: p.plateStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' });
+      drag.ghost = svgNode('g', { class: 'ls-ghost' }) as SVGGElement;
       drag.ghost.append(mask, painted, cut);
       partG.insertBefore(drag.ghost, partG.firstChild);
     }
