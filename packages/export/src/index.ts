@@ -681,7 +681,8 @@ export interface ObjMtlOptions {
   /**
    * The materials table to name materials from and add to, shared by every OBJ of one export
    * (a set's plates) so that each names one filament the same way; `buildMtl` writes it once.
-   * Default: a table of its own.
+   * Every writer on one table names materials one way (`materialBy`, which the table records):
+   * a writer asking for the other way throws. Default: a table of its own.
    */
   materials?: ObjMaterials;
 }
@@ -710,6 +711,9 @@ export interface ObjMaterials {
   readonly byKey: Map<string, ObjMaterial>;
   /** Filament slot per colour, in the order first seen: `buildThreeMF`'s numbering. */
   readonly slotByColor: Map<string, number>;
+  /** How its materials are named (`ObjMtlOptions.materialBy`): set by the first writer given the
+   *  table. By colour and by slot, the first colour and slot 1 would both be `filament1`. */
+  materialBy?: 'color' | 'extruder';
 }
 
 /** An empty materials table, for the OBJ files of one export to share. */
@@ -750,7 +754,13 @@ const objSlug = (s: string): string => s.replace(/[^A-Za-z0-9_-]+/g, '_').replac
  */
 export function objWriter(opts: ObjMtlOptions = {}): ObjWriter {
   const materials = opts.materials ?? objMaterials();
-  const byExtruder = opts.materialBy === 'extruder';
+  const materialBy = opts.materialBy ?? 'color';
+  if (materials.materialBy && materials.materialBy !== materialBy) {
+    const way = (by: 'color' | 'extruder') => (by === 'color' ? 'colour' : 'filament slot');
+    throw new Error(`This materials table names its materials by ${way(materials.materialBy)}, so an OBJ cannot add to it by ${way(materialBy)}.`);
+  }
+  materials.materialBy = materialBy;
+  const byExtruder = materialBy === 'extruder';
   /** The material a part's colour, or its slot, stands for: made the first time it is asked. */
   const materialFor = (p: ExportPart<ArrayLike<number>>): string => {
     const colour = p.color.join(',');
@@ -815,9 +825,8 @@ export function objWriter(opts: ObjMtlOptions = {}): ObjWriter {
  *
  * Millimetres in the parts' own coordinates, Z up exactly as `buildThreeMF` writes it.
  *
- * The clicker (`objExport.ts`) and the keycap generator (`exportObj.js`) each still carry their
- * own copy of this writer, with app-specific plate layout baked in. This one is the shared
- * version; moving them onto it is separate work.
+ * Given a shared `materials` table, the `mtl` and `materialCount` it returns are the whole
+ * table's: every material any writer on the table has added so far, not only this OBJ's.
  *
  * The header comment carries the provenance mark. A comment is not metadata; a caller that
  * needs the licence to travel should also put it in the export's description.

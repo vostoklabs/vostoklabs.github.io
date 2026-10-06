@@ -164,6 +164,31 @@ for (const [name, [parts, opts]] of Object.entries(CASES)) {
   check('a shared table: one MTL names every material of every plate, in first-used order',
     buildMtl(materials) === 'newmtl filament1\nKd 0.0863 0.0863 0.0863\n\nnewmtl filament2\nKd 0.7843 0.0627 0.1804\n\nnewmtl filament3\nKd 0.0000 0.5255 0.8392\n');
   check('a shared table: each plate still numbers its own vertices from 1', plateB.text.includes('\nf 1 3 2\n'));
+  // buildObjMtl given the table answers for all of it: every material any plate has added.
+  const third = buildObjMtl([part('third plate', [22, 22, 22], [0, 0, 0, 2])], { materials });
+  check('a shared table: buildObjMtl gives the whole table\'s MTL and count', third.mtl === buildMtl(materials) && third.materialCount === 3, `${third.materialCount} materials`);
+}
+{
+  // One table names its materials one way. By colour and by slot, the first colour and slot 1
+  // are both `filament1`, and an MTL written from both would hold two of them.
+  const errorOf = (fn: () => unknown) => {
+    try {
+      fn();
+      return '';
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+  };
+  const materials = objMaterials();
+  const byColour = objWriter({ materials });
+  byColour.add(KEYCAP[0]!);
+  const error = errorOf(() => objWriter({ materials, materialBy: 'extruder' }).add(KEYCAP[3]!));
+  check('a shared table: a writer naming materials another way is refused', error.includes('by colour') && error.includes('by filament slot'),
+    error || buildMtl(materials).split('\n').filter((l) => l.startsWith('newmtl')).join(', '));
+  check('a shared table: and one naming them the same way is not', errorOf(() => objWriter({ materials, materialBy: 'color' }).add(KEYCAP[2]!)) === '');
+  const bySlot = objMaterials();
+  objWriter({ materials: bySlot, materialBy: 'extruder' }).add(KEYCAP[0]!);
+  check('a shared table: by slot, the default way is refused too', errorOf(() => objWriter({ materials: bySlot })) !== '');
 }
 
 /* ------------------------------------------------------------------ one material per filament slot */
