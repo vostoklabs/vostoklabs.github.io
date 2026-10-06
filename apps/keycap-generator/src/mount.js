@@ -39,13 +39,16 @@ import { openSvgPreview } from './svgPreview.js';
 import { FONT_OPTIONS, importFontFile, parseLetter, loadBundledFonts } from './letter.js';
 import { buildBodies } from './geometry.js';
 import { initManifold, geomToManifold, manifoldToGeom, creaseNormals, getManifoldApi } from './manifold.js';
-import { printMatrix } from './meshUtils.js';
 import { applyStemClearance } from './stemClearance.js';
 import {
   FIT_TEST_STEP_MM, FIT_TEST_STEP_OPTIONS, FIT_TEST_FONT_ID, computeFitTestLadder, buildFitTestRow,
 } from './fitTest.js';
 import { keycapThreeMF } from './export3mf.js';
 import { keycapObjMtl } from './exportObj.js';
+import {
+  capParts, orientForPrint, blankParts, fitTestParts, profileTag, capFileName, blankFileName,
+  fitTestFileName, alphabetFileName, ALPHABET_MTL, ALPHABET, alphabetEntryName,
+} from './exportParts.js';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
 import { zipSync } from 'fflate';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
@@ -648,12 +651,13 @@ export function mount(container, host) {
   const fitStepRow = $('fitTestStepMount');
   fitStepRow.append(fitStepControl);
 
-  /** {positions, indices} (fitTest.js's plain output) -> a real THREE.BufferGeometry.
+  /** {positions, indices} (fitTest.js's plain output) -> a real THREE.BufferGeometry, for the
+   *  preview.
    *
    *  Copies `positions` rather than wrapping it: a `BufferAttribute` keeps whatever array it's
-   *  given, and the export path calls `.translate()` on its own copy to bake in the row offset
-   *  — sharing the array with the preview mesh's geometry would let that mutate the preview's
-   *  vertices too, out from under a mesh whose position is ALSO offset, doubling it up. */
+   *  given, and the export (`fitTestParts`) translates its own copy of the same pieces to bake
+   *  in the row offset — sharing the array would let that move the preview's vertices too, out
+   *  from under a mesh whose position is ALSO offset, doubling it up. */
   function plainToFitTestGeometry(plain) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(plain.positions.slice(), 3));
@@ -1545,62 +1549,16 @@ export function mount(container, host) {
   });
 
   // ---------------------------------------------------------------- export
-  // Assemble the 3MF body list (cap, legend, and stem) for one set of carved bodies.
-  // Shared by the single-cap export and the full-alphabet batch so colour/filament
-  // assignment stays identical. The stem rides on the legend filament in shine-through,
-  // otherwise the keycap filament.
+  // The parts one set of carved bodies exports (exportParts.js), at the stem's current fit,
+  // laid out the way the profile prints.
   function buildExportParts(bodies, capColor, logoColor, through) {
     flushStemApply();
-    // Filament slots, by colour. Slot 1 is the cap and slot 2 is the legend, unconditionally
-    // and as they always have been — even when the two are set to the same hex, which is a
-    // two-filament file someone may well have asked for on purpose.
-    //
-    // Extra legends are matched against what is already claimed instead, so a second legend in
-    // the SAME colour as the first shares its slot rather than demanding a third filament for
-    // a colour the plate is already loaded with.
-    const bySlot = [capColor];
-    const slotOf = (hex) => {
-      const i = bySlot.findIndex((c) => c.toLowerCase() === hex.toLowerCase());
-      if (i >= 0) return i + 1;
-      bySlot.push(hex);
-      return bySlot.length;
-    };
-
-    const parts = [
-      { name: 'Keycap', color: capColor, extruder: 1, geom: bodies.keycapGeometry },
-    ];
-    // Single-colour mode has no separate legend body (it's a recess in the cap) — and with no
-    // legend body there are no extra ones either, so no slot is claimed and never filled.
-    if (bodies.logoGeometry) {
-      bySlot.push(logoColor); // slot 2
-      parts.push({ name: 'Legend', color: logoColor, extruder: 2, geom: bodies.logoGeometry });
-    }
-    (bodies.extraGeometries ?? []).forEach((geom, i) => {
-      if (!geom) return;
-      const color = extraLegends[i]?.color ?? logoColor;
-      parts.push({ name: `Legend ${i + 2}`, color, extruder: slotOf(color), geom });
-    });
-    if (stemGeometry) {
-      parts.push({
-        name: 'Stem',
-        color: through ? logoColor : capColor,
-        extruder: through ? 2 : 1,
-        geom: stemGeometry,
-      });
-    }
-    return orientForPrint(parts);
-  }
-
-  /**
-   * Lay the parts out the way the profile has to be printed — the same rotation the preview
-   * applies via `printGroup`, so what the user sees on the plate is what lands in the file.
-   *
-   * Clones before transforming: these geometries are the live preview meshes.
-   */
-  function orientForPrint(parts) {
-    const m = printMatrix(currentProfile, meta);
-    if (!m) return parts;
-    return parts.map((p) => ({ ...p, geom: p.geom.clone().applyMatrix4(m) }));
+    const extraColors = extraLegends.map((l) => l?.color);
+    return orientForPrint(
+      capParts(bodies, { capColor, logoColor, through, extraColors, stem: stemGeometry }),
+      currentProfile,
+      meta,
+    );
   }
 
 
@@ -1717,26 +1675,6 @@ export function mount(container, host) {
     nudgeLicense();
   }
 
-  /** The rendered fit-test row -> export parts. Each piece's row offset is baked into real
-   *  vertex positions, since an export part is a standalone geometry with no parent transform
-   *  (unlike the preview meshes, which carry the offset as `mesh.position`). */
-  function fitTestExportParts() {
-    const capColor = $('capColor').value;
-    const parts = [];
-    for (const p of fitTestPieces) {
-      const bake = (plain) => plainToFitTestGeometry(plain).translate(p.offsetX, 0, 0);
-      if (p.watertight) {
-        // A space, not a hyphen, before the label: the label carries its own sign, and
-        // `Test-${label}` named the negative rungs "Test--0.10" in the slicer's object list.
-        parts.push({ name: `Fit test ${p.label}`, color: capColor, extruder: 1, geom: bake(p.geometry) });
-      } else {
-        parts.push({ name: `Fit test tab ${p.label}`, color: capColor, extruder: 1, geom: bake(p.tabGeometry) });
-        parts.push({ name: `Fit test stem ${p.label}`, color: capColor, extruder: 1, geom: bake(p.stemGeometry) });
-      }
-    }
-    return parts;
-  }
-
   /** Export whatever fit-test row is currently on screen, through the one export function
    *  every other path in this app uses — provenance, the licence nudge, and the MakerLab vs
    *  browser branching all come for free (invariant 8). */
@@ -1744,8 +1682,8 @@ export function mount(container, host) {
     if (!fitTestPieces?.length) return;
     const n = fitTestPieces.length;
     await deliverModel(
-      fitTestExportParts,
-      `keycap-fit-test${profileSlug() ? '-' + profileSlug() : ''}`,
+      () => fitTestParts(fitTestPieces, $('capColor').value),
+      fitTestFileName(profileSlug()),
       `Exported fit test 3MF ✓  ${n} piece${n === 1 ? '' : 's'} to test-fit, one filament.`,
       `Keycap stem fit test (${n} piece${n === 1 ? '' : 's'}), made with the Keycap Legend Generator.`,
     );
@@ -1770,8 +1708,7 @@ export function mount(container, host) {
     // it gets first refusal before the single-cap path runs.
     if (await proPanel?.handleExport?.()) return;
     if (!lastBodies) return;
-    const legendSlug = (currentLegend?.name || 'legend').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    const baseName = `keycap-${legendSlug}${profileSlug() ? '-' + profileSlug() : ''}`;
+    const baseName = capFileName(currentLegend?.name, profileSlug());
     // Counted from the parts rather than assumed to be two: a cap with a second legend in its
     // own colour is a three-filament print, and "assign two filaments" would be wrong advice
     // at the one moment the user is standing in front of the slicer.
@@ -1793,19 +1730,9 @@ export function mount(container, host) {
   $('exportBlank').addEventListener('click', async () => {
     flushStemApply();
     if (!shellGeometry) return;
-    const makeParts = () => {
-      const capColor = $('capColor').value;
-      const parts = [{ name: 'Keycap', color: capColor, extruder: 1, geom: shellGeometry }];
-      if (stemGeometry) parts.push({ name: 'Stem', color: capColor, extruder: 1, geom: stemGeometry });
-      return parts;
-    };
-
-    const sizeLabel = ($('unitSelect').value || '').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    const tags = [profileSlug(), sizeLabel].filter(Boolean).join('-');
-    const baseName = `keycap-blank${tags ? '-' + tags : ''}`;
     await deliverModel(
-      makeParts,
-      baseName,
+      () => blankParts(shellGeometry, stemGeometry, $('capColor').value),
+      blankFileName(profileSlug(), $('unitSelect').value),
       'Exported blank keycap ✓  Single-colour cap with no legend.',
       'Blank keycap, made with the Keycap Legend Generator.'
     );
@@ -1816,7 +1743,6 @@ export function mount(container, host) {
   // download them as a single ZIP of 3MFs. 1u-only for now (button is disabled on
   // other sizes). Each letter is carved with the same buildBodies path as the live
   // preview, so what you set up for one letter is what every cap in the pack gets.
-  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const alphabetBtn = $('alphabetSet');
   const alphabetHelp = $('alphabetHelp');
 
@@ -1869,11 +1795,11 @@ export function mount(container, host) {
         const bodies = await buildBodies(shellGeometry, meta, legend, opts);
         const parts = buildExportParts(bodies, capColor, logoColor, through);
         if (toHost) {
-          const { obj, mtl } = keycapObjMtl(parts, { mtlFileName: 'keycap-alphabet.mtl' });
+          const { obj, mtl } = keycapObjMtl(parts, { mtlFileName: ALPHABET_MTL });
           plates.push(textToArrayBuffer(obj));
           plateMtl = mtl;
         } else {
-          files[`keycap-${ch}.3mf`] = new Uint8Array(await keycapThreeMF(parts, { process: projectProcess() }).arrayBuffer());
+          files[alphabetEntryName(ch)] = new Uint8Array(await keycapThreeMF(parts, { process: projectProcess() }).arrayBuffer());
         }
         bodies.keycapGeometry.dispose();
         bodies.logoGeometry?.dispose();
@@ -1887,8 +1813,7 @@ export function mount(container, host) {
         return; // the finally below still runs: lock released, chip cleared, preview restored
       }
 
-      const fontSlug = fontName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-      const baseName = `keycap-alphabet-${fontSlug}${profileSlug() ? '-' + profileSlug() : ''}`;
+      const baseName = alphabetFileName(fontName, profileSlug());
 
       if (toHost) {
         setStatus('Sending alphabet set to MakerLab…');
@@ -2137,8 +2062,7 @@ export function mount(container, host) {
   // Slug for the active profile, used to keep exported filenames distinct between profiles.
   // Empty when there's only one profile, so single-profile filenames stay unchanged.
   function profileSlug() {
-    if (!currentProfile || keycapProfiles.length < 2) return '';
-    return currentProfile.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    return profileTag(currentProfile, keycapProfiles.length);
   }
 
   // ------------------------------------------------- stage handover

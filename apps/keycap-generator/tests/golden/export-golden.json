@@ -846,6 +846,448 @@
     {"name":"Fit test +0.10","extruder":1,"color":"#161616","tris":6476,"verts":3240,"watertight":true,"volume":560.3057,"box":[10.4576,-10.703,0,29.4495,3.703,5.6]},
     {"name":"Fit test +0.20","extruder":1,"color":"#161616","tris":6356,"verts":3180,"watertight":true,"volume":556.8949,"box":[32.4495,-10.703,0,51.4415,3.703,5.6]}
    ]
+  },
+  "AZ-S-1u-roboto-A": {
+   "files": {
+    "3D/3dmodel.model": "9c0f5a90c6505bef",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "83b4268d66d7965a",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1284,"verts":644,"watertight":true,"volume":1110.9451,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":44,"verts":22,"watertight":true,"volume":8.2057,"box":[-2.584,-4.3153,11.3323,4.1074,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-B": {
+   "files": {
+    "3D/3dmodel.model": "82451d8ea88cc69e",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "96c171eabde6fefe",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":2236,"verts":1120,"watertight":true,"volume":1108.5788,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":1000,"verts":498,"watertight":true,"volume":10.5719,"box":[-1.8255,-4.3153,11.3323,3.349,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-C": {
+   "files": {
+    "3D/3dmodel.model": "09f6448e60863f43",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "3a500f8bf1709f23",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":2344,"verts":1174,"watertight":true,"volume":1111.8429,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":1100,"verts":552,"watertight":true,"volume":7.3078,"box":[-2.0836,-4.3153,11.3323,3.6071,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-D": {
+   "files": {
+    "3D/3dmodel.model": "a08e55f31318a753",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "7ce23f231a92a66c",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1912,"verts":958,"watertight":true,"volume":1109.8261,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":672,"verts":336,"watertight":true,"volume":9.3246,"box":[-1.9872,-4.3153,11.3323,3.5107,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-E": {
+   "files": {
+    "3D/3dmodel.model": "a734546aa9873d95",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "e10dd6a6c472b03c",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1288,"verts":646,"watertight":true,"volume":1110.8731,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":44,"verts":24,"watertight":true,"volume":8.2776,"box":[-1.6522,-4.3153,11.3323,3.1757,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-F": {
+   "files": {
+    "3D/3dmodel.model": "a718538e5ee76a65",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "48e71114fc9c018f",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1280,"verts":642,"watertight":true,"volume":1112.5078,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":36,"verts":20,"watertight":true,"volume":6.6429,"box":[-1.5906,-4.3153,11.3323,3.1141,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-G": {
+   "files": {
+    "3D/3dmodel.model": "1984ef8cfe093964",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "6966a1489159a05e",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":2298,"verts":1151,"watertight":true,"volume":1110.4135,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":1052,"verts":528,"watertight":true,"volume":8.7373,"box":[-2.0873,-4.3153,11.3323,3.6108,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-H": {
+   "files": {
+    "3D/3dmodel.model": "b26a9507bcf02916",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "12706038ecb69041",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1288,"verts":646,"watertight":true,"volume":1109.9633,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":44,"verts":24,"watertight":true,"volume":9.1874,"box":[-2.1566,-4.3153,11.3323,3.6801,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-I": {
+   "files": {
+    "3D/3dmodel.model": "dda49244516c0b92",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "a20093d7b14048db",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1256,"verts":630,"watertight":true,"volume":1115.3469,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":12,"verts":8,"watertight":true,"volume":3.8039,"box":[0.2612,-4.3153,11.3323,1.2622,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-J": {
+   "files": {
+    "3D/3dmodel.model": "824981e11a2a978c",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "0e89d21ded3480cb",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1768,"verts":886,"watertight":true,"volume":1113.7953,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":524,"verts":264,"watertight":true,"volume":5.3554,"box":[-1.6033,-4.3153,11.3323,3.1268,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-K": {
+   "files": {
+    "3D/3dmodel.model": "2b60d3e92d32958a",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "403599073371d7dd",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1288,"verts":646,"watertight":true,"volume":1110.3261,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":44,"verts":24,"watertight":true,"volume":8.8246,"box":[-2.1489,-4.3153,11.3323,3.6724,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-L": {
+   "files": {
+    "3D/3dmodel.model": "80095e0a9eb8ad17",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "96d7543778f4cee5",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1264,"verts":634,"watertight":true,"volume":1113.8762,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":20,"verts":12,"watertight":true,"volume":5.2745,"box":[-1.5406,-4.3153,11.3323,3.0641,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-M": {
+   "files": {
+    "3D/3dmodel.model": "8d582c6f5c62cb94",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "39023f1468e9f960",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1300,"verts":652,"watertight":true,"volume":1105.3374,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":56,"verts":30,"watertight":true,"volume":13.8133,"box":[-3.019,-4.3153,11.3323,4.5425,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-N": {
+   "files": {
+    "3D/3dmodel.model": "ff17fdadd3aed62e",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "ea562a1b7c0b6c0a",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1280,"verts":642,"watertight":true,"volume":1108.2399,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":36,"verts":20,"watertight":true,"volume":10.9108,"box":[-2.1566,-4.3153,11.3323,3.6801,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-O": {
+   "files": {
+    "3D/3dmodel.model": "b44ec8167b7c54c6",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "0bea76b72b3e3fd1",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":2536,"verts":1270,"watertight":true,"volume":1110.4979,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":1296,"verts":648,"watertight":true,"volume":8.6528,"box":[-2.2109,-4.3153,11.3323,3.7343,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-P": {
+   "files": {
+    "3D/3dmodel.model": "556f82aa744b0945",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "83c38b4ad3fe7a4a",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1784,"verts":894,"watertight":true,"volume":1110.8562,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":544,"verts":272,"watertight":true,"volume":8.2945,"box":[-1.9718,-4.3153,11.3323,3.4953,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-Q": {
+   "files": {
+    "3D/3dmodel.model": "0ad7197863af034f",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "79278d40c4a7c25a",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":2548,"verts":1276,"watertight":true,"volume":1111.9896,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":1308,"verts":654,"watertight":true,"volume":7.1611,"box":[-1.8345,-4.3153,11.3323,3.358,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-R": {
+   "files": {
+    "3D/3dmodel.model": "2a76af1af7207c98",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "d0fb3bc6f4e2443b",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1800,"verts":902,"watertight":true,"volume":1109.4065,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":560,"verts":280,"watertight":true,"volume":9.7442,"box":[-1.9987,-4.3153,11.3323,3.5222,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-S": {
+   "files": {
+    "3D/3dmodel.model": "d664bd8cdd57b253",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "128f3b076482c5a4",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":2976,"verts":1490,"watertight":true,"volume":1110.9942,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":1732,"verts":868,"watertight":true,"volume":8.1565,"box":[-1.9263,-4.3153,11.3323,3.4498,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-T": {
+   "files": {
+    "3D/3dmodel.model": "54aa0221b4cf6c4e",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "7e700bba0c1a4cca",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1272,"verts":638,"watertight":true,"volume":1113.3619,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":28,"verts":16,"watertight":true,"volume":5.7889,"box":[-2.1797,-4.3153,11.3323,3.7032,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-U": {
+   "files": {
+    "3D/3dmodel.model": "b2311632fdab3463",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "2039d5c6b4904fc1",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1780,"verts":892,"watertight":true,"volume":1111.0244,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":536,"verts":270,"watertight":true,"volume":8.1264,"box":[-1.9525,-4.3153,11.3323,3.476,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-V": {
+   "files": {
+    "3D/3dmodel.model": "114a204adc35f30f",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "67a2f01d64f3f81f",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1268,"verts":636,"watertight":true,"volume":1111.8695,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":24,"verts":14,"watertight":true,"volume":7.2812,"box":[-2.4993,-4.3153,11.3323,4.0227,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-W": {
+   "files": {
+    "3D/3dmodel.model": "61059a279319ab81",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "525cec8f45b95a03",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1316,"verts":660,"watertight":true,"volume":1109.9427,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":72,"verts":38,"watertight":true,"volume":9.2081,"box":[-3.0383,-3.7458,11.3323,4.5617,2.7151,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-X": {
+   "files": {
+    "3D/3dmodel.model": "f9484994c2a9c679",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "ec8eee6f1139935c",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1288,"verts":646,"watertight":true,"volume":1110.774,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":44,"verts":24,"watertight":true,"volume":8.3768,"box":[-2.2991,-4.3153,11.3323,3.8225,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-Y": {
+   "files": {
+    "3D/3dmodel.model": "3208f234e2eb0eef",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "a9cafe320dda6e7d",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1276,"verts":640,"watertight":true,"volume":1112.8698,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":32,"verts":18,"watertight":true,"volume":6.2809,"box":[-2.3607,-4.3153,11.3323,3.8841,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
+  },
+  "AZ-S-1u-roboto-Z": {
+   "files": {
+    "3D/3dmodel.model": "ab0151af798970eb",
+    "Metadata/model_settings.config": "511f551497d4b414",
+    "Metadata/project_settings.config": "cf26293f8d811e5d",
+    "Metadata/vostok_labs.txt": "7d372a3b750b8209",
+    "[Content_Types].xml": "a1ed066344e85390",
+    "_rels/.rels": "465f67e7a55f044d"
+   },
+   "obj": "faef65d73e197c8f",
+   "mtl": "0e53d6bf9c092948",
+   "parts": [
+    {"name":"Keycap","extruder":1,"color":"#161616","tris":1280,"verts":642,"watertight":true,"volume":1111.3246,"box":[-8.306,-9.5831,0,9.8295,8.5524,11.8323]},
+    {"name":"Legend","extruder":2,"color":"#f7f7f5","tris":36,"verts":20,"watertight":true,"volume":7.8261,"box":[-2.0064,-4.3153,11.3323,3.5299,3.2847,11.8323]},
+    {"name":"Stem","extruder":1,"color":"#161616","tris":2232,"verts":1116,"watertight":true,"volume":167.1017,"box":[-3.186,-4.4631,0,4.7095,3.4324,9.9955]}
+   ]
   }
  }
 }

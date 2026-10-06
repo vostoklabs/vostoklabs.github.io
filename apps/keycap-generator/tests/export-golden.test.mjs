@@ -1,5 +1,6 @@
 /*
-  The keycap's export golden: fifty settings, and every file the export writes for each one.
+  The keycap's export golden: fifty settings and the alphabet set's twenty-six letters, and every
+  file the export writes for each one.
 
     node apps/keycap-generator/tests/export-golden.test.mjs            (part of pnpm test)
     node apps/keycap-generator/tests/export-golden.test.mjs --record   write tests/golden/export-golden.json again
@@ -21,10 +22,9 @@
   and OBJ writers, the Bambu profile it embeds, the brand's URLs in the licence lines.
 
   What it runs is the app's own modules (keycap.js, logo.js, letter.js, geometry.js, manifold.js,
-  stemClearance.js, fitTest.js, export3mf.js, exportObj.js), bundled as the app bundles them. The
-  few lines that put the parts together live inside mount.js's closure, which a test cannot
-  import, so `exportParts` below repeats them (mount.js `buildExportParts`, `orientForPrint`, the
-  blank and the fit-test exports). Keep the two in step.
+  stemClearance.js, fitTest.js, export3mf.js, exportObj.js), bundled as the app bundles them, and
+  the parts and the file names come from exportParts.js, the module the app's exports go through,
+  so what is tested is what ships.
 
   manifold-3d stays external, so node loads the npm build itself, as fit-test.test.js does; the
   `?url` import manifold.js makes for Vite is answered with the path of that build's WASM.
@@ -93,12 +93,11 @@ await build({
       "export { LUCIDE_ICONS, buildSvg } from './src/lucideIcons.js';",
       "export { buildBodies } from './src/geometry.js';",
       "export { initManifold, getManifoldApi, geomToManifold, manifoldToGeom } from './src/manifold.js';",
-      "export { printMatrix } from './src/meshUtils.js';",
       "export { applyStemClearance } from './src/stemClearance.js';",
       "export { buildFitTestRow, computeFitTestLadder, FIT_TEST_STEP_MM, FIT_TEST_FONT_ID } from './src/fitTest.js';",
       "export { keycapThreeMF } from './src/export3mf.js';",
       "export { keycapObjMtl } from './src/exportObj.js';",
-      "export { BufferGeometry, Float32BufferAttribute, BufferAttribute } from 'three';",
+      "export { capParts, orientForPrint, blankParts, fitTestParts, profileTag, capFileName, blankFileName, fitTestFileName, ALPHABET, ALPHABET_MTL } from './src/exportParts.js';",
     ].join('\n'),
     resolveDir: APP,
     sourcefile: 'export-golden-entry.js',
@@ -209,6 +208,13 @@ const CASES = [
   { id: 'C-1u-fit-test', profile: C, size: '1u', fitTest: true },
 ];
 
+/* The full alphabet set: what "Get full alphabet set (A–Z)" carves, a Standard 1u in the panel's
+   settings, each letter read one character long. Every letter's 3MF is what the set's zip holds
+   (stored as it is), and its OBJ is one of the plates the MakerLab export hands over. */
+for (const ch of app.ALPHABET) {
+  CASES.push({ id: `AZ-S-1u-roboto-${ch}`, profile: S, size: '1u', legend: { kind: 'alphabet', text: ch, font: 'roboto' } });
+}
+
 // ------------------------------------------------------------------ the app's state, per case
 const index = JSON.parse(readFileSync(join(APP, 'public', 'keycaps', 'index.json'), 'utf8'));
 const DEFAULTS = { depth: 0.5, rot: 0, offx: 0, offy: 0, stemTol: 0, capColor: '#161616', logoColor: '#f7f7f5', walls: 'arachne' };
@@ -242,8 +248,6 @@ function stemAt(baseStem, tol) {
   return r.watertight ? r.geometry : baseStem;
 }
 
-const slug = (s) => s.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-
 async function legendFor(spec, unit) {
   if (spec.kind === 'lucide') {
     const ic = app.LUCIDE_ICONS.find((x) => x.name === spec.name);
@@ -251,20 +255,21 @@ async function legendFor(spec, unit) {
     return { ...app.parseLogo(app.buildSvg(ic.node)), name: ic.name };
   }
   if (spec.kind === 'svg') return { ...app.parseLogo(SVGS[spec.name]), name: spec.name };
+  // The alphabet set reads each letter one character long.
+  if (spec.kind === 'alphabet') return app.parseLetter(spec.text, FONTS[spec.font], 1);
   // mount.js letterMaxLen(): 4 characters on a 1u, more on a longer cap.
   return app.parseLetter(spec.text, FONTS[spec.font], Math.max(4, Math.round((unit || 1) * 4)));
 }
 
-/** The parts one case exports, and the name its files get: mount.js runPrimaryExport() with
- *  buildExportParts() and orientForPrint(), the blank export, or the fit-test export. */
+/** The parts one case exports, and the MTL its OBJ names: built by src/exportParts.js, the
+ *  module the app's own exports go through (the single cap, the blank, the fit test, A-Z). */
 async function exportParts(c) {
   const profile = index.profiles.find((p) => p.id === c.profile);
   const entry = profile.keycaps.find((k) => k.id === c.size);
   const { shell, meta, baseStem } = await capFor(entry.file);
   const o = { ...DEFAULTS, ...c };
   const stem = stemAt(baseStem, o.stemTol);
-  const capColor = o.capColor;
-  const logoColor = o.logoColor;
+  const tag = app.profileTag(profile, index.profiles.length);
 
   if (c.fitTest) {
     const ladder = app.computeFitTestLadder(o.stemTol, app.FIT_TEST_STEP_MM, -0.4, 0.4);
@@ -272,27 +277,11 @@ async function exportParts(c) {
       { api, baseStemGeometry: baseStem, meta, letterContour: (text) => app.parseLetter(text, app.FIT_TEST_FONT_ID, 6) },
       ladder,
     );
-    const geom = (plain, dx) => {
-      const g = new app.BufferGeometry();
-      g.setAttribute('position', new app.Float32BufferAttribute(plain.positions.slice(), 3));
-      g.setIndex(new app.BufferAttribute(plain.indices, 1));
-      return g.translate(dx, 0, 0);
-    };
-    const parts = [];
-    for (const p of pieces) {
-      if (p.watertight) parts.push({ name: `Fit test ${p.label}`, color: capColor, extruder: 1, geom: geom(p.geometry, p.offsetX) });
-      else {
-        parts.push({ name: `Fit test tab ${p.label}`, color: capColor, extruder: 1, geom: geom(p.tabGeometry, p.offsetX) });
-        parts.push({ name: `Fit test stem ${p.label}`, color: capColor, extruder: 1, geom: geom(p.stemGeometry, p.offsetX) });
-      }
-    }
-    return { parts, baseName: `keycap-fit-test-${slug(profile.id)}` };
+    return { parts: app.fitTestParts(pieces, o.capColor), mtlFileName: `${app.fitTestFileName(tag)}.mtl` };
   }
 
   if (c.blank) {
-    const parts = [{ name: 'Keycap', color: capColor, extruder: 1, geom: shell }];
-    if (stem) parts.push({ name: 'Stem', color: capColor, extruder: 1, geom: stem });
-    return { parts, baseName: `keycap-blank-${slug(profile.id)}-${slug(entry.id)}` };
+    return { parts: app.blankParts(shell, stem, o.capColor), mtlFileName: `${app.blankFileName(tag, entry.id)}.mtl` };
   }
 
   const legend = await legendFor(c.legend, entry.unit);
@@ -311,14 +300,13 @@ async function exportParts(c) {
     homingBump: homing,
     homingBumpGeom: homingBumpGeom,
   });
-  const parts = [{ name: 'Keycap', color: capColor, extruder: 1, geom: bodies.keycapGeometry }];
-  if (bodies.logoGeometry) parts.push({ name: 'Legend', color: logoColor, extruder: 2, geom: bodies.logoGeometry });
-  if (stem) {
-    parts.push({ name: 'Stem', color: o.through ? logoColor : capColor, extruder: o.through ? 2 : 1, geom: stem });
-  }
-  const m = app.printMatrix(profile, meta);
-  const oriented = m ? parts.map((p) => ({ ...p, geom: p.geom.clone().applyMatrix4(m) })) : parts;
-  return { parts: oriented, baseName: `keycap-${slug(legend.name || 'legend')}-${slug(profile.id)}`, walls: o.walls };
+  const parts = app.orientForPrint(
+    app.capParts(bodies, { capColor: o.capColor, logoColor: o.logoColor, through: !!o.through, stem }),
+    profile,
+    meta,
+  );
+  const mtlFileName = c.legend.kind === 'alphabet' ? app.ALPHABET_MTL : `${app.capFileName(legend.name, tag)}.mtl`;
+  return { parts, mtlFileName, walls: o.walls };
 }
 
 // ------------------------------------------------------------------ what a file is
@@ -377,7 +365,7 @@ function measure(geom) {
 }
 
 async function run(c) {
-  const { parts, baseName, walls = 'arachne' } = await exportParts(c);
+  const { parts, mtlFileName, walls = 'arachne' } = await exportParts(c);
   // mount.js projectProcess(): Arachne is written as an override, Classic is the preset's own.
   const blob = app.keycapThreeMF(parts, { process: walls === 'classic' ? {} : { wall_generator: walls } });
   const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
@@ -387,7 +375,7 @@ async function run(c) {
     const text = /\.(model|config|txt|xml|rels)$/i.test(name) ? strFromU8(bytes) : null;
     files[name] = hash(text == null ? bytes : steady(text));
   }
-  const { obj, mtl } = app.keycapObjMtl(parts, { mtlFileName: `${baseName}.mtl` });
+  const { obj, mtl } = app.keycapObjMtl(parts, { mtlFileName });
   return {
     files,
     obj: hash(steady(obj)),
