@@ -433,6 +433,90 @@ test('hold: dispose rejects an export waiting on a batch, and a release after it
   assert(runs === 1, `nothing may build after dispose, ${runs - 1} did`);
 });
 
+test('hold: a settled() made under the hold waits for that very release, so a batch must never await one', async () => {
+  const loop = buildLoop({ run: () => 'cap' });
+  loop.request();
+  assert((await within(loop.settled())) === 'cap', 'first build');
+  const release = loop.hold()!;
+  assert(!loop.busy, 'busy is about builds: false under a hold with nothing asked for');
+  let got: string | null = null;
+  const inside = loop.settled().then((v) => { got = v; });
+  await tick(30);
+  assert(got === null, 'a settled() under the hold must wait for the release, not answer early');
+  release();
+  await within(inside);
+  assert(got === 'cap', `and the release answers it, got ${got}`);
+});
+
+test('hold: taken inside onResult or onIdle, a settled() made there waits for the release', async () => {
+  for (const where of ['onResult', 'onIdle'] as const) {
+    let release: (() => void) | null = null;
+    let got: string | null = null;
+    const take = () => {
+      if (release) return;
+      release = loop.hold();
+      void loop.settled().then((v) => { got = v; });
+    };
+    const loop = where === 'onResult' ? buildLoop({ run: () => 'cap', onResult: take }) : buildLoop({ run: () => 'cap', onIdle: take });
+    loop.request();
+    await tick(30);
+    assert(release, `${where}: the loop can be held from inside the callback`);
+    assert(got === null, `${where}: the settled() made in the callback must wait for the release, got ${got}`);
+    release!();
+    await tick();
+    assert(got === 'cap', `${where}: the release answers it, got ${got}`);
+  }
+});
+
+test('holdFor: the batch runs under the hold, an edit made in it builds once after, and its value comes back', async () => {
+  let width = 1;
+  let runs = 0;
+  const loop = buildLoop({ run: () => { runs++; return width; } });
+  loop.request();
+  await loop.settled();
+  let heldDuring = false;
+  const done = loop.holdFor(async () => {
+    heldDuring = loop.hold() === null;
+    width = 2;
+    loop.request();
+    await tick(20);
+    assert(runs === 1, `no build may start under the batch, ${runs - 1} did`);
+    return 'letters';
+  });
+  assert(done, 'an idle loop can be held');
+  assert((await within(done!)) === 'letters', 'holdFor hands back what the batch returned');
+  assert(heldDuring, 'the loop must be held while the batch runs');
+  assert((await within(loop.settled())) === 2, 'the edit made during the batch builds after it');
+  assert(runs === 2, `exactly once, got ${runs - 1}`);
+});
+
+test('holdFor: a batch that throws or rejects still lets go of the loop', async () => {
+  const loop = buildLoop({ run: () => 'cap' });
+  loop.request();
+  await loop.settled();
+  const why = (p: Promise<unknown> | null) => within(p!).then(() => 'ran', (e: Error) => e.message);
+  const threw = await why(loop.holdFor(() => { throw new Error('the font is missing'); }));
+  assert(threw === 'the font is missing', `a throw comes back as the rejection, got "${threw}"`);
+  const rejected = await why(loop.holdFor(async () => { await tick(); throw new Error('the engine stopped'); }));
+  assert(rejected === 'the engine stopped', `a rejection comes back as it is, got "${rejected}"`);
+  const release = loop.hold();
+  assert(release, 'the loop must be free again after both');
+  release!();
+  assert((await within(loop.settled())) === 'cap', 'and an export still gets the design');
+});
+
+test('holdFor: null while a build runs, and the batch does not run', async () => {
+  const m = manualRun<string>();
+  const loop = buildLoop({ run: m.run });
+  loop.request();
+  await tick();
+  let ran = false;
+  assert(loop.holdFor(() => { ran = true; }) === null, 'a running build must not be held under');
+  assert(!ran, 'and the batch must not run');
+  m.calls[0]!.resolve('a');
+  assert((await within(loop.settled())) === 'a', 'the build lands as usual');
+});
+
 /* -------------------------------------------------------------- worker transport */
 
 /**

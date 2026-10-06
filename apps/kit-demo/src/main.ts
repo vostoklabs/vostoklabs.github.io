@@ -1598,30 +1598,28 @@ const designLoop = buildLoop({
 designLoop.seed(0);
 loopLine.textContent = 'Showing design 0, shipped prebuilt: nothing was built.';
 async function runLoopBatch(): Promise<void> {
-  const release = designLoop.hold();
-  if (!release) {
-    toast('A build is running. Try again when it lands.', { kind: 'warn' });
-    return;
-  }
-  try {
+  const batch = designLoop.holdFor(async () => {
     for (let i = 0; i < 26; i++) {
       loopLine.textContent = `Batch: ${String.fromCharCode(65 + i)} (${i + 1}/26). Nothing rebuilds, and Export waits.`;
       await new Promise((done) => setTimeout(done, 120));
     }
     loopLine.textContent = `Batch done. Showing design ${designLoop.latest}.`;
-  } finally {
-    release();
+  });
+  if (!batch) {
+    toast('A build or a batch is running. Try again when it is done.', { kind: 'warn' });
+    return;
   }
+  await batch;
 }
 
 app.append(
   entry(
-    'buildLoop().seed() · buildLoop().hold()',
+    'buildLoop().seed() · buildLoop().hold() · buildLoop().holdFor()',
     'Build loop: a prebuilt start, a batch run',
     'seed() starts the loop from a design built elsewhere, so the first screen and an export of it ' +
       'need no build. hold() lets a batch of the app’s own (an alphabet, a set) run with no rebuild ' +
       'starting under it: Export waits until the batch lets go, and a change made meanwhile builds ' +
-      'once, after it.',
+      'once, after it. holdFor() runs the batch under the hold and lets go however it ends.',
     loopLine,
     buttonRow(
       button({

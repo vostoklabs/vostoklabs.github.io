@@ -81,15 +81,27 @@ export interface BuildLoop<R> {
    * called no build starts and `settled()` waits; changes asked for meanwhile build once, after
    * it. Returns the release, or null while a build runs or another batch holds the loop: try
    * again once it lands. Calling the release twice releases once.
+   *
+   * Take the design with `settled()` before holding, never during the hold: a `settled()` made
+   * under the hold waits for this very release, so a batch that awaits one never ends. Release
+   * in `finally`, or use `holdFor()`: a release that is never called leaves every export
+   * waiting for good.
    */
   hold(): (() => void) | null;
+  /**
+   * `hold()`, run `batch`, and let go when it ends, however it ends: the hold cannot be lost.
+   * Returns what `batch` returns, or null when the loop could not be held (as `hold()`), and
+   * then `batch` has not run. The same rule holds inside `batch`: no `settled()`.
+   */
+  holdFor<T>(batch: () => Promise<T> | T): Promise<T> | null;
   /**
    * What is running is no longer wanted: the user switched mode or design. Its result is
    * dropped when it lands, and `latest` is cleared so nothing from before can be exported.
    * Call `request()` to build the new thing.
    */
   invalidate(): void;
-  /** A build is running or waiting to run. */
+  /** A build is running or waiting to run. A held batch is not a build: with nothing asked for,
+   *  this is false while a batch holds the loop, so an app shows its batch from its own state. */
   readonly busy: boolean;
   /** The last result that was still current when it landed. For the preview only. */
   readonly latest: R | null;
@@ -206,7 +218,9 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
       if (dirty) start();
       else {
         guard(() => opts.onIdle?.());
-        settleWaiters();
+        // A batch that took the loop inside onResult or onIdle holds it now, and whoever waits
+        // is answered at its release.
+        if (!held) settleWaiters();
       }
     };
 
@@ -223,6 +237,24 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
     } catch (e) {
       finish(false, e);
     }
+  };
+
+  const hold = (): (() => void) | null => {
+    if (disposed || running || held) return null;
+    held = true;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      held = false;
+      if (disposed) return;
+      // What was asked for during the batch builds now, on the next tick rather than inside
+      // the caller's own clean-up; with nothing asked, whoever waited gets the result there is.
+      if (dirty) {
+        clearTimeout(timer);
+        timer = setTimeout(start, 0);
+      } else settleWaiters();
+    };
   };
 
   return {
@@ -251,22 +283,13 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
       latest = result;
       return true;
     },
-    hold() {
-      if (disposed || running || held) return null;
-      held = true;
-      let released = false;
-      return () => {
-        if (released) return;
-        released = true;
-        held = false;
-        if (disposed) return;
-        // What was asked for during the batch builds now, on the next tick rather than inside
-        // the caller's own clean-up; with nothing asked, whoever waited gets the result there is.
-        if (dirty) {
-          clearTimeout(timer);
-          timer = setTimeout(start, 0);
-        } else settleWaiters();
-      };
+    hold,
+    holdFor<T>(batch: () => Promise<T> | T) {
+      const release = hold();
+      if (!release) return null;
+      // The batch runs now, in the caller's tick; a throw in it rejects, and the hold is let go
+      // however it ends.
+      return new Promise<T>((resolve) => resolve(batch())).finally(release);
     },
     invalidate() {
       generation += 1;
