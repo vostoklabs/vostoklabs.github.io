@@ -6,10 +6,15 @@
 // asks the point test "is this ring inside that one"; and every caller destructures the box as
 // [x0, y0, x1, y1].
 //
+// Then the logo's own question, "is this ring inside that one", and the winding the logo takes
+// from it. The answer may not depend on where a ring starts or which way it runs: the printed ink
+// is taken by winding, so a reader that starts a ring elsewhere would print different ink.
+//
 // Run: pnpm --filter foldbox test:poly
 
-import { pointInRing, polysBounds, signedArea } from '../src/geometry/poly';
-import type { Poly } from '../src/types';
+import { windByNesting } from '../src/geometry/marks';
+import { pointInRing, polysBounds, ringWithin, signedArea } from '../src/geometry/poly';
+import type { Poly, Pt } from '../src/types';
 
 let failures = 0;
 let checks = 0;
@@ -48,6 +53,59 @@ ok(JSON.stringify(polysBounds([ell])) === '[-1,-2,5,7]', `the L's box is ${JSON.
 ok(JSON.stringify(polysBounds([square, triangle])) === '[0,0,4,3]', 'two rings do not share one box');
 ok(JSON.stringify(polysBounds([])) === '[0,0,0,0]', 'no rings is not the empty box at the origin');
 ok(JSON.stringify(polysBounds([[]])) === '[0,0,0,0]', 'a ring with no points is not the empty box at the origin');
+
+/** Every start and both directions of a ring. */
+const starts = (r: Poly): Poly[] =>
+  r.flatMap((_, k) => {
+    const s = [...r.slice(k), ...r.slice(0, k)];
+    return [s, [...s].reverse()];
+  });
+const sq4: Poly = [[0, 0], [4, 0], [4, 4], [0, 4]];
+/** Crosses `sq4`: one corner inside it and two outside; one of the square's corners is inside it. */
+const wedge: Poly = [[2, 2], [7, 2], [2, 7]];
+/** Wholly inside `sq4`, as a counter is inside its letter. */
+const counter: Poly = [[1, 1], [1, 3], [3, 3], [3, 1]];
+/** A V with its two ends on `sq4`'s sides, as an envelope's flap meets them. */
+const flap: Poly = [[0, 3], [2, 1], [4, 3]];
+
+console.log('inside, asked of the whole ring');
+ok(starts(wedge).every((w) => !ringWithin(w, sq4)), 'a ring that crosses another is inside it from some start');
+ok(starts(sq4).every((s) => !ringWithin(s, wedge)), 'the ring it crosses is inside it from some start');
+ok(starts(counter).every((c) => ringWithin(c, sq4)), 'a counter is not inside its letter from some start');
+ok(!ringWithin(sq4, counter), 'the letter is inside its counter');
+ok(starts(flap).every((f) => ringWithin(f, sq4)), 'a ring whose ends touch the other is not inside it from some start');
+ok(!ringWithin(sq4, sq4), 'a ring is inside itself');
+
+console.log('outer or hole, by nesting');
+let crossed = 0;
+for (const w of starts(wedge)) {
+  for (const s of starts(sq4)) {
+    if (windByNesting([s, w]).every((r) => signedArea(r) > 0)) crossed++;
+  }
+}
+ok(crossed === 6 * 8, `two crossing rings came out as two outers for ${crossed} of 48 starts`);
+ok(
+  starts(counter).every((c) => {
+    const [outer, hole] = windByNesting([[...sq4].reverse(), c]);
+    return signedArea(outer!) > 0 && signedArea(hole!) < 0;
+  }),
+  'a counter is not a hole in its letter from some start',
+);
+// Six wavy rings one inside the next, 400 points each: the innermost is inside five others, so a
+// hole, and the outermost is inside none.
+const wavy = Array.from({ length: 6 }, (_, k) =>
+  Array.from({ length: 400 }, (_, i): Pt => {
+    const a = (i / 400) * Math.PI * 2;
+    const rad = 20 + 4 * k + 1.2 * Math.sin(a * (5 + k));
+    return [rad * Math.cos(a), rad * Math.sin(a)];
+  }),
+);
+for (const shift of [0, 133, 271]) {
+  const signs = windByNesting(wavy.map((r, k) => (k % 2 ? [...r].reverse() : [...r.slice(shift), ...r.slice(0, shift)])))
+    .map((r) => (signedArea(r) > 0 ? '+' : '-'))
+    .join('');
+  ok(signs === '-+-+-+', `six nested rings started at ${shift} wind ${signs}, not -+-+-+`);
+}
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
 if (failures) process.exit(1);

@@ -26,7 +26,7 @@
 import { buildStl, buildThreeMF, downloadFile, type ExportPart, type RGB } from '@vostok/export';
 import { BRAND } from '@vostok/brand';
 import type { Net, Panel, Poly, Pt } from '../types';
-import { EPS, at, polysBounds, cross, len, pointInRing, signedArea, sub } from '../geometry/poly';
+import { EPS, at, polysBounds, cross, len, pointInRing, ringIndex, ringWithin, signedArea, sub } from '../geometry/poly';
 import {
   effectiveHingeWidthMm,
   hingeThicknessMm,
@@ -605,12 +605,10 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
     const outers = inlayRings.filter((r) => signedArea(r) > 0);
     const holes = inlayRings.filter((r) => signedArea(r) <= 0);
     for (const outer of outers) {
+      const index = ringIndex(outer);
       ink.prism(
         outer,
-        holes.filter((h) => {
-          const probe = h[0];
-          return probe !== undefined && pointInRing(probe, outer);
-        }),
+        holes.filter((h) => ringWithin(h, outer, 1e-9, index)),
         0,
         inlayTop,
       );

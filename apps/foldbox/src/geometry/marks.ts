@@ -21,8 +21,9 @@
 // across a window: the diagnostics carry the reason and the dieline simply has no
 // logo on it.
 
+import { cancelCoincidentRings } from '@vostok/shapes';
 import type { Artwork, BoxParams, Mark, Net, Panel, Poly, Pt, StyleId } from '../types';
-import { at, polysBounds, pointInRing, signedArea } from './poly';
+import { at, polysBounds, pointInRing, ringIndex, ringWithin, signedArea } from './poly';
 import { WINDOW_PANEL, styleMeta } from './styles';
 import { grooveHalfOpeningMm } from './fit';
 
@@ -52,16 +53,19 @@ function dedupe(poly: Poly): Poly {
 /** Outer rings CCW, holes CW, decided by NESTING rather than by whatever the source
  *  wound them: a TrueType outline is clockwise-outside, a CFF one is the opposite, an
  *  SVG is whatever the artist drew, and a mirror flips all three. Depth is how many
- *  other rings contain this one; even is an outer, odd is a hole. Rings that cross —
- *  two letters of a script face that touch — are left as they are: they tessellate
- *  even-odd either way, which is the same thing every SVG renderer would do. */
+ *  other rings this one lies inside; even is an outer, odd is a hole. "Inside" is asked
+ *  of every vertex (`ringWithin`), not of the first: where two rings cross — two letters
+ *  of a script face that touch, the strokes of an outline drawing filled — the first
+ *  vertex lands on either side of the crossing depending on where the ring happens to
+ *  start, and the printed ink is taken by winding, so it came and went with that. */
 export function windByNesting(rings: Poly[]): Poly[] {
-  return rings.map((r) => {
-    const probe = at(r, 0);
+  // Each ring indexed once, not once for every pair it is in.
+  const index = rings.map(ringIndex);
+  return rings.map((r, k) => {
     let depth = 0;
-    for (const other of rings) {
-      if (other !== r && pointInRing(probe, other)) depth++;
-    }
+    rings.forEach((other, m) => {
+      if (m !== k && ringWithin(r, other, 1e-9, index[m])) depth++;
+    });
     const ccw = signedArea(r) > 0;
     return depth % 2 === 0 ? (ccw ? r : [...r].reverse()) : ccw ? [...r].reverse() : r;
   });
@@ -70,13 +74,15 @@ export function windByNesting(rings: Poly[]): Poly[] {
 /** Centre the art on the origin and scale it so its longest side is 1. The face
  *  decides the millimetres later; this just makes "50% of the face" mean the same
  *  thing for a word and for a badge. Rings that are not shapes — the odd two-point
- *  contour a font emits, the slivers a stroke tessellation leaves — are dropped here. */
+ *  contour a font emits, the slivers a stroke tessellation leaves — are dropped here, and
+ *  so are rings drawn twice over: a filled icon face draws a symbol's inside twice, wound
+ *  against itself, and the pair encloses nothing (`cancelCoincidentRings`). */
 export function normalizeArtwork(rings: Poly[], lines: Poly[]): Artwork {
   const box = polysBounds([...rings, ...lines]);
   const side = Math.max(box[2] - box[0], box[3] - box[1]) || 1;
-  const cleanRings = rings
-    .map(dedupe)
-    .filter((r) => r.length >= 3 && Math.abs(signedArea(r)) > side * side * 1e-8);
+  const cleanRings = cancelCoincidentRings(
+    rings.map(dedupe).filter((r) => r.length >= 3 && Math.abs(signedArea(r)) > side * side * 1e-8),
+  );
   const cleanLines = lines.map(dedupe).filter((l) => l.length >= 2);
   const all = polysBounds([...cleanRings, ...cleanLines]);
   const cx = (all[0] + all[2]) / 2;

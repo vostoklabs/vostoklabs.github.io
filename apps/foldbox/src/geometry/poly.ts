@@ -3,7 +3,7 @@
 // cost more than it buys. The one thing that has to be right is that shared corners
 // compare EQUAL, which is what `snap` is for.
 
-import { pointInRing, ringBox, signedArea } from '@vostok/shapes';
+import { pointInRing, pointSegmentDistance, ringBox, signedArea, type Box } from '@vostok/shapes';
 import type { Poly, Pt } from '../types';
 
 /* Area and winding, and even-odd point-in-ring, are the shelf's: positive area is
@@ -11,6 +11,102 @@ import type { Poly, Pt } from '../types';
    tell an outer ring from a hole; the point test is blind to winding, so it can ask "is this ring
    nested inside that one" before either has been wound the right way. */
 export { pointInRing, signedArea };
+
+/**
+ * Whether ring `r` lies inside ring `o`, asked of every one of `r`'s vertices rather than its
+ * first: inside when none of them is outside `o` and at least one is inside, the ones on `o`'s
+ * edge (within `tol`) saying nothing either way.
+ *
+ * So two rings that cross are side by side, neither inside the other, which is what an outline's
+ * overlapping parts are (a font's overlapping strokes, an outline drawing's touching shapes); a
+ * counter lies wholly inside its letter and is inside. The answer is the same wherever `r`
+ * starts and whichever way it runs, and a hair of float noise in where a vertex sits cannot
+ * change it. Asked of the first vertex alone, a crossing ring came out inside or not by which
+ * side of the crossing that vertex happened to fall on.
+ *
+ * `index` is `o`'s `ringIndex`, for a caller asking about the same `o` many times.
+ */
+export function ringWithin(r: Poly, o: Poly, tol = 1e-9, index: RingIndex = ringIndex(o)): boolean {
+  const { box } = index;
+  let inside = false;
+  for (const p of r) {
+    if (p[0] < box.minX - tol || p[0] > box.maxX + tol || p[1] < box.minY - tol || p[1] > box.maxY + tol) return false;
+    const side = sideOf(p, o, index, tol);
+    if (side === 0) continue;
+    if (side < 0) return false;
+    inside = true;
+  }
+  return inside;
+}
+
+/** A ring's box, and its edges filed by bands of height: a point only ever needs the edges at
+ *  its own height, so asking every vertex of one ring against another costs a few edges a vertex
+ *  rather than the whole ring. Without it, rings nested in rings of a few thousand points (a
+ *  filled contour map, a target) took seconds where the first-vertex test took milliseconds. */
+export interface RingIndex {
+  box: Box;
+  band: number;
+  /** Edge `i` (from vertex `i - 1` to vertex `i`) appears in every band its height spans. */
+  start: Int32Array;
+  edges: Int32Array;
+}
+
+export function ringIndex(o: Poly): RingIndex {
+  const box = ringBox([o]);
+  const n = o.length;
+  let rise = 0;
+  for (let i = 0, j = n - 1; i < n; j = i++) rise += Math.abs((o[i] as Pt)[1] - (o[j] as Pt)[1]);
+  const height = box.maxY - box.minY;
+  const band = Math.max((2 * rise) / Math.max(1, n), height / 4096, 1e-12);
+  const bands = Math.floor(height / band) + 1;
+  const bandOf = (y: number): number => Math.min(bands - 1, Math.max(0, Math.floor((y - box.minY) / band)));
+  const count = new Int32Array(bands + 1);
+  const each = (fn: (k: number, i: number) => void): void => {
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const ya = (o[i] as Pt)[1];
+      const yb = (o[j] as Pt)[1];
+      for (let k = bandOf(Math.min(ya, yb)); k <= bandOf(Math.max(ya, yb)); k++) fn(k, i);
+    }
+  };
+  each((k) => count[k + 1]!++);
+  for (let k = 0; k < bands; k++) count[k + 1]! += count[k]!;
+  const start = count.slice();
+  const edges = new Int32Array(count[bands]!);
+  each((k, i) => (edges[count[k]!++] = i));
+  return { box, band, start, edges };
+}
+
+/** Which side of `o` a point is on: 0 within `tol` of an edge, else 1 inside and -1 outside.
+ *  The same answers, to the bit, as asking `pointSegmentDistance` and `pointInRing` of every
+ *  edge: the same arithmetic on the same ends, asked only of the edges that can matter. */
+function sideOf(p: Pt, o: Poly, index: RingIndex, tol: number): -1 | 0 | 1 {
+  const { box, band, start, edges } = index;
+  const n = o.length;
+  const last = start.length - 2;
+  const bandOf = (y: number): number => Math.min(last, Math.max(0, Math.floor((y - box.minY) / band)));
+  const [px, py] = p;
+  for (let k = bandOf(py - tol); k <= bandOf(py + tol); k++) {
+    for (let e = start[k]!; e < start[k + 1]!; e++) {
+      const i = edges[e]!;
+      const a = o[i === 0 ? n - 1 : i - 1] as Pt;
+      const b = o[i] as Pt;
+      if ((px < a[0] - tol && px < b[0] - tol) || (px > a[0] + tol && px > b[0] + tol)) continue;
+      if ((py < a[1] - tol && py < b[1] - tol) || (py > a[1] + tol && py > b[1] + tol)) continue;
+      if (pointSegmentDistance(p, a, b) <= tol) return 0;
+    }
+  }
+  // Even-odd, as `pointInRing` counts it: every edge the ray to the right can cross spans the
+  // point's height, so it is filed in the point's band.
+  let c = false;
+  const k = bandOf(py);
+  for (let e = start[k]!; e < start[k + 1]!; e++) {
+    const i = edges[e]!;
+    const a = o[i] as Pt;
+    const b = o[i === 0 ? n - 1 : i - 1] as Pt;
+    if (a[1] > py !== b[1] > py && px < ((b[0] - a[0]) * (py - a[1])) / (b[1] - a[1]) + a[0]) c = !c;
+  }
+  return c ? 1 : -1;
+}
 
 /** Grid the whole app rounds to. Fine enough that no real dimension lands on the
  *  boundary between two cells, coarse enough that two panels built by different
