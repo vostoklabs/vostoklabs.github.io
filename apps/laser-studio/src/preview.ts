@@ -11,7 +11,7 @@ import { isStaleChunk, staleSaidHere } from './stale';
 import type { BuildOutput, KeyringSpec } from './engine/types';
 import { assembledLayout, assembledPieces, type Assembled } from './assembled';
 import { distanceToOutline, finalHoleCentre, insideShapes, keyringCentre, snapRing, type RingSnap } from './engine/editorGeometry';
-import { getUnit, onUnitChange, setUnit, type Unit } from './units';
+import { units } from './units';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /** The Export Preview's sheet: white, so red, blue and black read as what they are. */
@@ -192,13 +192,10 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
     onChange: (m) => { applyMode(m); if (last) render(last, keyring); },
   });
   modeSwitch.classList.add('ls-preview__mode');
-  const unitSwitch = segmentedControl<Unit>({
-    options: [{ value: 'mm', label: 'mm' }, { value: 'in', label: 'in' }],
-    value: getUnit(),
-    onChange: (u) => setUnit(u),
-  });
+  // The kit's mm | in switch, which keeps itself in step with the unit however it is changed.
+  const unitSwitch = units.unitSwitch();
   unitSwitch.classList.add('ls-preview__unit');
-  onUnitChange(() => { unitSwitch.setValue(getUnit()); if (last) render(last, keyring); });
+  units.onChange(() => { if (last) render(last, keyring); });
   // The switches live in a bar above the drawing, never over it: a ruler label under a
   // control is a ruler label nobody can read.
   const bar = el('div', { className: 'ls-preview__bar' }, [modeSwitch, unitSwitch]);
@@ -313,7 +310,7 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
     const muted = themeColor('--muted', '#9aa3b2');
     const fs = Math.max(vw, vh) * 0.028;
     // Ticks every nice number of the CURRENT unit — 10 mm or 0.5 in — drawn in mm.
-    const inches = getUnit() === 'in';
+    const inches = units.get() === 'in';
     const step = inches ? niceStep(Math.max(w, h) / 25.4) * 25.4 : niceStep(Math.max(w, h));
     const tickLabel = (mm: number) => (inches ? String(+(mm / 25.4).toFixed(2)) : String(Math.round(mm)));
 

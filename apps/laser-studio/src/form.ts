@@ -56,7 +56,7 @@ import {
 import { BATCH_SHEETS } from './engine/batch';
 import { fieldHome, fontSampleOf, railIconKeys, railOrder, surpriseValues, useSegmented } from './form-rules';
 import { loadPatternLibrary, openPatternGallery, paintPattern, patternTitle } from '@vostok/patterns/ui';
-import { fmtLength, getUnit, onUnitChange } from './units';
+import { units } from './units';
 import { lines, type Field, type Values } from './templates/types';
 
 const SYMBOL_FAMILY = fontFamilyFor(FALLBACK_FONT_ID);
@@ -105,8 +105,9 @@ function lengthReadout(f: { unit?: string; format?: (v: number) => string }) {
   if (f.format) return { format: f.format };
   if (f.unit !== 'mm') return {};
   return {
-    format: (v: number) => fmtLength(v),
-    parse: (typed: number) => (getUnit() === 'in' ? typed * 25.4 : typed),
+    format: (v: number) => units.format(v),
+    // A unit typed after the number is read as written ("2 in" in millimetres is 50.8 mm).
+    parse: (typed: number, raw: string) => units.parse(typed, raw),
   };
 }
 
@@ -132,7 +133,7 @@ export function renderForm(opts: FormOptions): Form {
   /** The millimetre nudge pads, so the mm | in switch can re-letter them. */
   const pads: { setUnit(unit: string, scale?: number, decimals?: number): void }[] = [];
   const showUnit = (pad: { setUnit(unit: string, scale?: number, decimals?: number): void }) =>
-    (getUnit() === 'in' ? pad.setUnit('in', 1 / 25.4, 3) : pad.setUnit('mm', 1, 1));
+    (units.get() === 'in' ? pad.setUnit('in', 1 / 25.4, 3) : pad.setUnit('mm', 1, 1));
 
   /** Controls that draw ANOTHER field's value — the areas card draws its symbol's artwork —
    *  and so cannot wait for their own `set` to be called. Repainted on every change. */
@@ -650,11 +651,11 @@ export function renderForm(opts: FormOptions): Form {
   applyVisibility();
 
   // The switch on the preview changes what every length READS, never what it is. Re-showing a
-  // value through the control's own setter is the whole of it: `format` closes over `getUnit()`.
+  // value through the control's own setter is the whole of it: `format` reads the unit in use.
   const lengthKeys = fields
     .filter((f) => (f.kind === 'number' || f.kind === 'stepper') && f.unit === 'mm' && !f.format)
     .map((f) => f.key);
-  const stopUnits = onUnitChange(() => {
+  const stopUnits = units.onChange(() => {
     for (const k of lengthKeys) controls.get(k)?.set(values[k] ?? 0);
     for (const pad of pads) showUnit(pad);
   });

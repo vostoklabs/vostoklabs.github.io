@@ -40,7 +40,7 @@ import { keyringFrom } from './templates/keyring';
 import { renderForm } from './form';
 import { createPreview } from './preview';
 import { buildLaserStudioSvg, downloadCutFiles } from './export/laserSvg';
-import { fmtSize, onUnitChange } from './units';
+import { units } from './units';
 import { CHANGELOG } from './changelog';
 
 export interface EditorOptions {
@@ -102,9 +102,9 @@ export function createEditor(opts: EditorOptions): HTMLElement {
     // The template's own clause ("24 cards · 2 sheets") beats the generic piece count; a run laid
     // on sheets says how many unless the clause already did.
     const pieces = out.status ? ` · ${out.status}` : out.parts.length > 1 ? ` · ${out.parts.length} pieces` : '';
-    status.set(`${fmtSize(out.bbox.maxX - out.bbox.minX, out.bbox.maxY - out.bbox.minY)}${pieces}${sheetsClause(out)} · ${ops.join(' + ')}${warn ? ` · ${warn}` : ''}`, warn ? 'warn' : 'idle');
+    status.set(`${units.formatSize(out.bbox.maxX - out.bbox.minX, out.bbox.maxY - out.bbox.minY)}${pieces}${sheetsClause(out)} · ${ops.join(' + ')}${warn ? ` · ${warn}` : ''}`, warn ? 'warn' : 'idle');
   }
-  const stopUnits = onUnitChange(() => { if (output) describe(output); });
+  const stopUnits = units.onChange(() => { if (output) describe(output); });
 
   // -- rebuild: coalesce a burst of edits, drop stale results ----------------------------
   /**
