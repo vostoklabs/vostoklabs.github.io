@@ -22,11 +22,21 @@ interface Edge {
   maxY: number;
 }
 
+const atLeast = (v: number, lo: number): number => (lo > v ? lo : v);
+const atMost = (v: number, hi: number): number => (hi < v ? hi : v);
+
 /** The region's edges in a uniform grid, so a segment only meets the edges near it. */
 export class EdgeIndex {
   readonly edges: Edge[] = [];
   private readonly cells = new Map<string, Edge[]>();
   private readonly size: number;
+  /** The cells that hold an edge, first and last along each axis. A walk stops at them: a
+   *  segment reaching far past the region (to 1e9 mm, or to infinity) costs what one across it
+   *  does, and a region with no edges costs nothing at all. */
+  private readonly x0: number;
+  private readonly x1: number;
+  private readonly y0: number;
+  private readonly y1: number;
   readonly shapes: Shapes;
 
   constructor(shapes: Shapes, cell?: number) {
@@ -51,6 +61,11 @@ export class EdgeIndex {
     }
     const span = Math.max(maxX - minX, maxY - minY, 1);
     this.size = cell ?? Math.max(1, span / 24);
+    // With no edges these are +Infinity and -Infinity, an empty range.
+    this.x0 = Math.floor(minX / this.size);
+    this.x1 = Math.floor(maxX / this.size);
+    this.y0 = Math.floor(minY / this.size);
+    this.y1 = Math.floor(maxY / this.size);
     for (const e of this.edges) this.forCells(e.minX, e.minY, e.maxX, e.maxY, (k) => {
       let bucket = this.cells.get(k);
       if (!bucket) this.cells.set(k, (bucket = []));
@@ -59,10 +74,12 @@ export class EdgeIndex {
   }
 
   private forCells(minX: number, minY: number, maxX: number, maxY: number, fn: (key: string) => void): void {
-    const x0 = Math.floor(minX / this.size);
-    const x1 = Math.floor(maxX / this.size);
-    const y0 = Math.floor(minY / this.size);
-    const y1 = Math.floor(maxY / this.size);
+    // Clamped to the cells that hold an edge: those outside are empty, so the edges found, and
+    // their order, are what the whole walk finds. (A bound that is not a number clamps nothing.)
+    const x0 = atLeast(Math.floor(minX / this.size), this.x0);
+    const x1 = atMost(Math.floor(maxX / this.size), this.x1);
+    const y0 = atLeast(Math.floor(minY / this.size), this.y0);
+    const y1 = atMost(Math.floor(maxY / this.size), this.y1);
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) fn(`${x},${y}`);
   }
 

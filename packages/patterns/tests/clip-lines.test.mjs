@@ -169,6 +169,25 @@ const LINES = { compact: true };
   check('a 0.3 mm run is kept', kept.length === 1 && near(kept[0][kept[0].length - 1][0] - kept[0][0][0], 0.3, 1e-9), JSON.stringify(kept));
 }
 
+// 12. A line reaching far past the region, or to infinity, or a region with no edges at all: the
+//     answer comes back at once (the edge index walks only the cells that hold an edge).
+{
+  const plate = [[disc(30)]];
+  const timed = (lines, region) => {
+    const t0 = performance.now();
+    const runs = clipPolylines(lines, region, LINES);
+    return { runs, ms: performance.now() - t0 };
+  };
+  const inf = timed([[[0, 0], [Infinity, 0]], [[-Infinity, 5], [Infinity, 5]]], plate);
+  check('a line to infinity comes back at once, with nothing on it', inf.ms < 100 && inf.runs.length === 0, `${inf.ms.toFixed(1)} ms`);
+  const far = timed([[[0, 0], [1e9, 1e9]]], plate);
+  check('a line 1e9 mm long comes back at once', far.ms < 100, `${far.ms.toFixed(1)} ms`);
+  const empty = timed([[[-1500, 0], [1500, 0]]], []);
+  check('a 3 m line on a region with no edges comes back at once, with nothing on it', empty.ms < 100 && empty.runs.length === 0, `${empty.ms.toFixed(1)} ms`);
+  const wide = timed(Array.from({ length: 20 }, (_, i) => [[-3000 + i, -3000], [3000, 3000 - i]]), plate);
+  check('twenty lines a hundred times the plate come back at once, each with its run across it', wide.ms < 100 && wide.runs.length === 20, `${wide.ms.toFixed(1)} ms, ${wide.runs.length} runs`);
+}
+
 console.log(`\n${pass} passed, ${fails.length} failed`);
 if (fails.length) {
   for (const f of fails) console.log(`  · ${f}`);
