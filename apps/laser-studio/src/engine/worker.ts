@@ -27,7 +27,12 @@ function getModule(): Promise<Wasm> {
       wasm.setMinCircularEdgeLength(0.15);
       wasm.setMinCircularAngle(3);
       return wasm;
-    })();
+    })().catch((err) => {
+      // A load that failed (the .wasm did not arrive) is tried again by the next build, rather
+      // than failing every build after it until the page is reloaded.
+      modulePromise = null;
+      throw err;
+    });
   }
   return modulePromise;
 }
