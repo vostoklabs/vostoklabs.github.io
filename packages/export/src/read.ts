@@ -35,7 +35,8 @@ export function modelFormatOf(name: string): ModelFormat | null {
  *
  * STL and OBJ come back as written (an STL as a triangle soup, three vertices per triangle);
  * welding, repair and orientation are the caller's business. A file with no triangles throws,
- * with a sentence a person can read.
+ * with a sentence a person can read, and so does a binary STL whose size does not match the
+ * triangle count in its header.
  */
 export function readModel(bytes: Uint8Array | ArrayBuffer, name: string): ModelMesh {
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -69,7 +70,9 @@ function readStl(data: Uint8Array): ModelMesh {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   if (data.byteLength >= 84) {
     const count = view.getUint32(80, true);
-    if (84 + count * 50 === data.byteLength) {
+    const size = 84 + count * 50;
+    if (size === data.byteLength) {
+      if (count === 0) throw new Error('This STL has no triangles in it.');
       const positions = new Float32Array(count * 9);
       for (let t = 0; t < count; t++) {
         // 12 bytes of facet normal first: never trusted, the winding says which way is out.
@@ -77,6 +80,11 @@ function readStl(data: Uint8Array): ModelMesh {
         for (let k = 0; k < 9; k++) positions[t * 9 + k] = view.getFloat32(at + k * 4, true);
       }
       return { positions, indices: soupIndices(count * 3) };
+    }
+    // Binary all the same, at the wrong size: text has no zero byte, and a binary STL's count
+    // has one (its top byte, below 16.7 million triangles). Bytes went missing, or came after.
+    if (data.subarray(0, 84).includes(0)) {
+      throw new Error(`This binary STL is damaged: its header gives ${count} triangles, which take ${size} bytes, but the file is ${data.byteLength} bytes.`);
     }
   }
   const text = new TextDecoder().decode(data);

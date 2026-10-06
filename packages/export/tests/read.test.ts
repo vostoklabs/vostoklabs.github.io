@@ -114,6 +114,16 @@ check('no format for anything else', modelFormatOf('model.step') === null && mod
   const bin = buildStl(PARTS, 'solid but binary');
   check('binary STL whose header starts with "solid": read as binary', readModel(bin, 'x.stl').positions.length === (bin.length - 84) / 50 * 9);
   check('an STL with no triangles says so', throws(() => readModel(strToU8('solid empty\nendsolid\n'), 'e.stl')) === 'This STL has no triangles in it.');
+  // A binary STL whose header counts no triangles has none, and says so like any other.
+  check('a binary STL of no triangles says so', throws(() => readModel(new Uint8Array(84), 'empty.stl')) === 'This STL has no triangles in it.',
+    throws(() => readModel(new Uint8Array(84), 'empty.stl')) || 'read without a word');
+  // One that is longer or shorter than its own count says it is damaged: it has triangles.
+  const whole = buildStl(PARTS);
+  const longer = new Uint8Array(whole.length + 7);
+  longer.set(whole);
+  const said = [throws(() => readModel(longer, 'long.stl')), throws(() => readModel(whole.subarray(0, whole.length - 10), 'short.stl'))];
+  check('a binary STL longer or shorter than its triangle count says it is damaged',
+    said.every((m) => m.startsWith('This binary STL is damaged') && m.includes('12 triangles') && m.includes(`${whole.length} bytes`)), said.join(' / '));
 }
 {
   const obj = '# a quad and a triangle\nv 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0 1.0\nvt 0 0\nf 1/1/1 2/1/1 3/1/1 4/1/1\nv 0 0 1\nf -1 -2 -3\n';
