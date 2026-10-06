@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
+import { withScope } from '@vostok/manifold';
 import { initManifold, geomToManifold, manifoldToGeom, extrudePrism, extrudeStrokeGeom } from './manifold.js';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -114,51 +115,59 @@ export async function buildBodies(capGeom, meta, icon, opts) {
   const bottomZ = opts.through ? capBottomZ - 1 : lo - opts.depth;
   const height  = meta.topZ + 3 - bottomZ;
 
-  let cap = geomToManifold(capGeom);
+  // Every manifold object the carve makes is kept, and freed when it ends even when a step
+  // throws: the WASM heap only grows, and a legend that failed half way used to leave the cap
+  // and the prism in it. What comes out is plain three.js geometry, copied out of WASM memory.
+  //
+  // A union's inputs are still freed the moment the union is made, as they always were: manifold
+  // evaluates lazily and flattens a chain of unions only when nothing else holds its parts, so
+  // keeping them alive to the end changes how it triangulates the result. The scope's second
+  // free of an object already freed is a no-op.
+  return withScope((keep) => {
+    let cap = keep(geomToManifold(capGeom));
 
-  if (opts.homingBump && opts.homingBumpGeom) {
-    const homingBumpManifold = geomToManifold(opts.homingBumpGeom);
-    // Align homing bump from 1u coordinate system to current keycap's center and topZ height.
-    const translateX = meta.center[0] - 0.7617388490000003;
-    const translateY = meta.center[1] - (-0.5153479989999994);
-    const translateZ = meta.topZ - 11.8322514;
-    const translatedBump = homingBumpManifold.translate([translateX, translateY, translateZ]);
-    const mergedCap = cap.add(translatedBump);
-    cap.delete();
-    homingBumpManifold.delete();
-    translatedBump.delete();
-    cap = mergedCap;
-  }
-
-  // Build the prism: start with fill contours (if any), then union in each stroke solid.
-  // `boldMM` grows the outline all round — a print concern more than a styling one, since a
-  // legend thinner than a couple of extrusion widths comes out ragged. Absent (0) by default,
-  // so the single-cap path is unchanged.
-  const bold = opts.boldMM || 0;
-  let prism = contours.length ? extrudePrism(contours, bottomZ, height, bold) : null;
-
-  for (const sg of strokeGeoms) {
-    const strokeSolid = extrudeStrokeGeom(sg, bottomZ, height, bold);
-    if (prism) {
-      const united = prism.add(strokeSolid);
-      prism.delete();
-      strokeSolid.delete();
-      prism = united;
-    } else {
-      prism = strokeSolid;
+    if (opts.homingBump && opts.homingBumpGeom) {
+      const homingBumpManifold = keep(geomToManifold(opts.homingBumpGeom));
+      // Align homing bump from 1u coordinate system to current keycap's center and topZ height.
+      const translateX = meta.center[0] - 0.7617388490000003;
+      const translateY = meta.center[1] - (-0.5153479989999994);
+      const translateZ = meta.topZ - 11.8322514;
+      const translatedBump = keep(homingBumpManifold.translate([translateX, translateY, translateZ]));
+      const mergedCap = keep(cap.add(translatedBump));
+      cap.delete();
+      homingBumpManifold.delete();
+      translatedBump.delete();
+      cap = mergedCap;
     }
-  }
 
-  if (!prism) throw new Error('No geometry to extrude for this icon.');
+    // Build the prism: start with fill contours (if any), then union in each stroke solid.
+    // `boldMM` grows the outline all round — a print concern more than a styling one, since a
+    // legend thinner than a couple of extrusion widths comes out ragged. Absent (0) by default,
+    // so the single-cap path is unchanged.
+    const bold = opts.boldMM || 0;
+    let prism = contours.length ? keep(extrudePrism(contours, bottomZ, height, bold)) : null;
 
-  // Single-colour mode: only carve the recess (cap − prism) and skip the separate legend
-  // body, so the whole cap prints in one filament with the icon engraved into the top.
-  const logoM  = opts.singleColor ? null : cap.intersect(prism);
-  const bodyM  = cap.subtract(prism);
+    for (const sg of strokeGeoms) {
+      const strokeSolid = keep(extrudeStrokeGeom(sg, bottomZ, height, bold));
+      if (prism) {
+        const united = keep(prism.add(strokeSolid));
+        prism.delete();
+        strokeSolid.delete();
+        prism = united;
+      } else {
+        prism = strokeSolid;
+      }
+    }
 
-  const logoGeometry    = logoM ? manifoldToGeom(logoM) : null;
-  const keycapGeometry  = manifoldToGeom(bodyM);
+    if (!prism) throw new Error('No geometry to extrude for this icon.');
 
-  cap.delete(); prism.delete(); logoM?.delete(); bodyM.delete();
-  return { keycapGeometry, logoGeometry, surfaceVariation: hi - lo };
+    // Single-colour mode: only carve the recess (cap − prism) and skip the separate legend
+    // body, so the whole cap prints in one filament with the icon engraved into the top.
+    const logoM  = opts.singleColor ? null : keep(cap.intersect(prism));
+    const bodyM  = keep(cap.subtract(prism));
+
+    const logoGeometry    = logoM ? manifoldToGeom(logoM) : null;
+    const keycapGeometry  = manifoldToGeom(bodyM);
+    return { keycapGeometry, logoGeometry, surfaceVariation: hi - lo };
+  });
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import ManifoldModule from 'manifold-3d';
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
-import { csOf, extrude } from '@vostok/manifold';
+import { csOf, extrude, withScope } from '@vostok/manifold';
 import { weldPositions } from './meshUtils.js';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
@@ -73,24 +73,34 @@ export function creaseNormals(geom, creaseAngleDeg = 30) {
  * (and every lucide icon, which is a 2/24 stroke) sit right at that edge.
  *
  * Round joins because letters have curves and a mitre would grow spikes off every corner.
- * Takes ownership of `cs` and returns whichever section the caller should use.
+ * Frees `cs` once it has grown it and returns whichever section the caller should use, kept in
+ * the caller's scope so a throw further on still frees it.
  */
-function embolden(cs, bold) {
+function embolden(cs, bold, keep) {
   if (!bold) return cs;
-  const grown = cs.offset(bold, 'Round', 2, 16);
+  const grown = keep(cs.offset(bold, 'Round', 2, 16));
   cs.delete();
   return grown;
+}
+
+/** One cross-section stood up as a prism from bottomZ to bottomZ + height. The caller owns the
+ *  solid; what is made on the way is freed when it is done with, and by the scope if a step
+ *  throws (a second free is a no-op there). */
+function prismOf(cs, bottomZ, height, bold) {
+  return withScope((keep) => {
+    const section = embolden(keep(cs), bold, keep);
+    const solidRaw = keep(extrude(api, section, height));
+    const solid = solidRaw.translate([0, 0, bottomZ]);
+    solidRaw.delete();
+    section.delete();
+    return solid;
+  });
 }
 
 // 2D contours -> vertical prism spanning bottomZ .. bottomZ + height.
 // NonZero fill matches SVG and cleanly unions any self-overlapping paths.
 export function extrudePrism(contours, bottomZ, height, bold = 0) {
-  const cs = embolden(csOf(api, contours, 'NonZero'), bold);
-  const solidRaw = extrude(api, cs, height);
-  const solid = solidRaw.translate([0, 0, bottomZ]);
-  solidRaw.delete();
-  cs.delete();
-  return solid;
+  return prismOf(csOf(api, contours, 'NonZero'), bottomZ, height, bold);
 }
 
 /**
@@ -130,10 +140,5 @@ export function extrudeStrokeGeom(flatGeom, bottomZ, height, bold = 0) {
     throw new Error('Stroke geometry produced no usable triangles.');
   }
 
-  const cs = embolden(csOf(api, contours, 'NonZero'), bold);
-  const solidRaw = extrude(api, cs, height);
-  const solid = solidRaw.translate([0, 0, bottomZ]);
-  solidRaw.delete();
-  cs.delete();
-  return solid;
+  return prismOf(csOf(api, contours, 'NonZero'), bottomZ, height, bold);
 }
