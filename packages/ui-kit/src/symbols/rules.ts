@@ -14,6 +14,10 @@
   Every edit the symbol field makes is one of these functions, so a node test can hold each
   rule, and an app editing the same value (the inspector's Before / After / Both sides)
   makes exactly the edit the field would.
+
+  This file imports nothing, and stays that way: `@vostok/ui-kit/symbol-rules` is this file
+  alone, so geometry code and node tests that ask which characters are symbols load no DOM
+  and none of the rest of the kit (tests/symbol-rules.test.mjs holds it).
 */
 
 /** The first code point a symbol may use. */

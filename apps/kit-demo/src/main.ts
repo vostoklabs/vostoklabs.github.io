@@ -73,8 +73,6 @@ import {
   symbolInspector,
   SYMBOL_CATALOG,
   POPULAR_SYMBOL_IDS,
-  nextSymbolChar,
-  shiftSymbol,
   modeBar,
   stageTools,
   previewBar,
@@ -109,6 +107,8 @@ import {
   type SymbolTransform,
 } from '@vostok/ui-kit';
 import { openSymbolChooser, symbolDrawing } from '@vostok/ui-kit/symbols';
+// The symbol rules on their own, as code with no DOM takes them.
+import { nextSymbolChar, shiftSymbol } from '@vostok/ui-kit/symbol-rules';
 import './demo.css';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -1188,7 +1188,9 @@ app.append(
       'token: click to select it, drag to move it, Backspace to remove it. "Add symbol" opens the ' +
       'library over the bundled Tabler and Fluent sets, hanging under the button. A selected token ' +
       'opens its inspector: size, offset, turn, flip, move, swap, remove. The large line is the ' +
-      'page’s own drawing of the result, the part an app owns.',
+      'page’s own drawing of the result, the part an app owns. The rules under all three (which ' +
+      'characters are symbols, lengths in code points, every edit) load alone from ' +
+      '@vostok/ui-kit/symbol-rules, with no DOM, as this page takes them.',
     panel(engraving, symbolLine, inspectorSlot),
   ),
 );
