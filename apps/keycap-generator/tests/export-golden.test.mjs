@@ -97,7 +97,7 @@ await build({
       "export { applyStemClearance } from './src/stemClearance.js';",
       "export { buildFitTestRow, computeFitTestLadder, FIT_TEST_STEP_MM, FIT_TEST_FONT_ID } from './src/fitTest.js';",
       "export { keycapThreeMF } from './src/export3mf.js';",
-      "export { buildObjMtl } from './src/exportObj.js';",
+      "export { keycapObjMtl } from './src/exportObj.js';",
       "export { BufferGeometry, Float32BufferAttribute, BufferAttribute } from 'three';",
     ].join('\n'),
     resolveDir: APP,
@@ -387,7 +387,7 @@ async function run(c) {
     const text = /\.(model|config|txt|xml|rels)$/i.test(name) ? strFromU8(bytes) : null;
     files[name] = hash(text == null ? bytes : steady(text));
   }
-  const { obj, mtl } = app.buildObjMtl(parts, { mtlFileName: `${baseName}.mtl` });
+  const { obj, mtl } = app.keycapObjMtl(parts, { mtlFileName: `${baseName}.mtl` });
   return {
     files,
     obj: hash(steady(obj)),

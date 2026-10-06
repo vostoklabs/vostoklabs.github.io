@@ -27,7 +27,7 @@ import {
 } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
-import { downloadFile } from '@vostok/export';
+import { downloadFile, textToArrayBuffer } from '@vostok/export';
 // 1x1 transparent PNG — last-resort cover if the canvas can't be read (the shelf's, shared with
 // every MakerLab app). In practice preserveDrawingBuffer makes the real capture succeed.
 import { BLANK_COVER } from '@vostok/export/makerlab';
@@ -45,7 +45,7 @@ import {
   FIT_TEST_STEP_MM, FIT_TEST_STEP_OPTIONS, FIT_TEST_FONT_ID, computeFitTestLadder, buildFitTestRow,
 } from './fitTest.js';
 import { keycapThreeMF } from './export3mf.js';
-import { buildObjMtl, objToArrayBuffer } from './exportObj.js';
+import { keycapObjMtl } from './exportObj.js';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
 import { zipSync } from 'fflate';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
@@ -472,7 +472,7 @@ export function mount(container, host) {
 
   // debug handles (harmless; used for automated verification)
   window.__app = {
-    THREE, scene, camera, renderer, capMesh, logoMesh, stemMesh, keycapThreeMF, buildObjMtl,
+    THREE, scene, camera, renderer, capMesh, logoMesh, stemMesh, keycapThreeMF, keycapObjMtl,
     get exportParts() {
       return lastBodies
         ? buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked)
@@ -1658,13 +1658,13 @@ export function mount(container, host) {
     if (MAKERLAB && mlReady() && mlCan('export')) {
       setStatus('Sending to MakerLab…');
       try {
-        const { obj, mtl } = buildObjMtl(makeParts(), { mtlFileName: `${baseName}.mtl` });
+        const { obj, mtl } = keycapObjMtl(makeParts(), { mtlFileName: `${baseName}.mtl` });
         const result = await sdkExport({
           artifacts: [
             {
               fileName: `${baseName}.obj`,
               format: 'obj',
-              buffer: objToArrayBuffer(obj),
+              buffer: textToArrayBuffer(obj),
               mtl,
               coverImage: captureCover(),
               description: `${description} ${LICENSE_NOTE}`,
@@ -1869,8 +1869,8 @@ export function mount(container, host) {
         const bodies = await buildBodies(shellGeometry, meta, legend, opts);
         const parts = buildExportParts(bodies, capColor, logoColor, through);
         if (toHost) {
-          const { obj, mtl } = buildObjMtl(parts, { mtlFileName: 'keycap-alphabet.mtl' });
-          plates.push(objToArrayBuffer(obj));
+          const { obj, mtl } = keycapObjMtl(parts, { mtlFileName: 'keycap-alphabet.mtl' });
+          plates.push(textToArrayBuffer(obj));
           plateMtl = mtl;
         } else {
           files[`keycap-${ch}.3mf`] = new Uint8Array(await keycapThreeMF(parts, { process: projectProcess() }).arrayBuffer());

@@ -12,6 +12,34 @@ const rgbOf = (hex) => {
 };
 
 /**
+ * One keycap part in the shape the shelf's writers take: the 3MF here, and the OBJ
+ * (exportObj.js). One conversion for both, so the two files cannot describe different solids.
+ *
+ * @param {{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}} p
+ */
+export function shelfPart(p) {
+  // Manifold output is already a clean, indexed, watertight solid — use it as-is.
+  // Only weld when handed a non-indexed mesh (don't re-weld and risk false merges).
+  const g = p.geom.index ? p.geom : weldPositions(p.geom);
+  const idx = g.getIndex().array;
+  return {
+    name: p.name,
+    color: rgbOf(p.color),
+    extruder: p.extruder,
+    positions: g.getAttribute('position').array,
+    // three keeps a small mesh's index as 16-bit; the writers take 32.
+    indices: idx instanceof Uint32Array ? idx : Uint32Array.from(idx),
+  };
+}
+
+/** Who made the file, for the provenance mark every keycap file carries (invariant #2). */
+export function keycapMark() {
+  // Read without assuming Vite, so a node script that imports this file still runs.
+  const env = import.meta.env ?? {};
+  return { title: 'Keycap', generator: 'keycap-generator', buildId: env.VITE_BUILD_ID };
+}
+
+/**
  * Build the keycap's 3MF.
  *
  * @param {Array<{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}>} parts
@@ -23,28 +51,10 @@ const rgbOf = (hex) => {
  * @returns {Blob} the file, typed `model/3mf`.
  */
 export function keycapThreeMF(parts, { process } = {}) {
-  // Read without assuming Vite, so a node script that imports this file still runs.
-  const env = import.meta.env ?? {};
   const bytes = writeThreeMF(
-    parts.map((p) => {
-      // Manifold output is already a clean, indexed, watertight solid — use it as-is.
-      // Only weld when handed a non-indexed mesh (don't re-weld and risk false merges).
-      const g = p.geom.index ? p.geom : weldPositions(p.geom);
-      const idx = g.getIndex().array;
-      return {
-        name: p.name,
-        color: rgbOf(p.color),
-        extruder: p.extruder,
-        positions: g.getAttribute('position').array,
-        // three keeps a small mesh's index as 16-bit; the writer takes 32.
-        indices: idx instanceof Uint32Array ? idx : Uint32Array.from(idx),
-        group: 'keycap',
-      };
-    }),
+    parts.map((p) => ({ ...shelfPart(p), group: 'keycap' })),
     {
-      title: 'Keycap',
-      generator: 'keycap-generator',
-      buildId: env.VITE_BUILD_ID,
+      ...keycapMark(),
       plateSize: plateSize(loadPlateChoice()),
       process,
     },

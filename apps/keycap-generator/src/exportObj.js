@@ -1,124 +1,47 @@
-import { provenanceComment } from '@vostok/export';
-import { weldPositions } from './meshUtils.js';
-
-/*
- * OBJ + MTL writer for the embedded build's export path.
- *
- * Writes one `o` object per colour region with its own `usemtl`, and one `Kd` material per
- * distinct colour.
- *
- * Geometry is written in the same native millimetre space keycapThreeMF() uses, so the OBJ
- * and the standalone .3mf describe an identical model.
- */
-
-// Round to keep the file compact without losing print precision (1e-4 mm) and avoid
-// exponent notation, which some OBJ readers reject.
-const f = (n) => (Math.round(n * 1e4) / 1e4).toString();
-
-// "#rrggbb" -> "r g b" as 0..1 floats, the only colour form MTL's Kd takes.
-function kd(hex) {
-  const h = hex.replace('#', '');
-  const v = (i) => (parseInt(h.slice(i, i + 2), 16) / 255).toFixed(4);
-  return `${v(0)} ${v(2)} ${v(4)}`;
-}
-
-// OBJ object/material names are whitespace-delimited — keep them token-safe.
-const slug = (s) => s.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'part';
+// The keycap's OBJ and MTL, the files the MakerLab export hands the host, written by the shelf's
+// writer (@vostok/export, "OBJ export"). This file only says what the keycap is to it: the parts
+// keycapThreeMF takes (export3mf.js converts both), one material per filament slot, and the
+// provenance mark in the header (invariant #2).
+//
+// A material per SLOT rather than per colour: a cap and a legend set to the same colour are
+// still two filaments in the 3MF, someone may have asked for that on purpose, and the OBJ keeps
+// them as two materials too.
+import { buildObjMtl, objWriter, objMaterials } from '@vostok/export';
+import { keycapMark, shelfPart } from './export3mf.js';
 
 /**
- * An OBJ plate being written one part at a time.
- *
- * The single-cap export has every part in hand before it writes anything, but a keyboard set
- * does not: it carves 61–87 caps one after another, and holding every finished body until the
- * end would keep tens of megabytes of geometry alive for no reason. A writer lets the set
- * builder append each cap the moment it's carved and dispose the geometry immediately.
- *
- * `materials` is shared across the plates of one artifact — a 3MF gets one MTL for the whole
- * export, so every plate must name the same filament slots the same way.
- *
- * @param {{ mtlFileName?: string, materials?: Map<number, object> }} [opts]
- */
-export function createObjWriter({ mtlFileName = 'model.mtl', materials = new Map() } = {}) {
-  /* The header carries the same provenance and licence text the .3mf writes into
-     Metadata/vostok_labs.txt, from the same function — one line of "Vostok Labs" was all this
-     used to say, and it named neither the licence nor the build.
-
-     The standalone .obj keeps it, and so does anything the user opens the OBJ with. A comment
-     is not metadata, though, so on the embedded route the licence line also rides in the
-     export `description` (mount.js). */
-  // The build id the .3mf carries, read as export3mf.js reads it: without assuming Vite, so a
-  // node script that imports this file still runs.
-  const env = import.meta.env ?? {};
-  const lines = [
-    ...provenanceComment({ title: 'Keycap', generator: 'keycap-generator', buildId: env.VITE_BUILD_ID }).split('\n'),
-    '# Units: millimetres. One `o` object per filament slot region.',
-    `mtllib ${mtlFileName}`,
-  ];
-  // OBJ face indices are 1-based and run GLOBALLY across the file, so every object's
-  // indices shift by the number of vertices already written.
-  let vertexOffset = 0;
-
-  return {
-    materials,
-    /** @param {{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}} p */
-    add(p) {
-      // One material per filament slot. First part to claim a slot names and colours it.
-      if (!materials.has(p.extruder)) {
-        materials.set(p.extruder, { name: `filament${p.extruder}`, color: p.color, extruder: p.extruder });
-      }
-      // Manifold output is already a clean, indexed, watertight solid — use it as-is.
-      // Only weld when handed a non-indexed mesh (don't re-weld and risk false merges).
-      const g = p.geom.index ? p.geom : weldPositions(p.geom);
-      const pos = g.getAttribute('position').array;
-      const idx = g.getIndex().array;
-
-      lines.push(`o ${slug(p.name)}`);
-      lines.push(`usemtl ${materials.get(p.extruder).name}`);
-
-      for (let i = 0; i < pos.length; i += 3) {
-        lines.push(`v ${f(pos[i])} ${f(pos[i + 1])} ${f(pos[i + 2])}`);
-      }
-      for (let i = 0; i < idx.length; i += 3) {
-        const a = idx[i] + 1 + vertexOffset;
-        const b = idx[i + 1] + 1 + vertexOffset;
-        const c = idx[i + 2] + 1 + vertexOffset;
-        lines.push(`f ${a} ${b} ${c}`);
-      }
-
-      vertexOffset += pos.length / 3;
-    },
-    /** Nothing written yet — an empty plate must never be handed to the host. */
-    get isEmpty() { return vertexOffset === 0; },
-    get text() { return lines.join('\n') + '\n'; },
-  };
-}
-
-/** MTL text for a writer's (or several writers') shared material map. */
-export function mtlText(materials) {
-  return [...materials.values()].map((m) => `newmtl ${m.name}\nKd ${kd(m.color)}`).join('\n\n') + '\n';
-}
-
-/**
- * Build an OBJ (+ matching MTL) describing one print plate.
+ * The OBJ (+ matching MTL) of one print plate.
  *
  * @param {Array<{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}>} parts
  *        Same shape keycapThreeMF() takes. `extruder` is the 1-based filament slot; parts
  *        sharing a slot share one material (cap + stem are both slot 1 normally).
  * @param {{ mtlFileName?: string }} [opts]
- * @returns {{ obj: string, mtl: string, materials: Array<{name:string,color:string,extruder:number}> }}
+ * @returns {{ obj: string, mtl: string }}
  */
-export function buildObjMtl(parts, { mtlFileName = 'model.mtl' } = {}) {
-  const writer = createObjWriter({ mtlFileName });
-  for (const p of parts) writer.add(p);
-  return {
-    obj: writer.text,
-    mtl: mtlText(writer.materials),
-    materials: [...writer.materials.values()],
-  };
+export function keycapObjMtl(parts, { mtlFileName = 'model.mtl' } = {}) {
+  const { obj, mtl } = buildObjMtl(parts.map(shelfPart), { mtlFileName, materialBy: 'extruder', provenance: keycapMark() });
+  return { obj, mtl };
 }
 
-/** UTF-8 ArrayBuffer of an OBJ plate, for the host export path. */
-export function objToArrayBuffer(obj) {
-  const bytes = new TextEncoder().encode(obj);
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+/**
+ * An OBJ plate written one part at a time.
+ *
+ * A keyboard set carves 61–87 caps one after another, and holding every finished body until the
+ * end would keep tens of megabytes of geometry alive for no reason. A writer lets the set builder
+ * add each cap the moment it is carved and dispose of the geometry at once.
+ *
+ * `materials` (`objMaterials()` from @vostok/export) is shared by every plate of one export, so
+ * each names a filament slot the same way; `buildMtl(materials)` is the export's one MTL.
+ *
+ * @param {{ mtlFileName?: string, materials?: import('@vostok/export').ObjMaterials }} [opts]
+ */
+export function keycapObjWriter({ mtlFileName = 'model.mtl', materials = objMaterials() } = {}) {
+  const writer = objWriter({ mtlFileName, materials, materialBy: 'extruder', provenance: keycapMark() });
+  return {
+    /** @param {{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}} p */
+    add: (p) => writer.add(shelfPart(p)),
+    /** Nothing written yet: an empty plate must never be handed to the host. */
+    get isEmpty() { return writer.isEmpty; },
+    get text() { return writer.text; },
+  };
 }

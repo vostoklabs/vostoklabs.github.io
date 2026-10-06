@@ -46,7 +46,7 @@ async function load(name, env) {
     stdin: {
       contents:
         "export { keycapThreeMF } from './src/export3mf.js';\n" +
-        "export { buildObjMtl } from './src/exportObj.js';\n" +
+        "export { keycapObjMtl } from './src/exportObj.js';\n" +
         "export { plateSize, savePlateChoice } from '@vostok/plates';\n" +
         "export { BoxGeometry } from 'three';\n",
       resolveDir: APP,
@@ -112,7 +112,7 @@ const vlBuild = model.match(/<metadata name="vl:build">([^<]*)<\/metadata>/)?.[1
 check('the 3MF\'s vl:build is the build id the bundle was given', vlBuild === BUILD_ID, `vl:build = ${JSON.stringify(vlBuild)}`);
 
 // --- The OBJ ---------------------------------------------------------------------------------
-const buildLine = (app) => app.buildObjMtl(partsOf(app)).obj.split('\n').find((l) => l.startsWith('# Build:'));
+const buildLine = (app) => app.keycapObjMtl(partsOf(app)).obj.split('\n').find((l) => l.startsWith('# Build:'));
 const withId = buildLine(stamped);
 const withoutId = buildLine(unstamped);
 check('the OBJ header names the build id the bundle was given', withId === `# Build: ${BUILD_ID}`, JSON.stringify(withId));
