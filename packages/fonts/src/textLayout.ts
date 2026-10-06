@@ -23,8 +23,11 @@ const EMPTY_BOX: LineBox = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
 /** Convert opentype.js path commands into polygon contours (Y flipped for Z-up). Each curve is
  *  flattened into `segments` straight steps; 8, the default, is what every outline has been
- *  drawn with. */
+ *  drawn with. A count is a whole number of at least one, so it is rounded and floored at 1; a
+ *  value that is no number at all (NaN, an infinity) is the default. */
 export function pathCommandsToPolygons(commands: any[], decimalPlaces = 3, segments = 8): number[][][] {
+  // A step count below 1, or a fraction, would stop the walk short of each curve's end point.
+  const steps = Number.isFinite(segments) ? Math.max(1, Math.round(segments)) : 8;
   const polygons: number[][][] = [];
   let currentPolygon: number[][] = [];
 
@@ -38,8 +41,8 @@ export function pathCommandsToPolygons(commands: any[], decimalPlaces = 3, segme
     } else if (c.type === 'Q') {
       const p0 = currentPolygon[currentPolygon.length - 1];
       if (p0) {
-        for (let i = 1; i <= segments; i++) {
-          const t = i / segments;
+        for (let i = 1; i <= steps; i++) {
+          const t = i / steps;
           const x = (1 - t) * (1 - t) * p0[0]! + 2 * (1 - t) * t * c.x1 + t * t * c.x;
           const y = (1 - t) * (1 - t) * p0[1]! + 2 * (1 - t) * t * (-c.y1) + t * t * (-c.y);
           currentPolygon.push([x, y]);
@@ -48,8 +51,8 @@ export function pathCommandsToPolygons(commands: any[], decimalPlaces = 3, segme
     } else if (c.type === 'C') {
       const p0 = currentPolygon[currentPolygon.length - 1];
       if (p0) {
-        for (let i = 1; i <= segments; i++) {
-          const t = i / segments;
+        for (let i = 1; i <= steps; i++) {
+          const t = i / steps;
           const x = Math.pow(1 - t, 3) * p0[0]! + 3 * Math.pow(1 - t, 2) * t * c.x1 + 3 * (1 - t) * t * t * c.x2 + Math.pow(t, 3) * c.x;
           const y = Math.pow(1 - t, 3) * p0[1]! + 3 * Math.pow(1 - t, 2) * t * (-c.y1) + 3 * (1 - t) * t * t * (-c.y2) + Math.pow(t, 3) * (-c.y);
           currentPolygon.push([x, y]);
@@ -178,7 +181,8 @@ export interface HorizontalOptions {
    */
   vAlign?: 'top' | 'middle' | 'bottom';
   /** Straight steps per curve of each glyph; 8 when absent. More steps follow a curve closer, at
-   *  the cost of more points. */
+   *  the cost of more points. Rounded to a whole number of at least 1, and 8 for a value that is
+   *  not a number at all. */
   segments?: number;
 }
 

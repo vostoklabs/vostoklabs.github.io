@@ -93,6 +93,17 @@ ok(Math.abs(fineLayout.box.maxX - layout({}).box.maxX) < 0.2 && Math.abs(fineLay
 const vertical = (opts?: { segments?: number }) => getVerticalContours(regular, null, 'Sog', 20, 1, 0, opts);
 ok(same(vertical(), vertical({ segments: 8 })) && count(vertical({ segments: 16 }).contours) > count(vertical().contours), 'getVerticalContours takes it too');
 
+// A step count is a whole number of at least one. Less, or a fraction, stopped each curve short of
+// its end point (no steps at all, or the last at t = 0.8), so the outline lost its corners.
+const steps = (s: number) => pathCommandsToPolygons(commands, 3, s);
+const oneStep = steps(1);
+ok(count(oneStep) > 0 && same(steps(0), oneStep) && same(steps(-4), oneStep), 'zero or fewer steps is one step: each curve still reaches its end');
+ok(same(steps(2.5), steps(3)) && same(steps(2.4), steps(2)), 'a fraction of a step is rounded to a whole one');
+ok(same(steps(Number.NaN), coarse) && same(steps(Infinity), coarse), 'a count that is no number at all is the default 8');
+const endOf = (c: number[][][]) => c.map((r) => r[r.length - 1]);
+ok(same(endOf(steps(3)), endOf(coarse)), 'every contour ends on the same point whatever the count');
+ok(same(layout({ segments: Number.NaN }), layout({})) && same(vertical({ segments: 0 }), vertical({ segments: 1 })), 'the layouts pass the count on the same way');
+
 // ---- the outlines themselves
 
 // Digests of the text engine's outlines, recorded from it before `segments` existed: a change to
