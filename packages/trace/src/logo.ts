@@ -405,8 +405,11 @@ export interface SvgOptions {
    *  of an outline above. Fills are read as they always are.
    *
    *  The lines share the rings' frame and count towards its size, so a drawing that is all lines
-   *  still reads, and `aspect` and `mm` measure the lines too. They are never part of `outline`
-   *  or `coverage`, and `removeBg` never takes them away: a background is a filled shape. */
+   *  still reads, and `aspect` and `mm` measure the lines too. A line has no width of its own, so
+   *  for `aspect` each side is taken as at least the widest line's stroke, the width the line is
+   *  drawn at: a lone straight line has the aspect the strip reading of the same file gives it,
+   *  not 1. They are never part of `outline` or `coverage`, and `removeBg` never takes them away:
+   *  a background is a filled shape. */
   outlinesAsLines?: boolean;
 }
 
@@ -516,6 +519,8 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
   const loose = new Map<string, { rgb: RGB; lines: Chain[] }>();
   /** Lines drawn as strips, per colour AND stroke — two widths are two different strips. */
   const ribbons = new Map<string, { rgb: RGB; width: number; cap: string; limit: number; lines: Chain[] }>();
+  /** The widest stroke among the outlines read as lines: 0 when there are none. */
+  let lineWidth = 0;
 
   data.paths.forEach((path: any, pathIndex: number) => {
     const style = path.userData?.style || {};
@@ -567,6 +572,7 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
           line.push([p.x, p.y]);
         }
         groupOf(rgb).lines.push(line);
+        lineWidth = Math.max(lineWidth, Number(style.strokeWidth) || 1);
       }
       return;
     }
@@ -701,7 +707,14 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
   const dx = bMaxX - bMinX;
   const dy = bMaxY - bMinY;
   const maxSide = Math.max(dx, dy) || 1;
-  const aspect = dy !== 0 ? dx / dy : 1;
+  // A line has no width of its own, so lines alone can make a drawing with no height (a single
+  // horizontal line) or no width. Read as lines, each side is taken as at least the widest line's
+  // stroke, the width the line is drawn at: 80 along by a 2-wide stroke is 40, as the strip
+  // reading of the same file says, where 80 by 0 was read as 1. A side the drawing spans by more
+  // than that is measured as it lies, so this changes only a drawing thinner than its stroke.
+  const aspect = lineWidth > 0
+    ? Math.max(dx, lineWidth) / Math.max(dy, lineWidth)
+    : dy !== 0 ? dx / dy : 1;
 
   const normalizeRing = (r: Ring): Ring =>
     r.map(([x, y]) => [

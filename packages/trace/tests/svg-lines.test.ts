@@ -82,6 +82,26 @@ check(
   same(lines(one), [[[-0.5, 0.5], [0.5, -0.5]]]) && one.aspect === 1,
   `lines ${JSON.stringify(lines(one))}`,
 );
+
+// A line has no width of its own, so a lone straight line has no height (or no width): each side
+// of the aspect is taken as at least the stroke the line is drawn with, as the strip reading has it.
+for (const [name, d, want] of [['a lone horizontal line', 'M10 50 H90', 40], ['a lone vertical line', 'M50 10 V90', 1 / 40]] as const) {
+  const file = svg(stroke(d));
+  const asLine = parseSvg(file, asLines).aspect;
+  const asStrip = parseSvg(file).aspect;
+  check(
+    `${name}: the aspect of the strip it is drawn as, not 1`,
+    asLine === asStrip && Math.abs(asLine - want) < 1e-12,
+    `as a line ${asLine}, as a strip ${asStrip}`,
+  );
+}
+const thin = parseSvg(svg(stroke('M10 50 L50 50.5 L90 50')), asLines);
+check(
+  '…and a drawing thinner than its stroke is measured as that stroke, not as its hairline',
+  Math.abs(thin.aspect - 40) < 1e-12,
+  `aspect ${thin.aspect} for 80 along and 0.5 high, drawn 2 wide`,
+);
+
 const strips = parseSvg(drawing);
 check(
   'without the option the same drawing is strips, as before',
