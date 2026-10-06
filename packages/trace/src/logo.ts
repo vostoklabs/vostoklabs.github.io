@@ -191,7 +191,7 @@ function joinOpenLines(lines: THREE.Vector2[][], eps: number): Chain[] {
   const cell = (v: number) => Math.round(v / eps);
   const grid = new Map<string, number[]>();
   lines.forEach((l, i) => {
-    for (const [end, p] of [[0, l[0]], [1, l[l.length - 1]]] as const) {
+    for (const [end, p] of [[0, l[0]!], [1, l[l.length - 1]!]] as const) {
       const k = `${cell(p.x)},${cell(p.y)}`;
       const list = grid.get(k);
       if (list) list.push(i * 2 + end); else grid.set(k, [i * 2 + end]);
@@ -205,8 +205,8 @@ function joinOpenLines(lines: THREE.Vector2[][], eps: number): Chain[] {
       for (const id of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
         const i = id >> 1;
         if (used[i]) continue;
-        const l = lines[i];
-        const end = id & 1 ? l[l.length - 1] : l[0];
+        const l = lines[i]!;
+        const end = id & 1 ? l[l.length - 1]! : l[0]!;
         if (end.distanceTo(p) > eps) continue;
         used[i] = 1;
         return id & 1 ? [...l].reverse() : l;
@@ -219,9 +219,9 @@ function joinOpenLines(lines: THREE.Vector2[][], eps: number): Chain[] {
     if (used[i]) return;
     used[i] = 1;
     let pts = [...line];
-    const loops = () => pts.length > 2 && pts[pts.length - 1].distanceTo(pts[0]) <= eps;
+    const loops = () => pts.length > 2 && pts[pts.length - 1]!.distanceTo(pts[0]!) <= eps;
     const grow = () => {
-      for (let l; !loops() && (l = next(pts[pts.length - 1]));) pts.push(...l.slice(1));
+      for (let l; !loops() && (l = next(pts[pts.length - 1]!));) pts.push(...l.slice(1));
     };
     grow();
     if (!loops()) { pts.reverse(); grow(); }
@@ -241,7 +241,7 @@ function chainsOf(lines: Chain[]): Chain[] {
   const b = new THREE.Box2();
   for (const l of lines) for (const p of l.pts) b.expandByPoint(p);
   const eps = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, 1e-6) * 1e-4;
-  const shut = (l: Chain) => l.closed || (l.pts.length > 2 && l.pts[0].distanceTo(l.pts[l.pts.length - 1]) <= eps);
+  const shut = (l: Chain) => l.closed || (l.pts.length > 2 && l.pts[0]!.distanceTo(l.pts[l.pts.length - 1]!) <= eps);
   return [
     ...lines.filter(shut).map((l) => ({ pts: l.pts, closed: true })),
     ...joinOpenLines(lines.filter((l) => !shut(l)).map((l) => l.pts), eps),
@@ -265,8 +265,15 @@ function strokeGeomToContours(geom: THREE.BufferGeometry): Ring[] {
   const nTris = (idx ? idx.array.length : pos.count) / 3;
   for (let t = 0; t < nTris; t++) {
     const [ia, ib, ic] = getTri(t);
+    // The three corners of triangle t, which the loop bound keeps inside the mesh. An app checked
+    // with noUncheckedIndexedAccess reads them as possibly undefined. These lines stay exactly as
+    // written because another copy of this function still matches them line for line, and the
+    // copy check finds a copy by its text.
+    // @ts-ignore
     const ax = pos.getX(ia), ay = pos.getY(ia);
+    // @ts-ignore
     const bx = pos.getX(ib), by = pos.getY(ib);
+    // @ts-ignore
     const cx = pos.getX(ic), cy = pos.getY(ic);
 
     const area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
@@ -284,7 +291,7 @@ function strokeGeomToContours(geom: THREE.BufferGeometry): Ring[] {
 /** Signed shoelace area: anticlockwise positive. */
 const shoelace = (r: Ring): number => {
   let a = 0;
-  for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += r[j][0] * r[i][1] - r[i][0] * r[j][1];
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += r[j]![0] * r[i]![1] - r[i]![0] * r[j]![1];
   return a / 2;
 };
 
@@ -300,11 +307,11 @@ const shoelace = (r: Ring): number => {
  */
 function ribbonRings(line: THREE.Vector2[], closed: boolean, width: number, cap: string, miterLimit: number): Ring[] {
   const h = width / 2;
-  const p = line.filter((q, i) => i === 0 || q.distanceTo(line[i - 1]) > 1e-9);
-  if (closed && p.length > 1 && p[0].distanceTo(p[p.length - 1]) <= 1e-9) p.pop();
+  const p = line.filter((q, i) => i === 0 || q.distanceTo(line[i - 1]!) > 1e-9);
+  if (closed && p.length > 1 && p[0]!.distanceTo(p[p.length - 1]!) <= 1e-9) p.pop();
   const n = p.length;
   if (n < 2 || !(h > 0)) return [];
-  const dir = (i: number) => p[(i + 1) % n].clone().sub(p[i]).normalize();
+  const dir = (i: number) => p[(i + 1) % n]!.clone().sub(p[i]!).normalize();
   const left = (d: THREE.Vector2) => new THREE.Vector2(-d.y, d.x);
   const at = (q: THREE.Vector2, v: THREE.Vector2, k: number): [number, number] => [q.x + v.x * k, q.y + v.y * k];
   /** One side of the strip, `s` = +1 left, −1 right. */
@@ -313,11 +320,11 @@ function ribbonRings(line: THREE.Vector2[], closed: boolean, width: number, cap:
     for (let i = 0; i < n; i++) {
       const before = closed || i > 0 ? left(dir((i - 1 + n) % n)) : null;
       const after = closed || i < n - 1 ? left(dir(i)) : null;
-      if (!before || !after) { out.push(at(p[i], (before ?? after)!, h * s)); continue; }
+      if (!before || !after) { out.push(at(p[i]!, (before ?? after)!, h * s)); continue; }
       const m = before.clone().add(after);
       const cos = m.length() / 2; // of half the turn
-      if (cos > 1e-6 && 1 / cos <= miterLimit) out.push(at(p[i], m.normalize(), (h / cos) * s));
-      else out.push(at(p[i], before, h * s), at(p[i], after, h * s));
+      if (cos > 1e-6 && 1 / cos <= miterLimit) out.push(at(p[i]!, m.normalize(), (h / cos) * s));
+      else out.push(at(p[i]!, before, h * s), at(p[i]!, after, h * s));
     }
     return out;
   };
@@ -335,7 +342,7 @@ function ribbonRings(line: THREE.Vector2[], closed: boolean, width: number, cap:
   };
   const endDir = dir(n - 2);
   const startDir = dir(0).negate();
-  return [[...l, ...capAt(p[n - 1], endDir), ...r.reverse(), ...capAt(p[0], startDir)]];
+  return [[...l, ...capAt(p[n - 1]!, endDir), ...r.reverse(), ...capAt(p[0]!, startDir)]];
 }
 
 /** One drawable path in the file, as the import preview shows it. */
@@ -645,6 +652,9 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
   const ringArea = (r: Ring): number => {
     let a = 0;
     for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      // Left as written, like the triangle corners in `strokeGeomToContours`: both indices are
+      // inside the ring, and another copy still matches this line.
+      // @ts-ignore
       a += r[j][0] * r[i][1] - r[i][0] * r[j][1];
     }
     return a / 2;

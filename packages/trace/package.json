@@ -5,10 +5,11 @@
   "type": "module",
   "description": "A picture or an SVG file into shapes: the image tracer (decode, crop and adjust, remove the background, reduce the colours, trace the outlines) and the SVG reader, both answering normalised rings per colour that the apps scale into millimetres.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./svg": "./src/logo.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.svg.json",
     "test": "esbuild tests/svg-reader.test.ts tests/svg-lines.test.ts tests/svg-legend.test.ts tests/svg-corpus.test.ts --bundle --platform=node --format=esm --external:@xmldom/xmldom --outdir=node_modules/.cache --out-extension:.js=.mjs --log-level=error && node node_modules/.cache/svg-reader.test.mjs && node node_modules/.cache/svg-lines.test.mjs && node node_modules/.cache/svg-legend.test.mjs && node node_modules/.cache/svg-corpus.test.mjs"
   },
   "dependencies": {

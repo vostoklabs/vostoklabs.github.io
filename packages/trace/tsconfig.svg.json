@@ -1,0 +1,9 @@
+{
+  // The SVG reader alone (@vostok/trace/svg), under the house settings an app is checked with,
+  // noUncheckedIndexedAccess included: an app that imports the subpath type-checks this file.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "esModuleInterop": true
+  },
+  "files": ["src/logo.ts"]
+}
