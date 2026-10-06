@@ -1403,6 +1403,9 @@ const cardViews = segmentedControl({
   onChange: (v) => {
     cardTools.hidden = v !== 'three';
     cardLegend.hidden = v !== 'file';
+    // The export is a white sheet that has to stay clear: the status line goes under the strip.
+    plateSvg.classList.toggle('kit-plate--sheet', v === 'file');
+    demoCard.statusBelow(v === 'file');
   },
 });
 const demoCard = previewCard({
@@ -1419,11 +1422,13 @@ app.append(
     entry(
       'previewCard() · zoomControl() · lengthUnits()',
       'Preview card',
-      'The stage as a framed card: the view switch and the mm | in switch in a bar over the picture, ' +
-        'the status line and the zoom tools in its bottom corners, and under it the strip the view ' +
-        'needs: the 3D view’s switches, or what the export’s colours mean. The unit switch is ' +
-        'lengthUnits(): every length on the card follows it, and the choice is remembered. On a ' +
-        'phone the zoom tools go to the top corner without the number.',
+      'The stage as a framed card, at Laser Studio’s numbers: the view switch and the mm | in switch ' +
+        'in a bar over the picture, the status line and the zoom tools in its bottom corners, and ' +
+        'under it the strip the view needs: the 3D view’s switches, or what the export’s colours ' +
+        'mean. In Export Preview the status line moves under that strip, clear of the white sheet. ' +
+        'The unit switch is lengthUnits(): every length on the card follows it, with no trailing ' +
+        'zero, and the choice is remembered. On a phone the zoom tools go to the top corner without ' +
+        'the number.',
       el('div', { className: 'kit-stage' }, [demoCard.root]),
     ),
   ),

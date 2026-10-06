@@ -872,8 +872,9 @@ details.vl-section--collapsible[open] > summary {
 
 /* ----------------------------------------------------------------- preview card */
 /* `previewCard()`: the stage as a framed card, a little in from the stage's edges: a bar of
-   switches over the picture (one end each, wrapping when the stage is too narrow for one row,
-   where it used to clip), the picture, and strips under it, each ruled off above. */
+   switches over the picture (one end each), the picture, and strips under it, each ruled off
+   above. Laser Studio's editor stage at its shipped numbers, so moving Studio onto the card moves
+   nothing on screen. */
 .vl-preview-card {
   position: absolute;
   inset: var(--space-4);
@@ -887,7 +888,6 @@ details.vl-section--collapsible[open] > summary {
 .vl-preview-card__bar {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
@@ -896,22 +896,28 @@ details.vl-section--collapsible[open] > summary {
 }
 .vl-preview-card__start,
 .vl-preview-card__end { display: flex; align-items: center; gap: var(--space-2); }
-.vl-preview-card__view { position: relative; flex: 1 1 0; min-height: 0; }
-.vl-preview-card__foot { flex: 0 0 auto; border-top: 1px solid var(--line); }
-/* The status line in the picture's bottom-left corner, on the card's own ground so it reads over
-   a drawing and over a 3D scene alike, and short of the zoom tools when they are there. */
-.vl-preview-card__view > .vl-stage-status {
-  bottom: var(--space-3);
-  left: var(--space-3);
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
-}
+/* A column, so a drawing or a canvas host that grows (`flex: 1 1 0`) fills the picture's box
+   exactly as it would fill the card. */
+.vl-preview-card__view { position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+/* The rule only: a strip's own layout, its padding and how it gives way, are the app's. */
+.vl-preview-card__foot { border-top: 1px solid var(--line); }
+/* The status line in the picture's bottom-left corner, on its own ground, and short of the zoom
+   tools when they are there. */
+.vl-preview-card__view > .vl-stage-status { bottom: 14px; left: 14px; }
 .vl-preview-card__view:has(> .vl-zoom-control) > .vl-stage-status { max-width: calc(100% - 210px); }
-@media (max-width: 900px) {
-  .vl-preview-card { inset: var(--space-2); }
+/* `statusBelow(true)`: the status line under the strips, in the card's flow, for a picture that
+   has to stay clear (the export preview's white sheet). */
+.vl-preview-card > .vl-stage-status {
+  position: static;
+  align-self: flex-start;
+  margin: 0 16px var(--space-3);
+  max-width: calc(100% - 32px);
 }
 @media (max-width: 760px) {
+  /* On a phone the bar wraps rather than squeeze its switches. */
+  .vl-preview-card__bar { flex-wrap: wrap; }
   /* The zoom tools have gone to the top corner: the status line takes the width. */
-  .vl-preview-card__view:has(> .vl-zoom-control) > .vl-stage-status { max-width: calc(100% - 2 * var(--space-3)); }
+  .vl-preview-card__view:has(> .vl-zoom-control) > .vl-stage-status { max-width: calc(100% - 28px); }
 }
 
 /* ----------------------------------------------- diagnostics: every one, listed */

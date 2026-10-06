@@ -65,8 +65,25 @@ const mini = (n: unknown) => n as MiniElement;
   check('previewCard: the picture, the status line and the zoom tools are in the view, in that order', mini(card.view).children.map((c) => c.className.split(' ')[0]).join() === ',vl-stage-status,vl-zoom-control');
   check('previewCard: view is the positioned box it returns', root.querySelector('.vl-preview-card__view') === mini(card.view));
   check('previewCard: no inline style', !html(root).includes(' style="'));
-  const bare = mini(previewCard({}).root);
-  check('previewCard: with nothing given, still a bar and a view, nothing else', bare.children.length === 2 && bare.querySelectorAll('.vl-preview-card__start, .vl-preview-card__end').length === 2);
+
+  card.statusBelow(true);
+  check('previewCard statusBelow: the status line moves under the strips, last in the card', root.lastElementChild === mini(status.root) && root.children.length === 5);
+  check('previewCard statusBelow: the view keeps its picture and the zoom tools', mini(card.view).children.map((c) => c.className.split(' ')[0]).join() === ',vl-zoom-control');
+  status.set('Off the sheet.', 'warn');
+  check('previewCard statusBelow: still the same status line, still set', root.lastElementChild!.textContent === 'Off the sheet.');
+  card.statusBelow(true);
+  check('previewCard statusBelow: asking twice moves nothing', root.lastElementChild === mini(status.root) && root.children.length === 5);
+  card.statusBelow(false);
+  check('previewCard statusBelow(false): back in the view, before the zoom tools', mini(card.view).children.map((c) => c.className.split(' ')[0]).join() === ',vl-stage-status,vl-zoom-control' && root.children.length === 4);
+  check('previewCard statusBelow(false): the card is as it was built', root.children.map((c) => c.className).join(' | ') === 'vl-preview-card__bar | vl-preview-card__view | vl-preview-card__foot | vl-preview-card__foot');
+
+  const noZoom = previewCard({ view: [el('div')], status: stageStatus('x').root });
+  noZoom.statusBelow(true);
+  noZoom.statusBelow(false);
+  check('previewCard statusBelow(false) with no zoom tools: last in the view', mini(noZoom.view).lastElementChild?.className === 'vl-stage-status');
+  const bare = previewCard({});
+  bare.statusBelow(true);
+  check('previewCard: with nothing given, still a bar and a view, nothing else', mini(bare.root).children.length === 2 && mini(bare.root).querySelectorAll('.vl-preview-card__start, .vl-preview-card__end').length === 2);
 }
 
 /* -------------------------------------------------------------------- lengthUnits */
