@@ -10,7 +10,7 @@
     pnpm --filter @vostok/ui-kit test
 */
 import './support/install-mini-dom';
-import { html, type MiniElement } from './support/mini-dom';
+import { html, miniDocument, type MiniElement } from './support/mini-dom';
 import { el } from '../src/dom';
 import { ICONS } from '../src/icons';
 import { sourceCards } from '../src/components/sources';
@@ -22,6 +22,7 @@ import { studioView } from '../src/components/editor-shell';
 import { chip } from '../src/components/elements';
 import { generatorHeader } from '../src/components/generator-chrome';
 import { sidebarFooter } from '../src/components/sidebar-footer';
+import { drawer } from '../src/components/drawer';
 
 let pass = 0;
 const fails: string[] = [];
@@ -229,6 +230,12 @@ option('generatorHeader compact', 'vl-app-header--compact', (on) =>
   const sheetBody = sheet?.querySelector('.vl-app__phone-sheet');
   check('appShell phone: Settings opens a drawer titled Settings', !!sheet && sheet.getAttribute('aria-label') === 'Settings');
   check('appShell phone: the drawer holds the left panel’s settings, then its footer', sheetBody?.textContent === 'railmorereset' && leftScroll.childNodes.length === 0);
+  check('appShell phone: the sheet takes the focus as it opens', !!sheet && sheet.contains(miniDocument.activeElement));
+  const drawers = () => mini(document.body).querySelectorAll('.vl-drawer').map((d) => d.getAttribute('aria-label')).join();
+  const picker = drawer({ title: 'Symbols', content: 'A grid' });
+  check('appShell phone: a picker opened from the sheet goes over it, and the sheet stays', drawers() === 'Settings,Symbols' && sheetBody?.textContent === 'railmorereset');
+  picker.close();
+  check('appShell phone: the sheet is still there when the picker closes', drawers() === 'Settings' && leftScroll.childNodes.length === 0);
   settingsButton.click();
   check('appShell phone: a second press opens no second drawer', mini(document.body).querySelectorAll('.vl-drawer').length === 1);
   sheet!.querySelector('.vl-drawer__close')!.click();

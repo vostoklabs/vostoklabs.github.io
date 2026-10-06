@@ -122,9 +122,13 @@ function phoneLayout(left: PanelParts, right: PanelParts): void {
     if (sheet) return;
     const homes = [left.scroll, ...(left.footer ? [left.footer] : [])].map((home) => ({ home, nodes: [...home.childNodes] }));
     const content = el('div', { className: 'vl-app__phone-sheet' }, homes.flatMap((h) => h.nodes));
+    // It stays open under a picker its own controls open (Insert symbol), and takes the focus,
+    // since opening it is asking to use it.
     sheet = drawer({
       title: 'Settings',
       content,
+      stayOpen: true,
+      focusFirst: true,
       onClose: () => {
         for (const { home, nodes } of homes) home.append(...nodes);
         sheet = null;

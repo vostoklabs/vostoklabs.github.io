@@ -19,7 +19,7 @@
     { "name": "Dialog", "category": "ui", "use": ["dialog", "promptDialog"], "with": ["closeAllDialogs", "holdModal"], "for": "An accessible modal window (focus held, Escape closes the top one), a one-line prompt, and holdModal for an overlay built elsewhere." },
     { "name": "Two-pane window", "category": "ui", "use": ["splitDialog"], "for": "A large dialog with a preview on one side and settings on the other; the frame the import wizards use." },
     { "name": "Toast", "category": "ui", "use": ["toast"], "for": "A small message that appears for a moment and goes away." },
-    { "name": "Drawer", "category": "ui", "use": ["drawer"], "with": ["closeAllDrawers"], "for": "A panel that slides in from the edge (the phone settings sheet, the changelog)." },
+    { "name": "Drawer", "category": "ui", "use": ["drawer"], "with": ["closeAllDrawers"], "for": "A panel that slides in from the edge (the phone settings sheet, the changelog); one can stay open under a picker it opens, and take the focus." },
     { "name": "Menu", "category": "ui", "use": ["openMenu"], "with": ["closeAllMenus"], "for": "A dropdown menu anchored to a button." },
     { "name": "Popover", "category": "ui", "use": ["popover"], "with": ["closeAllPopovers"], "for": "Content hanging off a control, closed by clicking away." },
     { "name": "Loading and empty states", "category": "ui", "use": ["progressBar", "skeleton", "busyChip", "emptyState"], "for": "A progress bar, a loading placeholder, the busy chip on the stage, and the \"nothing here yet\" panel." },
