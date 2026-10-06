@@ -137,6 +137,16 @@ check('no format for anything else', modelFormatOf('model.step') === null && mod
   // (x, y, z) -> (-y + 2, x, z) by the component, then +3 on z by the item, in cm: so mm x10.
   check('3MF: a part in another file, through a component and an item transform, in cm',
     same(m.positions, [20, 0, 30, 20, 10, 30, 10, 0, 30, 20, 0, 40]) && m.indices.length === 12, [...m.positions].join(' '));
+  // XML quotes an attribute either way; the same two files with every attribute in single quotes.
+  const single = (xml: string) => xml.replace(/"/g, "'");
+  let quoted: string;
+  try {
+    const q = readModel(zipSync({ '3D/3dmodel.model': strToU8(single(root)), '3D/Objects/part_1.model': strToU8(single(part)) }), 'part.3mf');
+    quoted = same(q.positions, m.positions) && same(q.indices, m.indices) ? '' : [...q.positions].join(' ');
+  } catch (err) {
+    quoted = err instanceof Error ? err.message : String(err);
+  }
+  check('3MF: attributes in single quotes read as in double', quoted === '', quoted);
   check('a 3MF that is not a zip says so', throws(() => readModel(strToU8('PK no zip here'), 'bad.3mf')) === 'This 3MF could not be opened — it is not a valid zip.');
   check('a 3MF with no model says so', throws(() => readModel(zipSync({ 'readme.txt': strToU8('hi') }), 'none.3mf')) === 'This 3MF has no model in it.');
 }

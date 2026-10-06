@@ -161,16 +161,17 @@ interface ModelPart {
   items: Ref[];
 }
 
-/** An attribute of a tag's attribute text, by name. */
+/** An attribute of a tag's attribute text, by name, in double quotes or single: XML takes both. */
 const ATTR = new Map<string, RegExp>();
 function attrOf(tag: string, name: string): string | undefined {
   let re = ATTR.get(name);
-  if (!re) ATTR.set(name, (re = new RegExp(`(?:^|\\s)${name}\\s*=\\s*"([^"]*)"`)));
-  return re.exec(tag)?.[1];
+  if (!re) ATTR.set(name, (re = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`)));
+  const m = re.exec(tag);
+  return m ? (m[1] ?? m[2]) : undefined;
 }
 
 function readModelPart(xml: string): ModelPart {
-  const unit = (/<model\b[^>]*\bunit\s*=\s*"([^"]+)"/.exec(xml)?.[1] ?? 'millimeter').toLowerCase();
+  const unit = (attrOf(/<model\b([^>]*)>/.exec(xml)?.[1] ?? '', 'unit') || 'millimeter').toLowerCase();
   const part: ModelPart = { scale: MM_PER_UNIT[unit] ?? 1, meshes: new Map(), components: new Map(), items: [] };
   const objects = /<object\b([^>]*)>([\s\S]*?)<\/object>/g;
   for (let m = objects.exec(xml); m; m = objects.exec(xml)) {
