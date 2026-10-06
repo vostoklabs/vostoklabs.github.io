@@ -86,6 +86,45 @@ const toasts = () => body.querySelectorAll('.vl-toast').map((t) => t.textContent
   );
   localStorage.setItem(KEY, JSON.stringify([icon(''), { ...icon('x'), id: 7 }, icon('ok')]));
   check('store: a stored entry whose id is empty or not a string is not listed', readMyIcons(KEY).map((i) => i.id).join() === 'ok');
+
+  // Shapes the window could not draw: no islands, a ring that is not a list of points, a ring of
+  // two points, a point that is not two numbers.
+  const MALFORMED = [[], [null], [[[1, 2, 3]]], [[[[0, 0], [1, 1]]]], [[[[0, 0], [1, 'a'], [1, 1]]]]];
+  miniStorage.clear();
+  body.replaceChildren();
+  const refused = MALFORMED.map((shapes, i) => keepMyIcon(KEY, { id: `bad${i}`, label: `Bad ${i}`, shapes: shapes as unknown as MyIcon['shapes'] }));
+  check(
+    'store: an icon whose shapes the window could not draw comes back, is not kept, and the toast says so',
+    refused.every((r, i) => r.id === `bad${i}`) && localStorage.getItem(KEY) === null && toasts().length === MALFORMED.length && toasts().every((t) => t === 'Icon added. My icons cannot keep it.'),
+    `${localStorage.getItem(KEY)} | ${toasts().join(' | ')}`,
+  );
+  localStorage.setItem(KEY, JSON.stringify([{ id: 'drawn', label: 'Drawn', shapes: [null] }, icon('ok')]));
+  keepMyIcon(KEY, { id: 'new', label: 'New', shapes: SQUARE });
+  check(
+    'store: one kept by an older version is not listed, and is kept after the icons like any entry the kit cannot list',
+    readMyIcons(KEY).map((i) => i.id).join() === 'new,ok' && (stored() as { id: string }[]).map((x) => x.id).join() === 'new,ok,drawn',
+    JSON.stringify(stored()),
+  );
+
+  // Something other than a list under the key is not the kit's to replace; a string that is not
+  // JSON at all is nobody's.
+  for (const other of ['{"version":2,"items":[1,2]}', '"a note"', '12', 'null']) {
+    miniStorage.clear();
+    body.replaceChildren();
+    localStorage.setItem(KEY, other);
+    const back = keepMyIcon(KEY, { label: 'Logo', shapes: SQUARE });
+    check(
+      `store: ${other} under the key is left as it is, and the toast says the icon is not kept`,
+      back.label === 'Logo' && localStorage.getItem(KEY) === other && toasts().join() === 'Icon added. My icons cannot keep it.',
+      `${localStorage.getItem(KEY)} | ${toasts().join(' | ')}`,
+    );
+  }
+  miniStorage.clear();
+  body.replaceChildren();
+  localStorage.setItem(KEY, '{not json');
+  keepMyIcon(KEY, { id: 'fresh', label: 'Fresh', shapes: SQUARE });
+  check('store: a string that is not JSON at all is replaced by the list', readMyIcons(KEY).map((i) => i.id).join() === 'fresh' && toasts().length === 0, `${localStorage.getItem(KEY)?.slice(0, 40)} | ${toasts().join(' | ')}`);
+  body.replaceChildren();
 }
 
 /* ------------------------------------------------------------------ size and storage */
@@ -242,6 +281,16 @@ const woven = withMyIcons(base, { key: KEY, draw: () => el('span', { attrs: { 'd
   nextUpload = undefined;
   await woven.upload!.onFile({ name: 'app-did-it.svg' } as File, () => {});
   check('weave: an upload that hands nothing back keeps nothing', readMyIcons(KEY).length === 3);
+  body.replaceChildren();
+  nextUpload = { label: 'Broken', shapes: [null] };
+  await woven.upload!.onFile({ name: 'broken.svg' } as File, () => {});
+  nextUpload = null;
+  check(
+    'weave: an upload whose shapes the window could not draw is not kept, and the toast says so',
+    readMyIcons(KEY).length === 3 && !JSON.stringify(stored()).includes('Broken') && toasts().join() === 'Icon added. My icons cannot keep it.',
+    toasts().join(' | '),
+  );
+  body.replaceChildren();
 }
 
 /* ------------------------------------------------------------ the chooser's wiring */

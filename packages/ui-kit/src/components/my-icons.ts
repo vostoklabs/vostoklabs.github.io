@@ -9,8 +9,10 @@ import { toast } from './toast';
   The app gives the storage key, so an app that already kept a list under its own key goes on
   reading it. Newest first, at most MY_ICONS_MAX icons and MY_ICONS_MAX_CHARS characters between
   them: browser storage is small, and every app on the site shares it. An entry under the key that
-  is not an icon of this shape (another version's, another format's) is not listed, does not
-  count against either limit, and is never dropped: it is kept after the icons.
+  is not an icon of this shape (another version's, another format's, shapes the window cannot
+  draw) is not listed, does not count against either limit, and is never dropped: it is kept
+  after the icons. A key that holds something other than a list is left as it is, and nothing is
+  kept under it.
 
   No symbol data and no font here: the symbol chooser weaves this into its window, and a node test
   can hold the rules without loading the library.
@@ -33,7 +35,14 @@ export const MY_ICONS_CATEGORY = { id: 'mine', label: 'My icons' } as const;
 type Traced = { id?: string; label: string; shapes: Shapes };
 const isTraced = (x: unknown): x is Traced =>
   !!x && typeof (x as Traced).label === 'string' && Array.isArray((x as Traced).shapes);
-const isIcon = (x: unknown): x is MyIcon => isTraced(x) && typeof x.id === 'string' && x.id !== '';
+/** Shapes the window can draw, as it draws them: islands of rings of [x, y] points, a ring three
+ *  points or more, every coordinate a number. */
+const isShapes = (x: unknown): x is Shapes =>
+  Array.isArray(x) && x.length > 0 && x.every((island) =>
+    Array.isArray(island) && island.length > 0 && island.every((ring) =>
+      Array.isArray(ring) && ring.length >= 3 && ring.every((p) =>
+        Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))));
+const isIcon = (x: unknown): x is MyIcon => isTraced(x) && isShapes(x.shapes) && typeof x.id === 'string' && x.id !== '';
 
 /** What is stored under `key`: null when nothing is, or storage cannot be read. */
 function rawOf(key: string): string | null {
@@ -44,14 +53,20 @@ function rawOf(key: string): string | null {
   }
 }
 
-/** Every entry of a stored list, as it is. A list that cannot be read is an empty one. */
-function entriesOf(raw: string | null): unknown[] {
+/** What a stored string holds: a list, anything else that parses, or [] for nothing or a string
+ *  that is not JSON at all. */
+function parsedOf(raw: string | null): unknown {
   try {
-    const list = JSON.parse(raw || '[]');
-    return Array.isArray(list) ? list : [];
+    return JSON.parse(raw || '[]');
   } catch {
     return [];
   }
+}
+
+/** Every entry of a stored list, as it is. Anything that is not a list has none. */
+function entriesOf(raw: string | null): unknown[] {
+  const list = parsedOf(raw);
+  return Array.isArray(list) ? list : [];
 }
 
 /** The icons under `key`, newest first. */
@@ -62,14 +77,17 @@ export function readMyIcons(key: string): MyIcon[] {
 /** A write refused for want of room, rather than because storage is off. */
 const isQuota = (e: unknown) => /quota/i.test(`${(e as Error | null)?.name} ${(e as Error | null)?.message}`);
 const BLOCKED = 'This browser does not let the page save anything, so My icons cannot keep it.';
+const CANNOT = 'My icons cannot keep it.';
 
 /** Store the list under `key` with `kept` first. Says why not, or null when it is kept. */
 function store(key: string, kept: MyIcon): string | null {
+  // Shapes the window could not draw would sit in the list unseen.
+  if (!isShapes(kept.shapes)) return CANNOT;
   let first: string;
   try {
     first = JSON.stringify(kept);
   } catch {
-    return 'My icons cannot keep it.';
+    return CANNOT;
   }
   if (first.length > MY_ICONS_MAX_CHARS / 5) return 'It is too detailed for My icons to keep.';
   let storage: Storage;
@@ -80,7 +98,10 @@ function store(key: string, kept: MyIcon): string | null {
   } catch {
     return BLOCKED; // and nothing is written over a list that could not be read
   }
-  const rest = entriesOf(raw);
+  // Something other than a list under the key (another version's store, another app's) is not
+  // the kit's to replace. A string that is not JSON at all is nobody's, and is replaced.
+  const rest = parsedOf(raw);
+  if (!Array.isArray(rest)) return CANNOT;
   const icons = [first, ...rest.filter((x) => isIcon(x) && x.id !== kept.id).map((x) => JSON.stringify(x))].slice(0, MY_ICONS_MAX);
   const foreign = rest.filter((x) => !isIcon(x)).map((x) => JSON.stringify(x));
   // The oldest go first: past the limit in characters, then for as long as the browser has no
@@ -102,9 +123,10 @@ function store(key: string, kept: MyIcon): string | null {
 /**
  * Keep an icon under `key`, first, as the one it replaces if it has that one's id, and named
  * `mine:…` if it has no id of its own (an id must be a string with something in it). Its shapes
- * are in the symbol frame, as `MyIcon`'s are. The oldest icons go when the list passes
- * MY_ICONS_MAX or MY_ICONS_MAX_CHARS, or the browser has no room left. An icon that cannot be
- * kept still comes back, so the import it came from still stands, and a toast says why.
+ * are in the symbol frame, as `MyIcon`'s are, and ones the window can draw: shapes it could not
+ * are not kept. The oldest icons go when the list passes MY_ICONS_MAX or MY_ICONS_MAX_CHARS, or
+ * the browser has no room left. An icon that cannot be kept still comes back, so the import it
+ * came from still stands, and a toast says why.
  */
 export function keepMyIcon(key: string, icon: Traced): MyIcon {
   const kept: MyIcon = {
