@@ -25,9 +25,6 @@ const check = (name: string, ok: boolean, detail = '') => {
 };
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-// A toast takes itself away on a timer of the window's; the stand-in window keeps them, to read.
-(globalThis as unknown as { window: Record<string, unknown> }).window.setTimeout = () => 0;
-
 const body = miniDocument.body as MiniElement;
 const KEY = 'test-my-icons';
 const SQUARE = [[[[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]]] as MyIcon['shapes'];

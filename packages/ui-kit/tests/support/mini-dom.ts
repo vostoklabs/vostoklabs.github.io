@@ -545,5 +545,8 @@ export function installMiniDom(): void {
     innerWidth: 1280,
     innerHeight: 800,
     getComputedStyle: g.getComputedStyle,
+    // A toast takes itself away on a timer of the window's; this one never fires, so a test can
+    // read every toast that was shown.
+    setTimeout: () => 0,
   };
 }

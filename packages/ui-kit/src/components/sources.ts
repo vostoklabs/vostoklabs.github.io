@@ -3,6 +3,22 @@
 // same in every generator instead of being re-derived per app.
 import { el } from '../dom';
 import { svgEl, svgPathEl } from '../icons';
+import { toast } from './toast';
+
+/** A host's file picker, run from a press: `dropZone`'s and `uploadCta`'s `pick`. */
+type Pick = (browse: () => void) => Promise<File | null>;
+
+/** Run `pick` now, inside the press, so a dialog it opens still counts as the person's own doing;
+ *  a throw or a rejection is said in a toast rather than lost, and a plain value (a caller in
+ *  JavaScript) is taken as it is. */
+function runPick(pick: Pick, browse: () => void, onFile: (file: File) => void): void {
+  new Promise<File | null>((resolve) => resolve(pick(browse))).then(
+    (file) => {
+      if (file) onFile(file);
+    },
+    (err: unknown) => toast(err instanceof Error && err.message ? `Could not open a file: ${err.message}` : 'Could not open a file.', { kind: 'error' }),
+  );
+}
 
 // ---------------------------------------------------------------- sources --
 
@@ -86,7 +102,7 @@ export interface DropZoneOptions {
    * person backed out) does nothing. It is handed `browse`, which opens the browser's dialog,
    * for when there is no host: `pick: (browse) => chooseFile(host, { kind: 'image' }, browse)`.
    */
-  pick?: (browse: () => void) => Promise<File | null>;
+  pick?: Pick;
   /**
    * Leave a drop to the page's own drop handler, one on the window that sorts every dropped
    * file by its type, instead of taking it: the zone still shows it is a target, and `onFiles`
@@ -124,17 +140,19 @@ export function dropZone(opts: DropZoneOptions): HTMLElement {
   const browse = () => input.click();
   const open = () => {
     if (!opts.pick) return browse();
-    void opts.pick(browse).then((file) => {
-      if (file) opts.onFiles([file]);
-    });
+    runPick(opts.pick, browse, (file) => opts.onFiles([file]));
   };
 
-  root.addEventListener('click', open);
+  // The hidden input's own click (from `browse`) bubbles back up here: it is not a second press.
+  root.addEventListener('click', (e) => {
+    if (e.target !== input) open();
+  });
   root.addEventListener('keydown', (e) => {
     const k = (e as KeyboardEvent).key;
     if (k === 'Enter' || k === ' ') {
       e.preventDefault();
-      open();
+      // A key held down repeats; it is still one press.
+      if (!(e as KeyboardEvent).repeat) open();
     }
   });
   input.addEventListener('change', () => {
@@ -173,7 +191,7 @@ export interface UploadCtaOptions {
   onFiles: (files: File[]) => void;
   /** A file picker of the host's own, opened instead of the browser's dialog, as `dropZone`'s:
    *  the file it gives goes to `onFiles`, null does nothing, and it is handed `browse`. */
-  pick?: (browse: () => void) => Promise<File | null>;
+  pick?: Pick;
 }
 
 /** The slim "replace this file" row shown once something is already loaded. */
@@ -195,9 +213,7 @@ export function uploadCta(opts: UploadCtaOptions): HTMLElement {
     root.addEventListener('click', (e) => {
       if (e.target === input) return;
       e.preventDefault();
-      void pick(() => input.click()).then((file) => {
-        if (file) opts.onFiles([file]);
-      });
+      runPick(pick, () => input.click(), (file) => opts.onFiles([file]));
     });
   }
   return root;
