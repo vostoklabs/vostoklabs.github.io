@@ -77,11 +77,12 @@ const SHEETS: CutFile[] = [
   check('two sheets: the sheets, then the README, as given',
     JSON.stringify(entries(two.data as Uint8Array)) === JSON.stringify({ 'box-sheet-1.svg': '<svg id="1"/>', 'box-sheet-2.svg': '<svg id="2"/>', 'README.txt': 'Red lines cut.' }));
   check('two sheets, no README: just the sheets', Object.keys(entries(cutFileBundle(SHEETS, 'box').data as Uint8Array)).join() === 'box-sheet-1.svg,box-sheet-2.svg');
-  // A list that carries its own README (the way Laser Studio builds it) zips as it stands, the
-  // same archive it zipped by hand.
+  // A list that carries its own README (the way Laser Studio builds it) zips as it stands: the
+  // same bytes as fflate's own zip of those files, in that order, at level 6.
   const listed = [...SHEETS, { name: 'README.txt', text: 'Run the engrave first.' }];
+  const byHand = zipSync(Object.fromEntries(listed.map((f) => [f.name, strToU8(f.text)])), { level: 6 });
   check('a README already in the list: zipped as given, the same bytes as zipping it by hand',
-    bytesEqual(cutFileBundle(listed, 'run').data as Uint8Array, buildZip(Object.fromEntries(listed.map((f) => [f.name, f.text])))));
+    bytesEqual(cutFileBundle(listed, 'run').data as Uint8Array, byHand));
 }
 {
   // downloadCut hands the bundle to the browser's download: a link clicked with its name.
