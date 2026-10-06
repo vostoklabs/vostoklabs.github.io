@@ -38,8 +38,9 @@ export interface LengthUnits {
    *  the text typed says mm: "12 mm" is 12 mm whichever unit is showing. */
   parse(typed: number, raw?: string): number;
   /** The mm | in switch, kept in step with the unit however it is changed. For a switch that
-   *  lives as long as the app: it is never unsubscribed. */
-  unitSwitch(opts?: Pick<SegmentedOptions<LengthUnit>, 'fit' | 'size' | 'label' | 'help'>): SegmentedRow<LengthUnit>;
+   *  lives as long as the app: it is never unsubscribed. A screen reader calls it "Units" unless
+   *  it is given a caption or another `ariaLabel`. */
+  unitSwitch(opts?: Pick<SegmentedOptions<LengthUnit>, 'fit' | 'size' | 'label' | 'help' | 'ariaLabel'>): SegmentedRow<LengthUnit>;
 }
 
 const MM_PER_IN = 25.4;
@@ -83,6 +84,7 @@ export function lengthUnits(opts: LengthUnitsOptions): LengthUnits {
     parse: (typed, raw = '') => (unit === 'in' && !/mm/i.test(raw) ? typed * MM_PER_IN : typed),
     unitSwitch(o = {}) {
       const control = segmentedControl<LengthUnit>({
+        ariaLabel: 'Units',
         ...o,
         options: [
           { value: 'mm', label: 'mm' },

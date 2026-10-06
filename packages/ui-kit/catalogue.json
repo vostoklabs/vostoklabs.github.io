@@ -6,7 +6,7 @@
     { "name": "Switch", "category": "ui", "use": ["toggleSwitch"], "for": "A labelled on/off switch; tapping its text flips it. compact: a smaller label close to its switch, for the stage or under a preview." },
     { "name": "Slider", "category": "ui", "use": ["sliderRow"], "with": ["slider"], "for": "A labelled slider with a typed value box, clamping, units and a help tip." },
     { "name": "Stepper", "category": "ui", "use": ["stepperRow"], "for": "A label with a minus/plus pair round an editable number." },
-    { "name": "Option tabs", "category": "ui", "use": ["segmentedControl"], "for": "Pick one of a few options: text tabs, icon cards or picture tiles (a segmented control, a radio group to screen readers); fit content and a compact size for a bar over a preview." },
+    { "name": "Option tabs", "category": "ui", "use": ["segmentedControl"], "for": "Pick one of a few options: text tabs, icon cards or picture tiles (a segmented control, a radio group to screen readers); fit content, a compact size and a name of its own for a switch in a bar over a preview." },
     { "name": "Dropdown", "category": "ui", "use": ["selectField"], "with": ["setFieldOptions"], "for": "A labelled dropdown, with its options swappable after it is built." },
     { "name": "Form fields", "category": "ui", "use": ["textField", "numberField", "textareaField", "searchField", "checkbox"], "for": "Labelled text, number (with unit), multi-line and live-search fields, and a checkbox." },
     { "name": "Chip", "category": "ui", "use": ["chip"], "for": "A small filter or tag toggle; centered for a chip stretched to fill a grid cell." },

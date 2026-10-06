@@ -721,6 +721,12 @@ export interface SegmentedOptions<T extends string = string> {
    * bar over a picture rather than in a settings panel. Default: the panel size. Tabs only.
    */
   size?: 'compact';
+  /**
+   * The group's name for a screen reader when it has no caption: a switch in a bar, where the
+   * place names it for the eye and nothing names it for the ear ("View", "Units"). A caption
+   * (`label`) names the group itself and wins. Default: none.
+   */
+  ariaLabel?: string;
 }
 
 /** What `segmentedControl` returns: a `ValueRow` plus per-option visibility. */
@@ -931,6 +937,7 @@ export function segmentedControl<T extends string = string>(
     if (opts.label) root.setAttribute('aria-labelledby', text.id);
     outer = el('div', { className: 'vl-control' }, [lab, root]);
   }
+  if (opts.ariaLabel && !opts.label) root.setAttribute('aria-label', opts.ariaLabel);
 
   const row = outer as unknown as SegmentedRow<T>;
   // An unknown value is ignored rather than clearing the selection: a loaded

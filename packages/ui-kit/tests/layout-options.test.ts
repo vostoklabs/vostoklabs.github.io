@@ -181,6 +181,14 @@ option('segmentedControl size', 'vl-tabs--compact', (on) =>
   const live = segmentedControl({ options: VIEWS, value: 'design', size: 'compact', fit: 'content', onChange: (v) => (picked = v) }) as unknown as MiniElement;
   live.querySelectorAll('.vl-tab')[2]!.click();
   check('segmentedControl compact: still picks', picked === 'file');
+
+  const plain = mini(segmentedControl({ options: VIEWS, value: 'three', fit: 'content', size: 'compact' }));
+  const named = mini(segmentedControl({ options: VIEWS, value: 'three', fit: 'content', size: 'compact', ariaLabel: 'View' }));
+  check('segmentedControl ariaLabel: no name by default, as before', plain.getAttribute('aria-label') === null);
+  check('segmentedControl ariaLabel: names the radio group', named.getAttribute('role') === 'radiogroup' && named.getAttribute('aria-label') === 'View');
+  check('segmentedControl ariaLabel: adds the name and nothing else', norm(named).replace(' aria-label="View"', '') === norm(plain));
+  const captioned = mini(segmentedControl({ label: 'View', ariaLabel: 'Views', options: VIEWS })).querySelector('.vl-tabs')!;
+  check('segmentedControl ariaLabel: a caption names the group instead', captioned.getAttribute('aria-label') === null && !!captioned.getAttribute('aria-labelledby'));
 }
 
 option('chip centered', 'vl-chip--centered', (on) => chip({ label: 'Lid', pressed: true, className: 'vl-row', ...(on === undefined ? {} : { centered: on }) }));

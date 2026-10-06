@@ -497,7 +497,8 @@ app.append(
     'Tabs in a bar',
     'A switch in a bar beside other controls, as over a preview: as wide as its options rather than ' +
       'the bar, so the switch beside it keeps its place, and a size down from the panel’s tabs, a ' +
-      'step smaller again on a phone. The unit switch on the right is fit to its content only.',
+      'step smaller again on a phone. The unit switch on the right is fit to its content only. No caption ' +
+      'names a switch in a bar, so each takes an ariaLabel for a screen reader.',
     el('div', { className: 'kit-bar' }, [
       segmentedControl({
         options: [
@@ -508,9 +509,10 @@ app.append(
         value: 'three',
         fit: 'content',
         size: 'compact',
+        ariaLabel: 'View',
         onChange: (v) => toast(`View: ${v}`),
       }),
-      segmentedControl({ options: [{ value: 'mm', label: 'mm' }, { value: 'in', label: 'in' }], value: 'mm', fit: 'content' }),
+      segmentedControl({ options: [{ value: 'mm', label: 'mm' }, { value: 'in', label: 'in' }], value: 'mm', fit: 'content', ariaLabel: 'Units' }),
     ]),
   ),
   entry(
@@ -1400,6 +1402,7 @@ const cardViews = segmentedControl({
   value: 'three',
   fit: 'content',
   size: 'compact',
+  ariaLabel: 'View',
   onChange: (v) => {
     cardTools.hidden = v !== 'three';
     cardLegend.hidden = v !== 'file';
