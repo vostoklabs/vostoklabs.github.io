@@ -22,6 +22,7 @@ writeFileSync(entry, [
   `export { contractProblems } from '${pkg}/src/contract.ts';`,
   `export { MATERIAL_SOLID, MATERIAL_FONT_SHA256 } from '${pkg}/src/material-solid.ts';`,
   `export { pathCommandsToPolygons } from '@vostok/fonts/textLayout';`,
+  `export { POPULAR as FONTS_POPULAR } from '@vostok/fonts';`,
   `export { csOf } from '${pkg}/../manifold/src/index.ts';`,
 ].join('\n'));
 const outfile = `${tmp}/symbols-test-${process.pid}.mjs`;
@@ -103,6 +104,23 @@ const twice = ['material:favorite', 'material:star', 'material:bedtime', 'materi
 check('Popular shows a heart, a star, a moon, a crown, a paw once, not again from Material', !twice.some((id) => popular.includes(id)) && popular.includes('tabler:heart'), twice.filter((id) => popular.includes(id)).join(' '));
 check('…and search still finds the Material ones', S.searchSymbols('favorite').some((e) => e.id === 'material:favorite') && S.searchSymbols('crown').some((e) => e.id === 'material:crown'));
 check('Popular lists each symbol once', new Set(popular).size === popular.length);
+// A picker limited to some sets keeps a Material glyph whose drawn twin is not on its page: a
+// heart or a star leaves Popular only for a drawn heart or star the picker shows.
+{
+  const ids = (filter) => S.listSymbols('popular', filter).map((e) => e.id);
+  const materialOnly = ids({ sets: ['material'] });
+  const oldPage = S.FONTS_POPULAR.map((i) => `material:${i.id}`);
+  check('Popular with only Material is the Material popular page, every glyph in its order', materialOnly.join() === oldPage.join(), `${materialOnly.length} of ${oldPage.length}`);
+  check('…so it opens on the heart and the star', materialOnly[0] === 'material:favorite' && materialOnly[1] === 'material:star');
+  const tablerToo = ids({ sets: ['tabler', 'material'] });
+  check(
+    'with Tabler and Material, a Material glyph steps aside only for a Tabler twin on the page',
+    tablerToo.includes('tabler:heart') && !tablerToo.includes('material:favorite') && tablerToo.includes('material:mood') && tablerToo.includes('material:sentiment_very_satisfied'),
+  );
+  check('…and still lists each symbol once', new Set(tablerToo).size === tablerToo.length);
+  const fluentOnly = ids({ sets: ['fluent'] });
+  check('with only Fluent, Popular is the Fluent picks', fluentOnly.length > 0 && fluentOnly.every((id) => id.startsWith('fluent:')));
+}
 check('Everything lists the whole library', S.listSymbols('all').length === all.length);
 check('Yin yang comes unframed: Fluent\'s framed Yin yang and Peace symbol are not in the library', !S.symbolById('fluent:yin-yang') && !S.symbolById('fluent:peace-symbol') && !!S.symbolById('tabler:yin-yang'));
 check('Lucide is never a set of the library', all.every((e) => ['fluent', 'tabler', 'material'].includes(e.set)) && !S.symbolById('lucide:heart'));

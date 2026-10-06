@@ -99,10 +99,18 @@ const POPULAR_DRAWN = [
 ];
 
 /** Material's popular glyphs that a drawn pick above already shows (a heart, a star, a moon, a
- *  crown, a paw, a flower, a smiling face). Popular shows each once; search still finds them. */
-const POPULAR_SHOWN_ALREADY = new Set([
-  'material:favorite', 'material:star', 'material:bedtime', 'material:crown', 'material:pets',
-  'material:local_florist', 'material:mood', 'material:sentiment_very_satisfied',
+ *  crown, a paw, a flower, a smiling face), each with the drawn pick that shows it. Popular shows
+ *  each once: a Material glyph steps aside only for a drawn twin that is on the page, so a picker
+ *  limited to Material still opens on its heart and its star. Search still finds them all. */
+const POPULAR_DRAWN_TWIN = new Map([
+  ['material:favorite', 'tabler:heart'],
+  ['material:star', 'tabler:star'],
+  ['material:bedtime', 'tabler:moon'],
+  ['material:crown', 'tabler:crown'],
+  ['material:pets', 'tabler:paw'],
+  ['material:local_florist', 'tabler:flower'],
+  ['material:mood', 'fluent:grinning-face'],
+  ['material:sentiment_very_satisfied', 'fluent:smiling-face-with-heart-eyes'],
 ]);
 
 /** The categories a picker lists, in order: @vostok/fonts' symbol groups. */
@@ -139,10 +147,11 @@ export function listSymbols(category: string, filter?: SymbolFilter): SymbolEntr
   const material = (list: { id: string }[]) => list.map((i) => lib.byId.get(`material:${i.id}`)).filter((e): e is SymbolEntry => !!e);
   let list: SymbolEntry[];
   if (category === 'popular') {
-    list = [
-      ...POPULAR_DRAWN.map((id) => lib.byId.get(id)).filter((e): e is SymbolEntry => !!e),
-      ...material(POPULAR).filter((e) => !POPULAR_SHOWN_ALREADY.has(e.id)),
-    ];
+    // The filter goes on the drawn picks first: a Material glyph gives way only to a drawn twin
+    // that is still on the page after it.
+    const drawn = POPULAR_DRAWN.map((id) => lib.byId.get(id)).filter((e): e is SymbolEntry => !!e).filter(keep(filter));
+    const shown = new Set(drawn.map((e) => e.id));
+    list = [...drawn, ...material(POPULAR).filter((e) => !shown.has(POPULAR_DRAWN_TWIN.get(e.id) ?? ''))];
   } else if (category === 'all') {
     list = lib.all;
   } else if (SYMBOL_GROUPS.some((g) => g.id === category)) {
