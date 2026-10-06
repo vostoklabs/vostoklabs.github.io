@@ -41,7 +41,7 @@ const outfile = join(cacheDir, `threemf-plate-build-${process.pid}.mjs`);
 await build({
   stdin: {
     contents:
-      "export { buildThreeMF } from './src/export/threemfExport.ts';\n" +
+      "export { clickerThreeMF } from './src/export/threemfExport.ts';\n" +
       "export { plateSize, savePlateChoice } from '@vostok/plates';\n",
     resolveDir: APP,
     sourcefile: 'threemf-plate-build-entry.ts',
@@ -81,7 +81,7 @@ const parts = [
 ];
 
 app.savePlateChoice(PLATE);
-const files = unzipSync(app.buildThreeMF(parts));
+const files = unzipSync(app.clickerThreeMF(parts));
 const model = strFromU8(files['3D/3dmodel.model']);
 
 // Where the layout lands on the bed: the XY box of every vertex in the file, moved by the

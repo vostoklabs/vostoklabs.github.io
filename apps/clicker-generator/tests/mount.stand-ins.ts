@@ -184,11 +184,11 @@ export async function openSvgPreview() {
 
 /* ----------------------------------------------------------------- the writers */
 
-export function buildThreeMF(parts: ClickerPart[], opts: Record<string, unknown> = {}) {
+export function clickerThreeMF(parts: ClickerPart[], opts: Record<string, unknown> = {}) {
   seen.built.push({ parts, opts });
   return new Uint8Array(0);
 }
-export function downloadThreeMF(parts: ClickerPart[], name: string, opts: Record<string, unknown> = {}) {
+export function downloadClickerThreeMF(parts: ClickerPart[], name: string, opts: Record<string, unknown> = {}) {
   seen.downloads.push({ parts, name, opts });
 }
 export function clickerObjMtl(parts: ClickerPart[], opts: Record<string, unknown> = {}) {

@@ -15,7 +15,7 @@
       && node apps/clicker-generator/.export-objects-test.mjs
 */
 import { unzipSync, strFromU8 } from 'fflate';
-import { buildThreeMF } from '../src/export/threemfExport.ts';
+import { clickerThreeMF } from '../src/export/threemfExport.ts';
 import type { ClickerPart } from '../src/types.ts';
 
 const tetra = (name: string, group: 'top' | 'base', x: number, extra: Partial<ClickerPart> = {}): ClickerPart => ({
@@ -31,7 +31,7 @@ const tetra = (name: string, group: 'top' | 'base', x: number, extra: Partial<Cl
 
 /** Each slicer object in the file: its name and how many parts it holds. */
 function objectsOf(parts: ClickerPart[]): { name: string; parts: number }[] {
-  const cfg = strFromU8(unzipSync(buildThreeMF(parts, { plate: 'a1' }))['Metadata/model_settings.config']!);
+  const cfg = strFromU8(unzipSync(clickerThreeMF(parts, { plate: 'a1' }))['Metadata/model_settings.config']!);
   return [...cfg.matchAll(/<object id="\d+"><metadata key="name" value="([^"]*)"\/>((?:(?!<\/object>)[\s\S])*)/g)]
     .map(([, name, body]) => ({ name: name!, parts: (body!.match(/<part /g) ?? []).length }));
 }

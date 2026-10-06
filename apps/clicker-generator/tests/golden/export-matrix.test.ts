@@ -71,7 +71,7 @@ const { MODEL_SAMPLES } = await import('../../src/model/samples.ts');
 const { FALLBACK_POST_SEAT, makeSwitchKit, measurePostSeat, measureSwitchBands, seatPost } = await import('../../src/model/switchKit.ts');
 const { buildModelClicker } = await import('../../src/model/buildModel.ts');
 const { DEFAULT_MODEL_CUT } = await import('../../src/model/types.ts');
-const { buildThreeMF } = await import('../../src/export/threemfExport.ts');
+const { clickerThreeMF } = await import('../../src/export/threemfExport.ts');
 const { clickerObjMtl } = await import('../../src/export/objExport.ts');
 
 type BuildParams = import('../../src/types.ts').BuildParams;
@@ -435,7 +435,7 @@ function record(built: Built) {
   });
 
   const plate = built.plate ?? 'a1';
-  const threeMF = unzipSync(buildThreeMF(built.parts, { plate, ...(built.sourceModel ? { sourceModel: built.sourceModel } : {}) }));
+  const threeMF = unzipSync(clickerThreeMF(built.parts, { plate, ...(built.sourceModel ? { sourceModel: built.sourceModel } : {}) }));
   const { obj, mtl } = clickerObjMtl(built.parts, { plate, ...(built.sourceModel ? { sourceModel: built.sourceModel } : {}) });
   objTexts.set(built, obj);
   return {

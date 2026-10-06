@@ -1,4 +1,4 @@
-import { buildThreeMF } from '../src/export/threemfExport.ts';
+import { clickerThreeMF } from '../src/export/threemfExport.ts';
 import { unzipSync, strFromU8 } from 'fflate';
 
 const tetra = (
@@ -23,7 +23,7 @@ const parts = [
   tetra([0, 255, 0], 'top-color-0-0', 5, 'top'),
   tetra([0, 128, 255], 'base-body', 8, 'base'),
 ];
-const bytes = buildThreeMF(parts as any);
+const bytes = clickerThreeMF(parts as any);
 
 const files = unzipSync(bytes);
 const names = Object.keys(files);
@@ -34,7 +34,7 @@ const relsNoCover = strFromU8(files['_rels/.rels']);
 // the relationship and the content type that make them findable.
 const fakePng = new TextEncoder().encode('PNG-BYTES-STAND-IN');
 const fakeSmallPng = new TextEncoder().encode('SMALL-PNG-STAND-IN');
-const coverFiles = unzipSync(buildThreeMF(parts as any, { coverPng: fakePng }));
+const coverFiles = unzipSync(clickerThreeMF(parts as any, { coverPng: fakePng }));
 const coverNames = Object.keys(coverFiles);
 const relsCover = strFromU8(coverFiles['_rels/.rels']);
 const typesCover = strFromU8(coverFiles['[Content_Types].xml']);
@@ -124,7 +124,7 @@ const checks: [string, boolean][] = [
     strFromU8(coverFiles['Metadata/plate_1_small.png']) === strFromU8(fakePng)],
   ['small cover used when supplied',
     strFromU8(
-      unzipSync(buildThreeMF(parts as any, { coverPng: fakePng, coverSmallPng: fakeSmallPng }))[
+      unzipSync(clickerThreeMF(parts as any, { coverPng: fakePng, coverSmallPng: fakeSmallPng }))[
         'Metadata/plate_1_small.png'
       ],
     ) === strFromU8(fakeSmallPng)],

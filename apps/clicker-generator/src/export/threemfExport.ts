@@ -58,7 +58,7 @@ export function clickerMark(sourceModel?: string): ProvenanceMeta {
   };
 }
 
-export function buildThreeMF(parts: ClickerPart[], opts: ThreeMFOptions = {}): Uint8Array {
+export function clickerThreeMF(parts: ClickerPart[], opts: ThreeMFOptions = {}): Uint8Array {
   // Drop the whole assembly onto the build plate (min Z -> 0), keeping relative positions,
   // then pack the pieces onto the chosen bed.
   const minZ = assemblyMinZ(parts);
@@ -95,6 +95,6 @@ export function buildThreeMF(parts: ClickerPart[], opts: ThreeMFOptions = {}): U
   );
 }
 
-export function downloadThreeMF(parts: ClickerPart[], fileName = 'clicker.3mf', opts: ThreeMFOptions = {}): void {
-  downloadFile(buildThreeMF(parts, opts), fileName, 'model/3mf');
+export function downloadClickerThreeMF(parts: ClickerPart[], fileName = 'clicker.3mf', opts: ThreeMFOptions = {}): void {
+  downloadFile(clickerThreeMF(parts, opts), fileName, 'model/3mf');
 }

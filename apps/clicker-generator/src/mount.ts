@@ -33,7 +33,7 @@ import { downloadFile, textToArrayBuffer } from '@vostok/export';
 import { createUi, type UiState } from './ui/ui';
 import { loadFileToImage, parseSvg, processImage, type RgbaImage, type SvgOptions } from '@vostok/trace';
 import { runWizard } from './ui/wizard';
-import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
+import { clickerThreeMF, downloadClickerThreeMF } from './export/threemfExport';
 import { shownBuild, type Shown } from './export/shownBuild';
 import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
 import { clickerObjMtl } from './export/objExport';
@@ -936,7 +936,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           const { parts, fileBase, source, png } = await withCover(file);
           const name = `${fileBase}.3mf`;
           const { indexed } = await host.exportToLibrary(
-            { name, bytes: buildThreeMF(parts, { ...(await coverImages(png)), ...source }) },
+            { name, bytes: clickerThreeMF(parts, { ...(await coverImages(png)), ...source }) },
             { designer: 'Clicker Generator' },
           );
           store.set({ status: indexed ? 'Exported to your library ✓' : `Exported as ${name} ✓` });
@@ -960,7 +960,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // The cover goes in the file, so a folder of orders shows what each one is instead of
         // forty identical 3MF icons.
         const { parts, fileBase, source, png } = await withCover(file);
-        downloadThreeMF(parts, `${fileBase}.3mf`, { ...(await coverImages(png)), ...source });
+        downloadClickerThreeMF(parts, `${fileBase}.3mf`, { ...(await coverImages(png)), ...source });
         // First download on the page: the full licence window. Later ones: the corner reminder.
         licenseAfterExport();
       }
