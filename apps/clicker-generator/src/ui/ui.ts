@@ -1,7 +1,6 @@
 import { BRAND } from '@vostok/brand';
 import {
   button,
-  colorChip,
   dialog,
   helpTip,
   historyControls,
@@ -39,6 +38,9 @@ import {
   keyMap,
   settingsRail,
   toast,
+  uploadCta,
+  colorPopover,
+  paletteRow,
 } from '@vostok/ui-kit';
 import { MAKERLAB, SELLER_PACK, isUnlocked } from 'virtual:makerlab';
 import type { BaseShapeKind, BlockStyle, BlockTexture, KeychainSide, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
@@ -687,7 +689,7 @@ export function createUi(
         <p class="switch-pad-hint">Move &amp; rotate the MX switch ${tip('Slide and rotate the selected MX switch away from the design centre. Handy when a switch doesn\'t sit neatly in the centre of your design.')}</p>
         <div id="switchPadMount"></div>
       </div>
-      <button class="secondary" id="switchResetAll" type="button" style="display:none; width:100%;">Reset all switches</button>
+      <div id="switchResetAllMount"></div>
     </div>
     <div data-rail="keychain">
       <div id="keychainMount"></div>
@@ -755,7 +757,7 @@ export function createUi(
   leftTop.after(settings);
   resolveHelpTips(leftScroll);
 
-  sidebarLeft.innerHTML = '';
+  sidebarLeft.replaceChildren();
   sidebarLeft.append(leftScroll);
 
   // The byline lives in a compact credit line pinned to the bottom-left in both builds, and
@@ -800,7 +802,7 @@ export function createUi(
   }));
 
   // Populate Right Sidebar (Input Modes & Export)
-  sidebarRight.innerHTML = '';
+  sidebarRight.replaceChildren();
   const rightScroll = document.createElement('div');
   rightScroll.className = 'vl-panel__scroll';
   rightScroll.innerHTML = `
@@ -832,11 +834,7 @@ export function createUi(
           Drop or upload SVG vector files. Color paths will map to filament slots.
         </p>
         <div id="uploadGallery"></div>
-        <label class="upload-cta">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Upload SVG file(s)
-          <input id="svgUpload" type="file" accept=".svg,image/svg+xml" multiple />
-        </label>
+        <div id="svgUploadMount"></div>
         <div id="removeBgSvgMount"></div>
       </div>
 
@@ -883,14 +881,6 @@ export function createUi(
   `;
   resolveHelpTips(rightScroll);
 
-  // Hidden dummy file input for loading project JSON
-  const projFileInput = document.createElement('input');
-  projFileInput.type = 'file';
-  projFileInput.id = 'projFile';
-  projFileInput.accept = 'application/json';
-  projFileInput.hidden = true;
-  rightScroll.appendChild(projFileInput);
-
   const rightFooter = sidebarFooter({
     // Also true in the embedded build, where nobody owns them: the embedded build has no
     // download path, so it has no Save or Load. The kit then draws only the theme toggle.
@@ -900,14 +890,10 @@ export function createUi(
     formats: [{ id: '3mf', label: '3MF' }],
     onExport: () => cb.onExport(),
     onSave: () => cb.onSaveProject(),
+    // The file the footer's own picker chose; none means a host draws Open itself.
     onLoad: (f?: File) => {
-      if (!f) { cb.onOpenFromHost?.(); return; }
-      // Forward the picked file to the hidden project-file input, whose change
-      // handler (below) calls cb.onLoadProject.
-      const dt = new DataTransfer();
-      dt.items.add(f);
-      projFileInput.files = dt.files;
-      projFileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      if (f) cb.onLoadProject(f);
+      else cb.onOpenFromHost?.();
     },
     themeStorageKey: 'clicker_theme',
   });
@@ -1120,17 +1106,19 @@ export function createUi(
   $('removeBgSvgMount').append(removeBgSvgToggle);
 
   // --- SVG Panel Setup ---
-  const svgUpload = $<HTMLInputElement>('svgUpload');
-  svgUpload.parentElement?.addEventListener('click', (e) => {
-    if (!cb.pickFile) return;
-    e.preventDefault();
-    void pickOrBrowse('svg', ['svg'], () => {}).then((f) => { if (f) cb.onSvgUpload(f); });
-  });
-  svgUpload.addEventListener('change', () => {
-    const f = svgUpload.files?.[0];
-    if (f) cb.onSvgUpload(f);
-    svgUpload.value = '';
-  });
+  // With a host, its own picker opens; without one, the browser's dialog. Several files can be
+  // picked, and the first is the one added, as it always was.
+  const pickFile = cb.pickFile;
+  $('svgUploadMount').replaceWith(uploadCta({
+    label: 'Upload SVG file(s)',
+    icon: ICONS.upload,
+    accept: '.svg,image/svg+xml',
+    multiple: true,
+    ...(pickFile ? { pick: () => pickFile('svg', ['svg']) } : {}),
+    onFiles: ([f]) => {
+      if (f) cb.onSvgUpload(f);
+    },
+  }));
 
   const uploadGalleryEl = $('uploadGallery');
   let uploadEmptyEl: HTMLElement | null = null;
@@ -1250,7 +1238,7 @@ export function createUi(
   }
 
   function rebuildGallery() {
-    galleryEl.innerHTML = '';
+    galleryEl.replaceChildren();
     lucideShown = 0;
     lucideMatches = rankLucide(searchEl.value);
     searchClearEl.style.display = searchEl.value ? 'block' : 'none';
@@ -2186,7 +2174,15 @@ export function createUi(
     onChange: (v) => cb.onActiveSwitch(+v),
   });
   $('switchChipsMount').append(activeSwitchTabs);
-  $('switchResetAll').addEventListener('click', () => cb.onSwitchResetAll());
+  // Only for two or three switches (see update()): one switch has the pad's own reset.
+  const switchResetAll = button({
+    label: 'Reset all switches',
+    emphasis: 'secondary',
+    block: true,
+    onClick: () => cb.onSwitchResetAll(),
+  });
+  switchResetAll.hidden = true;
+  $('switchResetAllMount').replaceWith(switchResetAll);
 
   const keychainToggle = toggleSwitch({
     label: 'Keyring loop',
@@ -2357,15 +2353,8 @@ export function createUi(
   document.getElementById('stageCutRow')?.append(cutBar.root);
 
   // --- Export and Utility actions ---
-  // Export / Save / Load / Help / theme now live in the shared ui-kit sidebar
-  // footer (created above); its callbacks call cb.onExport / cb.onSaveProject /
-  // showTutorialPrompt directly. The only piece still wired here is the hidden
-  // project-file input the footer's onLoad forwards a file to.
-  const projFile = $<HTMLInputElement>('projFile');
-  projFile.addEventListener('change', () => {
-    if (projFile.files?.[0]) cb.onLoadProject(projFile.files[0]);
-    projFile.value = '';
-  });
+  // Export / Save / Load / Help / theme live in the shared ui-kit sidebar footer (created
+  // above); its callbacks call cb.onExport / cb.onSaveProject / cb.onLoadProject directly.
 
   // Help tooltips are the kit's `helpTip()` now (see `tip()` / `resolveHelpTips()` above) —
   // each marker owns its own bubble and positioning, so there is nothing left to wire here.
@@ -2389,9 +2378,12 @@ export function createUi(
     return [bestName, bestHex];
   }
 
-  // Robust floating swatch picker. Anchored at (clientX, clientY) — typically the
-  // cursor or a trigger element's corner — then measured and clamped so it always
-  // stays fully on-screen (the old version could land in the top-left corner).
+  /** What the colour picker offers, each chip named for the shelf filament nearest to it. */
+  const offerOf = (options: RGB[]) => options.map((rgb) => ({ hex: rgbHex(rgb), name: getFilamentNameAndHex(rgb)[0] }));
+
+  /** The kit's colour picker, anchored at (clientX, clientY): a palette row's chip or a click on
+   *  a part of the model (mount.ts, Model mode). A colour made on its wheel joins the design's
+   *  colours once, when the picker closes (cb.onCustomColor), never on every step of a drag. */
   function showColorPopoverAt(
     clientX: number,
     clientY: number,
@@ -2399,86 +2391,15 @@ export function createUi(
     options: RGB[],
     handlers: { onSelect: (hex: string) => void; onClose?: () => void }
   ) {
-    document.getElementById('sbColorPopover')?.remove();
-
-    // Restored on close. The trigger for this popover is often a click on the 3D canvas
-    // (mount.ts) rather than a focusable control, so this can legitimately be null — in
-    // which case there is simply nothing to give focus back to.
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-    const popover = document.createElement('div');
-    popover.id = 'sbColorPopover';
-    popover.className = 'color-popover';
-    popover.setAttribute('role', 'dialog');
-    popover.setAttribute('aria-label', 'Choose a color');
-    document.body.appendChild(popover);
-
-    let done = false;
-    const close = () => {
-      if (done) return;
-      done = true;
-      popover.remove();
-      document.removeEventListener('mousedown', dismiss);
-      document.removeEventListener('keydown', onKey, true);
-      handlers.onClose?.();
-      previouslyFocused?.focus();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    document.addEventListener('keydown', onKey, true);
-
-    options.forEach((rgb) => {
-      const hex = rgbHex(rgb);
-      const [name] = getFilamentNameAndHex(rgb);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.style.background = hex;
-      btn.title = name;
-      if (hex.toLowerCase() === currentHex.toLowerCase()) btn.classList.add('active');
-      btn.addEventListener('click', () => {
-        handlers.onSelect(hex);
-        close();
-      });
-      popover.appendChild(btn);
+    colorPopover({
+      x: clientX,
+      y: clientY,
+      value: currentHex,
+      options: offerOf(options),
+      onSelect: handlers.onSelect,
+      onCustom: (hex) => cb.onCustomColor(hex),
+      onClose: handlers.onClose,
     });
-
-    // Custom color: live-updates while dragging, stays open until dismissed.
-    const custom = document.createElement('label');
-    custom.className = 'cp-custom';
-    custom.title = 'Custom color';
-    const inp = document.createElement('input');
-    inp.type = 'color';
-    inp.value = /^#[0-9a-f]{6}$/i.test(currentHex) ? currentHex : '#888888';
-    /* The wheel fires `input` on every step of a drag, so remembering the colour there filled
-       the design's palette with a dozen near-identical oranges. The colour joins the palette
-       once, when the popover closes, and only if the wheel was touched at all — clicking an
-       existing swatch is not a new colour. */
-    let wheelUsed = false;
-    inp.addEventListener('input', () => { wheelUsed = true; handlers.onSelect(inp.value); });
-    const closeHandlers = handlers.onClose;
-    handlers.onClose = () => {
-      if (wheelUsed) cb.onCustomColor(inp.value);
-      closeHandlers?.();
-    };
-    custom.appendChild(inp);
-    popover.appendChild(custom);
-
-    // Measure now that it's populated, then clamp into the viewport.
-    const w = popover.offsetWidth || 170;
-    const h = popover.offsetHeight || 180;
-    popover.style.left = `${Math.max(8, Math.min(clientX, window.innerWidth - w - 8))}px`;
-    popover.style.top = `${Math.max(8, Math.min(clientY, window.innerHeight - h - 8))}px`;
-
-    const dismiss = (e: MouseEvent) => {
-      if (!popover.contains(e.target as Node)) close();
-    };
-    setTimeout(() => document.addEventListener('mousedown', dismiss), 50);
-
-    // Move focus in, so Tab and Escape work immediately rather than leaving focus wherever
-    // the triggering click left it — often nowhere focusable at all, when the trigger was a
-    // click on the 3D canvas.
-    (popover.querySelector<HTMLElement>('button, input') ?? popover).focus();
   }
 
   /** The colours the shared popover offers for EVERY row on this palette, built once per
@@ -2502,57 +2423,6 @@ export function createUi(
     return [...customColors.filter((c) => !shelf.some((o) => sameRgb(o, c))), ...shelf];
   }
 
-  /** One compact colour row: a dot for the colour the image actually traced to (not
-   *  necessarily the filament chosen to print it), the row's label, and a `colorChip()`
-   *  holding the filament currently assigned.
-   *
-   *  This replaces a full `filamentRow()` — all fourteen shelf swatches, repeated on every
-   *  row — which is what Ian meant by "the left side of the palette feels cut off" and "this
-   *  big palette item that sometimes just disappears": the custom-colour chip that appears
-   *  only for an off-palette value could land alone on a wrapped second row, or overflow the
-   *  333px sidebar outright, depending on how many swatches came before it. The chip opens
-   *  the SAME `showColorPopoverAt` popover a click on the 3D model opens, given the SAME
-   *  options list (`colorOptionsFor`, above) — one picker, one offered list, instead of a
-   *  shelf here and a different popover there that could show different colours for the
-   *  same part. */
-  function paletteRow(
-    label: string,
-    valueHex: string,
-    options: RGB[],
-    onChange: (hex: string) => void,
-    quantHex?: string,
-  ): HTMLElement {
-    const labelEl = document.createElement('span');
-    labelEl.className = 'palette-row__label';
-    if (quantHex) {
-      const dot = document.createElement('span');
-      dot.className = 'fil-quant-dot';
-      dot.style.background = quantHex;
-      dot.title = 'Detected color';
-      labelEl.append(dot);
-    }
-    labelEl.append(document.createTextNode(label));
-
-    const chip = colorChip({
-      hex: valueHex,
-      label: `${label} colour`,
-      onClick: (e) => {
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        showColorPopoverAt(rect.left, rect.bottom + 6, valueHex, options, {
-          onSelect: (hex) => {
-            chip.setValue(hex);
-            onChange(hex);
-          },
-        });
-      },
-    });
-
-    const row = document.createElement('div');
-    row.className = 'palette-row';
-    row.append(labelEl, chip);
-    return row;
-  }
-
   function renderPalette(
     palette: PaletteEntry[],
     bodyColorRgb: RGB,
@@ -2563,7 +2433,7 @@ export function createUi(
     customColors: RGB[] = [],
   ) {
     const pal = $('palette');
-    pal.innerHTML = '';
+    pal.replaceChildren();
 
     // The tip, plus — once shapes have been recolored one by one — the way back. A
     // palette row only resets its own bucket, so without this a scattered set of
@@ -2588,24 +2458,26 @@ export function createUi(
       pal.appendChild(reset);
     };
 
-    const options = colorOptionsFor(colorMode, limitedColors, customColors);
+    /* One compact row per colour, the kit's: the name, and the chip holding the filament it
+       prints in, opening the same picker a click on the 3D model opens with the same offered
+       list (`colorOptionsFor`, above). A colour traced from the picture shows as a dot before
+       the name (`detected`), beside the filament chosen to print it. */
+    const offered = offerOf(colorOptionsFor(colorMode, limitedColors, customColors));
+    const row = (label: string, value: string, onChange: (hex: string) => void, detected?: string) =>
+      paletteRow({ label, value, options: offered, onChange, onCustom: (hex) => cb.onCustomColor(hex), ...(detected ? { detected } : {}) });
 
     // Letter blocks print in exactly three filaments — the blocks, the caps, and the
     // legends — so the palette is those three rows, not one per letter.
     if (blocks) {
-      pal.append(paletteRow('Body', rgbHex(bodyColorRgb), options, (hex) => cb.onBodyColor(hex)));
-      pal.append(paletteRow('Caps', rgbHex(blocks.capRgb), options, (hex) => cb.onCapColor(hex)));
-      pal.append(
-        paletteRow('Letters', rgbHex(palette[0]?.filamentRgb ?? [247, 247, 245]), options, (hex) =>
-          cb.onFilament(0, hex),
-        ),
-      );
+      pal.append(row('Body', rgbHex(bodyColorRgb), (hex) => cb.onBodyColor(hex)));
+      pal.append(row('Caps', rgbHex(blocks.capRgb), (hex) => cb.onCapColor(hex)));
+      pal.append(row('Letters', rgbHex(palette[0]?.filamentRgb ?? [247, 247, 245]), (hex) => cb.onFilament(0, hex)));
       appendTip('Tip: click a block, a cap or a letter on the 3D model to recolor it.');
       return;
     }
 
     // ALWAYS render the Clicker Body row.
-    pal.append(paletteRow('Body', rgbHex(bodyColorRgb), options, (hex) => cb.onBodyColor(hex)));
+    pal.append(row('Body', rgbHex(bodyColorRgb), (hex) => cb.onBodyColor(hex)));
 
     if (palette.length === 0) {
       const hint = document.createElement('div');
@@ -2614,9 +2486,7 @@ export function createUi(
       pal.appendChild(hint);
     } else {
       palette.forEach((entry, i) => {
-        pal.append(
-          paletteRow(`Color ${i + 1}`, rgbHex(entry.filamentRgb), options, (hex) => cb.onFilament(i, hex), rgbHex(entry.quantRgb)),
-        );
+        pal.append(row(`Color ${i + 1}`, rgbHex(entry.filamentRgb), (hex) => cb.onFilament(i, hex), rgbHex(entry.quantRgb)));
       });
 
       appendTip('Tip: click a shape on the 3D model to recolor just that shape. A row above recolors its whole color.');
@@ -2735,8 +2605,7 @@ export function createUi(
       activeSwitchTabs.setOptionVisible('2', switchCountN >= 3);
       activeSwitchTabs.setValue(String(activeIdx) as '0' | '1' | '2');
     }
-    const resetAllEl = document.getElementById('switchResetAll');
-    if (resetAllEl) resetAllEl.style.display = switchCountN > 1 ? 'block' : 'none';
+    switchResetAll.hidden = switchCountN <= 1;
     const kc = state.keychain;
     keychainToggle.setValue(kc.enabled);
     const kcOpts = document.getElementById('keychainOpts');
@@ -3041,7 +2910,7 @@ export function createUi(
           // `partEdgeRows`, populated below — not a DOM query for a data attribute.
           const currentTargets = Array.from(partEdgeRows.keys());
           if (targets.join(',') !== currentTargets.join(',')) {
-            edgesContentEl.innerHTML = '';
+            edgesContentEl.replaceChildren();
             partEdgeRows.clear();
             for (const t of targets) {
               const radiusLabelEl = document.createElement('span');

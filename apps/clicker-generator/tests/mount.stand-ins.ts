@@ -38,6 +38,10 @@ export const seen = {
   sdkExports: [] as any[],
   /** The seams handed to the paid panel, in the MakerWorld build. */
   pro: null as any,
+  /** Every colour picker the app opened: where, on which colour, offering what, and its handlers. */
+  popovers: [] as { x: number; y: number; hex: string; options: number[][]; handlers: { onSelect(hex: string): void; onClose?(): void } }[],
+  /** The viewer's part-pick handler: what a click on the model calls. */
+  partPick: null as null | ((index: number | null, x: number, y: number, shift: boolean) => void),
 };
 
 /** The conditions a scenario sets up. `reset()` puts them back. */
@@ -73,6 +77,8 @@ export function reset() {
   seen.modelPanel = null;
   seen.sdkExports.length = 0;
   seen.pro = null;
+  seen.popovers.length = 0;
+  seen.partPick = null;
   Object.assign(knobs, { makerlab: false, coverMs: 0, imageTraceThrows: null, svgTraceThrows: null, fontMs: {} });
   knobs.fontFails = new Set();
   knobs.fontsLoaded = new Set(['helvetiker-regular', 'helvetiker-bold']);
@@ -135,6 +141,9 @@ export function createViewer() {
     },
     renderThumbnail: () => null,
     renderToPng: async () => null,
+    onPartPick(fn: typeof seen.partPick) {
+      seen.partPick = fn;
+    },
   });
 }
 export const mountPlatePicker = noop;
@@ -146,6 +155,9 @@ export function createUi(_left: unknown, _right: unknown, _status: unknown, call
   return quiet({
     update(state: any) {
       seen.state = state;
+    },
+    showColorPopoverAt(x: number, y: number, hex: string, options: number[][], handlers: (typeof seen.popovers)[number]['handlers']) {
+      seen.popovers.push({ x, y, hex, options, handlers });
     },
   });
 }

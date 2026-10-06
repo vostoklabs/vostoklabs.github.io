@@ -70,6 +70,8 @@ const worker = {
   refuseIf: null as null | ((msg: any) => boolean),
 };
 const inbox: { w: FakeWorker; msg: any }[] = [];
+/** Every request posted to the worker since the clicker was mounted, in order. */
+const posted: any[] = [];
 let working = false;
 
 const partsNamed = (name: string) => [
@@ -157,8 +159,10 @@ async function fresh(prepare?: () => void, host?: object) {
   clock.errors.length = 0;
   unhandled.length = 0;
   logged.length = 0;
+  posted.length = 0;
   FakeWorker.onPost = (w, msg) => {
     if (worker.refuseIf?.(msg)) throw new DOMException('The object could not be cloned.', 'DataCloneError');
+    posted.push(msg);
     inbox.push({ w, msg });
     void work();
   };
@@ -533,6 +537,48 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   await clock.advance(300);
   check('in MakerLab, Model mode: the OBJ sent is the cut on screen', exp.done && seen.objs[0]?.[0].name === 'model:slice|size=40|st=0', `${shown(seen.objs[0]?.[0].name)}`);
   check('…and its mark says whose shape it is, as the 3MF\'s does', seen.objOpts[0]?.sourceModel === 'Skull', String(seen.objOpts[0]?.sourceModel));
+  finish(unmount);
+}
+
+/* ===================================================== what the panel's controls call */
+
+{
+  const unmount = await fresh();
+  ui().onSwitchCount(2);
+  await clock.advance(200);
+  const layout = JSON.stringify(seen.state?.switches);
+  ui().onSwitchNudge(5, 0);
+  await clock.advance(200);
+  const moved = JSON.stringify(seen.state?.switches) !== layout;
+  const before = posted.length;
+  ui().onSwitchResetAll();
+  await clock.advance(200);
+  check('Reset all switches: every switch goes back where two switches start', moved && JSON.stringify(seen.state?.switches) === layout && seen.state?.activeSwitchIndex === 0, `${JSON.stringify(seen.state?.switches)}, was ${layout}`);
+  check('…and the clicker is built again with them', posted.slice(before).some((m) => m.type === 'buildClicker' && JSON.stringify(m.params.switches) === layout), `${posted.length - before} requests`);
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onImportMode('model');
+  await clock.advance(300);
+  seen.partPick?.(0, 120, 80, false);
+  const pop = seen.popovers[0];
+  check('a click on the model opens the colour picker there, on the piece\'s colour, offering the filament shelf', !!pop && pop.x === 120 && pop.y === 80 && pop.hex === '#090909' && pop.options.length === 14, pop ? `${pop.x},${pop.y} ${pop.hex}, ${pop.options.length} offered` : 'none opened');
+  const before = posted.length;
+  pop?.handlers.onSelect('#00ae42');
+  await clock.advance(300);
+  check('…and a pick recolours that piece and builds it again', JSON.stringify(seen.state?.modelCut.colors.top) === '[0,174,66]' && posted.slice(before).some((m) => m.type === 'buildModel' && JSON.stringify(m.params.colors?.top) === '[0,174,66]'), JSON.stringify(seen.state?.modelCut.colors.top));
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onCustomColor('#123456');
+  ui().onCustomColor('#00ae42'); // a shelf colour is not a new one
+  ui().onCustomColor('#123456'); // nor is one already kept
+  await clock.advance(10);
+  check('a colour made on the picker\'s wheel is kept for the next picker, once; a shelf colour is not', JSON.stringify(seen.state?.customColors) === '[[18,52,86]]', JSON.stringify(seen.state?.customColors));
   finish(unmount);
 }
 

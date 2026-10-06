@@ -318,7 +318,7 @@ export function runWizard(opts: WizardOpts) {
   const colourCount = el('span', { className: 'wz-colour-count' });
 
   const renderColourList = () => {
-    colourList.innerHTML = '';
+    colourList.replaceChildren();
     const n = keep.filter(Boolean).length;
     colourCount.textContent = candidates.length
       ? `${n} of ${candidates.length} kept`
@@ -371,7 +371,7 @@ export function runWizard(opts: WizardOpts) {
   };
 
   const renderPalette = (set: RegionSet | null) => {
-    palette.innerHTML = '';
+    palette.replaceChildren();
     if (!set) return;
     const ordered = set.regions.slice().sort((a, b) => b.coverage - a.coverage);
     for (const r of ordered) {
@@ -387,7 +387,7 @@ export function runWizard(opts: WizardOpts) {
   };
 
   const show = () => {
-    prev.innerHTML = '';
+    prev.replaceChildren();
     if (view === 'original') {
       if (!lastAdjusted) lastAdjusted = adjusted();
       prev.appendChild(imageToCanvas(lastAdjusted));
