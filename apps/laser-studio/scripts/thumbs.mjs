@@ -28,7 +28,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const app = fileURLToPath(new URL('..', import.meta.url)).replaceAll('\\', '/').replace(/\/$/, '');
@@ -42,11 +42,25 @@ const FONT_DIR = `${root}/packages/fonts/src/fonts`;
  *  drawing, and the packages they build on. Fonts by name and size (they are 34 MB). */
 const SOURCES = [
   `${app}/src/templates`, `${app}/src/engine`, `${app}/src/symbols`, `${app}/src/preview.ts`, `${app}/src/assembled.ts`,
+  // The faces the pattern template fills.
+  `${app}/src/areas.ts`,
   `${app}/scripts/thumbs.mjs`,
   `${root}/packages/laser/src`, `${root}/packages/patterns/src`, `${root}/packages/fonts/src`,
   // The shape maths both engines stand on, and the kit's `svgNode` the picture is drawn with.
   `${root}/packages/shapes/src`, `${root}/packages/ui-kit/src/dom.ts`,
+  // The booleans' memory-safe doors, and the pattern library's tiles.
+  `${root}/packages/manifold/src`, `${root}/packages/patterns/data/pattern-monster.json`, `${root}/packages/patterns/data/pattern-monster-index.json`,
 ];
+
+/** Whether a saved file can change a card's picture: the dev server drops the cards it serves when
+ *  one is saved (vite.config.ts). The same list the cache key is made of, so the two never part. */
+export function isPictureSource(file) {
+  const f = resolve(file).replaceAll('\\', '/');
+  return SOURCES.some((s) => {
+    const p = resolve(s).replaceAll('\\', '/');
+    return f === p || f.startsWith(`${p}/`);
+  });
+}
 
 function walk(p, out) {
   if (!existsSync(p)) return;

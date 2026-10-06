@@ -104,7 +104,9 @@ function laserThumbsPlugin() {
   // Dev only: drop the served module so the next page load re-reads it — after the background
   // generator lands, and whenever a source that can change a picture is saved.
   let invalidate = () => {};
-  const PICTURE_SOURCES = /[\\/](src[\\/](templates|engine|symbols)[\\/]|src[\\/](preview|assembled)\.ts$|packages[\\/](laser|patterns|fonts)[\\/]src[\\/])/;
+  /** Which saves those are: the generator's own list, the one its cache key is made of. */
+  const pictureSources = async () =>
+    ((await import(pathToFileURL(script).href)) as { isPictureSource(file: string): boolean }).isPictureSource;
   const generate = () =>
     (generating ??= new Promise<boolean>((done) => {
       const child = spawn(process.execPath, [script], { cwd: __dirname, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -122,12 +124,13 @@ function laserThumbsPlugin() {
   return {
     name: 'laser-thumbs',
     configResolved(c: { command: string }) { isBuild = c.command === 'build'; },
-    configureServer(server: ViteDevServer) {
+    async configureServer(server: ViteDevServer) {
       invalidate = () => {
         const m = server.moduleGraph.getModuleById(RESOLVED);
         if (m) server.moduleGraph.invalidateModule(m);
       };
-      server.watcher.on('change', (f) => { if (PICTURE_SOURCES.test(f)) invalidate(); });
+      const isPictureSource = await pictureSources();
+      server.watcher.on('change', (f) => { if (isPictureSource(f)) invalidate(); });
     },
     resolveId(id: string) { return id === VIRTUAL_ID ? RESOLVED : null; },
     async load(id: string) {
