@@ -100,6 +100,18 @@ const mini = (n: unknown) => n as MiniElement;
   const fixed = lengthUnits({ storageKey: 'test-unit-3', trimZeros: false });
   check('lengthUnits trimZeros false: always one decimal', fixed.format(120) === '120.0 mm' && fixed.format(48.66) === '48.7 mm');
   check('lengthUnits trimZeros false: a size the same way', fixed.formatSize(120, 14.4) === '120.0 × 14.4 mm');
+  check('lengthUnits: a half rounds away from zero both ways, as toFixed does', studio.format(-1.25) === '-1.3 mm' && fixed.format(-1.25) === '-1.3 mm' && studio.format(1.25) === '1.3 mm');
+  check('lengthUnits: 0.35, stored a hair under, reads 0.3 both ways', studio.format(0.35) === '0.3 mm' && fixed.format(0.35) === '0.3 mm');
+  {
+    // Every 0.005 mm from -50 to 50, so every half on the way: trimming drops a zero and nothing else.
+    const moved: number[] = [];
+    for (let k = -10000; k <= 10000; k++) {
+      const v = k / 200;
+      if (studio.format(v) !== fixed.format(v).replace(/\.0 mm$/, ' mm').replace(/^-0 mm$/, '0 mm')) moved.push(v);
+    }
+    check('lengthUnits trimZeros: only ever drops a zero, never moves a number', moved.length === 0);
+  }
+  check('lengthUnits parse: in millimetres, a unit written after the number is read as written', studio.parse(2, '2 in') === 50.8 && studio.parse(2, '2"') === 50.8 && studio.parse(2, '2”') === 50.8 && studio.parse(2, '2 inches') === 50.8 && studio.parse(1.2, '1.2 cm') === 12);
 
   const heard: string[] = [];
   const stop = studio.onChange((u) => heard.push(u));
@@ -115,6 +127,7 @@ const mini = (n: unknown) => n as MiniElement;
   check('lengthUnits parse: in inches a typed number is inches', studio.parse(2, '2') === 50.8);
   check('lengthUnits parse: "12 mm" typed in inches is 12 mm', studio.parse(12, '12 mm') === 12);
   check('lengthUnits parse: no text, the number is in the unit showing', studio.parse(1) === 25.4);
+  check('lengthUnits parse: in inches, centimetres and millimetres are read as written', studio.parse(1.2, '1.2 cm') === 12 && studio.parse(12, '12MM') === 12 && studio.parse(2, '2 in ') === 50.8);
 
   const tabs = mini(control).querySelectorAll('.vl-tab');
   tabs[0]!.click();
