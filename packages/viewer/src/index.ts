@@ -184,17 +184,25 @@ export interface Viewer {
   setOrbitEnabled(on: boolean): void;
   /** A 2x-supersampled PNG of the current view, at the viewport's own size. */
   renderToPng(): Promise<Blob | null>;
-  /** A square, framed PNG of the whole model for a cover image: a fixed three-quarter
-   *  angle (or the user's own, with `angle: 'view'`), the build plate off, and an explicit
-   *  edge in pixels (default 512). */
+  /**
+   * A square, framed PNG of the whole model for a cover image: from a fixed three-quarter angle
+   * (or the user's own, with `angle: 'view'`), on the stage's background, an explicit edge in
+   * pixels a side (default 512).
+   *
+   * What a picture shows, this and `renderThumbnail` alike: the model as it is built, every layer
+   * back in its place (an exploded view is shot put together) and the fold rig as it stands,
+   * framed whole. Not the build plate, not a part that is hidden, and none of the pointer's
+   * business: no hover, no selection, no outline. The stage gets all of it back once the picture
+   * is taken.
+   */
   renderCoverPng(opts?: number | CoverOptions): Promise<Blob | null>;
   /**
    * A square picture, as a PNG data URL: of `parts` if given (a result the stage is not
-   * showing, built for the picture and freed after it), otherwise of the model on the stage
-   * (its parts with every layer in its place, and its fold rig). From the default three-quarter
-   * angle whatever the user has orbited to, so pictures side by side compare the models and not
-   * the camera. On a transparent background with `alpha`, on the stage's background without. No
-   * plate, no highlight. Null if the canvas cannot be read.
+   * showing, built for the picture and freed after it), otherwise of the model on the stage,
+   * shown as `renderCoverPng` shows it. From the default three-quarter angle whatever the user
+   * has orbited to, so pictures side by side compare the models and not the camera. On a
+   * transparent background with `alpha`, on the stage's background without. Null if the canvas
+   * cannot be read.
    */
   renderThumbnail(edge: number, parts?: ViewerPart[]): string | null;
   /** Escape hatches for generator-specific overlays. */
@@ -766,6 +774,25 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       : new MutationObserver(() => setTheme(readTheme()));
   themeObserver?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
+  /** Draw a picture's frame: `draw` runs with the pointer's business cleared (no hover, no
+   *  selection, no outline) and every layer in its place, and the stage gets both back the moment
+   *  it returns, before anything else can draw or click. The one rule both pictures follow (see
+   *  `Viewer.renderCoverPng`). */
+  function asPictured<T>(draw: () => T): T {
+    const hovered = hoveredIndex;
+    const chosen = selected;
+    hoveredIndex = null;
+    selected = [];
+    applyHighlight();
+    try {
+      return withLayersInPlace(draw);
+    } finally {
+      hoveredIndex = hovered;
+      selected = chosen;
+      applyHighlight();
+    }
+  }
+
   const partBox = new THREE.Box3();
   /** What a picture frames: every part that is drawn (`drawn`: one hidden with setPartVisible,
    *  or in a hidden layer, is not) and the fold rig. Read once `root` and `rig` have their world
@@ -815,28 +842,30 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     // to hand it back whatever happens.
     try {
       buildPlate.object.visible = false;
-      root.updateMatrixWorld(true);
-      rig.updateMatrixWorld(true);
+      asPictured(() => {
+        root.updateMatrixWorld(true);
+        rig.updateMatrixWorld(true);
 
-      // Both the flat parts and anything hierarchical (a fold rig), so a model that lives
-      // only in the rig — which is every foldbox box — is framed rather than missed.
-      const box = pictureBox();
-      if (!box.isEmpty()) {
-        const centre = box.getCenter(new THREE.Vector3());
-        // Sphere radius, so the fit holds at any angle, and the frame is square, so the
-        // vertical FOV governs both directions.
-        const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
-        camera.position.copy(centre).addScaledVector(dir, coverDistance(radius, camera.fov));
-        camera.lookAt(centre);
-      }
-      camera.aspect = 1;
-      camera.updateProjectionMatrix();
+        // Both the flat parts and anything hierarchical (a fold rig), so a model that lives
+        // only in the rig — which is every foldbox box — is framed rather than missed.
+        const box = pictureBox();
+        if (!box.isEmpty()) {
+          const centre = box.getCenter(new THREE.Vector3());
+          // Sphere radius, so the fit holds at any angle, and the frame is square, so the
+          // vertical FOV governs both directions.
+          const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
+          camera.position.copy(centre).addScaledVector(dir, coverDistance(radius, camera.fov));
+          camera.lookAt(centre);
+        }
+        camera.aspect = 1;
+        camera.updateProjectionMatrix();
 
-      // `updateStyle: false` — the drawing buffer changes shape, the canvas element on
-      // screen does not, so nothing flickers while the shot is taken.
-      renderer.setPixelRatio(1);
-      renderer.setSize(edge, edge, false);
-      renderer.render(scene, camera);
+        // `updateStyle: false` — the drawing buffer changes shape, the canvas element on
+        // screen does not, so nothing flickers while the shot is taken.
+        renderer.setPixelRatio(1);
+        renderer.setSize(edge, edge, false);
+        renderer.render(scene, camera);
+      });
       return await new Promise<Blob | null>((res) => renderer.domElement.toBlob((b) => res(b), 'image/png'));
     } finally {
       renderer.setPixelRatio(prevRatio);
@@ -865,18 +894,12 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     const plateWasVisible = buildPlate.object.visible;
     const rigWasVisible = rig.visible;
     const rootWasVisible = root.visible;
-    const hovered = hoveredIndex;
-    const chosen = selected;
     let shot: THREE.Group | null = null;
     let url: string | null = null;
 
-    // A hover glow or a selection outline is the pointer's business, not the picture's.
-    hoveredIndex = null;
-    selected = [];
-    applyHighlight();
     buildPlate.object.visible = false;
     try {
-      withLayersInPlace(() => {
+      asPictured(() => {
         const box = new THREE.Box3();
         if (parts) {
           shot = new THREE.Group();
@@ -931,9 +954,6 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       camera.position.copy(prevPos);
       controls.update(); // re-aims the camera at the untouched orbit target
       buildPlate.object.visible = plateWasVisible;
-      hoveredIndex = hovered;
-      selected = chosen;
-      applyHighlight();
       renderer.render(scene, camera);
     }
     return url;

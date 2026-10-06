@@ -314,6 +314,47 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   v.dispose();
 }
 
+/* ------------------------------------------------------------------ what a picture shows */
+
+{
+  // The cover and the thumbnail alike: the model as it is built, every layer back in its place,
+  // and none of the pointer's business (no hover, no selection, no outline); all of it back on
+  // the stage once the picture is taken.
+  const v = createViewer(stage, { outline: true });
+  const top = v.layer('top');
+  const exploded = new THREE.Vector3(0, 0, 30);
+  top.position.copy(exploded);
+  v.setParts(PARTS.map((p, i) => (i === 2 ? { ...p, layer: 'top' } : p)), true);
+  page.frame();
+  // Hover the lifted part where it is drawn now: through the middle of its corners.
+  const lifted = v.partMeshes()[2]!;
+  lifted.updateWorldMatrix(true, false);
+  const corners = lifted.geometry.getAttribute('position');
+  const middle = new THREE.Vector3();
+  for (let i = 0; i < corners.count; i++) middle.add(new THREE.Vector3().fromBufferAttribute(corners, i));
+  const onScreen = middle.divideScalar(corners.count).applyMatrix4(lifted.matrixWorld).project(v.camera);
+  const at = [((onScreen.x + 1) / 2) * 800, ((1 - onScreen.y) / 2) * 600] as const;
+  v.highlightPart(0);
+  page.pointer('pointermove', ...at);
+  const state = () => `glow ${emissive(v).join(' ')}, ${outlinesOf(v).length} outlines, top at ${top.position.toArray().join(' ')}`;
+  const onStage = state();
+  const seen: string[] = [];
+  const render = v.renderer.render.bind(v.renderer);
+  v.renderer.render = (scene, camera) => {
+    seen.push(state());
+    render(scene, camera);
+  };
+  check('pictures: set up with a selection, a hover and a lifted layer', v.pickPart(...at) === 2 && onStage === 'glow 0.2 0 0.4, 1 outlines, top at 0 0 30', onStage);
+  const pictured = 'glow 0 0 0, 0 outlines, top at 0 0 0';
+  await v.renderCoverPng(64);
+  check('pictures: the cover shows the model built, with nothing highlighted', seen[0] === pictured, seen[0]);
+  check('pictures: and the stage gets its highlight and its layer back', state() === onStage && seen[1] === onStage, `${state()}; drawn with ${seen[1]}`);
+  seen.length = 0;
+  v.renderThumbnail(64);
+  check('pictures: so does the thumbnail', seen[0] === pictured && state() === onStage && seen[1] === onStage, `${seen[0]}, then ${state()}`);
+  v.dispose();
+}
+
 /* ------------------------------------------------------------------ hidden parts */
 
 {
