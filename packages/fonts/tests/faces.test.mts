@@ -8,9 +8,11 @@
    - the other weights are in no picker's list, and getFont finds them once the weights module
      is imported, not before;
    - the symbol font through its own door is the one the text engine falls back to, parsed once;
-   - `segments` changes how finely a curve is drawn, and leaving it out changes nothing.
+   - `segments` changes how finely a curve is drawn, and leaving it out changes nothing;
+   - the outlines themselves, in Roboto and in Pacifico, are pinned as the text engine drew them.
   The font files are read from disk (tests/vite-glob-files.mts answers the globs).
 */
+import { createHash } from 'node:crypto';
 import { FONTS, FALLBACK_FONT_ID, getFont, getFontUrl, installFontFaces, loadedFont, preloadFonts, getHorizontalContours, getVerticalContours, pathCommandsToPolygons } from '../src/index';
 import { getIconFont, iconFontUrl, ICONS } from '../src/iconFont';
 
@@ -90,6 +92,25 @@ ok(count(fineLayout.contours) > count(layout({}).contours), 'and 16 draws more p
 ok(Math.abs(fineLayout.box.maxX - layout({}).box.maxX) < 0.2 && Math.abs(fineLayout.box.minY - layout({}).box.minY) < 0.2, 'round the same letters');
 const vertical = (opts?: { segments?: number }) => getVerticalContours(regular, null, 'Sog', 20, 1, 0, opts);
 ok(same(vertical(), vertical({ segments: 8 })) && count(vertical({ segments: 16 }).contours) > count(vertical().contours), 'getVerticalContours takes it too');
+
+// ---- the outlines themselves
+
+// Digests of the text engine's outlines, recorded from it before `segments` existed: a change to
+// how a curve is drawn or where a glyph lands moves them. Roboto, and Pacifico for its curls.
+const PINNED_TEXT: Record<string, string> = {
+  'roboto horizontal': 'c696109615f85d6495d5d4de52ac3a8f93acc9d18ec395880db0f72e1f02af88',
+  'roboto vertical': 'b18ec3b4a166ba1c7b44d0396d321ea0c12e18368f14f7d8f32e99b5df6d1684',
+  'pacifico horizontal': '655c17f0f017a824de6b9e9a401ee791dc90b88517142f5412e721497190e66f',
+  'pacifico vertical': 'a4d34bddbb263598c20990cd938e007a5aca19ed5a3224d458ddd3600827c78f',
+};
+const sha = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
+const pacifico = await getFont('pacifico');
+for (const [id, face] of [['roboto', regular], ['pacifico', pacifico]] as const) {
+  const across = sha(getHorizontalContours(face, null, 'Sog', 'two', 20, 12, 0, 'center', 0.4, 0.05));
+  const down = sha(getVerticalContours(face, null, 'Sog', 20, 1, 0));
+  ok(across === PINNED_TEXT[`${id} horizontal`], `${id}, two lines across: ${across.slice(0, 16)} (pinned ${PINNED_TEXT[`${id} horizontal`]!.slice(0, 16)})`);
+  ok(down === PINNED_TEXT[`${id} vertical`], `${id}, down the page: ${down.slice(0, 16)} (pinned ${PINNED_TEXT[`${id} vertical`]!.slice(0, 16)})`);
+}
 
 console.log(`faces: ${checks - failed}/${checks} checks passed`);
 process.exit(failed ? 1 : 0);
