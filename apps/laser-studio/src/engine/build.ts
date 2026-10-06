@@ -11,23 +11,17 @@
 // optionally sharing the primary's keyring hole so a stack registers, then laid out beside it.
 import {
   applyKeyring,
-  bboxOf,
-  circleRing,
   csOf,
   fromCS,
   intersectShapes,
   offsetShapes,
-  placeShapes,
   ringsOf,
-  roundedRectRing,
-  signedArea,
   subtractShapes,
   toCS,
   unionShapes,
   withScope,
-  type Box,
-  type Shapes,
-} from '@vostok/laser';
+} from '@vostok/laser/csg2d';
+import { bboxOf, circleRing, placeShapes, roundedRectRing, signedArea, type Box, type Shapes } from '@vostok/shapes';
 import type { CutImage } from '@vostok/export';
 import { LATTICE_STATUS, latticeFaces } from '@vostok/patterns/lattice';
 import { clipPolylines, clipShapesToLines, lineLength } from '@vostok/patterns/clip';

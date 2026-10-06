@@ -2,7 +2,8 @@
 // outline still reads letter by letter. Worker-side and pure apart from manifold's wasm module,
 // which the unions need; `buildKeychain` calls `seamPaths` for a layer with
 // `op: 'score', seams: true`.
-import { bboxOf, ringsOf, toCS, withScope, type Box, type Shapes } from '@vostok/laser';
+import { ringsOf, toCS, withScope } from '@vostok/laser/csg2d';
+import { bboxOf, type Box, type Shapes } from '@vostok/shapes';
 import { lineLength } from '@vostok/patterns/clip';
 import { insideShapes } from './editorGeometry';
 

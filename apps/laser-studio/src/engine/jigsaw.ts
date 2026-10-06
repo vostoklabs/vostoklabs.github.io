@@ -41,8 +41,8 @@
 // 29 % of the edge, at the default). The neck is 1.24 head-radii across and never under
 // `NECK_MIN` = 3 mm (§2.1's tab width, 1× the stock): on the smallest cells the Knob size slider's
 // low end asks for less, and gets the floor — a 16 mm cell at 18 % would be a 1.8 mm neck.
-import { circleRing, heartRing, roundedRectRing, type Pt } from '@vostok/laser';
-import { pointInRing } from '@vostok/shapes';
+import { heartRing } from '@vostok/laser/blanks';
+import { circleRing, pointInRing, roundedRectRing, type Pt } from '@vostok/shapes';
 
 type Ring = Pt[];
 

@@ -35,8 +35,7 @@
 // one or two V's from 0.6 out, and a hub's points on the arms sit either well inside those edges
 // (≤ 0.34) or well past them (≥ 0.48), never on them.
 // `tests/node/snowflake.test.mjs` measures all of it on the welded outline.
-import { circleRing, type Pt, type Shapes } from '@vostok/laser';
-import { pointInRing } from '@vostok/shapes';
+import { circleRing, pointInRing, type Pt, type Shapes } from '@vostok/shapes';
 
 type Ring = Pt[];
 

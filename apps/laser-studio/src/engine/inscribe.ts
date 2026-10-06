@@ -14,7 +14,7 @@
 // for both, and it is the same rule the SVG the customer gets is drawn with.
 //
 // Pure: millimetres, Y up, no DOM and no wasm (tests/node/inscribe.test.mjs).
-import { bboxOf, signedArea, type Box, type Pt, type Shapes } from '@vostok/laser';
+import { bboxOf, signedArea, type Box, type Pt, type Shapes } from '@vostok/shapes';
 
 export interface InscribeOpts {
   /** Clearance from the outline, mm — usually `dia / 2 + ring`. */

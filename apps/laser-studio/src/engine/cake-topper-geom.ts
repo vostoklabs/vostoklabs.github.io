@@ -7,7 +7,8 @@
 // it runs inside a live preview and can be asserted in node. The one primitive underneath is a
 // scan line: at a given x (or y), every material interval the artwork covers, merged across
 // islands. Even-odd per island is what reads a counter as a hole whichever way its ring is wound.
-import { bboxOf, heartRing, starRing, type Pt, type Shapes } from '@vostok/laser';
+import { heartRing, starRing } from '@vostok/laser/blanks';
+import { bboxOf, type Pt, type Shapes } from '@vostok/shapes';
 
 /** One material interval on a scan line: [low, high]. */
 export type Span = [number, number];

@@ -1,9 +1,9 @@
 // Text and symbols → design layers, in millimetres. The same font pipeline the name keychain
 // uses (@vostok/fonts contours → islands), with the knobs a template
 // is likely to expose.
-import { bboxOf, buildSymbol, centreShapes, islandsFromContours, placeShapes, type Box, type Shapes } from '@vostok/laser';
+import { buildSymbol } from '@vostok/laser';
 import { FALLBACK_FONT_ID, getFont, getHorizontalContours, getVerticalContours, pathCommandsToPolygons } from '@vostok/fonts';
-import { pointInRing } from '@vostok/shapes';
+import { bboxOf, centreShapes, islandsFromContours, placeShapes, pointInRing, type Box, type Shapes } from '@vostok/shapes';
 import { withSymbols, symbolIslands, type SymbolMap } from '../symbols/model';
 import { unionIndex, unionOutlineDistance, type UnionIndex } from './editorGeometry';
 import type { DesignLayer, OpChoice } from './types';

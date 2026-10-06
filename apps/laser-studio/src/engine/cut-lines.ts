@@ -13,7 +13,8 @@
 // twists into a figure-8 wherever the line turns tighter than its own width, and a twisted ring
 // under the 'Positive' fill rule leaves the twist unfilled — a bridge nobody drew. A quad cannot
 // twist.
-import { subtractShapes, type Shapes } from '@vostok/laser';
+import { subtractShapes } from '@vostok/laser/csg2d';
+import type { Shapes } from '@vostok/shapes';
 
 type Pt = [number, number];
 

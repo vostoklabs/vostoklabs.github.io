@@ -12,7 +12,7 @@
 // may do to a finder pattern, and how much of the code a symbol may cost — and there are four QR
 // templates that would otherwise each answer them their own way.
 import qrcode from 'qrcode-generator';
-import { mapShapes, type Shapes } from '@vostok/laser';
+import { mapShapes, type Shapes } from '@vostok/shapes';
 import type { CutRing } from '@vostok/export';
 
 // Byte mode as UTF-8. The encoder's default keeps only the low 8 bits of each UTF-16 unit, so a

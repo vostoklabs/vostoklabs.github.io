@@ -59,7 +59,7 @@
 // Two calls because the content box has to exist before a caller can fit type or a QR into it,
 // and the pieces cannot be built before the content exists. Nothing here touches manifold: every
 // ring is closed-form, so a node test can hold the whole construction to the formula above.
-import { bboxOf, roundedRectRing, type Box, type Shapes } from '@vostok/laser';
+import { bboxOf, roundedRectRing, type Box, type Shapes } from '@vostok/shapes';
 import type { CutRing } from '@vostok/export';
 import { FIT, slotHoleRing, slotWidth, tabWidth } from './slots';
 import type { Blank, DesignLayer, PartInput, Pose } from './types';

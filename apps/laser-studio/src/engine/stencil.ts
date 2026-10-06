@@ -9,7 +9,8 @@
 // as material and the counter hangs off it. A counter worth more than 25 mm² gets a second bar
 // roughly opposite the first, so a big "O" does not hinge on one point; a counter narrower than
 // a millimetre is scrap either way and is simply punched with the letter.
-import { bboxOf, signedArea, subtractShapes, unionShapes, type Shapes } from '@vostok/laser';
+import { subtractShapes, unionShapes } from '@vostok/laser/csg2d';
+import { bboxOf, signedArea, type Shapes } from '@vostok/shapes';
 
 type Pt = [number, number];
 

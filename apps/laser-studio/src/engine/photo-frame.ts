@@ -92,9 +92,8 @@
 //   ...place decorations with holeClear(g, box), lay lettering inside g.window's borders...
 //   const pieces = framePieces(g, { holes, rim, windowMinus, front, middle });
 //   return { ...pieces, keyring: NO_KEYRING };
-import { bboxOf, filletRing, roundedRectRing, type Box, type Shapes } from '@vostok/laser';
 import type { CutRing } from '@vostok/export';
-import { pointInRing } from '@vostok/shapes';
+import { bboxOf, filletRing, pointInRing, roundedRectRing, type Box, type Shapes } from '@vostok/shapes';
 import { FIT, slotHoleRing, slotWidth, tabWidth } from './slots';
 import type { Blank, DesignLayer, PartInput, Pose } from './types';
 

@@ -9,7 +9,7 @@
 // "H" is two points, and two points stay a straight line however you move them. So every warp
 // subdivides first, and `subdivideShapes` is exported because a caller warping twice wants to
 // pay for that once.
-import { bboxOf, signedArea, type Box, type Pt, type Shapes } from '@vostok/laser';
+import { bboxOf, signedArea, type Box, type Pt, type Shapes } from '@vostok/shapes';
 
 /** Longest edge a warp will bend over, mm. Fine enough that a 6 mm letter curves smoothly on an
  *  arch; coarse enough that a word is a few thousand points, not a few hundred thousand. */

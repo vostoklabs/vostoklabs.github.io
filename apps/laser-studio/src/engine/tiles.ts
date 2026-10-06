@@ -7,7 +7,7 @@
 //
 // The values are the ordinary English word-game letter values. The board game whose name people
 // reach for here is a trademark; it is not used in this codebase, in the UI or in any copy.
-import { bboxOf, mapShapes, roundedRectRing, type Shapes } from '@vostok/laser';
+import { bboxOf, mapShapes, roundedRectRing, type Shapes } from '@vostok/shapes';
 import type { CutRing } from '@vostok/export';
 import { textLayer } from './text';
 import type { SymbolMap } from '../symbols/model';

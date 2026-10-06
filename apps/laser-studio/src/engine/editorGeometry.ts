@@ -1,5 +1,6 @@
-import { bboxOf, holeCentre, signedArea, type Box, type Shapes, type Keyring } from '@vostok/laser';
-import { insideShapes, insideUnion, pointInRing } from '@vostok/shapes';
+import type { Keyring } from '@vostok/laser';
+import { holeCentre } from '@vostok/laser/keyring';
+import { bboxOf, insideShapes, insideUnion, pointInRing, signedArea, type Box, type Shapes } from '@vostok/shapes';
 // The scan line lives next door (it was written for the topper's word spaces and legs, and it is
 // the same primitive a bridge needs): every material interval a row or a column crosses.
 import { columnSpans, rowSpans, type Span } from './cake-topper-geom';

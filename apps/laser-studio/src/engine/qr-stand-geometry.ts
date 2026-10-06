@@ -2,7 +2,7 @@
 // plate the code is engraved on, and the wedge foot it half-laps into. Closed-form ring math —
 // ellipses and a raised cosine — in millimetres, Y up, outer rings CCW. No CSG, so `build()`
 // calls these on the main thread.
-import { roundedRectRing } from '@vostok/laser';
+import { roundedRectRing } from '@vostok/shapes';
 import type { CutRing } from '@vostok/export';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));

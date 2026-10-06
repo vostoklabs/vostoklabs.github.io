@@ -8,17 +8,10 @@
 // more in millimetres than near ones. So the rim is a `Blank` kind the worker cuts
 // (`engine/build.ts`, `{ kind: 'rim' }`), never a helper a template calls. Everything else here
 // is trig with no manifold in it, and runs on the main thread inside a template's `build()`.
-import {
-  buildBlank,
-  edgePoint,
-  offsetShapes,
-  subtractShapes,
-  unionShapes,
-  type BlankDef,
-  type BlankParams,
-  type Pt,
-  type Shapes,
-} from '@vostok/laser';
+import { buildBlank, type BlankDef, type BlankParams } from '@vostok/laser/blanks';
+import { offsetShapes, subtractShapes, unionShapes } from '@vostok/laser/csg2d';
+import { edgePoint } from '@vostok/laser/keyring';
+import type { Pt, Shapes } from '@vostok/shapes';
 import type { CutRing } from '@vostok/export';
 
 /** What `buildRim` found: the ring, and whether the rim swallowed the shape and fell back to

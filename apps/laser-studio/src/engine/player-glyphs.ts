@@ -12,7 +12,8 @@
 //   · an arrowhead is 0.4 × the height tall, so it reads as a head and not as a thicker stroke;
 //   · two strokes that must stay apart (the repeat's arrow and the side it points past) keep 0.6
 //     of a stroke of bare wood between them, which at 0.4 mm is still above the burn floor.
-import { circleRing, heartRing, mirrorX, roundPolygonRing, roundedRectRing, type Pt, type Shapes } from '@vostok/laser';
+import { heartRing, roundPolygonRing } from '@vostok/laser/blanks';
+import { circleRing, mirrorX, roundedRectRing, type Pt, type Shapes } from '@vostok/shapes';
 import type { CutRing } from '@vostok/export';
 
 /** The thinnest engraved stroke a glyph is drawn with, mm. */
