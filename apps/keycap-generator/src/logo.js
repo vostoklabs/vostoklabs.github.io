@@ -7,7 +7,8 @@ import { flattenSvgStyles } from '@vostok/ui-kit';
  * The keycap's SVG legends, read by the shelf's SVG reader (@vostok/trace, "SVG reader"):
  * `parseSvgLegend` is the one-colour reading a legend is carved from, and `describeSvg` is what
  * the import window lists. What is left here is only what the keycap's callers expect of them:
- * three.js shapes, a part list with no colours, and the window's choices written into the file.
+ * three.js shapes, a part list with no colours, a file read without its opacities (as this app
+ * always read one), and the window's choices written into the file.
  */
 
 /**
@@ -22,6 +23,43 @@ const CHOSEN_ATTR = 'data-vl-chosen';
  *  CSS that a strict style-src policy never lets SVGLoader read (`flattenSvgStyles` in
  *  @vostok/ui-kit says more). Exported from here too, for the import preview and its test. */
 export { flattenSvgStyles };
+
+const OPACITIES = ['opacity', 'fill-opacity', 'stroke-opacity'];
+
+/**
+ * The markup with its opacities taken out, on every element.
+ *
+ * The legend is one colour, and a part is drawn by its paint alone, as this app has always read a
+ * file: a path a file hides at zero opacity is still one of its shapes, listed in the import
+ * window like any other and carved when it is on. The shelf's reader takes a zero-opacity paint
+ * for no paint, which suits a cut file's invisible fills; read that way here, it changed where the
+ * window starts (a box maker's panels came in filled, a line beside a hidden shape as a fill that
+ * carves nothing) and what a board saved before it carves. Only a file that mentions opacity is
+ * parsed again.
+ */
+function withoutOpacity(svgText) {
+  if (!/opacity/i.test(svgText)) return svgText;
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  } catch {
+    return svgText;
+  }
+  const root = doc?.documentElement;
+  if (!root || root.nodeName !== 'svg') return svgText;
+  let touched = false;
+  for (const node of [root, ...Array.from(root.getElementsByTagName('*'))]) {
+    for (const name of OPACITIES) {
+      if (!node.hasAttribute(name)) continue;
+      node.removeAttribute(name);
+      touched = true;
+    }
+  }
+  return touched ? new XMLSerializer().serializeToString(root) : svgText;
+}
+
+/** A file as the legend reads it: its CSS paint in attributes, its opacities left out. */
+const legendText = (svgText) => withoutOpacity(flattenSvgStyles(svgText));
 
 /**
  * What is in an SVG, before committing to it: the shelf's `describeSvg`, as the keycap's import
@@ -40,7 +78,7 @@ export { flattenSvgStyles };
  * @returns {{ parts: Array<{index:number, kind:'fill'|'stroke'|'none', area:number, strokeWidth?:number, why?:'white'|'artboard'}>, issues: string[] }}
  */
 export function describeLogo(svgText) {
-  const { parts, issues } = describeSvg(flattenSvgStyles(svgText));
+  const { parts, issues } = describeSvg(legendText(svgText));
   return {
     parts: parts.map(({ hex, ...part }) => part),
     issues: parts.length ? [] : issues,
@@ -61,8 +99,9 @@ export function describeLogo(svgText) {
  * attribute in the stored markup is one more thing a strict style-src policy refuses on every re-parse.
  *
  * The legend is one colour, so `#000` is only "ink"; the carve does not read the value. A part
- * turned on is painted at full opacity too: the reader leaves out a paint at zero opacity, so
- * without it Fill on a part the file hid that way ("Invisible in the file") would do nothing.
+ * turned on is painted at full opacity too: the carve reads no opacity (`withoutOpacity`), but
+ * the file is also the tile's picture and what a board saves, and there a part the file hid that
+ * way has to show as the shape it will carve.
  *
  * @param {string} svgText
  * @param {Record<number, 'fill'|'outline'|'off'>} choices
@@ -104,7 +143,7 @@ export function applySvgChoices(svgText, choices) {
  * @param {string} svgText
  */
 export function parseLogo(svgText) {
-  const { contours, strokes, box, view } = parseSvgLegend(flattenSvgStyles(svgText));
+  const { contours, strokes, box, view } = parseSvgLegend(legendText(svgText));
   return {
     contours,
     strokeGeoms: strokes.map((corners) => new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(corners, 3))),

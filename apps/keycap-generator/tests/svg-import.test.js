@@ -12,6 +12,8 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 globalThis.DOMParser = DOMParser;
 globalThis.XMLSerializer = XMLSerializer;
 const { describeLogo, applySvgChoices, parseLogo, flattenSvgStyles } = await import('../src/logo.js');
+// How the import window starts each part, from what `describeLogo` reports (the kit's own rule).
+const { svgImportDefaults } = await import('@vostok/ui-kit');
 
 let failures = 0;
 const check = (name, ok, detail) => {
@@ -173,25 +175,84 @@ check('and the carve drops it, leaving just the icon',
   carvedScaled.contours.length === 1,
   `${carvedScaled.contours.length} contours`);
 
-// --- a part the file hid at zero opacity --------------------------------------------------
-// It paints nothing, so it is described as invisible and left out of the carve; turned on in the
-// window, the choice is written at full opacity, so it is carved after all.
+// --- opacity: a legend is drawn by its paint ----------------------------------------------
+// The legend is one colour, and the keycap reads a file without its opacities, as it always has:
+// a part the file hides at zero opacity is still one of its shapes, listed and carved like any
+// other. (The shared reader alone would call it invisible.)
 const hidden = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <rect x="10" y="10" width="30" height="30" fill="#000" fill-opacity="0"/>
   <path d="M60 90 L90 60" fill="none" stroke="#000" stroke-width="4" opacity="0"/>
   <circle cx="70" cy="30" r="15" fill="#000"/>
 </svg>`;
-check('a fill or a stroke at zero opacity is described as painting nothing',
-  describeLogo(hidden).parts.filter((p) => p.kind === 'none').map((p) => p.index).sort().join(',') === '0,1',
+check('a part a file hides at zero opacity is described by its paint',
+  describeLogo(hidden).parts.map((p) => `${p.index}:${p.kind}`).sort().join(' ') === '0:fill 1:stroke 2:fill',
   describeLogo(hidden).parts.map((p) => `${p.index}:${p.kind}`).join(' '));
 const hiddenAsFiled = parseLogo(hidden);
-check('and is left out of the carve: the disc alone',
-  hiddenAsFiled.contours.length === 1 && hiddenAsFiled.strokeGeoms.length === 0,
-  `${hiddenAsFiled.contours.length} contour, ${hiddenAsFiled.strokeGeoms.length} ribbons`);
-const hiddenTurnedOn = parseLogo(applySvgChoices(hidden, { 0: 'fill', 1: 'outline', 2: 'fill' }));
-check('turned on in the window, both are carved: the square filled, the line as a ribbon',
-  hiddenTurnedOn.contours.length === 2 && hiddenTurnedOn.strokeGeoms.length === 1 && solid(hiddenTurnedOn) > solid(hiddenAsFiled) + 850,
-  `${hiddenTurnedOn.contours.length} contours, ${hiddenTurnedOn.strokeGeoms.length} ribbon, solid ${solid(hiddenAsFiled).toFixed(0)} -> ${solid(hiddenTurnedOn).toFixed(0)}`);
+check('and carved by its paint: the square, the line and the disc',
+  hiddenAsFiled.contours.length === 2 && hiddenAsFiled.strokeGeoms.length === 1,
+  `${hiddenAsFiled.contours.length} contours, ${hiddenAsFiled.strokeGeoms.length} ribbon`);
+const hiddenOff = parseLogo(applySvgChoices(hidden, { 0: 'off', 1: 'off', 2: 'fill' }));
+check('turned off in the window, it is left out: the disc alone',
+  hiddenOff.contours.length === 1 && hiddenOff.strokeGeoms.length === 0,
+  `${hiddenOff.contours.length} contour, ${hiddenOff.strokeGeoms.length} ribbons`);
+
+// A board saved before the window wrote opacities: its file keeps the zero opacity under a part
+// that was on, and that part must still carve.
+const savedEarlier = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" data-vl-chosen="1">
+  <rect x="10" y="10" width="30" height="30" fill="#000" fill-opacity="0" stroke="none" visibility="visible"/>
+  <circle cx="70" cy="30" r="15" fill="#000" stroke="none" visibility="visible"/>
+</svg>`;
+check('a part a board saved earlier had on still carves, zero opacity and all',
+  parseLogo(savedEarlier).contours.length === 2, `${parseLogo(savedEarlier).contours.length} contours`);
+
+// The written choice: a part turned on is painted at full strength in the file too, so the file,
+// and the tile's picture of it, show the shape that will carve.
+const turnedOn = applySvgChoices(hidden, { 0: 'fill', 1: 'outline', 2: 'fill' });
+check('Fill on a part hidden at zero opacity writes it at full opacity',
+  /<rect[^>]*fill-opacity="1"[^>]*opacity="1"/.test(turnedOn) || /<rect[^>]*opacity="1"[^>]*fill-opacity="1"/.test(turnedOn),
+  (turnedOn.match(/<rect[^>]*>/) ?? [''])[0]);
+const strokeHidden = applySvgChoices(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M10 90 L90 10" fill="none" stroke="#000" stroke-width="4" stroke-opacity="0"/>
+</svg>`, { 0: 'outline' });
+check('and Outline on a line hidden by its stroke opacity writes the stroke at full opacity',
+  /stroke-opacity="1"/.test(strokeHidden) && /\sopacity="1"/.test(strokeHidden),
+  (strokeHidden.match(/<path[^>]*>/) ?? [''])[0]);
+
+// --- how the window starts each part, as before ---------------------------------------------
+// A box maker's cut file: each panel a red line over a white fill nobody sees. Every row starts
+// as "White in the file", Off, as it always has, rather than filled into solid slabs.
+const boxMaker = `<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="60mm" viewBox="0 0 100 60">
+  <path style="stroke: rgb(255,0,0); stroke-width: 0.2; fill: rgb(255,255,255); fill-opacity: 0; opacity: 1;" d="M10 10 H50 V50 H10 Z"/>
+  <path style="stroke: rgb(255,0,0); stroke-width: 0.2; fill: rgb(255,255,255); fill-opacity: 0; opacity: 1;" d="M20 20 H40 V30 H20 Z"/>
+  <path style="stroke: rgb(255,0,0); stroke-width: 0.2; fill: rgb(255,255,255); fill-opacity: 0; opacity: 1;" d="M60 10 H90 V50 H60 Z"/>
+</svg>`;
+const boxParts = describeLogo(boxMaker).parts;
+const boxStart = svgImportDefaults(boxParts);
+check('a box maker\'s cut file starts with every panel "White in the file", Off',
+  boxParts.length === 3 && boxParts.every((p) => p.kind === 'fill' && p.why === 'white' && boxStart[p.index].mode === 'off'),
+  boxParts.map((p) => `${p.kind}/${p.why ?? '-'}->${boxStart[p.index].mode}`).join(' '));
+// A visible line beside a filled shape the file hides: the line still starts as an Outline.
+const lineAndHidden = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect x="10" y="10" width="30" height="30" fill="#000" opacity="0"/>
+  <path d="M40 90 L90 40" fill="none" stroke="#000" stroke-width="4"/>
+</svg>`;
+const lineStart = svgImportDefaults(describeLogo(lineAndHidden).parts);
+check('a line beside a shape the file hides starts as an Outline, the shape as a Fill',
+  lineStart[0].mode === 'fill' && lineStart[1].mode === 'outline',
+  `shape ${lineStart[0].mode}, line ${lineStart[1].mode}`);
+
+// --- what the keycap's own reading adds to the shared reader --------------------------------
+check('the legend keeps the file\'s view box as its em',
+  JSON.stringify(parseLogo(sdCard).view) === '{"w":24,"h":24}', JSON.stringify(parseLogo(sdCard).view));
+check('…and has none when the file gives no size',
+  parseLogo('<svg xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="5" fill="#000"/></svg>').view === null, 'null');
+check('the window\'s parts carry no colour, so no row shows a swatch',
+  describeLogo(sdCard).parts.every((p) => !('hex' in p)), JSON.stringify(describeLogo(sdCard).parts[0]));
+const nineColours = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 10">${
+  ['#c00', '#0c0', '#00c', '#cc0', '#0cc', '#c0c', '#600', '#060', '#006'].map((c, i) => `<rect x="${i * 10}" y="0" width="8" height="8" fill="${c}"/>`).join('')}</svg>`;
+check('and a file of many colours raises no issue: the legend is one colour',
+  describeLogo(nineColours).issues.length === 0 && describeLogo(nineColours).parts.length === 9,
+  JSON.stringify(describeLogo(nineColours).issues));
 
 console.log(failures ? `\n${failures} FAILED` : '\nthe keycap importer describes, the choice is written into the file, and every reader gets it');
 process.exit(failures ? 1 : 0);
