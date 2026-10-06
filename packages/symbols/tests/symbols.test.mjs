@@ -115,6 +115,20 @@ check('"cat face" finds the cat face first', top('cat face')[0] === 'fluent:cat-
 check('"heart" leads with a symbol called Heart', S.searchSymbols('heart')[0]?.label === 'Heart', top('heart', 3).join());
 check('a search word reaches across sets', ['fluent:dog-face', 'material:pets'].every((id) => S.searchSymbols('dog').some((e) => e.id === id)));
 check('every word has to match', S.searchSymbols('cat zzzz').length === 0);
+const cat = S.searchSymbols('cat').map((e) => e.id);
+const cats = ['fluent:cat-face', 'fluent:grinning-cat', 'fluent:black-cat'];
+check('"cat" leads with the cats', cats.every((id) => cat.slice(0, cats.length).includes(id)), cat.slice(0, 4).join());
+check('…then the paws, before Category and every other word that only starts with cat',
+  ['tabler:paw', 'material:pets'].every((id) => cat.includes(id) && cat.indexOf(id) < cat.indexOf('material:category')), cat.slice(0, 8).join());
+const midWord = S.searchSymbols('cat').filter((e) => /location|notification|medication|scatter/i.test(e.label)).map((e) => e.id);
+check('a word only inside another matches nothing: "cat" finds no Location, Notifications, Medication', !midWord.length, midWord.join(' '));
+const car = S.searchSymbols('car');
+const hasCar = car.filter((e) => [e.label, e.name, e.terms].some((t) => t.toLowerCase().split(/[^a-z0-9]+/).includes('car')));
+const lastCar = Math.max(...hasCar.map((e) => car.indexOf(e)));
+check('"car" leads with Car, and Caret comes after every symbol that has the word car',
+  car[0]?.id === 'material:directions_car' && ['tabler:caret-up', 'tabler:caret-down'].every((id) => car.findIndex((e) => e.id === id) > lastCar),
+  `Car at ${car.findIndex((e) => e.id === 'material:directions_car') + 1}, Caret up at ${car.findIndex((e) => e.id === 'tabler:caret-up') + 1}, last whole "car" at ${lastCar + 1}`);
+check('a word that only starts one still matches: "categ" finds Category first', top('categ')[0] === 'material:category', top('categ', 3).join());
 
 // ── shapes ──
 const heart = await S.symbolShapes('tabler:heart', 20);

@@ -153,26 +153,38 @@ export function listSymbols(category: string, filter?: SymbolFilter): SymbolEntr
   return list.filter(keep(filter));
 }
 
+/** Lower-case words: each run of letters or digits. */
+const wordsOf = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/** Each symbol's label, name and search words as words, made on the first search. */
+let searchWords: Map<SymbolEntry, { label: string[]; name: string[]; terms: string[] }> | null = null;
+
 /**
- * Every symbol matching a query, best first, across every set. Each word has to match the
- * label, the name or the search words; an exact label ranks first, then a label that starts with
- * the word, a label that holds it, the name, and last a search word, so "car" leads with Car and
- * not with something that only lists car among its synonyms. Ties keep the sets' order.
+ * Every symbol matching a query, best first, across every set. Each word of the query has to
+ * match a word of the label, the name or the search words, whole or at its start: "cat" finds
+ * "cats" and "Category", never "Location". A whole word ranks above the start of one wherever it
+ * is, so "cat" leads with the cats and paws and not with Category, and "car" with Car, Car rental
+ * and Electric car and not with Caret. Within each, the label ranks above the name and the name
+ * above the search words, and a label's first word above its others; a label that is the query,
+ * or starts with it, ranks first of all. Ties keep the sets' order.
  */
 export function searchSymbols(query: string, filter?: SymbolFilter): SymbolEntry[] {
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const pool = library().all.filter(keep(filter));
+  const words = wordsOf(query);
+  const lib = library();
+  const pool = lib.all.filter(keep(filter));
   if (!words.length) return pool;
   const whole = words.join(' ');
+  searchWords ??= new Map(lib.all.map((e) => [e, { label: wordsOf(e.label), name: wordsOf(e.name), terms: wordsOf(e.terms) }]));
   const hits: { e: SymbolEntry; score: number; at: number }[] = [];
   pool.forEach((e, at) => {
-    const label = e.label.toLowerCase();
-    const name = e.name.replace(/[_-]/g, ' ');
-    // A search word matches the start of one: "cat" finds "cats", never "location".
-    const terms = ` ${e.terms}`;
-    let score = label === whole ? 200 : label.startsWith(whole) ? 100 : 0;
+    const { label, name, terms } = searchWords!.get(e)!;
+    const text = label.join(' ');
+    let score = text === whole ? 300 : text.startsWith(`${whole} `) ? 100 : 0;
     for (const w of words) {
-      const s = label === w ? 100 : label.startsWith(w) ? 50 : label.includes(w) ? 25 : name.includes(w) ? 10 : terms.includes(` ${w}`) ? 4 : 0;
+      const starts = (list: string[]) => list.some((x) => x.startsWith(w));
+      const s =
+        label[0] === w ? 50 : label.includes(w) ? 40 : name.includes(w) ? 30 : terms.includes(w) ? 20
+        : label[0]?.startsWith(w) ? 15 : starts(label) ? 12 : starts(name) ? 8 : starts(terms) ? 4 : 0;
       if (!s) return;
       score += s;
     }
