@@ -965,15 +965,26 @@ const routeOf = (f: File) =>
   : /\.(ttf|otf)$/i.test(f.name) ? 'a font, so it joins the font list'
   : f.type.startsWith('image/') ? 'a picture, so it goes to the image import'
   : 'not a file this page takes';
+const hostPick = async () => new File([SAMPLE_SVG], 'badge.svg', { type: 'image/svg+xml' });
 const routedPanel = panel(
   dropZone({
     title: 'Drop a file',
     text: 'or click to pick one',
     note: 'A picture, an SVG, a font or a model',
     bubble: true,
-    pick: async () => new File([SAMPLE_SVG], 'badge.svg', { type: 'image/svg+xml' }),
+    pick: hostPick,
     onFiles: ([f]) => {
       if (f) routedNote.textContent = `Picked ${f.name}: ${routeOf(f)}.`;
+    },
+  }),
+  uploadCta({
+    label: 'Upload SVG file(s)',
+    icon: ICONS.upload,
+    accept: '.svg,image/svg+xml',
+    multiple: true,
+    pick: hostPick,
+    onFiles: ([f]) => {
+      if (f) routedNote.textContent = `Picked ${f.name} from the row: ${routeOf(f)}.`;
     },
   }),
   routedNote,
@@ -1011,11 +1022,12 @@ app.append(
     panel(dropSlot),
   ),
   entry(
-    'dropZone({ pick, bubble })',
+    'dropZone({ pick, bubble }) · uploadCta({ pick })',
     'Drop zone on a page that sorts files',
     'For a page whose own drop handler sorts every file by type: bubble leaves a drop to it, and the ' +
       'zone only shows it is a target. pick opens a host’s own file picker in place of the ' +
-      'browser’s dialog; here the page stands in for the host and its picker hands back an SVG.',
+      'browser’s dialog, on the zone and on the upload row; here the page stands in for the host ' +
+      'and its picker hands back an SVG.',
     routedPanel,
   ),
   entry(

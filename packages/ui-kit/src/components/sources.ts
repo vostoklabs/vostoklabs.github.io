@@ -171,6 +171,9 @@ export interface UploadCtaOptions {
   multiple?: boolean;
   icon?: string;
   onFiles: (files: File[]) => void;
+  /** A file picker of the host's own, opened instead of the browser's dialog, as `dropZone`'s:
+   *  the file it gives goes to `onFiles`, null does nothing, and it is handed `browse`. */
+  pick?: (browse: () => void) => Promise<File | null>;
 }
 
 /** The slim "replace this file" row shown once something is already loaded. */
@@ -185,6 +188,18 @@ export function uploadCta(opts: UploadCtaOptions): HTMLElement {
     if (input.files?.length) opts.onFiles([...input.files]);
     input.value = '';
   });
+  const pick = opts.pick;
+  if (pick) {
+    // A press on the label would open the input's dialog; the host's picker opens instead. The
+    // `browse` it is handed clicks the input, whose own click is let through to the dialog.
+    root.addEventListener('click', (e) => {
+      if (e.target === input) return;
+      e.preventDefault();
+      void pick(() => input.click()).then((file) => {
+        if (file) opts.onFiles([file]);
+      });
+    });
+  }
   return root;
 }
 

@@ -1,6 +1,6 @@
 /*
-  dropZone({ pick, bubble }) in the stand-in document (support/mini-dom.ts), whose events bubble
-  until one is stopped.
+  dropZone({ pick, bubble }) and uploadCta({ pick }) in the stand-in document
+  (support/mini-dom.ts), whose events bubble until one is stopped.
 
   Off by default, and off the zone builds and behaves as before: a click opens the browser's file
   dialog, and a drop is the zone's alone. `pick` puts a host's own picker where the dialog was;
@@ -10,7 +10,7 @@
 */
 import './support/install-mini-dom';
 import { html, miniDocument, type MiniElement } from './support/mini-dom';
-import { dropZone, type DropZoneOptions } from '../src/components/sources';
+import { dropZone, uploadCta, type DropZoneOptions } from '../src/components/sources';
 
 let pass = 0;
 const fails: string[] = [];
@@ -103,6 +103,50 @@ function zone(extra: Partial<DropZoneOptions> = {}) {
   check('pick: it is handed the browser’s dialog, for when there is no host', z.browsed() === 1);
   z.drop([CAT]);
   check('pick: a drop is still the zone’s', z.got.length === 2 && z.past.length === 0);
+}
+
+/* ---------------------------------------------------------------- uploadCta pick */
+
+{
+  const got: File[][] = [];
+  const plain = uploadCta({ label: 'Upload SVG file(s)', accept: '.svg', multiple: true, onFiles: (f) => got.push(f) }) as unknown as MiniElement;
+  const picked = uploadCta({ label: 'Upload SVG file(s)', accept: '.svg', multiple: true, onFiles: (f) => got.push(f), pick: async () => CAT }) as unknown as MiniElement;
+  check('uploadCta pick: builds the same row as without it', html(plain) === html(picked));
+
+  // Without pick, a press on the row is the label's own: nothing stops it, so the dialog opens.
+  const press = (row: MiniElement, target?: MiniElement) => {
+    const ev = { type: 'click', target: target ?? row } as unknown as { type: string; defaultPrevented: boolean };
+    (target ?? row).dispatchEvent(ev);
+    return ev;
+  };
+  check('uploadCta: without pick, a press is left to open the dialog', !press(plain).defaultPrevented);
+
+  let asked = 0;
+  let browsed = 0;
+  let answer: File | null = CAT;
+  const row = uploadCta({
+    label: 'Upload SVG file(s)',
+    onFiles: (f) => got.push(f),
+    pick: async (browse) => {
+      asked++;
+      if (!answer) browse();
+      return answer;
+    },
+  }) as unknown as MiniElement;
+  const input = row.querySelector('input')!;
+  input.click = () => {
+    browsed++;
+    press(row, input); // the input's own click, bubbling to the row
+  };
+  got.length = 0;
+  const pressed = press(row);
+  await tick();
+  check('uploadCta pick: a press opens the host’s picker instead of the dialog', pressed.defaultPrevented && asked === 1 && browsed === 0);
+  check('uploadCta pick: the file it gives goes to onFiles', got.length === 1 && got[0]![0] === CAT);
+  answer = null;
+  press(row);
+  await tick();
+  check('uploadCta pick: with no host the picker browses, and the input’s own click is let through', asked === 2 && browsed === 1 && got.length === 1);
 }
 
 body.replaceChildren();
