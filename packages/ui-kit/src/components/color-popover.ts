@@ -49,10 +49,16 @@ export interface ColorPopoverHandle {
 
 const norm = (hex: string) => hex.trim().toLowerCase();
 
-/** Close whichever picker is open. One at a time: two would overlap and the lower one could
- *  not be reached. */
+/** The open picker's own close, so a close from outside it (another picker opening, an app
+ *  unmounting) runs the steps a pick or Escape runs: its document listeners go, a wheel colour
+ *  is reported, `onClose` is called. */
+let closeOpen: (() => void) | null = null;
+
+/** Close whichever picker is open, as its own close does. One at a time: two would overlap and
+ *  the lower one could not be reached. */
 export function closeColorPopover(): void {
-  document.querySelector('.vl-color-popover')?.remove();
+  if (closeOpen) closeOpen();
+  else document.querySelector('.vl-color-popover')?.remove();
 }
 
 export function colorPopover(opts: ColorPopoverOptions): ColorPopoverHandle {
@@ -74,6 +80,7 @@ export function colorPopover(opts: ColorPopoverOptions): ColorPopoverHandle {
   const close = () => {
     if (done) return;
     done = true;
+    if (closeOpen === close) closeOpen = null;
     pop.remove();
     document.removeEventListener('mousedown', dismiss);
     document.removeEventListener('keydown', onKey, true);
@@ -119,8 +126,10 @@ export function colorPopover(opts: ColorPopoverOptions): ColorPopoverHandle {
   pop.style.left = `${Math.max(8, Math.min(opts.x, window.innerWidth - w - 8))}px`;
   pop.style.top = `${Math.max(8, Math.min(opts.y, window.innerHeight - h - 8))}px`;
 
-  // A beat before arming the outside-click dismiss, or the click that opened it closes it.
-  setTimeout(() => document.addEventListener('mousedown', dismiss), 50);
+  closeOpen = close;
+  // A beat before arming the outside-click dismiss, or the click that opened it closes it; not
+  // at all if it has closed by then, or the listener would stay on the document for good.
+  setTimeout(() => { if (!done) document.addEventListener('mousedown', dismiss); }, 50);
   (pop.querySelector<HTMLElement>('button, input') ?? pop).focus();
 
   return { close };
