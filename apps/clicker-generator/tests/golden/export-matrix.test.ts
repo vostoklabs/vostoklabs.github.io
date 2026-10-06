@@ -32,6 +32,14 @@ import { DOMParser } from '@xmldom/xmldom';
 import { unzipSync } from 'fflate';
 import Module from 'manifold-3d';
 
+// GOLDEN_UPDATE=1 rewrites the table; unset (or empty), the table is compared. Any other value
+// ("0", "true") is not guessed at: the run stops here, before anything is built.
+const UPDATE = process.env.GOLDEN_UPDATE ?? '';
+if (UPDATE !== '' && UPDATE !== '1') {
+  console.error(`GOLDEN_UPDATE is "${UPDATE}": set GOLDEN_UPDATE=1 to rewrite the table, or leave it unset to compare against it.`);
+  process.exit(1);
+}
+
 // The SVG reader is handed a DOMParser under node, before anything that reads SVG loads.
 (globalThis as { DOMParser?: unknown }).DOMParser = DOMParser;
 
@@ -478,7 +486,7 @@ for (const [name, build] of Object.entries(DESIGNS)) {
   console.log(`built  ${name}  (${actual[name]!.parts.length} parts, ${actual[name]!.tris} triangles, ${((performance.now() - started) / 1000).toFixed(1)} s)`);
 }
 
-if (process.env.GOLDEN_UPDATE) {
+if (UPDATE === '1') {
   writeFileSync(GOLDEN_FILE, JSON.stringify(actual, null, 2) + '\n');
   console.log(`\nwrote ${GOLDEN_FILE}`);
   process.exit(0);
