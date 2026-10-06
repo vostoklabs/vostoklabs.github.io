@@ -22,7 +22,7 @@ import '@vostok/plates/plates.css';
 import {
   topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs,
   promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile,
-  button, dropZone, toast, themeColorHex, captureCover,
+  button, dropZone, toast, themeColorHex, captureCover, stageStatus,
   nudgePad, busyChip, panelCredit, paletteRow, segmentedControl, readProjectFile, appShell,
 } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
@@ -219,7 +219,10 @@ export function mount(container, host) {
   }
 
   const busyEl = busyChip();
-  const statusEl = $('status');
+  /* The kit's status line, in the stage's bottom-left corner where the template's own line was:
+     a carve's warnings come through `setDiagnostics`, every other message through `setStatus`. */
+  const status = stageStatus('Loading…');
+  $('status').replaceWith(status.root);
   $('viewport').append(busyEl);
 
   /**
@@ -235,9 +238,9 @@ export function mount(container, host) {
     else busyEl.show(text, onCancel);
   }
 
+  /** One line on the stage. `kind` 'warn' or 'err' colours it; anything else ('', 'ok') is plain. */
   function setStatus(msg, kind = '') {
-    statusEl.textContent = msg;
-    statusEl.className = kind;
+    status.set(msg, kind === 'err' ? 'error' : kind === 'warn' ? 'warn' : 'idle');
   }
 
   // ---------------------------------------------------------------- three setup
@@ -1115,9 +1118,9 @@ export function mount(container, host) {
     updateStemMaterial();
     shownCarve = carve;
 
-    const { diagnostics, ok } = carve.report;
-    if (diagnostics.length) setStatus(diagnostics[0].message, 'warn');
-    else setStatus(ok);
+    // Every warning counted, the worst shown: "2 problems · …" when the legend is both too big
+    // for the top and on a curved one, where the line used to show the first alone.
+    status.setDiagnostics(carve.report.diagnostics, carve.report.ok);
   }
 
   /** The rebuild lock. A batch (the alphabet set, a paid set) holds the loop, so no preview
