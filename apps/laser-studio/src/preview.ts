@@ -195,7 +195,7 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
   // The kit's mm | in switch, which keeps itself in step with the unit however it is changed.
   const unitSwitch = units.unitSwitch();
   unitSwitch.classList.add('ls-preview__unit');
-  units.onChange(() => { if (last) render(last, keyring); });
+  const stopUnits = units.onChange(() => { if (last) render(last, keyring); });
   // The switches live in a bar above the drawing, never over it: a ruler label under a
   // control is a ruler label nobody can read.
   const bar = el('div', { className: 'ls-preview__bar' }, [modeSwitch, unitSwitch]);
@@ -257,7 +257,7 @@ export function createPreview(host: HTMLElement, opts: PreviewOptions = {}): Pre
     }
     finally { loading3d=false; }
   }
-  const cleanup = new MutationObserver(() => { if (!root.isConnected) {materialPreview?.dispose(); cleanup.disconnect();} });
+  const cleanup = new MutationObserver(() => { if (!root.isConnected) {materialPreview?.dispose(); stopUnits(); cleanup.disconnect();} });
   cleanup.observe(document.body, { childList:true, subtree:true });
   root.dataset.mode = mode;
   host.append(root);

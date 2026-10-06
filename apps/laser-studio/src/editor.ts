@@ -160,28 +160,35 @@ export function createEditor(opts: EditorOptions): HTMLElement {
       busy.show();
     },
     onResult: ({ input, output }) => {
-      // How many colours the design is cut from: Batch offers to separate them when it is more than one.
-      form.setColourCount(new Set([input.material ?? 'light', ...(input.parts ?? []).map((p) => p.material ?? 'light')]).size);
-      // No Ring control (a design with its own fixed hole — pet tag, matching keychains) →
-      // no drag handle: a drag would write ringDx/ringDy the form does not declare and snap
-      // back.
-      preview.render(output, hasKeyring ? keyring() : null);
-      describe(output);
+      try {
+        // How many colours the design is cut from: Batch offers to separate them when it is more than one.
+        form.setColourCount(new Set([input.material ?? 'light', ...(input.parts ?? []).map((p) => p.material ?? 'light')]).size);
+        // No Ring control (a design with its own fixed hole — pet tag, matching keychains) →
+        // no drag handle: a drag would write ringDx/ringDy the form does not declare and snap
+        // back.
+        preview.render(output, hasKeyring ? keyring() : null);
+        describe(output);
+      } catch (err) {
+        // Drawing what was built failed: said as a failed build is, not left on "Building…".
+        failed(err as Error);
+      }
     },
-    onError: (err) => {
-      status.set(`Could not build it: ${err.message}`, 'error');
-      console.error(err);
-    },
+    onError: (err) => failed(err),
     onIdle: () => busy.hide(),
   });
+  function failed(err: Error) {
+    status.set(`Could not build it: ${err.message}`, 'error');
+    console.error(err);
+  }
   /** The values changed: build them, now or after the quiet time. */
   function rebuild(immediate = false) {
     loop.request();
     if (immediate) loop.flush();
   }
+  // The design's size in the new unit; after a build that failed, its message stays on the line.
   const stopUnits = units.onChange(() => {
     const shown = loop.latest;
-    if (shown) describe(shown.output);
+    if (shown && !loop.error) describe(shown.output);
   });
 
   // -- the form ---------------------------------------------------------------------------
