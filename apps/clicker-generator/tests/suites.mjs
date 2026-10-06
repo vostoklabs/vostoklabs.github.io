@@ -16,7 +16,9 @@
                @vostok/fonts reads its font table through, does not exist under node).
 
   Every suite runs even when an earlier one fails, so one red suite cannot hide another; the
-  exit code is 1 if any failed.
+  exit code is 1 if any failed. A suite still running after 15 minutes (CLICKER_SUITE_TIMEOUT_S
+  sets another limit, in seconds) is stopped and counted as failed, saying so: a hang fails the
+  run instead of holding it until CI gives up on it.
 */
 import { build } from 'esbuild';
 import { spawnSync } from 'node:child_process';
@@ -27,6 +29,9 @@ import { fileURLToPath } from 'node:url';
 const TESTS = dirname(fileURLToPath(import.meta.url));
 const APP = resolve(TESTS, '..');
 const ROOT = resolve(APP, '../..');
+
+/** How long one suite may run, in seconds: many times the slowest, so only a hang reaches it. */
+const TIMEOUT_S = Number(process.env.CLICKER_SUITE_TIMEOUT_S) || 15 * 60;
 
 /** Suite name (tests/<name>.test.ts) -> what its bundle needs. */
 const SUITES = {
@@ -87,13 +92,15 @@ for (const [name, needs] of Object.entries(SUITES)) {
     results.push({ name, ok: false, secs: 0 });
     continue;
   }
-  const run = spawnSync(process.execPath, [outfile], { cwd: ROOT, stdio: 'inherit' });
+  const run = spawnSync(process.execPath, [outfile], { cwd: ROOT, stdio: 'inherit', timeout: TIMEOUT_S * 1000, killSignal: 'SIGKILL' });
   rmSync(outfile, { force: true });
-  results.push({ name, ok: run.status === 0, secs: (Date.now() - started) / 1000 });
+  const hung = run.error?.code === 'ETIMEDOUT';
+  if (hung) console.error(`\n${name}: still running after ${TIMEOUT_S} s, so it was stopped and counts as failed.`);
+  results.push({ name, ok: run.status === 0, hung, secs: (Date.now() - started) / 1000 });
 }
 
 const failed = results.filter((r) => !r.ok);
 console.log('\nclicker suites:');
-for (const r of results) console.log(`  ${r.ok ? 'pass' : 'FAIL'}  ${r.name}  (${r.secs.toFixed(1)} s)`);
+for (const r of results) console.log(`  ${r.ok ? 'pass' : r.hung ? 'HUNG' : 'FAIL'}  ${r.name}  (${r.secs.toFixed(1)} s)`);
 console.log(failed.length ? `\n${failed.length} of ${results.length} suites failed: ${failed.map((r) => r.name).join(', ')}` : `\nall ${results.length} suites passed`);
 process.exit(failed.length ? 1 : 0);

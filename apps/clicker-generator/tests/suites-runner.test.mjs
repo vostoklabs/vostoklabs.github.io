@@ -7,6 +7,9 @@
 
   GOLDEN_UPDATE: 1 rewrites the export matrix's table, unset compares against it, and any other
   value ("0", "true") stops the run before a design is built and leaves the table as it was.
+
+  CLICKER_SUITE_TIMEOUT_S: a suite still running at the limit is stopped, and the run fails,
+  naming it. Here the limit is one second, on a suite that takes several.
 */
 import { spawnSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
@@ -41,6 +44,16 @@ for (const value of ['0', 'true']) {
   check(`GOLDEN_UPDATE=${value}: the run stops before building, and says what to set`,
     status !== 0 && !out.includes('\nbuilt ') && out.includes('GOLDEN_UPDATE=1'), `exit ${status}; ${out.trim().split('\n').slice(-3).join(' | ')}`);
   check(`GOLDEN_UPDATE=${value}: the table is as it was, not written again`, readFileSync(GOLDEN).equals(before) && statSync(GOLDEN).mtimeMs === written);
+}
+
+/* ------------------------------------------------------------------ a suite that runs too long */
+
+{
+  const { status, out } = run({ CLICKER_SUITE_TIMEOUT_S: '1' }, 'golden/export-matrix');
+  check('a suite still running at its limit is stopped, and fails the run naming it',
+    status === 1 && out.includes('golden/export-matrix: still running after 1 s') && out.includes('HUNG  golden/export-matrix'),
+    `exit ${status}; ${out.trim().split('\n').slice(-3).join(' | ')}`);
+  check('it is stopped, not left to finish', !out.includes('export matrix:'));
 }
 
 /* ------------------------------------------------------------------ report */
