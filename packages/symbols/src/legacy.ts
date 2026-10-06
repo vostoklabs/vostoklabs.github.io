@@ -78,9 +78,9 @@ export const FONT_AWESOME_TWINS: readonly (readonly [number, string, string])[] 
 const BY_CODE = new Map(FONT_AWESOME_TWINS.map(([cp, , id]) => [cp, id]));
 
 /** The library id for a Font Awesome character from an old Name Keychain project, or undefined
- *  for any other character. */
-export function fontAwesomeTwin(char: string): string | undefined {
-  return char.length === 1 ? BY_CODE.get(char.charCodeAt(0)) : undefined;
+ *  for any other character, and for anything a project file holds that is not a string. */
+export function fontAwesomeTwin(char: unknown): string | undefined {
+  return typeof char === 'string' && char.length === 1 ? BY_CODE.get(char.charCodeAt(0)) : undefined;
 }
 
 /** Lucide name → library id, or null where no set has one. */
@@ -109,7 +109,9 @@ export const LUCIDE_TWINS: Readonly<Record<string, string | null>> = {
   coffee: 'material:local_cafe', 'gamepad-2': 'material:sports_esports', trophy: 'material:emoji_events', crown: 'material:crown',
 };
 
-/** The library id for a Lucide icon name, or undefined where the library has none. */
-export function lucideTwin(name: string): string | undefined {
-  return LUCIDE_TWINS[name] ?? undefined;
+/** The library id for a Lucide icon name, or undefined where the library has none. The name comes
+ *  from a project file, untrusted JSON: only the table's own names count, so `constructor` or
+ *  `__proto__` reads as no twin rather than as what every object inherits. */
+export function lucideTwin(name: unknown): string | undefined {
+  return typeof name === 'string' && Object.hasOwn(LUCIDE_TWINS, name) ? (LUCIDE_TWINS[name] ?? undefined) : undefined;
 }

@@ -65,6 +65,31 @@ const catalog = JSON.parse(readFileSync(`${pkg}/../ui-kit/src/symbols/catalog.js
 const lost = catalog.filter((c) => !S.symbolById(c.id));
 check('every symbol of the kit catalog has its entry here', !lost.length, lost.map((c) => c.id).join(' '));
 
+// ── what a project file holds is untrusted JSON ──
+const said = (fn) => (v) => {
+  try {
+    return fn(v);
+  } catch (e) {
+    return `throws ${e.constructor.name}`;
+  }
+};
+const notStrings = [42, null, undefined, true, {}, ['favorite'], { id: 'material:favorite' }];
+const resolved = notStrings.map(said(S.resolveSymbolId));
+check('resolveSymbolId(42) and every other value that is not a string name nothing', resolved.every((r) => r === undefined), resolved.filter((r) => r !== undefined).join(', '));
+const byNotString = notStrings.map(said(S.symbolById));
+check('…and symbolById finds nothing for them', byNotString.every((r) => r === undefined), byNotString.filter((r) => r !== undefined).join(', '));
+let notId = '';
+await S.symbolShapes(42).catch((e) => { notId = e.message; });
+check('…and their shapes reject as an unknown symbol', /^Unknown symbol/.test(notId), notId);
+const inherited = ['constructor', 'toString', '__proto__', 'valueOf', 'hasOwnProperty'];
+for (const name of inherited) {
+  const twin = said(S.lucideTwin)(name);
+  check(`lucideTwin('${name}') is no twin, not what every object inherits`, twin === undefined, twin === undefined ? '' : typeof twin);
+}
+check('…and those names are no symbol ids either', inherited.every((n) => S.resolveSymbolId(n) === undefined));
+const oldCodes = notStrings.flatMap((v) => [said(S.lucideTwin)(v), said(S.fontAwesomeTwin)(v)]);
+check('a Lucide name or Font Awesome code that is not a string has no twin', oldCodes.every((r) => r === undefined), oldCodes.filter((r) => r !== undefined).join(', '));
+
 // ── categories ──
 const empty = S.SYMBOL_CATEGORIES.filter((c) => !S.listSymbols(c.id).length);
 check('every category lists something', !empty.length, empty.map((c) => c.id).join(' '));

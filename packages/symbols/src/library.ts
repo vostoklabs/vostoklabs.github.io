@@ -112,8 +112,10 @@ export const SYMBOL_CATEGORIES: readonly { id: string; label: string }[] = SYMBO
 }));
 
 /** The id a stored value names, or undefined: `set:name` as it is, and the older forms projects
- *  hold, a bare Material name (`favorite`) and the kit catalog's `fluent-…` / `tabler-…`. */
-export function resolveSymbolId(value: string): string | undefined {
+ *  hold, a bare Material name (`favorite`) and the kit catalog's `fluent-…` / `tabler-…`. A
+ *  project file is untrusted JSON, so a value that is not a string names nothing. */
+export function resolveSymbolId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
   const { byId } = library();
   if (byId.has(value)) return value;
   const old = value.match(/^(fluent|tabler)-(.+)$/);
@@ -123,7 +125,7 @@ export function resolveSymbolId(value: string): string | undefined {
 }
 
 /** One symbol by its id (or an older form of one, see `resolveSymbolId`). */
-export function symbolById(id: string): SymbolEntry | undefined {
+export function symbolById(id: unknown): SymbolEntry | undefined {
   const real = resolveSymbolId(id);
   return real ? library().byId.get(real) : undefined;
 }
