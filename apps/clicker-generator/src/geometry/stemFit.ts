@@ -17,6 +17,7 @@
 //
 // Miter joins, so the cross keeps the square corners the switch stem meets. The outer post and
 // the post's height are never touched, so everything stacked on `stemBB` stays where it was.
+import { csOf, extrude, ringsOf } from '@vostok/manifold';
 import { ringBox, signedArea } from '@vostok/shapes';
 
 type Wasm = any;
@@ -48,7 +49,7 @@ type Poly = [number, number][];
 /** The holes in one slice of the post, largest first. */
 function holesAt(stem: Solid, z: number): { poly: Poly; w: number; h: number }[] {
   const cs = stem.slice(z);
-  const polys: Poly[] = cs.toPolygons();
+  const polys: Poly[] = ringsOf(cs);
   cs.delete();
   const items = polys
     .map((poly) => ({ poly, area: Math.abs(signedArea(poly)), box: ringBox([poly]) }))
@@ -76,7 +77,6 @@ export function applyStemFit(wasm: Wasm, stem: Solid, fitMm: number): { solid: S
   const asAuthored = () => stem.translate([0, 0, 0]);
   if (!(Math.abs(fitMm) > 1e-4)) return { solid: asAuthored(), applied: true };
 
-  const { CrossSection, Manifold } = wasm;
   const bb = stem.boundingBox();
   const zMin: number = bb.min[2];
   const zMax: number = bb.max[2];
@@ -101,14 +101,14 @@ export function applyStemFit(wasm: Wasm, stem: Solid, fitMm: number): { solid: S
     for (const { poly } of mid) {
       // `toPolygons` winds a hole opposite its outline; as a shape of its own it wants CCW.
       const contour = signedArea(poly) < 0 ? poly.slice().reverse() : poly;
-      const hole = track(new CrossSection([contour], 'Positive'));
+      const hole = track(csOf(wasm, [contour], 'Positive'));
       const moved = track(hole.offset(fitMm / 2, 'Miter', MITER_LIMIT));
       const nudged = track(hole.offset(opening ? -NUDGE_MM : NUDGE_MM, 'Miter', MITER_LIMIT));
       const ring = track(opening ? moved.subtract(nudged) : nudged.subtract(moved));
       if (ring.isEmpty()) continue;
       const z0 = opening ? zMin - OVERSHOOT_MM : zMin + INSET_MM;
       const z1 = opening ? zMax + OVERSHOOT_MM : zMax - INSET_MM;
-      const prism = track(track(Manifold.extrude(ring, z1 - z0)).translate([0, 0, z0]));
+      const prism = track(track(extrude(wasm, ring, z1 - z0)).translate([0, 0, z0]));
       const next = opening ? out.subtract(prism) : out.add(prism);
       if (out !== stem) track(out);
       out = next;

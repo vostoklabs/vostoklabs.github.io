@@ -21,6 +21,7 @@
 // The row is shown in the preview and goes out through the normal Export button (mount.ts,
 // `enterFitTest`), never as a download of its own: MakerLab's sandbox has no downloads, and the
 // export path is also where the provenance and the licence nudge live.
+import { csOf, extrude } from '@vostok/manifold';
 import type { ClickerPart, RGB, Ring } from '../types';
 import { applyStemFit, STEM_FIT_MAX_MM, STEM_FIT_MIN_MM } from './stemFit';
 
@@ -120,7 +121,7 @@ export function buildFitStrip(
   stem: Solid,
   opts: FitStripOptions,
 ): { parts: ClickerPart[]; warnings: string[] } {
-  const { Manifold, CrossSection } = wasm;
+  const { Manifold } = wasm;
   const trash: { delete(): void }[] = [];
   const track = <T extends { delete(): void }>(o: T): T => {
     trash.push(o);
@@ -166,7 +167,7 @@ export function buildFitStrip(
     const labelWidthMm = hasText ? (x1 - x0) * glyphScale : 0;
     const layout = computeTabLayout(stemW, stemH, labelWidthMm);
 
-    const tabM: Solid = track(Manifold.cube([layout.tabW, layout.tabH, FIT_TEST_TAB_THICK_MM], false)
+    const tabM: Solid = track(track(Manifold.cube([layout.tabW, layout.tabH, FIT_TEST_TAB_THICK_MM], false))
       .translate([-layout.tabW / 2, layout.yMin, 0]));
     let bodyM: Solid = tabM;
     if (hasText) {
@@ -175,8 +176,8 @@ export function buildFitStrip(
       const contours = label.rings
         .filter((ring) => ring.length >= 3)
         .map((ring) => ring.map(([x, y]) => [(x - cx) * glyphScale, (y - cy) * glyphScale + layout.labelCenterY]));
-      const cs = track(new CrossSection(contours, 'EvenOdd'));
-      const labelPrism = track(track(cs.extrude(FIT_TEST_LABEL_DEPTH_MM + 1))
+      const cs = track(csOf(wasm, contours, 'EvenOdd'));
+      const labelPrism = track(track(extrude(wasm, cs, FIT_TEST_LABEL_DEPTH_MM + 1))
         // Pokes 1 mm above the tab top so the cut face is not coplanar with it.
         .translate([0, 0, FIT_TEST_TAB_THICK_MM - FIT_TEST_LABEL_DEPTH_MM]));
       bodyM = track(tabM.subtract(labelPrism));
