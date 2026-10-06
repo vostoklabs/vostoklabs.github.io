@@ -1171,7 +1171,7 @@
 }
 .vl-control--disabled .vl-palette-row__label { color: var(--muted); }
 /* `detected`: the colour the part was found in, before its name. A sample of the picture, not a
-   control, so a plain dot with nothing to hover. */
+   control, so a plain dot with no hover or press state; its tooltip says what it is. */
 .vl-palette-row__detected {
   flex: none;
   inline-size: 10px;

@@ -181,3 +181,30 @@ export function withMyIcons(lib: SymbolLibraryOptions, mine: MyIconsWeave): Symb
     },
   };
 }
+
+/** A pick from My icons, as the symbol chooser hands it to the app: a symbol of the set `mine`. */
+export interface MyIconChoice {
+  id: string;
+  label: string;
+  set: 'mine';
+  shapes: Shapes;
+}
+
+/**
+ * The symbol chooser's window: with My icons in it when the app asked for them (`myIcons`), and
+ * as given when it did not. A pick from them reaches `onPick` as a symbol of the set `mine`: the
+ * icon's id, name and shapes, and nothing else it was kept with. The tiles are `draw`'s.
+ */
+export function chooserWithMyIcons(
+  lib: SymbolLibraryOptions,
+  myIcons: { key: string } | undefined,
+  draw: (shapes: Shapes) => Element,
+  onPick: (choice: MyIconChoice) => void | Promise<void>,
+): SymbolLibraryOptions {
+  if (!myIcons) return lib;
+  return withMyIcons(lib, {
+    key: myIcons.key,
+    draw,
+    onPick: (icon) => onPick({ id: icon.id, label: icon.label, set: 'mine', shapes: icon.shapes }),
+  });
+}

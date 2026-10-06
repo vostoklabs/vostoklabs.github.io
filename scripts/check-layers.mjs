@@ -38,6 +38,7 @@ const LAYERS = [
   ['config/', 'config'],
   ['apps/', 'app'],
   ['packages/ui-kit/', 'ui'],
+  ['packages/ui-kit/src/symbols/rules.ts', 'core'], // which characters are symbols: no DOM, no imports
   ['packages/viewer/', 'ui'], // the 3D connector's view
   ['packages/plates/src/picker.ts', 'ui'],
   ['packages/plates/src/index.ts', 'ui'], // the front door also hands out the picker

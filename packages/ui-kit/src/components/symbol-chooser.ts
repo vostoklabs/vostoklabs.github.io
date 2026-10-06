@@ -13,7 +13,7 @@ import {
   type SymbolSetId,
 } from '@vostok/symbols';
 import { svgNode } from '../dom';
-import { withMyIcons } from './my-icons';
+import { chooserWithMyIcons } from './my-icons';
 import { openSymbolLibrary, type SymbolLibraryEntry, type SymbolLibraryHandle, type SymbolLibraryOptions } from './symbol-library';
 
 /** For an app that brings an icon in through a flow of its own (an SVG field, not the window's
@@ -56,7 +56,9 @@ export interface SymbolChooserOptions extends SymbolFilter {
   initialCategory?: string;
   /** An "Import your own SVG" button beside the search; the app traces the file and does with it
    *  what it does. With `myIcons`, the icon `onFile` resolves to (the traced file: its `label` and
-   *  `shapes`, and an `id` if the app names it) is kept under My icons. */
+   *  `shapes`, and an `id` if the app names it) is kept under My icons. Its shapes are in the
+   *  symbol frame, as a pick's are (centred, longest side 1, Y up): My icons draws them in that
+   *  frame, so shapes in millimetres would show as one clipped corner. */
   upload?: {
     label?: string;
     accept?: string;
@@ -100,12 +102,5 @@ export function openSymbolChooser(opts: SymbolChooserOptions): SymbolLibraryHand
     anchor: opts.anchor,
     upload: opts.upload,
   };
-  if (!opts.myIcons) return openSymbolLibrary(library);
-  return openSymbolLibrary(
-    withMyIcons(library, {
-      key: opts.myIcons.key,
-      draw: (shapes) => drawn(outlinePath(shapes)),
-      onPick: (icon) => opts.onPick({ id: icon.id, label: icon.label, set: 'mine', shapes: icon.shapes }),
-    }),
-  );
+  return openSymbolLibrary(chooserWithMyIcons(library, opts.myIcons, (shapes) => drawn(outlinePath(shapes)), opts.onPick));
 }

@@ -4,16 +4,16 @@
 
   The store: newest first, 40 at most, nothing that is not an icon listed and nothing of that kind
   lost. Its size, and what a browser with no room, or no storage at all, is told. The weave: the
-  window's options with My icons in them, everything else passed through. And the real symbol
-  window over a stand-in library, from the category button to the pick and the upload. The
-  symbol library itself stays out: this is what the chooser adds to it.
+  window's options with My icons in them, everything else passed through, and the chooser's
+  wiring of it. And the real symbol window over a stand-in library, from the category button to
+  the pick and the upload. The symbol library itself stays out: this is what the chooser adds.
 
     pnpm --filter @vostok/ui-kit test
 */
 import './support/install-mini-dom';
 import { miniDocument, miniStorage, type MiniElement } from './support/mini-dom';
 import { el } from '../src/dom';
-import { readMyIcons, keepMyIcon, withMyIcons, MY_ICONS_MAX, MY_ICONS_MAX_CHARS, type MyIcon } from '../src/components/my-icons';
+import { readMyIcons, keepMyIcon, withMyIcons, chooserWithMyIcons, MY_ICONS_MAX, MY_ICONS_MAX_CHARS, type MyIcon } from '../src/components/my-icons';
 import { openSymbolLibrary, type SymbolLibraryEntry, type SymbolLibraryOptions } from '../src/components/symbol-library';
 
 let pass = 0;
@@ -242,6 +242,36 @@ const woven = withMyIcons(base, { key: KEY, draw: () => el('span', { attrs: { 'd
   nextUpload = undefined;
   await woven.upload!.onFile({ name: 'app-did-it.svg' } as File, () => {});
   check('weave: an upload that hands nothing back keeps nothing', readMyIcons(KEY).length === 3);
+}
+
+/* ------------------------------------------------------------ the chooser's wiring */
+
+{
+  check('chooser: without myIcons the window is the library’s, as it was', chooserWithMyIcons(base, undefined, () => el('span'), () => {}) === base);
+  miniStorage.clear();
+  // Kept with a field of its own beside the three (an app's own list, read as icons).
+  localStorage.setItem(KEY, JSON.stringify([{ ...icon('mine:logo', 'Logo'), source: 'My icons' }]));
+  const drawnFrom: string[] = [];
+  const picks: unknown[] = [];
+  const opts = chooserWithMyIcons(
+    base,
+    { key: KEY },
+    (shapes) => {
+      drawnFrom.push(JSON.stringify(shapes));
+      return el('span', { attrs: { 'data-art': 'drawn' } });
+    },
+    (choice) => void picks.push(choice),
+  );
+  const [entry] = opts.list('mine');
+  check('chooser: with myIcons, My icons is in the window', opts.categories.some((c) => c.id === 'mine') && entry?.label === 'Logo');
+  const tile = opts.renderTile(entry!) as unknown as MiniElement;
+  check('chooser: an icon’s tile is the chooser’s drawing of its shapes', tile.getAttribute('data-art') === 'drawn' && drawnFrom.join() === JSON.stringify(SQUARE));
+  await opts.onPick(entry!);
+  check(
+    'chooser: a pick reaches the app as a symbol of the set mine: its id, name and shapes, nothing else',
+    JSON.stringify(picks) === JSON.stringify([{ id: 'mine:logo', label: 'Logo', set: 'mine', shapes: SQUARE }]),
+    JSON.stringify(picks),
+  );
 }
 
 /* -------------------------------------------- the real symbol window, over a stand-in library */
