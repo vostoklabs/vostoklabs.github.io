@@ -57,6 +57,7 @@ const PINNED: Record<string, string> = {
   'lucide Link': 'parts 1s 0s | opens OO | opened 0r 2l 5568aca0fc3b | filled 2r 0l 741b772ea237 | outlined 0r 2l 5568aca0fc3b',
   'lucide KeyRound': 'parts 0s 1f | opens OF | opened 1r 1l e5a98d2338ed | filled 2r 0l c1744cd90366 | outlined 0r 2l e0714628ff01',
   'lucide Tags': 'parts 0s 1s 2f | opens OOF | opened 1r 2l 89d7e90c6caf | filled 3r 0l 432aacb0db7f | outlined 0r 3l 4328217d5224',
+  'a path of one point': 'parts 0f | opens F | opened throws "What is switched on draws nothing, so there is no logo to put on the box." | filled throws "What is switched on draws nothing, so there is no logo to put on the box." | outlined throws "What is switched on draws nothing, so there is no logo to put on the box."',
 };
 
 /** A choice as one letter, in the parts' order: Fill, Outline, or off. */
@@ -78,6 +79,9 @@ const icons = new Map(lucideFiles());
 const files: [string, string][] = [
   ...LEGEND_FILES,
   ...LUCIDE.map((n): [string, string] => [`lucide ${n}`, icons.get(n) ?? '']),
+  // On, and drawing nothing: the reader refuses it, and the app says why rather than that
+  // nothing is switched on.
+  ['a path of one point', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M10 10" stroke="#000"/></svg>'],
 ];
 
 let failures = 0;

@@ -102,7 +102,7 @@ function manifoldReport(pos: Float32Array, idx: Uint32Array): string | null {
 }
 
 const STYLES: StyleId[] = ['mailer', 'tray', 'tray-webbed', 'flap-cover', 'tray-lid', 'cake-box', 'divider', 'tuck-top', 'snap-lock', 'gable', 'sleeve'];
-/** What the print-only build actually offers — see isPrintStyle in main.ts. */
+/** What the print-only build actually offers — see isPrintStyle in mount.ts. */
 const PRINT_STYLES: StyleId[] = ['mailer', 'mailer-flaps', 'tray', 'tray-lid', 'cake-box'];
 const SIZES: [number, number, number][] = [
   [90, 60, 25],

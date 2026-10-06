@@ -88,7 +88,7 @@ export interface StyleMeta {
    *  one way a hinge must not be; on the hinged lid, 184 mm. Every other printable
    *  structure here folds only on 0 and 90, which the same 45 degree fill crosses.
    *
-   *  So the print-only build does not offer them — see `isPrintStyle` in main.ts. */
+   *  So the print-only build does not offer them — see `isPrintStyle` in mount.ts. */
   webbedCorners?: boolean;
   /** Where this structure comes from. Shown in the UI and written into the export's
    *  README, so anyone who has to justify the design to a customer can. */

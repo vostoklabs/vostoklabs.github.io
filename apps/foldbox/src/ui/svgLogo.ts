@@ -22,6 +22,9 @@ export type SvgMode = 'fill' | 'outline' | 'off';
 export type SvgModes = Record<string, SvgMode>;
 
 const NOTHING_ON = 'Nothing is switched on, so there is no logo to put on the box.';
+const DRAWS_NOTHING = 'What is switched on draws nothing, so there is no logo to put on the box.';
+/** What the reader throws, on purpose, when the parts it is asked for draw nothing. */
+const READER_DREW_NOTHING = 'No drawable paths found in this SVG.';
 
 /**
  * The parts, biggest first, with the reason a tracer would drop each one, and what is wrong
@@ -85,11 +88,13 @@ export function svgArtwork(svgText: string, modes?: SvgModes): Artwork {
   let read: ReturnType<typeof parseSvg>;
   try {
     read = parseSvg(flat, { overrides, outlinesAsLines: true, asPainted: true });
-  } catch {
-    // The parts that are on draw nothing: an empty path, or a line with one point.
-    throw new Error(NOTHING_ON);
+  } catch (err) {
+    // The parts that are on draw nothing: an empty path, or a line with one point. Anything
+    // else is a fault in reading the file, and says so in its own words.
+    if (err instanceof Error && err.message === READER_DREW_NOTHING) throw new Error(DRAWS_NOTHING);
+    throw err;
   }
   const lines = read.regions.flatMap((r) => r.lines ?? []);
-  if (!read.outline.length && !lines.length) throw new Error(NOTHING_ON);
+  if (!read.outline.length && !lines.length) throw new Error(DRAWS_NOTHING);
   return normalizeArtwork(read.outline, lines);
 }

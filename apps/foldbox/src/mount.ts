@@ -754,6 +754,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
      outlines as the letters around it. A dialog underneath, which teardown closes. */
   const logoSymbols = button({
     label: 'Symbol',
+    title: 'Add a symbol to the words',
     emphasis: 'secondary',
     className: 'fb-logo-sym',
     onClick: () =>
