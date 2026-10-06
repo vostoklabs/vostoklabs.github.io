@@ -182,7 +182,7 @@ const BUDGET = {
   foldbox: { html: 1, restyle: 8 },
   'house-number': { restyle: 5 },
   hub: { html: 2, restyle: 10 },
-  'keycap-generator': { button: 16, select: 3, input: 13, range: 5, html: 2, restyle: 5 },
+  'keycap-generator': { button: 14, select: 3, input: 12, range: 5, html: 2 },
   'keychain-carabiner': { restyle: 1 },
   'kit-demo': { licence: 4 },
   'laser-studio': { restyle: 31 },

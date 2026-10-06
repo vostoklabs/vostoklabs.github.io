@@ -37,19 +37,18 @@ const BUDGET = {
   'apps/bubble-pop-generator': 1444,
   'apps/clicker-generator': 207,
   'apps/house-number': 37,
-  'apps/keycap-generator': 67,
+  'apps/keycap-generator': 55,
   'apps/keychain-carabiner': 15,
-  'apps/laser-studio': 26,
-  'apps/magnet-generator': 1595,
+  'apps/laser-studio': 13,
+  'apps/magnet-generator': 1566,
   'apps/name-keychain': 45,
   'apps/pen-topper': 24,
-  'packages/laser': 13,
   'packages/patterns': 13,
-  // The image tracer moved here from packages/laser (1012 there before); magnet and bubble-pop
-  // still hold their own copies of it.
-  'packages/trace': 955,
-  'packages/ui-kit': 26,
-  'packages/viewer': 18,
+  // The image tracer moved here from packages/laser; magnet and bubble-pop still hold their own
+  // copies of it.
+  'packages/trace': 914,
+  'packages/ui-kit': 14,
+  'packages/viewer': 15,
 };
 
 /* ------------------------------------------------------------------ reading */

@@ -72,13 +72,10 @@ const MAY_IMPORT = {
   is a hard failure; fixing one is a deletion from this list.
 */
 const KNOWN = new Set([
-  // The ring type every laser core file builds on is defined in the export connector. It moves
-  // to the shapes core when laser's and patterns' shape maths merge into one.
-  'packages/laser/src/blanks.ts -> packages/export/src/index.ts',
+  // These two laser core files still take the ring type from the export connector; the rest of
+  // the laser core takes it from the shapes core.
   'packages/laser/src/csg2d.ts -> packages/export/src/index.ts',
-  'packages/laser/src/rings.ts -> packages/export/src/index.ts',
   'packages/laser/src/text.ts -> packages/export/src/index.ts',
-  'packages/laser/src/types.ts -> packages/export/src/index.ts',
   // Takes FONTS from the registry file directly, past the package's front door. The fix is a
   // './registry' subpath export in @vostok/fonts.
   'apps/foldbox/src/logoFonts.ts -> packages/fonts/src/registry.ts',
@@ -96,8 +93,8 @@ const KNOWN = new Set([
   'packages/fonts/tests/import.test.mts -> ../src/index',
   'packages/fonts/tests/import.test.mts -> ../src/import',
   'packages/fonts/tests/faces.test.mts -> ../src/index',
-  // Meant too, but the command in its header has no stand-in yet, so its bundle stops at load
-  // ("glob is not a function"). font-fallback's header shows the command with it.
+  // Meant too: tests/suites.mjs runs it with the glob stand-in in place. The command in its own
+  // header leaves the stand-in out; font-fallback's header shows the command with it.
   'apps/clicker-generator/tests/text-sizing.test.ts -> ../src/image/letter.ts',
   // Meant: the real-mount suite bundles mount.ts with './ui/ui' and the other heavy panels
   // swapped for stand-ins (mount.test.mjs, `replaced`), so the registry never loads in it.
