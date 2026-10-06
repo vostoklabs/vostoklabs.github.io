@@ -1498,6 +1498,66 @@ app.append(
   ),
 );
 
+/* The build loop's two ways in from outside it: a seed, a design shipped prebuilt and on screen
+   before anything is built, and a hold, a batch run of the app's own that no rebuild may
+   interrupt. A build here takes a second, so an export pressed during one, or during the batch,
+   can be seen to wait. */
+let loopDesign = 0;
+const loopLine = el('p', { className: 'vl-hint' });
+const designLoop = buildLoop({
+  run: () => new Promise<number>((done) => setTimeout(() => done(loopDesign), 1000)),
+  onStart: () => (loopLine.textContent = `Building design ${loopDesign}…`),
+  onResult: (n) => (loopLine.textContent = `Showing design ${n}.`),
+});
+designLoop.seed(0);
+loopLine.textContent = 'Showing design 0, shipped prebuilt: nothing was built.';
+async function runLoopBatch(): Promise<void> {
+  const release = designLoop.hold();
+  if (!release) {
+    toast('A build is running. Try again when it lands.', { kind: 'warn' });
+    return;
+  }
+  try {
+    for (let i = 0; i < 26; i++) {
+      loopLine.textContent = `Batch: ${String.fromCharCode(65 + i)} (${i + 1}/26). Nothing rebuilds, and Export waits.`;
+      await new Promise((done) => setTimeout(done, 120));
+    }
+    loopLine.textContent = `Batch done. Showing design ${designLoop.latest}.`;
+  } finally {
+    release();
+  }
+}
+
+app.append(
+  entry(
+    'buildLoop().seed() · buildLoop().hold()',
+    'Build loop: a prebuilt start, a batch run',
+    'seed() starts the loop from a design built elsewhere, so the first screen and an export of it ' +
+      'need no build. hold() lets a batch of the app’s own (an alphabet, a set) run with no rebuild ' +
+      'starting under it: Export waits until the batch lets go, and a change made meanwhile builds ' +
+      'once, after it.',
+    loopLine,
+    buttonRow(
+      button({
+        label: 'Change the design',
+        emphasis: 'secondary',
+        onClick: () => {
+          loopDesign += 1;
+          designLoop.request();
+        },
+      }),
+      button({ label: 'Run a batch', emphasis: 'secondary', onClick: () => void runLoopBatch() }),
+      button({
+        label: 'Export',
+        onClick: async () => {
+          const n = await designLoop.settled();
+          toast(`Exported design ${n}`, { kind: 'ok' });
+        },
+      }),
+    ),
+  ),
+);
+
 /* ---------- Overlays ---------- */
 /* A small form hanging off the button that opened it; pressing the button again closes it. */
 const SHEET_SIZES: Record<string, string> = { small: '300 × 200 mm', medium: '400 × 300 mm', large: '600 × 400 mm' };

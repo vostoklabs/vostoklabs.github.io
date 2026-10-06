@@ -299,6 +299,140 @@ test('a throw in onIdle still answers Export', async () => {
   });
 });
 
+/* --------------------------------------------------------------- seed and hold */
+
+test('seed: an export of the prebuilt design gets it, with nothing built and nothing shown twice', async () => {
+  let runs = 0;
+  let shown = 0;
+  const loop = buildLoop({ run: () => { runs++; return 'built'; }, onResult: () => { shown++; } });
+  assert(loop.seed('prebuilt'), 'a seed before anything was asked for must be taken');
+  assert(loop.latest === 'prebuilt', `latest is ${loop.latest}`);
+  assert((await within(loop.settled())) === 'prebuilt', 'settled() must hand over the seed');
+  assert(runs === 0 && shown === 0, `nothing runs (${runs}) and onResult is not called (${shown})`);
+  assert(!loop.busy, 'the loop must be idle');
+});
+
+test('seed: the first change builds as usual and replaces it', async () => {
+  let width = 1;
+  const loop = buildLoop({ run: () => width });
+  loop.seed(0);
+  width = 2;
+  loop.request();
+  assert((await within(loop.settled())) === 2, 'export must get the build of the change, not the seed');
+});
+
+test('seed: refused once a build has been asked for, so a late prebuilt design never replaces an edit', async () => {
+  const loop = buildLoop({ run: () => 'edited' });
+  loop.request();
+  assert((await loop.settled()) === 'edited', 'first build');
+  assert(loop.seed('prebuilt') === false, 'a seed after a build must be refused');
+  assert(loop.latest === 'edited' && (await loop.settled()) === 'edited', 'and the build stands');
+});
+
+test('seed: taken again after invalidate(), for the new design', async () => {
+  const loop = buildLoop({ run: () => 'built' });
+  loop.request();
+  await loop.settled();
+  loop.invalidate();
+  assert(loop.seed('another design'), 'after invalidate() a seed is for the new settings');
+  assert((await loop.settled()) === 'another design', 'and settled() hands it over');
+});
+
+test('seed: a seeded result is held to diagnose like a build', async () => {
+  const loop = buildLoop<string[]>({ run: () => [], diagnose: (r) => r.map((message) => ({ level: 'error' as const, message })) });
+  loop.seed(['It is bigger than the plate.']);
+  const refused = await loop.settled().then(() => 'exported', (e: Error) => e.message);
+  assert(refused === 'It is bigger than the plate.', `export must refuse in the error's words, got "${refused}"`);
+});
+
+test('hold: no build starts while a batch holds the loop, and the edits made meanwhile build once after', async () => {
+  let width = 1;
+  let runs = 0;
+  const loop = buildLoop({ debounceMs: 5, run: () => { runs++; return width; } });
+  loop.request();
+  assert((await within(loop.settled())) === 1, 'first build');
+  const release = loop.hold();
+  assert(release, 'an idle loop can be held');
+  for (width = 2; width <= 4; width++) loop.request(); // the user keeps editing during the batch
+  width = 4;
+  loop.flush();
+  await tick(30);
+  assert(runs === 1, `no build may start while held, ${runs - 1} did`);
+  release!();
+  await tick(10);
+  assert(runs === 2, `exactly one build after the release, got ${runs - 1}`);
+  assert(loop.latest === 4, `from the newest settings, got ${loop.latest}`);
+});
+
+test('hold: an export pressed during the batch waits for it, then gets the design on screen', async () => {
+  let width = 1;
+  const loop = buildLoop({ run: () => width });
+  loop.request();
+  await loop.settled();
+  const release = loop.hold()!;
+  let got: number | null = null;
+  void loop.settled().then((v) => { got = v; });
+  await tick(20);
+  assert(got === null, 'settled() must wait while a batch holds the loop');
+  width = 2;
+  loop.request();
+  release();
+  assert((await within(loop.settled())) === 2, 'the edit made during the batch must be built');
+  assert(got === 2, `and the export that waited gets it, got ${got}`);
+});
+
+test('hold: released with nothing asked, a waiting export gets the result there is and nothing rebuilds', async () => {
+  let runs = 0;
+  const loop = buildLoop({ run: () => { runs++; return 'cap'; } });
+  loop.request();
+  await loop.settled();
+  const release = loop.hold()!;
+  const waiting = within(loop.settled());
+  release();
+  assert((await waiting) === 'cap', 'the waiting export must get the result');
+  assert(runs === 1, `nothing may rebuild, ${runs - 1} did`);
+});
+
+test('hold: refused while a build runs or another batch holds it, and a stale release frees nothing', async () => {
+  const m = manualRun<string>();
+  const loop = buildLoop({ run: m.run });
+  loop.request();
+  await tick();
+  assert(loop.hold() === null, 'a running build must not be held under');
+  m.calls[0]!.resolve('a');
+  await tick();
+  const first = loop.hold();
+  assert(first, 'held once the build landed');
+  assert(loop.hold() === null, 'a second batch must wait for the first');
+  first!();
+  const second = loop.hold();
+  assert(second, 'the next batch may hold it once the first lets go');
+  first!(); // the first batch's release, called again
+  loop.request();
+  await tick(10);
+  assert(m.calls.length === 1, 'a stale release must not let a build start under the second batch');
+  second!();
+  await tick();
+  assert(m.calls.length === 2, 'the second release lets it build');
+  m.calls[1]!.resolve('b');
+  assert((await within(loop.settled())) === 'b', 'and export gets it');
+});
+
+test('hold: dispose rejects an export waiting on a batch, and a release after it builds nothing', async () => {
+  let runs = 0;
+  const loop = buildLoop({ run: () => { runs++; return 1; } });
+  loop.request();
+  await loop.settled();
+  const release = loop.hold()!;
+  const waiting = loop.settled().then(() => 'resolved', () => 'rejected');
+  loop.request();
+  loop.dispose();
+  assert((await waiting) === 'rejected', 'a disposed loop must not leave a caller hanging');
+  release();
+  await tick(10);
+  assert(runs === 1, `nothing may build after dispose, ${runs - 1} did`);
+});
+
 /* -------------------------------------------------------------- worker transport */
 
 /**

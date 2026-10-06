@@ -60,13 +60,29 @@ export interface BuildLoop<R> {
   flush(): void;
   /**
    * The result that matches the settings as they are now. Waits for a pending or running
-   * build, and rejects if that build failed, nothing has been built, or (with `diagnose`) the
-   * result carries an error.
+   * build, and for a batch that holds the loop, and rejects if that build failed, nothing has
+   * been built, or (with `diagnose`) the result carries an error.
    *
    * Every export path awaits this. An exporter handed `latest` instead is the bug this module
    * exists to remove.
    */
   settled(): Promise<R>;
+  /**
+   * Start from a result made elsewhere: a design shipped prebuilt, shown for a fast first frame.
+   * It becomes `latest`, and `settled()` hands it to an export as if a build had made it, but
+   * nothing runs and `onResult` is not called: the app shows it itself. Only for the settings
+   * the loop started with, or was last `invalidate()`d to: once a build has been asked for, a
+   * seed no longer matches the settings and is refused. Returns whether it was taken.
+   */
+  seed(result: R): boolean;
+  /**
+   * Hold the loop for a batch run of the app's own that must not share the engine with a
+   * rebuild (an alphabet carved one letter at a time, a set builder). Until the release is
+   * called no build starts and `settled()` waits; changes asked for meanwhile build once, after
+   * it. Returns the release, or null while a build runs or another batch holds the loop: try
+   * again once it lands. Calling the release twice releases once.
+   */
+  hold(): (() => void) | null;
   /**
    * What is running is no longer wanted: the user switched mode or design. Its result is
    * dropped when it lands, and `latest` is cleared so nothing from before can be exported.
@@ -123,6 +139,10 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
   let latest: R | null = null;
   let error: Error | null = null;
   let disposed = false;
+  /** A build has been asked for since the start or the last `invalidate()`, so a seed is late. */
+  let asked = false;
+  /** A batch run holds the loop: nothing starts until it lets go. */
+  let held = false;
   let waiters: { resolve: (r: R) => void; reject: (e: Error) => void }[] = [];
 
   const outcome = (): { ok: true; value: R } | { ok: false; error: Error } => {
@@ -156,7 +176,8 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
   const start = () => {
     clearTimeout(timer);
     timer = undefined;
-    if (disposed || running) return; // a running build sees `dirty` when it lands and goes again
+    // A running build sees `dirty` when it lands and goes again; a held loop, when it is let go.
+    if (disposed || running || held) return;
     dirty = false;
     running = true;
     const gen = generation;
@@ -208,6 +229,7 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
     request() {
       if (disposed) return;
       dirty = true;
+      asked = true;
       clearTimeout(timer);
       timer = setTimeout(start, opts.debounceMs ?? 0);
     },
@@ -218,16 +240,39 @@ export function buildLoop<R>(opts: BuildLoopOptions<R>): BuildLoop<R> {
       if (disposed) return Promise.reject(new Error('This generator has been closed.'));
       // Someone is waiting on the result, so the debounce has nothing left to save.
       if (timer !== undefined) start();
-      if (!running && !dirty) {
+      if (!running && !dirty && !held) {
         const out = outcome();
         return out.ok ? Promise.resolve(out.value) : Promise.reject(out.error);
       }
       return new Promise<R>((resolve, reject) => waiters.push({ resolve, reject }));
     },
+    seed(result) {
+      if (disposed || asked) return false;
+      latest = result;
+      return true;
+    },
+    hold() {
+      if (disposed || running || held) return null;
+      held = true;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        held = false;
+        if (disposed) return;
+        // What was asked for during the batch builds now, on the next tick rather than inside
+        // the caller's own clean-up; with nothing asked, whoever waited gets the result there is.
+        if (dirty) {
+          clearTimeout(timer);
+          timer = setTimeout(start, 0);
+        } else settleWaiters();
+      };
+    },
     invalidate() {
       generation += 1;
       latest = null;
       error = null;
+      asked = false;
     },
     get busy() {
       return running || dirty;
