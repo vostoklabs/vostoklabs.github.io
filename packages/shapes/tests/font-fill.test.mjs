@@ -92,15 +92,18 @@ const square = (cx, cy, s, ccw = true) => {
 
 const require_ = createRequire(fileURLToPath(new URL('../../fonts/package.json', import.meta.url)));
 const opentype = require_('opentype.js');
-const fontFile = fileURLToPath(new URL('../../fonts/src/fonts/icon-fallback.ttf', import.meta.url));
-const buf = readFileSync(fontFile);
-const font = opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+/** One of the bundled faces, by its file name. */
+const fontNamed = (file) => {
+  const buf = readFileSync(fileURLToPath(new URL(`../../fonts/src/fonts/${file}`, import.meta.url)));
+  return opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+};
+const font = fontNamed('icon-fallback.ttf');
 
 /** A glyph's contours, Y up, curves flattened to 8 steps. */
-function contoursOf(char) {
+function contoursOf(char, from = font) {
   const out = [];
   let cur = [];
-  for (const c of font.getPath(char, 0, 0, 100).commands) {
+  for (const c of from.getPath(char, 0, 0, 100).commands) {
     if (c.type === 'M') { if (cur.length > 2) out.push(cur); cur = [[c.x, -c.y]]; }
     else if (c.type === 'L') cur.push([c.x, -c.y]);
     else if (c.type === 'Q' || c.type === 'C') {
@@ -126,6 +129,17 @@ for (const [id, char] of Object.entries(GLYPHS)) {
   const contours = contoursOf(char);
   const off = disagreements(contours, 100);
   check(`${id}: the islands fill as the font does`, contours.length > 0 && off <= 10, `${off} of 10000 samples off`);
+}
+
+// ---- 3. letters that draw a contour twice
+//
+// Ordinary text meets the same rule. Wallpoet's Ä draws each dot of its umlaut twice the same way
+// round, and Jura's ị its dot below: each pair stands on its own, so the font fills it. Read as
+// even-odd, the two copies cancelled and the letters lost their dots.
+for (const [file, char] of [['wallpoet.ttf', 'Ä'], ['jura.ttf', 'ị']]) {
+  const contours = contoursOf(char, fontNamed(file));
+  const off = disagreements(contours, 100);
+  check(`${file.replace('.ttf', '')} ${char}: the islands fill as the font does, dots and all`, contours.length > 0 && off <= 10, `${off} of 10000 samples off`);
 }
 
 console.log(`\n${pass} passed, ${fails.length} failed`);
