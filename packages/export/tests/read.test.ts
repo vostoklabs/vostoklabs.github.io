@@ -7,10 +7,11 @@
   that went in (an STL exactly, the OBJ and the 3MF to the four decimals they are written at,
   the 3MF moved by the transform that centres it on the plate). Then the shapes other programs
   write: ASCII STL, binary STL whose header starts with "solid", OBJ quads and negative indices,
-  a 3MF in centimetres whose part lives in another file behind a component transform, a file
-  with no extension. Then the rule that matters most: a coordinate is scaled and placed as a
-  double and rounded to a float once, so a file in metres reads to the same floats as it did
-  before the reader was shared.
+  a 3MF in centimetres whose part lives in another file behind a component transform, files of
+  different units, attributes in single quotes, damaged and empty STLs, a file with no
+  extension. Then the rule that matters most: a coordinate is scaled and placed as a double and
+  rounded to a float once, so a file in metres reads to the floats its decimals round to, and a
+  -0 stays -0.
 */
 import { strToU8, zipSync } from 'fflate';
 import {

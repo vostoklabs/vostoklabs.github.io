@@ -15,9 +15,9 @@
 
   The clock is frozen, so the dates the provenance mark writes are fixed too.
 
-  A step that is meant to change nothing (moving a writer, a reader, the worker or the viewer
-  onto the shelf) has to leave this table exactly as it is. A deliberate change to the files
-  fails here, says which designs and which entries moved, and writes what it got to
+  A change that is meant to leave the files as they are has to leave this table exactly as it
+  is. A deliberate change to the files fails here, says which designs and which entries moved,
+  and writes what it got to
   node_modules/.cache/export-matrix.actual.json. Once the change is meant, rewrite the table:
 
     GOLDEN_UPDATE=1 node apps/clicker-generator/tests/suites.mjs golden/export-matrix
@@ -387,7 +387,7 @@ const DESIGNS: Record<string, () => Built> = {
 /**
  * The same plate through the shelf's OBJ writer: every vertex placed the way the clicker's own
  * writer places it (dropped to the bed, packed onto the plate, tops face down), each part in
- * its group, coloured by colour. What moving the clicker onto the shelf's writer would write.
+ * its group, coloured by colour, for the comparison at the end.
  */
 function shelfObj(parts: ClickerPart[], plate: PlateChoice) {
   const minZ = assemblyMinZ(parts);

@@ -28,10 +28,11 @@ export function modelFormatOf(name: string): ModelFormat | null {
  * Read a model file: by its name's extension, or for a name without one, by its first bytes.
  *
  * Every coordinate is read as a double and scaled to millimetres (and placed, in a 3MF) before
- * it is rounded to a float once. Rounding first and scaling after moves a vertex of a file
- * written in metres by a unit in the last place, and a solid made from it is no longer the
- * same solid. Each file of a 3MF is read in its own unit, and a placement in the unit of the
- * file that wrote it.
+ * it is rounded to a float once. Rounding first and scaling or placing after moves a vertex of a
+ * file in any unit but millimetres, or of a part placed by a transform, by a unit in the last
+ * place, and a solid made from it is no longer the same solid. A -0 in the file is kept where no
+ * transform moves it. Each file of a 3MF is read in its own unit, and a placement in the unit of
+ * the file that wrote it.
  *
  * STL and OBJ come back as written (an STL as a triangle soup, three vertices per triangle);
  * welding, repair and orientation are the caller's business. A file with no triangles throws,

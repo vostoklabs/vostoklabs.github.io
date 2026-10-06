@@ -4,18 +4,19 @@
     node apps/clicker-generator/tests/suites.mjs golden/readers      (part of pnpm test)
 
   The clicker reads its MX assets with geometry/threemfImport.ts and an uploaded model with
-  model/parse.ts. `readModel` (@vostok/export, "Model reader") is to replace both, and before it
-  can it has to give the same floats for the same files: the MX socket, stem and switch (written
-  in metres), every Model-mode sample, and an upload of each shape the clicker's own suite reads
-  (binary and ASCII STL, an OBJ with quads and negative indices). Each is compared array for
-  array with the reader it would replace, and pinned by hash, so the comparison still holds once
-  the old readers are gone.
+  model/parse.ts. `readModel` (@vostok/export, "Model reader") reads the same files here, and
+  each is compared array for array with the clicker's reader for it: the MX socket, stem and
+  switch (written in metres), every Model-mode sample, and an upload of each shape the
+  clicker's own suite reads (binary and ASCII STL, an OBJ with quads and negative indices).
+  Each result is also pinned by hash.
 
-  One case may differ, and is held to a bound instead: a 3MF whose part is placed by a
-  transform. The upload reader rounds a vertex to a float before it moves and scales it; the
-  shelf's moves and scales the double and rounds once, so its vertex is as close to where the
-  file puts it or closer, and the two differ by a float's last place (nanometres). None of the
-  files the clicker ships has a transform.
+  Where the upload reader rounds a vertex to a float before it scales or places it, the two can
+  differ by a float's last place (nanometres): a 3MF in any unit but millimetres, and a part
+  placed by a transform. The shelf's reader scales and places the double and rounds once, so its
+  vertex is as close to where the file puts it, or closer. It also keeps a -0 in the file, where
+  the upload reader writes 0. None of the files above has any of these: the samples are in
+  millimetres and placed by no transform, and the MX assets, in metres, go through the asset
+  reader, which rounds once too. The cases that differ are held to a bound at the end.
 */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -198,6 +199,40 @@ for (const [name, file, data] of [
   check('placed by a transform: every vertex as close to where the file puts it, or closer', ours.positions.length === theirs.positions.length && closer,
     `${moved} of ${ours.positions.length} coordinates differ, by at most ${worst.toExponential(1)} mm`);
   check('placed by a transform: and by less than a micron', worst < 1e-3, `${worst.toExponential(1)} mm`);
+}
+
+/* ------------------------------------------------------------------ a unit other than millimetres, and a -0 */
+
+{
+  // No transform, but in centimetres: the upload reader rounds before it scales, the shelf's after.
+  const verts: number[][] = [];
+  for (let i = 0; i < 40; i++) verts.push([Math.cos(i * 0.9) * 2.37, Math.sin(i * 1.1) * 1.91, (i % 5) * 0.271]);
+  const model = '<?xml version="1.0"?><model unit="centimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1" type="model"><mesh><vertices>'
+    + verts.map(([x, y, z]) => `<vertex x="${x}" y="${y}" z="${z}"/>`).join('')
+    + '</vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object></resources><build><item objectid="1"/></build></model>';
+  const zip = zipSync({ '3D/3dmodel.model': strToU8(model) });
+  const data = zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer;
+  const theirs = parseModel(data, 'cm.3mf');
+  const ours = readModel(data, 'cm.3mf');
+  const exact = verts.flat().map((v) => v * 10);
+  let moved = 0;
+  let worst = 0;
+  let closer = ours.positions.length === theirs.positions.length;
+  for (let i = 0; i < ours.positions.length; i++) {
+    const d = Math.abs(ours.positions[i]! - theirs.positions[i]!);
+    if (d) moved++;
+    worst = Math.max(worst, d);
+    if (Math.abs(ours.positions[i]! - exact[i]!) > Math.abs(theirs.positions[i]! - exact[i]!)) closer = false;
+  }
+  check('in centimetres: the two differ in the last place, the shelf\'s as close to the file or closer, by less than a micron',
+    moved > 0 && closer && worst < 1e-3, `${moved} of ${ours.positions.length} coordinates differ, by at most ${worst.toExponential(1)} mm`);
+
+  // A -0 written in the file.
+  const signed = zipSync({ '3D/3dmodel.model': strToU8(model.replace(/x="[^"]*"/, 'x="-0"')) });
+  const signedData = signed.buffer.slice(signed.byteOffset, signed.byteOffset + signed.byteLength) as ArrayBuffer;
+  const ourZero = readModel(signedData, 'zero.3mf').positions[0]!;
+  const theirZero = parseModel(signedData, 'zero.3mf').positions[0]!;
+  check('a -0: the shelf\'s reader keeps it, the upload reader writes 0', Object.is(ourZero, -0) && Object.is(theirZero, 0), `${Object.is(ourZero, -0) ? '-0' : ourZero} / ${Object.is(theirZero, -0) ? '-0' : theirZero}`);
 }
 
 /* ------------------------------------------------------------------ report */
