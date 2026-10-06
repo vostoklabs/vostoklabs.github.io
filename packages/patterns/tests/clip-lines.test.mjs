@@ -151,6 +151,24 @@ const LINES = { compact: true };
   check('nothing measures nothing', lineLength([]) === 0 && lineLength([[[[1, 1]]]]) === 0);
 }
 
+// 10. Several rings, and an island with a counter, each come back as rings of their own: a scored
+//     word is many letters, and a letter's counter is a ring of its island.
+{
+  const two = clipShapesToLines([[square(6, -8, 0)], [square(6, 8, 0)]], [[square(40)]], LINES);
+  check('two rings that both survive are two islands of one ring each', two.shapes.length === 2 && two.shapes.every((isl) => isl.length === 1) && !two.paths.length, JSON.stringify(two.shapes.map((isl) => isl.length)));
+  const holed = clipShapesToLines([[square(16), square(6)]], [[square(40)]], LINES);
+  check('an island with a counter keeps both its rings', holed.shapes.length === 2 && near(lineLength(holed.shapes), 64 + 24), `${holed.shapes.length} rings, ${lineLength(holed.shapes)} mm`);
+}
+
+// 11. A run shorter than 0.05 mm is a near-tangent crossing's dust, not a line: it goes, and one a
+//     little longer stays.
+{
+  const plate = [[square(20)]];
+  check('a 0.03 mm run is dropped', clipPolylines([[[9.97, 0], [30, 0]]], plate, LINES).length === 0);
+  const kept = clipPolylines([[[9.7, 0], [30, 0]]], plate, LINES);
+  check('a 0.3 mm run is kept', kept.length === 1 && near(kept[0][kept[0].length - 1][0] - kept[0][0][0], 0.3, 1e-9), JSON.stringify(kept));
+}
+
 console.log(`\n${pass} passed, ${fails.length} failed`);
 if (fails.length) {
   for (const f of fails) console.log(`  · ${f}`);
