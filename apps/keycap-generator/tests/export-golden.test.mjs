@@ -27,7 +27,9 @@
   so what is tested is what ships.
 
   manifold-3d stays external, so node loads the npm build itself, as fit-test.test.js does; the
-  `?url` import manifold.js makes for Vite is answered with the path of that build's WASM.
+  `?url` import manifold.js makes for Vite is answered with the path of that build's WASM. A share
+  of the cases then runs again on the build the app ships (packages/manifold-noeval, which the
+  Vite config aliases in), and must write the same files.
 */
 import { build } from 'esbuild';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -71,48 +73,61 @@ globalThis.fetch = async (url) => {
 };
 
 // ------------------------------------------------------------------ the app's modules
-const WASM = createRequire(join(APP, 'package.json')).resolve('manifold-3d/manifold.wasm');
-const manifoldNode = {
+/* Two manifold builds: npm's manifold-3d, which the golden is recorded on, and the one the app
+   ships, the CSP-safe rebuild vite.config.js aliases in (packages/manifold-noeval). The second
+   runs a share of the cases below and must write the same files. */
+const NOEVAL = resolve(APP, '..', '..', 'packages', 'manifold-noeval');
+const MANIFOLD = {
+  // npm's stays external, so node loads the package itself; the app's glue is bundled in.
+  npm: { glue: null, wasm: createRequire(join(APP, 'package.json')).resolve('manifold-3d/manifold.wasm') },
+  app: { glue: join(NOEVAL, 'manifold.js'), wasm: join(NOEVAL, 'manifold.wasm') },
+};
+const manifoldNode = ({ glue, wasm }) => ({
   name: 'manifold-node',
   setup(b) {
     b.onResolve({ filter: /^manifold-3d\/manifold\.wasm\?url$/ }, () => ({ path: 'wasm', namespace: 'manifold-wasm-url' }));
-    b.onLoad({ filter: /.*/, namespace: 'manifold-wasm-url' }, () => ({ contents: `export default ${JSON.stringify(WASM)};`, loader: 'js' }));
-    b.onResolve({ filter: /^manifold-3d$/ }, () => ({ path: 'manifold-3d', external: true }));
+    b.onLoad({ filter: /.*/, namespace: 'manifold-wasm-url' }, () => ({ contents: `export default ${JSON.stringify(wasm)};`, loader: 'js' }));
+    b.onResolve({ filter: /^manifold-3d$/ }, () => (glue ? { path: glue } : { path: 'manifold-3d', external: true }));
   },
-};
+});
 
 const cacheDir = join(APP, 'node_modules', '.cache');
 mkdirSync(cacheDir, { recursive: true });
-const outfile = join(cacheDir, `export-golden-${process.pid}.mjs`);
-await build({
-  stdin: {
-    contents: [
-      "export { loadKeycap } from './src/keycap.js';",
-      "export { parseLogo } from './src/logo.js';",
-      "export { parseLetter, loadBundledFonts } from './src/letter.js';",
-      "export { LUCIDE_ICONS, buildSvg } from './src/lucideIcons.js';",
-      "export { buildBodies } from './src/geometry.js';",
-      "export { initManifold, getManifoldApi, geomToManifold, manifoldToGeom } from './src/manifold.js';",
-      "export { applyStemClearance } from './src/stemClearance.js';",
-      "export { buildFitTestRow, computeFitTestLadder, FIT_TEST_STEP_MM, FIT_TEST_FONT_ID } from './src/fitTest.js';",
-      "export { keycapThreeMF } from './src/export3mf.js';",
-      "export { keycapObjMtl } from './src/exportObj.js';",
-      "export { capParts, orientForPrint, blankParts, fitTestParts, profileTag, capFileName, blankFileName, fitTestFileName, ALPHABET, ALPHABET_MTL } from './src/exportParts.js';",
-    ].join('\n'),
-    resolveDir: APP,
-    sourcefile: 'export-golden-entry.js',
-    loader: 'js',
-  },
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  outfile,
-  logLevel: 'error',
-  plugins: [manifoldNode],
-  define: { __KEYCAP_ARTWORK__: 'false' },
-});
-const app = await import(pathToFileURL(outfile).href);
-rmSync(outfile, { force: true });
+/** The app's modules, bundled as the app bundles them, on one manifold build. */
+async function loadApp(which) {
+  const outfile = join(cacheDir, `export-golden-${which}-${process.pid}.mjs`);
+  await build({
+    stdin: {
+      contents: [
+        "export { loadKeycap } from './src/keycap.js';",
+        "export { parseLogo } from './src/logo.js';",
+        "export { parseLetter, loadBundledFonts } from './src/letter.js';",
+        "export { LUCIDE_ICONS, buildSvg } from './src/lucideIcons.js';",
+        "export { buildBodies } from './src/geometry.js';",
+        "export { initManifold, getManifoldApi, geomToManifold, manifoldToGeom } from './src/manifold.js';",
+        "export { applyStemClearance } from './src/stemClearance.js';",
+        "export { buildFitTestRow, computeFitTestLadder, FIT_TEST_STEP_MM, FIT_TEST_FONT_ID } from './src/fitTest.js';",
+        "export { keycapThreeMF } from './src/export3mf.js';",
+        "export { keycapObjMtl } from './src/exportObj.js';",
+        "export { capParts, orientForPrint, blankParts, fitTestParts, profileTag, capFileName, blankFileName, fitTestFileName, ALPHABET, ALPHABET_MTL } from './src/exportParts.js';",
+      ].join('\n'),
+      resolveDir: APP,
+      sourcefile: 'export-golden-entry.js',
+      loader: 'js',
+    },
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile,
+    logLevel: 'error',
+    plugins: [manifoldNode(MANIFOLD[which])],
+    define: { __KEYCAP_ARTWORK__: 'false' },
+  });
+  const mod = await import(pathToFileURL(outfile).href);
+  rmSync(outfile, { force: true });
+  return mod;
+}
+const app = await loadApp('npm');
 
 // ------------------------------------------------------------------ legends
 /** Original drawings for this test. The first is how an illustration program writes a file:
@@ -219,94 +234,120 @@ for (const ch of app.ALPHABET) {
 const index = JSON.parse(readFileSync(join(APP, 'public', 'keycaps', 'index.json'), 'utf8'));
 const DEFAULTS = { depth: 0.5, rot: 0, offx: 0, offy: 0, stemTol: 0, capColor: '#161616', logoColor: '#f7f7f5', walls: 'arachne' };
 
-await app.initManifold();
-const api = app.getManifoldApi();
-await app.loadBundledFonts();
-const homingBumpGeom = (await app.loadKeycap('keycaps/homing-bump.json')).shellGeometry;
+/**
+ * The cases, run on one bundle of the app: its manifold, fonts and caps loaded once. Returns
+ * `run(case)`, which carves and exports one case and says what every file it writes is.
+ */
+async function harnessFor(app) {
+  await app.initManifold();
+  const api = app.getManifoldApi();
+  await app.loadBundledFonts();
+  const homingBumpGeom = (await app.loadKeycap('keycaps/homing-bump.json')).shellGeometry;
 
-/** One cap as mount.js's setKeycap() leaves it: the shell, and the stem run through Manifold
- *  once so it is a clean indexed solid. Cached: the app keeps the loaded cap too. */
-const caps = new Map();
-async function capFor(file) {
-  if (caps.has(file)) return caps.get(file);
-  const kc = await app.loadKeycap(file);
-  let baseStem = null;
-  if (kc.stemGeometry) {
-    const m = app.geomToManifold(kc.stemGeometry);
-    baseStem = app.manifoldToGeom(m);
-    m.delete();
+  /** One cap as mount.js's setKeycap() leaves it: the shell, and the stem run through Manifold
+   *  once so it is a clean indexed solid. Cached: the app keeps the loaded cap too. */
+  const caps = new Map();
+  async function capFor(file) {
+    if (caps.has(file)) return caps.get(file);
+    const kc = await app.loadKeycap(file);
+    let baseStem = null;
+    if (kc.stemGeometry) {
+      const m = app.geomToManifold(kc.stemGeometry);
+      baseStem = app.manifoldToGeom(m);
+      m.delete();
+    }
+    const cap = { shell: kc.shellGeometry, meta: kc.meta, baseStem };
+    caps.set(file, cap);
+    return cap;
   }
-  const cap = { shell: kc.shellGeometry, meta: kc.meta, baseStem };
-  caps.set(file, cap);
-  return cap;
-}
 
-/** mount.js applyStemTolerance(): the authored stem at 0, else the clearance if it held. */
-function stemAt(baseStem, tol) {
-  if (!baseStem || Math.abs(tol) <= 1e-4) return baseStem;
-  const r = app.applyStemClearance(api, baseStem, tol);
-  return r.watertight ? r.geometry : baseStem;
-}
-
-async function legendFor(spec, unit) {
-  if (spec.kind === 'lucide') {
-    const ic = app.LUCIDE_ICONS.find((x) => x.name === spec.name);
-    if (!ic) throw new Error(`no lucide icon "${spec.name}"`);
-    return { ...app.parseLogo(app.buildSvg(ic.node)), name: ic.name };
+  /** mount.js applyStemTolerance(): the authored stem at 0, else the clearance if it held. */
+  function stemAt(baseStem, tol) {
+    if (!baseStem || Math.abs(tol) <= 1e-4) return baseStem;
+    const r = app.applyStemClearance(api, baseStem, tol);
+    return r.watertight ? r.geometry : baseStem;
   }
-  if (spec.kind === 'svg') return { ...app.parseLogo(SVGS[spec.name]), name: spec.name };
-  // The alphabet set reads each letter one character long.
-  if (spec.kind === 'alphabet') return app.parseLetter(spec.text, FONTS[spec.font], 1);
-  // mount.js letterMaxLen(): 4 characters on a 1u, more on a longer cap.
-  return app.parseLetter(spec.text, FONTS[spec.font], Math.max(4, Math.round((unit || 1) * 4)));
-}
 
-/** The parts one case exports, and the MTL its OBJ names: built by src/exportParts.js, the
- *  module the app's own exports go through (the single cap, the blank, the fit test, A-Z). */
-async function exportParts(c) {
-  const profile = index.profiles.find((p) => p.id === c.profile);
-  const entry = profile.keycaps.find((k) => k.id === c.size);
-  const { shell, meta, baseStem } = await capFor(entry.file);
-  const o = { ...DEFAULTS, ...c };
-  const stem = stemAt(baseStem, o.stemTol);
-  const tag = app.profileTag(profile, index.profiles.length);
+  async function legendFor(spec, unit) {
+    if (spec.kind === 'lucide') {
+      const ic = app.LUCIDE_ICONS.find((x) => x.name === spec.name);
+      if (!ic) throw new Error(`no lucide icon "${spec.name}"`);
+      return { ...app.parseLogo(app.buildSvg(ic.node)), name: ic.name };
+    }
+    if (spec.kind === 'svg') return { ...app.parseLogo(SVGS[spec.name]), name: spec.name };
+    // The alphabet set reads each letter one character long.
+    if (spec.kind === 'alphabet') return app.parseLetter(spec.text, FONTS[spec.font], 1);
+    // mount.js letterMaxLen(): 4 characters on a 1u, more on a longer cap.
+    return app.parseLetter(spec.text, FONTS[spec.font], Math.max(4, Math.round((unit || 1) * 4)));
+  }
 
-  if (c.fitTest) {
-    const ladder = app.computeFitTestLadder(o.stemTol, app.FIT_TEST_STEP_MM, -0.4, 0.4);
-    const pieces = app.buildFitTestRow(
-      { api, baseStemGeometry: baseStem, meta, letterContour: (text) => app.parseLetter(text, app.FIT_TEST_FONT_ID, 6) },
-      ladder,
+  /** The parts one case exports, and the MTL its OBJ names: built by src/exportParts.js, the
+   *  module the app's own exports go through (the single cap, the blank, the fit test, A-Z). */
+  async function exportParts(c) {
+    const profile = index.profiles.find((p) => p.id === c.profile);
+    const entry = profile.keycaps.find((k) => k.id === c.size);
+    const { shell, meta, baseStem } = await capFor(entry.file);
+    const o = { ...DEFAULTS, ...c };
+    const stem = stemAt(baseStem, o.stemTol);
+    const tag = app.profileTag(profile, index.profiles.length);
+
+    if (c.fitTest) {
+      const ladder = app.computeFitTestLadder(o.stemTol, app.FIT_TEST_STEP_MM, -0.4, 0.4);
+      const pieces = app.buildFitTestRow(
+        { api, baseStemGeometry: baseStem, meta, letterContour: (text) => app.parseLetter(text, app.FIT_TEST_FONT_ID, 6) },
+        ladder,
+      );
+      return { parts: app.fitTestParts(pieces, o.capColor), mtlFileName: `${app.fitTestFileName(tag)}.mtl` };
+    }
+
+    if (c.blank) {
+      return { parts: app.blankParts(shell, stem, o.capColor), mtlFileName: `${app.blankFileName(tag, entry.id)}.mtl` };
+    }
+
+    const legend = await legendFor(c.legend, entry.unit);
+    const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
+    const widthMM = o.mm ?? Math.round(room * 0.5 * 10) / 10;
+    const homing = !!o.homing && profile.homingBump !== false;
+    const bodies = await app.buildBodies(shell, meta, legend, {
+      widthMM,
+      depth: o.depth,
+      centerX: meta.center[0] + o.offx,
+      centerY: meta.center[1] + o.offy,
+      rotationDeg: o.rot,
+      mirror: !!o.mirror,
+      through: !!o.through,
+      singleColor: !!o.single,
+      homingBump: homing,
+      homingBumpGeom: homingBumpGeom,
+    });
+    const parts = app.orientForPrint(
+      app.capParts(bodies, { capColor: o.capColor, logoColor: o.logoColor, through: !!o.through, stem }),
+      profile,
+      meta,
     );
-    return { parts: app.fitTestParts(pieces, o.capColor), mtlFileName: `${app.fitTestFileName(tag)}.mtl` };
+    const mtlFileName = c.legend.kind === 'alphabet' ? app.ALPHABET_MTL : `${app.capFileName(legend.name, tag)}.mtl`;
+    return { parts, mtlFileName, walls: o.walls };
   }
 
-  if (c.blank) {
-    return { parts: app.blankParts(shell, stem, o.capColor), mtlFileName: `${app.blankFileName(tag, entry.id)}.mtl` };
-  }
-
-  const legend = await legendFor(c.legend, entry.unit);
-  const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
-  const widthMM = o.mm ?? Math.round(room * 0.5 * 10) / 10;
-  const homing = !!o.homing && profile.homingBump !== false;
-  const bodies = await app.buildBodies(shell, meta, legend, {
-    widthMM,
-    depth: o.depth,
-    centerX: meta.center[0] + o.offx,
-    centerY: meta.center[1] + o.offy,
-    rotationDeg: o.rot,
-    mirror: !!o.mirror,
-    through: !!o.through,
-    singleColor: !!o.single,
-    homingBump: homing,
-    homingBumpGeom: homingBumpGeom,
-  });
-  const parts = app.orientForPrint(
-    app.capParts(bodies, { capColor: o.capColor, logoColor: o.logoColor, through: !!o.through, stem }),
-    profile,
-    meta,
-  );
-  const mtlFileName = c.legend.kind === 'alphabet' ? app.ALPHABET_MTL : `${app.capFileName(legend.name, tag)}.mtl`;
-  return { parts, mtlFileName, walls: o.walls };
+  return async function run(c) {
+    const { parts, mtlFileName, walls = 'arachne' } = await exportParts(c);
+    // mount.js projectProcess(): Arachne is written as an override, Classic is the preset's own.
+    const blob = app.keycapThreeMF(parts, { process: walls === 'classic' ? {} : { wall_generator: walls } });
+    const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
+    const files = {};
+    for (const name of Object.keys(zip).sort()) {
+      const bytes = zip[name];
+      const text = /\.(model|config|txt|xml|rels)$/i.test(name) ? strFromU8(bytes) : null;
+      files[name] = hash(text == null ? bytes : steady(text));
+    }
+    const { obj, mtl } = app.keycapObjMtl(parts, { mtlFileName });
+    return {
+      files,
+      obj: hash(steady(obj)),
+      mtl: hash(mtl),
+      parts: parts.map((p) => ({ name: p.name, extruder: p.extruder, color: p.color, ...measure(p.geom) })),
+    };
+  };
 }
 
 // ------------------------------------------------------------------ what a file is
@@ -364,25 +405,7 @@ function measure(geom) {
   };
 }
 
-async function run(c) {
-  const { parts, mtlFileName, walls = 'arachne' } = await exportParts(c);
-  // mount.js projectProcess(): Arachne is written as an override, Classic is the preset's own.
-  const blob = app.keycapThreeMF(parts, { process: walls === 'classic' ? {} : { wall_generator: walls } });
-  const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()));
-  const files = {};
-  for (const name of Object.keys(zip).sort()) {
-    const bytes = zip[name];
-    const text = /\.(model|config|txt|xml|rels)$/i.test(name) ? strFromU8(bytes) : null;
-    files[name] = hash(text == null ? bytes : steady(text));
-  }
-  const { obj, mtl } = app.keycapObjMtl(parts, { mtlFileName });
-  return {
-    files,
-    obj: hash(steady(obj)),
-    mtl: hash(mtl),
-    parts: parts.map((p) => ({ name: p.name, extruder: p.extruder, color: p.color, ...measure(p.geom) })),
-  };
-}
+const run = await harnessFor(app);
 
 // ------------------------------------------------------------------ run and compare
 const started = Date.now();
@@ -466,6 +489,31 @@ if (!golden) {
     if (g.parts.length !== r.parts.length) detail.push(`parts ${g.parts.length} -> ${r.parts.length}`);
     fail(`${id}: ${moved.length ? `files moved (${moved.join(', ')})` : 'parts measure differently'}\n       ${detail.join('\n       ')}`);
   }
+}
+
+/* The build the app ships against the one the golden is recorded on: one case of every kind (an
+   icon, letters in each font, both drawings, shine-through, single colour, the homing bump, the
+   stem fit both ways, each profile, the blank, both fit tests, a letter of the set) must write
+   the same files and parts, to the byte, on both. */
+const PARITY = [
+  'S-1u-copy', 'S-1u-heart-rot45', 'S-1u-A-roboto', 'S-1u-Q-mono', 'S-1u-Fn-pacifico', 'S-1u-svg-styled',
+  'S-1u-copy-through', 'S-1u-A-single', 'S-1u-copy-homing', 'S-1u-copy-stem+0.2', 'S-1u-copy-stem-0.1',
+  'S-6.25u-svg-fills', 'S-1u-blank', 'S-1u-fit-test', 'L-2u-3stem-Ent-stem-0.2', 'T-2.25u-Shift-pacifico-stem+0.4',
+  'C-1u-heart-stem+0.1-mirror-rot30', 'C-1u-fit-test', 'AZ-S-1u-roboto-Q',
+];
+const parityStarted = Date.now();
+const runOnAppBuild = await harnessFor(await loadApp('app'));
+const differs = [];
+for (const id of PARITY) {
+  const c = CASES.find((x) => x.id === id);
+  if (!c) { fail(`parity: no case ${id}`); continue; }
+  if (JSON.stringify(await runOnAppBuild(c)) !== JSON.stringify(results[id])) differs.push(id);
+}
+const paritySeconds = ((Date.now() - parityStarted) / 1000).toFixed(1);
+if (differs.length) fail(`the app's manifold build writes different files from npm's manifold-3d: ${differs.join(', ')}`);
+else {
+  pass++;
+  console.log(`the app's manifold build and npm's manifold-3d write the same files for ${PARITY.length} cases (${paritySeconds} s)`);
 }
 
 console.log(
