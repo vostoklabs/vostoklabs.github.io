@@ -1362,7 +1362,7 @@ app.append(
 /* A preview card: the view switch and the unit switch over a drawing that zooms, the status line
    and the zoom tools in its corners, and under it the strip the view needs. The drawing is the
    page's own, where an app's SVG or 3D canvas would be. */
-const cardUnits = lengthUnits({ storageKey: 'kit-demo-unit', trimZeros: true });
+const cardUnits = lengthUnits({ storageKey: 'kit-demo-unit' });
 const PLATE_MM = { w: 120, h: 80 };
 let cardZoomAt = 1;
 const plateLabel = svgNode('text', { x: 100, y: 128, 'text-anchor': 'middle', 'font-size': 8, fill: 'currentColor' });

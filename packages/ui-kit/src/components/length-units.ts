@@ -6,7 +6,8 @@ import { segmentedControl, type SegmentedOptions, type SegmentedRow } from './co
   sets it. Remembered per browser, under the app's own key.
 
   Laser Studio had this as a module of its own. An app that wants the same choice imports this
-  rather than copying that, and how millimetres read ("120.0 mm" or "120 mm") is an option.
+  rather than copying that. Millimetres read the way the house writes numbers, with no trailing
+  zero the step does not need ("120 mm", not "120.0 mm"); one fixed decimal is an option.
 
   Make one per app, in one module, and import it wherever a length is shown: the choice lives in
   the object, so two of them would be two choices.
@@ -17,8 +18,8 @@ export type LengthUnit = 'mm' | 'in';
 export interface LengthUnitsOptions {
   /** Where the choice is remembered in this browser: one key per app ('laser-studio-unit'). */
   storageKey: string;
-  /** Millimetres without a trailing zero: "120 mm" and "48.5 mm". Default false: always one
-   *  decimal, "120.0 mm". Inches always show two. */
+  /** Millimetres without a trailing zero: "120 mm" and "48.5 mm". Default true; false keeps one
+   *  decimal always, "120.0 mm". Inches always show two. */
   trimZeros?: boolean;
 }
 
@@ -52,8 +53,9 @@ export function lengthUnits(opts: LengthUnitsOptions): LengthUnits {
   }
   const listeners = new Set<(unit: LengthUnit) => void>();
 
+  const trimZeros = opts.trimZeros ?? true;
   const mm = (v: number): string => {
-    if (!opts.trimZeros) return v.toFixed(1);
+    if (!trimZeros) return v.toFixed(1);
     const r = Math.round(v * 10) / 10;
     return Number.isInteger(r) ? String(r) : r.toFixed(1);
   };

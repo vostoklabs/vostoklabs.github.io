@@ -75,11 +75,14 @@ const mini = (n: unknown) => n as MiniElement;
   miniStorage.clear();
   const studio = lengthUnits({ storageKey: 'test-unit' });
   check('lengthUnits: millimetres by default', studio.get() === 'mm');
-  check('lengthUnits: one decimal by default', studio.format(120) === '120.0 mm' && studio.format(48.66) === '48.7 mm');
-  check('lengthUnits: a size in one unit', studio.formatSize(48.66, 14.4) === '48.7 × 14.4 mm');
+  check('lengthUnits: no trailing zero by default, whole millimetres stay whole', studio.format(120) === '120 mm' && studio.format(119.96) === '120 mm');
+  check('lengthUnits: anything else to one decimal', studio.format(48.66) === '48.7 mm' && studio.format(0.04) === '0 mm');
+  check('lengthUnits: a size in one unit', studio.formatSize(48.66, 14.4) === '48.7 × 14.4 mm' && studio.formatSize(120, 14.44) === '120 × 14.4 mm');
   const box = lengthUnits({ storageKey: 'test-unit-2', trimZeros: true });
-  check('lengthUnits trimZeros: whole millimetres stay whole', box.format(120) === '120 mm' && box.format(119.96) === '120 mm');
-  check('lengthUnits trimZeros: anything else to one decimal', box.format(48.66) === '48.7 mm' && box.formatSize(120, 14.44) === '120 × 14.4 mm');
+  check('lengthUnits trimZeros: true is the default', box.format(120) === studio.format(120) && box.formatSize(48.66, 14.4) === studio.formatSize(48.66, 14.4));
+  const fixed = lengthUnits({ storageKey: 'test-unit-3', trimZeros: false });
+  check('lengthUnits trimZeros false: always one decimal', fixed.format(120) === '120.0 mm' && fixed.format(48.66) === '48.7 mm');
+  check('lengthUnits trimZeros false: a size the same way', fixed.formatSize(120, 14.4) === '120.0 × 14.4 mm');
 
   const heard: string[] = [];
   const stop = studio.onChange((u) => heard.push(u));
