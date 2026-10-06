@@ -44,6 +44,8 @@ const SOURCES = [
   `${app}/src/templates`, `${app}/src/engine`, `${app}/src/symbols`, `${app}/src/preview.ts`, `${app}/src/assembled.ts`,
   `${app}/scripts/thumbs.mjs`,
   `${root}/packages/laser/src`, `${root}/packages/patterns/src`, `${root}/packages/fonts/src`,
+  // The shape maths both engines stand on, and the kit's `svgNode` the picture is drawn with.
+  `${root}/packages/shapes/src`, `${root}/packages/ui-kit/src/dom.ts`,
 ];
 
 function walk(p, out) {
