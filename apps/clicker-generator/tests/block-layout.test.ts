@@ -162,6 +162,19 @@ const state = (over: Partial<BlockState>): BlockState => ({
   const forText = lineSymbols({ ...map, [String.fromCodePoint(0xf0001)]: { kind: 'lucide', name: 'arrow-up' } });
   check('Text mode gets every traced symbol with a full look, and no Lucide names',
     Object.keys(forText).length === 2 && forText[a]!.look.scale === 1 && forText[a]!.look.flip === false, JSON.stringify(Object.keys(forText)));
+
+  // Which saved keys are symbols is the kit's rule (@vostok/ui-kit/symbol-rules): exactly one code
+  // point from U+F0000 to U+10FFFD. Two kinds of key the app's own rule once let through are left
+  // out: U+10FFFE and U+10FFFF, which Unicode keeps as noncharacters, and a symbol with more text
+  // after it. A twin's link is held to the same rule.
+  const cp = (s: string) => Array.from(s, (c) => c.codePointAt(0)!.toString(16)).join('+');
+  const keys = [0xf0000, 0x10fffd, 0x10fffe, 0x10ffff].map((n) => String.fromCodePoint(n));
+  const raw = Object.fromEntries([...keys, `${a}x`, 'A'].map((k) => [k, { kind: 'rings', label: 'k', rings: ring }]));
+  const kept = Object.keys(loadedSymbols(raw) ?? {});
+  check('a saved key is a symbol only when it is one code point from U+F0000 to U+10FFFD',
+    kept.join() === `${keys[0]},${keys[1]}`, kept.map(cp).join(' '));
+  const linked = loadedSymbols({ [a]: { kind: 'rings', label: 'Heart', rings: ring, pair: `${b}x` }, [b]: { kind: 'rings', label: 'Star', rings: ring, pair: String.fromCodePoint(0x10fffe) } }) ?? {};
+  check('a twin link to anything but one symbol is dropped', !('pair' in linked[a]!) && !('pair' in linked[b]!), Object.keys(linked).map(cp).join(' '));
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nblock layouts hold');

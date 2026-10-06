@@ -22,7 +22,7 @@ writeFileSync(entry, [
   `export { contractProblems } from '${pkg}/src/contract.ts';`,
   `export { MATERIAL_SOLID, MATERIAL_FONT_SHA256 } from '${pkg}/src/material-solid.ts';`,
   `export { pathCommandsToPolygons } from '@vostok/fonts/textLayout';`,
-  `export { POPULAR as FONTS_POPULAR } from '${pkg}/../fonts/src/symbolGroups.ts';`,
+  `export { POPULAR as FONTS_POPULAR, SYMBOL_GROUPS as FONTS_GROUPS, searchGroup as fontsSearchGroup } from '${pkg}/../fonts/src/symbolGroups.ts';`,
   `export { csOf } from '${pkg}/../manifold/src/index.ts';`,
 ].join('\n'));
 const outfile = `${tmp}/symbols-test-${process.pid}.mjs`;
@@ -120,6 +120,22 @@ check('Popular lists each symbol once', new Set(popular).size === popular.length
   check('…and still lists each symbol once', new Set(tablerToo).size === tablerToo.length);
   const fluentOnly = ids({ sets: ['fluent'] });
   check('with only Fluent, Popular is the Fluent picks', fluentOnly.length > 0 && fluentOnly.every((id) => id.startsWith('fluent:')));
+}
+// A chooser limited to Material, as a generator that types a symbol into its words opens it, puts
+// in the very characters the old Material picker did: page by page, the same characters in the
+// same order, so a saved project's words and a customer's habits mean what they meant.
+{
+  const pages = S.FONTS_GROUPS.map((g) => {
+    const before = S.fontsSearchGroup('', g.id).map((i) => i.char);
+    const now = S.listSymbols(g.id, { sets: ['material'] }).map((e) => e.char);
+    return { id: g.id, before, now, same: before.join('|') === now.join('|') };
+  });
+  const differ = pages.filter((p) => !p.same);
+  check(
+    'a Material-only chooser offers the old picker\'s characters, page by page and in order',
+    !differ.length && pages.every((p) => p.before.length > 0),
+    differ.map((p) => `${p.id}: ${p.before.length} before, ${p.now.length} now`).join('; ') || `${pages.length} pages, ${pages.reduce((n, p) => n + p.now.length, 0)} symbols`,
+  );
 }
 check('Everything lists the whole library', S.listSymbols('all').length === all.length);
 check('Yin yang comes unframed: Fluent\'s framed Yin yang and Peace symbol are not in the library', !S.symbolById('fluent:yin-yang') && !S.symbolById('fluent:peace-symbol') && !!S.symbolById('tabler:yin-yang'));
