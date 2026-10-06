@@ -280,6 +280,39 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   running.setPaused(false);
   check('dispose: nor a running one by a pause and a resume', page.pendingFrames() === 0 && draws(2) === 0, `${page.pendingFrames()} frames waiting`);
 }
+{
+  // A frame hook that throws costs its own work, not the frame: the stage is still drawn, the
+  // hooks after it still run, and the error is logged once rather than every frame.
+  const v = createViewer(stage);
+  v.setParts(PARTS);
+  const draws = () => {
+    const before = page.log.length;
+    let escaped = false;
+    try {
+      page.frame();
+    } catch {
+      escaped = true;
+    }
+    return escaped ? -1 : page.log.slice(before).filter((l) => l.startsWith('draw')).length;
+  };
+  const perFrame = draws();
+  const logged: unknown[][] = [];
+  const error = console.error;
+  console.error = (...args: unknown[]) => void logged.push(args);
+  let after = 0;
+  const offBroken = v.onFrame(() => {
+    throw new Error('a hook that breaks');
+  });
+  const offAfter = v.onFrame(() => void after++);
+  const drawn = [draws(), draws(), draws()];
+  console.error = error;
+  check('onFrame: a hook that throws, and every frame is still drawn', perFrame > 0 && drawn.every((d) => d === perFrame), `${drawn.join(', ')} draws (${perFrame} a frame)`);
+  check('onFrame: the hooks after it still run', after === 3, String(after));
+  check('onFrame: and the error is logged once', logged.length === 1 && String(logged[0]).includes('a hook that breaks'), `${logged.length} times`);
+  offBroken();
+  offAfter();
+  v.dispose();
+}
 
 /* ------------------------------------------------------------------ pictures */
 

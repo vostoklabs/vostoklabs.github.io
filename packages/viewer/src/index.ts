@@ -151,7 +151,8 @@ export interface Viewer {
   /** Called after every `setParts`, once the parts are built and the model is seated, with
    *  their meshes. Returns a function that stops it. */
   onPartsSet(cb: (meshes: THREE.Mesh[], parts: ViewerPart[]) => void): () => void;
-  /** Called once a frame, before the frame is drawn. Returns a function that stops it. */
+  /** Called once a frame, before the frame is drawn. Returns a function that stops it. A hook
+   *  that throws is logged, once, and the frame is drawn without its work. */
   onFrame(cb: () => void): () => void;
   /** Stop drawing while something covers the stage, and start again. A disposed viewer stays
    *  stopped. */
@@ -310,6 +311,8 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   const layers = new Map<string, THREE.Group>();
   const partsSetHooks = new Set<(meshes: THREE.Mesh[], parts: ViewerPart[]) => void>();
   const frameHooks = new Set<() => void>();
+  /** Frame hooks that have thrown, logged the first time only: a hook runs every frame. */
+  const brokenHooks = new WeakSet<() => void>();
 
   // Radius the camera was last framed for. A rebuild only re-frames when the
   // model grew or shrank enough to leave the view — otherwise dragging a slider
@@ -750,7 +753,17 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     // From below, a solid plate would sit between the camera and the model —
     // ghost it rather than hiding it, so it never pops as you orbit past level.
     buildPlate.setGhosted(camera.position.z <= floorZ);
-    for (const cb of [...frameHooks]) cb();
+    // Each hook on its own: one that throws costs its own work, never the frame or the others.
+    for (const cb of [...frameHooks]) {
+      try {
+        cb();
+      } catch (err) {
+        if (!brokenHooks.has(cb)) {
+          brokenHooks.add(cb);
+          console.error('An onFrame hook threw; the stage is drawn without its work.', err);
+        }
+      }
+    }
     renderer.render(scene, camera);
   }
   animate();
