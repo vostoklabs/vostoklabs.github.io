@@ -1170,6 +1170,17 @@
   color: var(--text);
 }
 .vl-control--disabled .vl-palette-row__label { color: var(--muted); }
+/* `detected`: the colour the part was found in, before its name. A sample of the picture, not a
+   control, so a plain dot with nothing to hover. */
+.vl-palette-row__detected {
+  flex: none;
+  inline-size: 10px;
+  block-size: 10px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--swatch, transparent);
+}
 
 /* ---------- The colour picker popover ---------- */
 /* Round chips, because a colour here is a spool rather than a UI surface — and round reads as

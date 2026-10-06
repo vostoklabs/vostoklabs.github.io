@@ -237,6 +237,13 @@ export interface PaletteRowOptions {
   onCustom?: (hex: string) => void;
   /** DOM id for the label element, for an app that renames it at runtime. */
   labelId?: string;
+  /**
+   * The colour this part was found in, `#rrggbb`: for a part traced from a picture, the
+   * picture's own colour, which need not be the filament chosen to print it. Shown as a dot
+   * before the label (beside it, not in it, so renaming the label keeps the dot); not a
+   * control. Without it there is no dot.
+   */
+  detected?: string;
 }
 
 /**
@@ -278,6 +285,14 @@ export function paletteRow(opts: PaletteRowOptions): ValueRow<string> {
   });
 
   const row = el('div', { className: 'vl-palette-row' }, [label, chip]) as unknown as ValueRow<string>;
+  if (opts.detected) {
+    // The colour through the CSSOM, as the chip's: a host whose policy refuses style attributes
+    // still paints it.
+    row.prepend(el('span', {
+      className: 'vl-palette-row__detected',
+      attrs: { title: 'Detected colour', 'aria-hidden': 'true', style: `--swatch: ${opts.detected}` },
+    }));
+  }
 
   function set(hex: string, notify = true) {
     value = norm(hex);

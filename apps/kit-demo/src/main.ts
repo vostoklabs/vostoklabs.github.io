@@ -603,6 +603,18 @@ app.append(
     ]),
   ),
   entry(
+    "paletteRow({ detected })",
+    'Palette row with the colour found',
+    'For parts traced from a picture: the colour each was found in, as a dot before its name, ' +
+      'beside the filament chosen to print it. The dot is a sample, not a control; the chip is ' +
+      'what changes the colour.',
+    el('div', { className: 'kit-sidebar-frame' }, [
+      paletteRow({ label: 'Fur', value: '#ff6a13', detected: '#e0812f', onChange: (h) => toast(`Fur: ${h}`) }),
+      paletteRow({ label: 'Eyes', value: '#161616', detected: '#2b2320', onChange: (h) => toast(`Eyes: ${h}`) }),
+      paletteRow({ label: 'Background', value: '#f7f7f5', detected: '#efe6d8', onChange: (h) => toast(`Background: ${h}`) }),
+    ]),
+  ),
+  entry(
     'colorSwatch() · colorPopover()',
     'Colour well & picker',
     'colorSwatch() is the bare well for a dense list of parts or layers. It has no visible label, ' +
