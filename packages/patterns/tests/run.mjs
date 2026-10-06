@@ -573,6 +573,8 @@ for (const def of P.PATTERNS) {
   ok(loose.closed.length === 0 && loose.open.length >= 1, `walked as given, the repeated point splits the ring (${loose.closed.length} closed, ${loose.open.length} open)`);
   ok(tight.closed.length === 1 && tight.open.length === 0 && tight.closed[0].length === ring.length, `compact: one closed ring of ${ring.length} points (${tight.closed.length} closed, ${tight.open.length} open)`);
   const line = [[-10, 2], [-5, 2], [-5, 2], [5, 2]];
+  const asGiven = P.clipPolylines([line], plate);
+  ok(asGiven.length === 2 && same(asGiven, [[[-10, 2], [-5, 2]], [[-5, 2], [5, 2]]]), `no options: the step of no length still splits the line, as it always did (${asGiven.length} runs)`);
   ok(P.clipPolylines([line], plate, { compact: true }).length === 1, 'compact: a line with a step of no length stays one run');
 }
 
