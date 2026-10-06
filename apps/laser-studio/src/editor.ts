@@ -18,7 +18,6 @@ import {
   licenseAfterExport,
   el,
   buildLoop,
-  BuildTimeoutError,
   markProject,
   readProjectFile,
 } from '@vostok/ui-kit';
@@ -36,7 +35,7 @@ import {
 } from 'virtual:makerlab';
 import { HOST_LICENCE_NOTE, exportToHost, type HostLink } from '@vostok/export/makerlab';
 import { coverDataUrl, cutExport, cutFileStem, cutZip, readmeText } from './export/makerlabArtifacts';
-import { build, restartEngine } from './engine/engine';
+import { build } from './engine/engine';
 import { mergeBatch, sheetOf, sheetsClause } from './engine/batch';
 import type { BuildInput, BuildOutput, KeyringSpec } from './engine/types';
 import { coerceValues, defaultsOf, type TemplateDef, type Values } from './templates';
@@ -71,10 +70,6 @@ const PROJECT = { app: 'laser-studio', keys: ['template', 'values'] } as const;
 
 /** One build as the screen shows it: what the template asked for, and what the worker made of it. */
 interface Built { input: BuildInput; output: BuildOutput }
-
-/** A build still running after this long is stuck, not slow: the slowest design takes about two
- *  seconds. It counts as failed, and the worker it is stuck in is replaced. */
-const BUILD_TIMEOUT_MS = 60_000;
 
 /** The next painted frame, or a quarter of a second, whichever comes first: a page that is not
  *  painting (a tab in the background) gets no frame at all, and must not stop building for it. */
@@ -149,9 +144,10 @@ export function createEditor(opts: EditorOptions): HTMLElement {
   // One build at a time, at most one more waiting behind it, always from the values as they are
   // when it starts; a burst of edits within 120 ms is one build. `settled()` is the design on
   // screen, for the export.
+  // A worker that never answers is the engine's to give up on (`build`'s deadline grows with the
+  // run), so the loop itself sets no time limit.
   const loop = buildLoop<Built>({
     debounceMs: 120,
-    timeoutMs: BUILD_TIMEOUT_MS,
     run: async () => {
       // One painted frame before the build starts, so the chip is on screen before any
       // synchronous template work can hold the main thread.
@@ -173,9 +169,6 @@ export function createEditor(opts: EditorOptions): HTMLElement {
       describe(output);
     },
     onError: (err) => {
-      // The worker is still busy with the build that timed out: every build after it would
-      // queue behind it, so it goes, and the next build starts a fresh one.
-      if (err instanceof BuildTimeoutError) restartEngine();
       status.set(`Could not build it: ${err.message}`, 'error');
       console.error(err);
     },
