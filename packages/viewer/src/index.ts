@@ -599,12 +599,22 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     return true;
   }
 
-  function castAt(clientX: number, clientY: number) {
-    if (partMeshes.length === 0) return null;
+  /** Aim the raycaster from the camera through a point on the stage. The camera's world matrix
+   *  is brought up to date first: a rebuild or a view moves the camera, and only the next frame
+   *  would update it, so a pick in between looked from where the camera had been. */
+  function aimAt(clientX: number, clientY: number) {
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    camera.updateMatrixWorld();
     raycaster.setFromCamera(pointer, camera);
+  }
+
+  function castAt(clientX: number, clientY: number) {
+    if (partMeshes.length === 0) return null;
+    aimAt(clientX, clientY);
+    // The parts too: seating, an offset or a pose moves them, and the next frame would place them.
+    root.updateMatrixWorld();
     return raycaster.intersectObjects(partMeshes.filter(drawn), false)[0] ?? null;
   }
 
@@ -617,10 +627,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   const dragPlane = new THREE.Plane();
   const dragHit = new THREE.Vector3();
   function pickOnPlane(clientX: number, clientY: number, value: number, axis: 'z' | 'y' = 'z'): [number, number, number] | null {
-    const rect = renderer.domElement.getBoundingClientRect();
-    pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(pointer, camera);
+    aimAt(clientX, clientY);
     if (axis === 'z') dragPlane.set(new THREE.Vector3(0, 0, 1), -(value + root.position.z));
     else dragPlane.set(new THREE.Vector3(0, 1, 0), -(value + root.position.y));
     if (!raycaster.ray.intersectPlane(dragPlane, dragHit)) return null;

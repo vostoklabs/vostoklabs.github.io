@@ -16,3 +16,8 @@ export const RED: [number, number, number] = [200, 10, 10];
 
 /** Three parts of three colours, one inside another's reach: what the tests pick and frame. */
 export const PARTS = [tetra(-10, -5, 0, 20, RED), tetra(-2, -2, 1, 6.5, [20, 200, 30]), tetra(4, 4, 2, 3, [250, 250, 250])];
+
+/** Where PARTS are on the 800 x 600 stage once a viewer with no options has framed them: the big
+ *  red part (0), and the small white one beside it (2). The green one (1) is hidden behind them. */
+export const RED_AT = [320, 300] as const;
+export const WHITE_AT = [420, 360] as const;

@@ -27,7 +27,7 @@
 */
 import * as THREE from 'three';
 import { installPage } from './support/page';
-import { PARTS, RED, tetra } from './support/parts';
+import { PARTS, RED, RED_AT, tetra, WHITE_AT } from './support/parts';
 
 const page = installPage();
 const { createViewer } = await import('../src/index');
@@ -158,9 +158,6 @@ async function step(name: string, v: Viewer, act: () => unknown, extra?: () => R
   };
 }
 
-/** Where the framed parts are on the stage: the big red one, and the small white one beside it. */
-const RED_AT = [320, 300] as const;
-const WHITE_AT = [420, 360] as const;
 const part = (i: number | null) => (i === null ? 'none' : String(i));
 
 /** A click: down and up on the same spot. */

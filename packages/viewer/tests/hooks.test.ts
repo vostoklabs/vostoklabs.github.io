@@ -9,7 +9,7 @@
 */
 import * as THREE from 'three';
 import { installPage } from './support/page';
-import { PARTS, RED, tetra } from './support/parts';
+import { PARTS, RED, RED_AT, tetra, WHITE_AT } from './support/parts';
 
 const page = installPage();
 const { createViewer } = await import('../src/index');
@@ -44,10 +44,10 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   check('default: the controls and the renderer are reachable', v.controls.object === v.camera && v.renderer.domElement === (canvas as unknown));
   v.setParts(PARTS);
   check('default: every part sits in the model group itself', v.partMeshes().every((m) => m.parent === v.root) && v.partMeshes().length === 3);
-  const hit = v.pickPart(400, 300);
+  const hit = v.pickPart(...RED_AT);
   v.highlightParts([0, 1, 2].filter((i) => i !== hit));
-  page.pointer('pointerdown', 400, 300, { shiftKey: true });
-  page.pointer('pointerup', 400, 300, { shiftKey: true });
+  page.pointer('pointerdown', ...RED_AT, { shiftKey: true });
+  page.pointer('pointerup', ...RED_AT, { shiftKey: true });
   check('default: a shift-click selects the one part, like any click', hit !== null && emissive(v).filter((e) => e > 0).length === 1, emissive(v).join());
   check('default: no outline is drawn round a selection', (v.highlightPart(0), !outlinesOf(v).length));
   const before = page.log.length;
@@ -160,9 +160,9 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   v.setParts(PARTS, true);
   const picks: (number | null)[] = [];
   v.onPartPick((i) => picks.push(i));
-  const hit = v.pickPart(400, 300);
-  page.pointer('pointerdown', 400, 300);
-  page.pointer('pointerup', 400, 300);
+  const hit = v.pickPart(...RED_AT);
+  page.pointer('pointerdown', ...RED_AT);
+  page.pointer('pointerup', ...RED_AT);
   v.highlightParts([0, 2]);
   check('highlightParts: every part named glows', emissive(v).map((e) => (e > 0 ? 1 : 0)).join() === '1,0,1', emissive(v).join());
   check('outline: an edge outline on each selected part, drawn last', outlinesOf(v).length === 2
@@ -170,21 +170,21 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   v.clearHighlight();
   check('outline: gone with the selection', outlinesOf(v).length === 0);
   if (hit !== null) {
-    page.pointer('pointerdown', 400, 300);
-    page.pointer('pointerup', 400, 300);
+    page.pointer('pointerdown', ...RED_AT);
+    page.pointer('pointerup', ...RED_AT);
     v.highlightParts([...[0, 1, 2].filter((i) => i !== hit)]);
-    page.pointer('pointerdown', 400, 300, { shiftKey: true });
-    page.pointer('pointerup', 400, 300, { shiftKey: true });
+    page.pointer('pointerdown', ...RED_AT, { shiftKey: true });
+    page.pointer('pointerup', ...RED_AT, { shiftKey: true });
     check('multiSelect: shift-click adds a part to the selection', emissive(v).every((e) => e > 0), emissive(v).join());
-    page.pointer('pointerdown', 400, 300, { shiftKey: true });
-    page.pointer('pointerup', 400, 300, { shiftKey: true });
+    page.pointer('pointerdown', ...RED_AT, { shiftKey: true });
+    page.pointer('pointerup', ...RED_AT, { shiftKey: true });
     check('multiSelect: and takes it out again', emissive(v).filter((e) => e > 0).length === 2 && emissive(v)[hit] === 0, emissive(v).join());
-    page.pointer('pointerdown', 400, 300);
-    page.pointer('pointerup', 400, 300);
+    page.pointer('pointerdown', ...RED_AT);
+    page.pointer('pointerup', ...RED_AT);
     check('multiSelect: a plain click selects one', emissive(v).filter((e) => e > 0).length === 1);
     check('the pick callback is told the part clicked', picks.every((p) => p === hit), picks.join());
   } else {
-    check('the centre of the stage hits a part', false, 'nothing under the pointer');
+    check('the red part is under the pointer', false, 'nothing under the pointer');
   }
   v.dispose();
 }
@@ -209,6 +209,23 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   const shown = draws();
   v.setPartVisible(2, false);
   check('outline: hidden with its part', shown - draws() === 2, 'the part and its outline both left out of the frame');
+  v.dispose();
+}
+{
+  // A pick looks from where the camera is now: one made after a rebuild has framed the parts,
+  // before the next frame is drawn, finds what the new view puts under the pointer.
+  const v = createViewer(stage);
+  page.frame();
+  v.setParts(PARTS, true);
+  const before = [v.pickPart(...RED_AT), v.pickPart(...WHITE_AT)];
+  const planeBefore = v.pickOnPlane(...RED_AT, 2, 'z');
+  page.frame();
+  const planeAfter = v.pickOnPlane(...RED_AT, 2, 'z');
+  check('picks: before the next frame, from the camera where it is now', before.join() === '0,2', before.join());
+  check('pickOnPlane: the same point before the next frame as after it', !!planeBefore && !!planeAfter && planeBefore.every((c, i) => near(c, planeAfter[i]!)),
+    `${planeBefore?.map((c) => c.toFixed(3))} then ${planeAfter?.map((c) => c.toFixed(3))}`);
+  v.setPartOffset(2, [0, 0, 40]);
+  check('picks: a part slid away is not under the pointer before the next frame either', v.pickPart(...WHITE_AT) !== 2, String(v.pickPart(...WHITE_AT)));
   v.dispose();
 }
 
@@ -304,20 +321,19 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
   const v = createViewer(stage);
   v.setParts(PARTS, true);
   page.frame();
-  const onWhite = [420, 360] as const; // the small white part, framed
   const picks: (number | null)[] = [];
   v.onPartPick((i) => picks.push(i));
-  const shown = v.pickPart(...onWhite);
+  const shown = v.pickPart(...WHITE_AT);
   v.setPartVisible(2, false);
-  page.pointer('pointerdown', ...onWhite);
-  page.pointer('pointerup', ...onWhite);
-  check('hidden: a hidden part is not picked', shown === 2 && v.pickPart(...onWhite) !== 2 && picks.length === 1 && picks[0] !== 2,
-    `${shown}, then ${v.pickPart(...onWhite)}; a tap told ${picks.join()}`);
+  page.pointer('pointerdown', ...WHITE_AT);
+  page.pointer('pointerup', ...WHITE_AT);
+  check('hidden: a hidden part is not picked', shown === 2 && v.pickPart(...WHITE_AT) !== 2 && picks.length === 1 && picks[0] !== 2,
+    `${shown}, then ${v.pickPart(...WHITE_AT)}; a tap told ${picks.join()}`);
   v.setPartVisible(2, true);
   v.layer('top').visible = false;
   v.setParts(PARTS.map((p, i) => (i === 2 ? { ...p, layer: 'top' } : p)));
   page.frame();
-  check('hidden: nor is a part in a hidden layer', v.pickPart(...onWhite) !== 2, String(v.pickPart(...onWhite)));
+  check('hidden: nor is a part in a hidden layer', v.pickPart(...WHITE_AT) !== 2, String(v.pickPart(...WHITE_AT)));
   v.layer('top').visible = true;
 
   // The big red part hidden: the cover and the thumbnail frame the other two.
