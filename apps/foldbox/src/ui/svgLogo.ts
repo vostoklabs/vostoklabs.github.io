@@ -28,7 +28,7 @@ const NOTHING_ON = 'Nothing is switched on, so there is no logo to put on the bo
  * with the file as a whole.
  *
  * Flattened first: a `<style>` block or a `style=""` attribute is read through the CSSOM, and
- * under the MakerLab host's `style-src 'self'` that read comes back empty, so an Illustrator
+ * under a host whose policy is `style-src 'self'` that read comes back empty, so an Illustrator
  * outline drawing would trace as a solid blob. Attributes are the one thing no policy blocks.
  * Every build, one code path: on the public site the result is the same paint either way.
  *

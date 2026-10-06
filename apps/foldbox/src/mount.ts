@@ -124,8 +124,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   /* The faces the logo offers, declared to the document from the SAME files `getFont` reads
      the outlines from, so the font tiles preview in them. Not `@vostok/fonts/fonts.css`: it
      declares every face, and the offline build would then carry each one twice, once for the
-     sheet and once for the outlines. Declared through the FontFace API, which the MakerLab
-     host's `style-src 'self'` lets through where it refuses an inline <style>.
+     sheet and once for the outlines. Declared through the FontFace API, which a host whose
+     policy is `style-src 'self'` lets through where it refuses an inline <style>.
      `document.fonts` outlives the container a host clears, so the teardown takes them away. */
   cleanups.push(installFontFaces(LOGO_FONTS));
 

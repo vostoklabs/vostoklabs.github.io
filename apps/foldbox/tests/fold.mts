@@ -243,7 +243,7 @@ for (const [L, W, H] of SIZES) {
   //
   // Nothing above tests this. A tab shortened to nothing still "fits inside its slot
   // with clearance", still straddles the ply, still gives four slots — and the box
-  // springs open in the user's hands. The tab length was cut on 2026-09-19 to stop it
+  // springs open in the user's hands. The tab length was cut once to stop it
   // protruding so far; this is the floor it may not be cut through.
   const innerXs = [...new Set(innerNet.outline.map((q) => +q[0].toFixed(4)))].sort((a, b) => a - b);
   const protrusion = innerXs[1]! - innerXs[0]!;

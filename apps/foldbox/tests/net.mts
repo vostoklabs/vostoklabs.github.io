@@ -1,8 +1,7 @@
 // Does the derivation actually hold? Run with `pnpm --filter foldbox test:net`.
 //
-// The extremes here are not arbitrary: 200x20x200, 50x50x8 and 60x60x60 are exactly
-// the cases that broke every published carton formula when they were checked, so any
-// style that survives them is on firmer ground than the standards are.
+// The extremes here are not arbitrary: 200x20x200, 50x50x8 and 60x60x60 are the cases
+// that broke the first formulas we tried, so every style is held to them.
 
 import { solve } from '../src/geometry/solve';
 import { buildNet } from '../src/geometry/net';

@@ -234,13 +234,13 @@ for (const style of STYLES) {
           const wantSide = end === 'left' ? -1 : end === 'right' ? 1 : Math.sign(off.x);
           ok(off.x * wantSide > 0, `${tag}: the slot is on the wrong end`);
 
-          // ISO 15348's one hard number, measured on the folded part rather than
-          // assumed from the net: no closer than 4 mm to the edge it hangs from.
+          // The slot's clearance, measured on the folded part rather than assumed
+          // from the net: no closer than 4 mm to the edge it hangs from.
           const tip = wantSide > 0 ? host.box.max.x : host.box.min.x;
           const slotEdge = wantSide > 0 ? Math.max(...ring.map((v) => v.x)) : Math.min(...ring.map((v) => v.x));
           ok(
             Math.abs(tip - slotEdge) >= 3.9,
-            `${tag}: the slot comes within ${Math.abs(tip - slotEdge).toFixed(1)} mm of the tip — ISO 15348 wants 4`,
+            `${tag}: the slot comes within ${Math.abs(tip - slotEdge).toFixed(1)} mm of the tip, not 4`,
           );
         }
 
