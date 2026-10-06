@@ -4,6 +4,7 @@
 // of text per row of keys. This turns the two into what the build reads: one slot per cell of the
 // grid in reading order — a letter, a symbol, a key with nothing printed on it, or no key at all —
 // plus the grid's width. Pure, so it is tested without a browser (tests/block-layout.test.ts).
+import { isSymbolChar } from '@vostok/ui-kit/symbol-rules';
 import type { BlockOrientation, BlockSlot, BlockStyle, BlockTexture } from '../types';
 import { lookOf, lookRings, type SymbolLook } from '../image/symbolRings';
 
@@ -12,11 +13,10 @@ export type BlockLayout = 'row' | 'column' | 'grid' | 'wasd' | 'arrows' | 'custo
 /** The largest grid the Rows and Columns steppers offer. */
 export const GRID_MAX = 6;
 
-/** A symbol stands in the text as one private-use character (plane 15/16), the way the rest of
- *  the house's symbol fields carry them, so a row of keys is still just a string. */
-export function isSymbolChar(ch: string): boolean {
-  return (ch.codePointAt(0) ?? 0) >= 0xf0000;
-}
+/* A symbol stands in the text as one private-use character (plane 15/16), the way the rest of
+   the house's symbol fields carry them, so a row of keys is still just a string. Which character
+   is one is the kit's rule, from the subpath that loads no DOM; handed on for the page. */
+export { isSymbolChar };
 
 /** What a symbol character prints: a Lucide icon by name, or rings already traced (a library
  *  symbol, or an SVG of your own), normalised like `parseSvg`'s: centred, longest side 1.
