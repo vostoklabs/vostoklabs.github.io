@@ -131,7 +131,7 @@ export interface Slit {
 
 /** A logo, before it is placed: closed rings and open lines in a UNIT box — centred on
  *  the origin, longest side exactly 1, Y-up. Produced by the UI from text or an SVG
- *  (`ui/artwork.ts`), consumed by `placeMarks`, which scales it onto a face. Keeping it
+ *  (`ui/artwork.ts`, `ui/svgLogo.ts`), consumed by `placeMarks`, which scales it onto a face. Keeping it
  *  unitless here is what lets the solver stay synchronous: fonts load asynchronously,
  *  and the net never waits on one. */
 export interface Artwork {

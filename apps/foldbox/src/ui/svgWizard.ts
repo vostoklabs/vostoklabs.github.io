@@ -17,7 +17,7 @@
  *    the stroke, and that is also why an outline has nothing to print as a second colour.
  */
 import { openSvgImport, themeColor, type SvgImportChoice, type SvgImportTrace } from '@vostok/ui-kit';
-import { describeSvg, svgArtwork, type SvgModes } from './artwork';
+import { describeSvg, svgArtwork, type SvgModes } from './svgLogo';
 import type { Artwork, Poly } from '../types';
 
 /** The preview box. The artwork spans roughly ±0.5, so this is the art with air round it. */

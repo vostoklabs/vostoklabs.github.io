@@ -62,7 +62,8 @@ import {
 import { OP_COLOR } from './export/paths';
 import { solve, fitToSheet, machineById, sheetById, stockById, type SizeLimits } from './geometry/solve';
 import { logoFaces } from './geometry/marks';
-import { readText, svgArtwork, textArtwork } from './ui/artwork';
+import { readText, textArtwork } from './ui/artwork';
+import { svgArtwork } from './ui/svgLogo';
 import { openSvgWizard } from './ui/svgWizard';
 import { STYLES, styleEcma, styleMeta, insideDims, hangModes } from './geometry/styles';
 import { buildRig, type FoldRig } from './fold/rig';
