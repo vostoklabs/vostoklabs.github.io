@@ -1,6 +1,6 @@
 /*
-  The keycap's export golden: fifty settings and the alphabet set's twenty-six letters, and every
-  file the export writes for each one.
+  The keycap's export golden: fifty settings, the alphabet set's twenty-six letters and two caps
+  with a second legend, and every file the export writes for each one.
 
     node apps/keycap-generator/tests/export-golden.test.mjs            (part of pnpm test)
     node apps/keycap-generator/tests/export-golden.test.mjs --record   write tests/golden/export-golden.json again
@@ -112,6 +112,7 @@ async function loadApp(which) {
         "export { objMaterials, buildMtl } from '@vostok/export';",
         "export { BoxGeometry } from 'three';",
         "export { capParts, orientForPrint, blankParts, fitTestParts, profileTag, capFileName, blankFileName, fitTestFileName, ALPHABET, ALPHABET_MTL } from './src/exportParts.js';",
+        "export { carveCap } from './src/rebuild.js';",
       ].join('\n'),
       resolveDir: APP,
       sourcefile: 'export-golden-entry.js',
@@ -232,6 +233,15 @@ for (const ch of app.ALPHABET) {
   CASES.push({ id: `AZ-S-1u-roboto-${ch}`, profile: S, size: '1u', legend: { kind: 'alphabet', text: ch, font: 'roboto' } });
 }
 
+/* Two legends on one cap, as the paid Double legends carve them: the first nudged up and left, a
+   second "A" down and right. In the first legend's colour the second shares its filament (two in
+   all); in a colour of its own it takes a third. */
+const secondLegend = (color) => ({ legend: letter('A', 'roboto'), color, placement: { sizeMM: 4, depth: 0.5, rotationDeg: 0, offsetX: 3.5, offsetY: -3.5 } });
+CASES.push(
+  { id: 'S-1u-copy+A-legend-colour', profile: S, size: '1u', legend: lucide('copy'), mm: 5, offx: -3, offy: 3, extra: secondLegend('#f7f7f5') },
+  { id: 'S-1u-copy+A-third-colour', profile: S, size: '1u', legend: lucide('copy'), mm: 5, offx: -3, offy: 3, extra: secondLegend('#e53e3e') },
+);
+
 // ------------------------------------------------------------------ the app's state, per case
 const index = JSON.parse(readFileSync(join(APP, 'public', 'keycaps', 'index.json'), 'utf8'));
 const DEFAULTS = { depth: 0.5, rot: 0, offx: 0, offy: 0, stemTol: 0, capColor: '#161616', logoColor: '#f7f7f5', walls: 'arachne' };
@@ -310,7 +320,7 @@ async function harnessFor(app) {
     const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
     const widthMM = o.mm ?? Math.round(room * 0.5 * 10) / 10;
     const homing = !!o.homing && profile.homingBump !== false;
-    const bodies = await app.buildBodies(shell, meta, legend, {
+    const opts = {
       widthMM,
       depth: o.depth,
       centerX: meta.center[0] + o.offx,
@@ -321,9 +331,31 @@ async function harnessFor(app) {
       singleColor: !!o.single,
       homingBump: homing,
       homingBumpGeom: homingBumpGeom,
-    });
+    };
+    // A second legend (the paid Double legends) is carved on the cap the first left, with its
+    // placement as mount.js's placementOpts() gives it, through the rebuild's own carveCap.
+    const extras = c.extra
+      ? [{
+        legend: await legendFor(c.extra.legend, entry.unit),
+        opts: {
+          ...opts,
+          widthMM: c.extra.placement.sizeMM,
+          depth: c.extra.placement.depth,
+          centerX: meta.center[0] + c.extra.placement.offsetX,
+          centerY: meta.center[1] + c.extra.placement.offsetY,
+          rotationDeg: c.extra.placement.rotationDeg,
+          homingBump: false,
+          homingBumpGeom: null,
+        },
+      }]
+      : [];
+    const bodies = extras.length
+      ? await app.carveCap(shell, meta, legend, opts, extras)
+      : await app.buildBodies(shell, meta, legend, opts);
     const parts = app.orientForPrint(
-      app.capParts(bodies, { capColor: o.capColor, logoColor: o.logoColor, through: !!o.through, stem }),
+      app.capParts(bodies, {
+        capColor: o.capColor, logoColor: o.logoColor, through: !!o.through, stem, extraColors: c.extra ? [c.extra.color] : [],
+      }),
       profile,
       meta,
     );
