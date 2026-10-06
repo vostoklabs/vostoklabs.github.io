@@ -108,7 +108,9 @@ async function loadApp(which) {
         "export { applyStemClearance } from './src/stemClearance.js';",
         "export { buildFitTestRow, computeFitTestLadder, FIT_TEST_STEP_MM, FIT_TEST_FONT_ID } from './src/fitTest.js';",
         "export { keycapThreeMF } from './src/export3mf.js';",
-        "export { keycapObjMtl } from './src/exportObj.js';",
+        "export { keycapObjMtl, keycapObjWriter } from './src/exportObj.js';",
+        "export { objMaterials, buildMtl } from '@vostok/export';",
+        "export { BoxGeometry } from 'three';",
         "export { capParts, orientForPrint, blankParts, fitTestParts, profileTag, capFileName, blankFileName, fitTestFileName, ALPHABET, ALPHABET_MTL } from './src/exportParts.js';",
       ].join('\n'),
       resolveDir: APP,
@@ -341,6 +343,12 @@ async function harnessFor(app) {
       files[name] = hash(text == null ? bytes : steady(text));
     }
     const { obj, mtl } = app.keycapObjMtl(parts, { mtlFileName });
+    // The same parts, a part at a time through the writer a keyboard set streams its plates
+    // with, must give the same OBJ and MTL.
+    const materials = app.objMaterials();
+    const writer = app.keycapObjWriter({ mtlFileName, materials });
+    for (const p of parts) writer.add(p);
+    if (writer.text !== obj || app.buildMtl(materials) !== mtl) streamDiffers.push(c.id);
     return {
       files,
       obj: hash(steady(obj)),
@@ -349,6 +357,9 @@ async function harnessFor(app) {
     };
   };
 }
+
+/** Cases whose parts, streamed through keycapObjWriter, did not give keycapObjMtl's files. */
+const streamDiffers = [];
 
 // ------------------------------------------------------------------ what a file is
 const hash = (data) => createHash('sha256').update(data).digest('hex').slice(0, 16);
@@ -514,6 +525,42 @@ if (differs.length) fail(`the app's manifold build writes different files from n
 else {
   pass++;
   console.log(`the app's manifold build and npm's manifold-3d write the same files for ${PARITY.length} cases (${paritySeconds} s)`);
+}
+
+// ------------------------------------------------------------------ the keyboard set's writer
+// The set streams its plates through keycapObjWriter, cap by cap, on one materials table for the
+// whole export. Every case above went through it too and must write keycapObjMtl's files.
+if (streamDiffers.length) fail(`streamed through keycapObjWriter, these cases write a different OBJ or MTL: ${streamDiffers.join(', ')}`);
+else {
+  pass++;
+  console.log(`keycapObjWriter, a part at a time, writes keycapObjMtl's OBJ and MTL for every case`);
+}
+{
+  // Two plates on one table: a cap and a legend in the cap's own colour on slots 1 and 2, then a
+  // second legend in a third colour on slot 3.
+  const box = (x, w) => new app.BoxGeometry(w, w, 2).translate(x, 0, 1);
+  const materials = app.objMaterials();
+  const plate1 = app.keycapObjWriter({ mtlFileName: 'set.mtl', materials });
+  const plate2 = app.keycapObjWriter({ mtlFileName: 'set.mtl', materials });
+  const emptyAtFirst = plate1.isEmpty && plate2.isEmpty;
+  plate1.add({ name: 'k1_A_cap', color: '#161616', extruder: 1, geom: box(0, 18) });
+  plate1.add({ name: 'k1_A_legend', color: '#161616', extruder: 2, geom: box(0, 6) });
+  plate2.add({ name: 'k2_B_cap', color: '#161616', extruder: 1, geom: box(30, 18) });
+  plate2.add({ name: 'k2_B_legend2', color: '#e53e3e', extruder: 3, geom: box(30, 6) });
+  const mtl = app.buildMtl(materials);
+  const names = [...mtl.matchAll(/^newmtl (\S+)$/gm)].map((m) => m[1]).join(',');
+  const kd = [...mtl.matchAll(/^Kd (.+)$/gm)].map((m) => m[1]);
+  const headed = [plate1.text, plate2.text].every((t) => t.startsWith('# Vostok Labs - Keycap') && /^# Build: /m.test(t) && /^mtllib set\.mtl$/m.test(t));
+  const ok = emptyAtFirst && !plate1.isEmpty && !plate2.isEmpty
+    && names === 'filament1,filament2,filament3' && kd[0] === kd[1] && kd[2] !== kd[0]
+    && /usemtl filament1[\s\S]*usemtl filament2/.test(plate1.text) && /usemtl filament1[\s\S]*usemtl filament3/.test(plate2.text)
+    && headed;
+  if (ok) {
+    pass++;
+    console.log('two plates on one materials table: a material per filament slot (one colour on two slots stays two), empty until a part lands, each with the provenance header');
+  } else {
+    fail(`two plates on one materials table: empty at first ${emptyAtFirst}, materials ${names}, Kd ${kd.join(' / ')}, headers ${headed}`);
+  }
 }
 
 console.log(
