@@ -23,7 +23,6 @@
     "@vostok/trace": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "d3-contour": "^4.0.2",
-    "fflate": "^0.8.2",
     "lucide": "^1.21.0",
     "manifold-3d": "^3.5.1",
     "three": "^0.171.0",

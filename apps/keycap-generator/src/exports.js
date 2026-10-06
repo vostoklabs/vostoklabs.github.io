@@ -14,13 +14,13 @@
  *   ctx.pro()                  the paid panel, or null
  *   ctx.begin(), ctx.end()     take and give back the rebuild lock: a batch must not share the
  *                              engine with a preview rebuild; ctx.busy() says it is taken
+ *   ctx.settled()              the carve that matches the panel, once it is made (rebuild.js)
  *   ctx.flushStem()            apply a stem-fit step still waiting for its frame
  *   ctx.state()                what the controls say now (see `exportState` in mount.js)
  */
 import { BRAND } from '@vostok/brand';
-import { downloadFile, textToArrayBuffer } from '@vostok/export';
+import { buildZip, downloadFile, textToArrayBuffer } from '@vostok/export';
 import { licenseAfterExport, toast } from '@vostok/ui-kit';
-import { zipSync } from 'fflate';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
 import { MAKERLAB, isReady as mlReady, can as mlCan, sdkExport, sdkToast } from 'virtual:makerlab';
@@ -32,6 +32,7 @@ import {
   capParts, orientForPrint, blankParts, fitTestParts, capFileName, blankFileName, fitTestFileName,
   alphabetFileName, ALPHABET, ALPHABET_MTL, alphabetEntryName,
 } from './exportParts.js';
+import { CarveDeclined } from './rebuild.js';
 
 /* The licence, on the one export path a file-level mark cannot reach: a comment in an OBJ
    is not metadata, so on the embedded route the licence rides in the export description. */
@@ -64,12 +65,19 @@ export function createExports(ctx) {
     return walls === 'classic' ? {} : { wall_generator: walls };
   };
 
-  /** The parts one set of carved bodies exports, at the stem's current fit, laid out the way
-   *  the profile prints. */
-  function buildExportParts(bodies, capColor, logoColor, through) {
+  /**
+   * The parts one carve exports, at the stem's current fit, laid out the way the carve's profile
+   * prints. A carve brings the cap, the profile and the shine-through setting it was made with,
+   * so a file can never pair one cap with another profile's orientation; the colours and the
+   * stem's fit are read now (neither is carved).
+   *
+   * @param {{ bodies: object, profile: object, meta: object, opts: { through: boolean } }} carve
+   */
+  function buildExportParts(carve, { capColor, logoColor }) {
     ctx.flushStem();
-    const { extraColors, stem, profile, meta } = ctx.state();
-    return orientForPrint(capParts(bodies, { capColor, logoColor, through, extraColors, stem }), profile, meta);
+    const { extraColors, stem } = ctx.state();
+    const through = !!carve.opts.through;
+    return orientForPrint(capParts(carve.bodies, { capColor, logoColor, through, extraColors, stem }), carve.profile, carve.meta);
   }
 
   /**
@@ -151,6 +159,9 @@ export function createExports(ctx) {
    *  every other path in this app uses — provenance, the licence nudge, and the MakerLab vs
    *  browser branching all come for free (invariant 8). */
   async function exportFitTest() {
+    // A stem-fit step still waiting for its frame rebuilds the row first: the frame stops in a
+    // background tab, and a press just before the click must be the row that goes out.
+    ctx.flushStem();
     const { fitTestPieces: pieces, capColor, profileTag } = ctx.state();
     if (!pieces?.length) return;
     const n = pieces.length;
@@ -180,19 +191,31 @@ export function createExports(ctx) {
     // stage it owns this too — the keyboard set generates a board, not the cap behind it — so
     // it gets first refusal before the single-cap path runs.
     if (await ctx.pro()?.handleExport?.()) return;
-    const { bodies, legendName, profileTag, capColor, logoColor, through, single } = ctx.state();
-    if (!bodies) return;
-    const baseName = capFileName(legendName, profileTag);
+    // The cap the panel describes: a change made a moment ago is carved first, where this used
+    // to take whichever carve had finished last. One that cannot be carved is refused, in words,
+    // rather than answered with the cap from before it.
+    let carve;
+    try {
+      carve = await ctx.settled();
+    } catch (err) {
+      const msg = err instanceof CarveDeclined || err?.name === 'NothingBuiltError'
+        ? 'Nothing to export yet: pick a legend for the cap first.'
+        : 'Nothing exported: this legend could not be carved (try a simpler icon/letter or smaller size).';
+      setStatus(msg, 'err');
+      throw new Error(msg); // the export panel says it too
+    }
+    const { capColor, logoColor } = ctx.state();
+    const baseName = capFileName(carve.legend.name, carve.profileTag);
     // Counted from the parts rather than assumed to be two: a cap with a second legend in its
     // own colour is a three-filament print, and "assign two filaments" would be wrong advice
     // at the one moment the user is standing in front of the slicer.
-    const parts = buildExportParts(bodies, capColor, logoColor, through);
+    const parts = buildExportParts(carve, { capColor, logoColor });
     const filaments = new Set(parts.map((p) => p.extruder)).size;
     const count = ['no', 'one', 'two', 'three', 'four'][filaments] ?? String(filaments);
     await deliverModel(
       () => parts,
       baseName,
-      single
+      carve.opts.singleColor
         ? 'Exported 3MF ✓  Single-colour cap with an engraved legend, one filament.'
         : `Exported 3MF ✓  Open in your slicer and assign ${count} filaments.`,
       `Keycap in ${count} colour${filaments === 1 ? '' : 's'}, made with the Keycap Legend Generator.`
@@ -233,27 +256,35 @@ export function createExports(ctx) {
   }
 
   async function generateAlphabetSet() {
-    const { unit, meta, shell } = ctx.state();
-    if (unit !== 1 || !meta || !shell) return;
-    // Hold the regen lock so live preview rebuilds don't run Manifold concurrently.
-    if (!ctx.begin()) return;
+    if (ctx.state().unit !== 1 || !ctx.state().meta || !ctx.state().shell) return;
+    // A carve in progress finishes first (a press during one used to be dropped). Never awaited
+    // once the batch holds the loop: it would wait for the batch's own release.
+    await ctx.settled().catch(() => {});
 
-    const { fontId, opts, capColor, logoColor, through, profileTag } = ctx.state();
+    // The cap and the settings as they are now, for every letter: a change made during the
+    // batch is carved for the preview once the batch lets go, not half way through the set.
+    const { fontId, opts, capColor, logoColor, through, profileTag, unit, meta, shell, profile } = ctx.state();
+    if (unit !== 1 || !meta || !shell) return;
     const fontName = FONT_OPTIONS.find((f) => f.id === fontId)?.name || 'font';
-    alphabetBtn.disabled = true;
-    // Twenty-six carves. Same trap the paid keyboard set had: without this the only way out
-    // of a slow font was closing the tab.
-    let cancelled = false;
-    ctx.setBusy('generating…', () => { cancelled = true; });
-    const files = {};
     // Host path: one OBJ per letter, handed over as a multi-plate export. Every letter
     // shares the same two colours, so one MTL covers the whole set. Standalone path still
     // zips 26 of our own .3mf files.
     const toHost = MAKERLAB && mlReady() && mlCan('export');
+    const files = {};
     const plates = [];
     let plateMtl = '';
+    let cancelled = false;
 
+    // The batch holds the loop, so no preview rebuild runs Manifold beside it, and lets go in the
+    // `finally` whatever happens: a hold has no timeout, and one never released would leave every
+    // later export waiting for good. The loop's `busy` says nothing of a hold, so the button is
+    // this function's to disable.
+    if (!ctx.begin()) return;
     try {
+      alphabetBtn.disabled = true;
+      // Twenty-six carves. Same trap the paid keyboard set had: without this the only way out
+      // of a slow font was closing the tab.
+      ctx.setBusy('generating…', () => { cancelled = true; });
       for (let i = 0; i < ALPHABET.length; i++) {
         if (cancelled) break;
         const ch = ALPHABET[i];
@@ -264,9 +295,8 @@ export function createExports(ctx) {
         await new Promise((r) => setTimeout(r, 0)); // let the spinner/status paint
 
         const legend = parseLetter(ch, fontId, 1);
-        const now = ctx.state();
-        const bodies = await buildBodies(now.shell, now.meta, legend, opts);
-        const parts = buildExportParts(bodies, capColor, logoColor, through);
+        const bodies = await buildBodies(shell, meta, legend, opts);
+        const parts = buildExportParts({ bodies, profile, meta, opts: { through } }, { capColor, logoColor });
         if (toHost) {
           const { obj, mtl } = keycapObjMtl(parts, { mtlFileName: ALPHABET_MTL });
           plates.push(textToArrayBuffer(obj));
@@ -313,7 +343,7 @@ export function createExports(ctx) {
         }
       } else {
         // 3MFs are already deflated zips — store (level 0) rather than re-compress.
-        const zipped = zipSync(files, { level: 0 });
+        const zipped = buildZip(files, { level: 0 });
 
         if (host) {
           /*

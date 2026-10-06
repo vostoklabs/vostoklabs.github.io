@@ -281,9 +281,6 @@ importers:
       d3-contour:
         specifier: ^4.0.2
         version: 4.0.2
-      fflate:
-        specifier: ^0.8.2
-        version: 0.8.3
       lucide:
         specifier: ^1.21.0
         version: 1.25.0

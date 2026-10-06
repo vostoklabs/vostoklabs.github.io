@@ -34,10 +34,9 @@ import { BLANK_COVER } from '@vostok/export/makerlab';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadKeycap } from './keycap.js';
-import { parseLogo, logoFootprint } from './logo.js';
+import { parseLogo } from './logo.js';
 import { openSvgPreview } from './svgPreview.js';
 import { FONT_OPTIONS, importFontFile, parseLetter, loadBundledFonts } from './letter.js';
-import { buildBodies } from './geometry.js';
 import { initManifold, geomToManifold, manifoldToGeom, creaseNormals, getManifoldApi } from './manifold.js';
 import { applyStemClearance } from './stemClearance.js';
 import {
@@ -47,6 +46,7 @@ import { keycapThreeMF } from './export3mf.js';
 import { keycapObjMtl } from './exportObj.js';
 import { profileTag } from './exportParts.js';
 import { createExports, LICENSE_NOTE } from './exports.js';
+import { rebuildLoop } from './rebuild.js';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
@@ -429,7 +429,6 @@ export function mount(container, host) {
 
   cleanups.push(() => {
     cancelAnimationFrame(frame);
-    clearTimeout(regenTimer); // a queued rebuild would otherwise fire into a torn-down scene
     ensureExtraMeshes(0);     // pooled meshes carry a material each, which renderer.dispose() misses
     controls.dispose();
     buildPlate.dispose?.();
@@ -458,7 +457,6 @@ export function mount(container, host) {
    * @type {Array<{legend: object, placement: object, color: string}>}
    */
   let extraLegends = [];
-  let lastBodies = null;      // { keycapGeometry, logoGeometry, extraGeometries } for export
   let lastIconSelection = null;
   let currentMode = 'icon';
   let currentUnit = 1;        // size of the active keycap (drives the letter limit)
@@ -467,12 +465,13 @@ export function mount(container, host) {
   window.__app = {
     THREE, scene, camera, renderer, capMesh, logoMesh, stemMesh, keycapThreeMF, keycapObjMtl,
     get exportParts() {
-      return lastBodies
-        ? exportsApi.buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked)
+      const carve = loop.latest;
+      return carve
+        ? exportsApi.buildExportParts(carve, { capColor: $('capColor').value, logoColor: $('logoColor').value })
         : null;
     },
     get meta() { return meta; },
-    get lastBodies() { return lastBodies; },
+    get lastBodies() { return loop.latest?.bodies ?? null; },
     get shellGeometry() { return shellGeometry; },
     get stemGeometry() { flushStemApply(); return stemGeometry; },
   };
@@ -764,8 +763,7 @@ export function mount(container, host) {
     // to show.
     if (!baseStemGeometry) { fitTestControl.setValue('cap'); return; }
     fitTestActive = true;
-    printGroup.visible = false;
-    clearTimeout(regenTimer); // a queued rebuild would now decline anyway; do not leave it pending
+    printGroup.visible = false; // a carve already asked for declines when its turn comes
     setFitTestLock(true);
     fitTestSavedCamera = { position: camera.position.clone(), target: controls.target.clone() };
     if (exportBtn) exportBtn.textContent = FIT_TEST_EXPORT_LABEL;
@@ -1020,16 +1018,10 @@ export function mount(container, host) {
     };
   }
 
-  let regenTimer = null;
-  let running = false;
-  function scheduleRegen() {
-    clearTimeout(regenTimer);
-    regenTimer = setTimeout(doRegen, 200);
-  }
-
   /**
-   * Would `doRegen` actually rebuild anything? The guards from the top of it, hoisted so a
-   * caller can ask BEFORE handing it the busy chip.
+   * Would a rebuild carve anything now? A Pro mode owns the stage, Fit test is open, or there is
+   * no legend or no cap yet: then a change is not carved, and a carve already asked for declines
+   * quietly when its turn comes.
    *
    * `switchKeycap` turns the chip on and leaves it to the rebuild to turn off again. When the
    * rebuild declines — a Pro mode owns the stage, or there is no legend yet — nothing else
@@ -1043,108 +1035,114 @@ export function mount(container, host) {
     return !singleCapSuspended && !fitTestActive && !!currentLegend && !!meta && !!shellGeometry;
   }
 
-  async function doRegen() {
-    if (!canRegen()) return;
-    if (running) { scheduleRegen(); return; }
-    running = true;
-    setBusyState('generating…');
-    await new Promise((r) => setTimeout(r, 0)); // let the spinner paint
-
-    try {
-      const oneOpts = currentOpts();
-      let { keycapGeometry: capG, logoGeometry: logoG, surfaceVariation } =
-        await buildBodies(shellGeometry, meta, currentLegend, oneOpts);
-
-      // Each extra legend is the same carve again, run on the cap the PREVIOUS pass produced.
-      //
-      // Chaining rather than carving every legend against the original shell is what makes two
-      // legends that touch impossible to get wrong: pass 2 intersects a cap that has already
-      // had pass 1's material taken out of it, so an overlapping sliver belongs to legend 1 and
-      // the two bodies can never claim the same space in the exported file. Carving both
-      // against the shell would hand the slicer two solids sharing a volume.
-      const extraG = [];
-      for (const layer of extraLegends) {
-        const r = await buildBodies(capG, meta, layer.legend, placementOpts(layer.placement));
-        capG.dispose(); // superseded by the cap this pass carved
-        capG = r.keycapGeometry;
-        extraG.push(r.logoGeometry);
-        surfaceVariation = Math.max(surfaceVariation, r.surfaceVariation);
-      }
-
-      // Preview meshes get creased normals (cosmetic); export keeps the clean indexed solids.
-      capMesh.geometry?.dispose();
-      logoMesh.geometry?.dispose();
-      lastBodies?.keycapGeometry?.dispose();
-      lastBodies?.logoGeometry?.dispose();
-      for (const g of lastBodies?.extraGeometries ?? []) g?.dispose();
-      capMesh.geometry = creaseNormals(capG);
-      // Single-colour mode returns no legend body — hide the legend mesh; the icon is now a
-      // recess carved into the cap geometry itself.
-      if (logoG) {
-        logoMesh.geometry = creaseNormals(logoG);
-        logoMesh.visible = true;
-      } else {
-        logoMesh.geometry = undefined;
-        logoMesh.visible = false;
-      }
-      ensureExtraMeshes(extraG.length);
-      extraG.forEach((g, i) => {
-        const { mesh, mat } = extraLegendMeshes[i];
-        mesh.geometry?.dispose();
-        mesh.geometry = g ? creaseNormals(g) : undefined;
-        mesh.visible = !!g;
-        mat.color.set(extraLegends[i].color);
-      });
-      updateStemMaterial();
-      lastBodies = { keycapGeometry: capG, logoGeometry: logoG, extraGeometries: extraG };
-
-      // One footprint per legend, so the "it won't fit" warning covers the second one too —
-      // it is the layer most likely to be pushed out to an edge.
-      const fps = [logoFootprint(currentLegend.box, oneOpts.widthMM)];
-      for (const layer of extraLegends) {
-        fps.push(logoFootprint(layer.legend.box, layer.placement.sizeMM));
-      }
-      const mm = (fp) => `${fp.w.toFixed(1)}×${fp.h.toFixed(1)} mm`;
-      const word = fps.length > 1 ? 'legends' : 'legend';
-      const sizes = fps.map(mm).join(' + ');
-      const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
-      const tooBig = fps.findIndex((fp) => Math.max(fp.w, fp.h) > room);
-
-      if (tooBig >= 0) {
-        const which = fps.length > 1 ? `Legend ${tooBig + 1}` : 'Legend';
-        setStatus(`Heads up: ${which.toLowerCase()} (${mm(fps[tooBig])}) is larger than the top (~${room.toFixed(1)} mm) and will be clipped.`, 'warn');
-      } else if (surfaceVariation > 0.4) {
-        setStatus(`Ready · ${word} ${sizes}. Note: top is curved (${surfaceVariation.toFixed(1)} mm). Keep it small so it stays flush.`, 'warn');
-      } else if ($('through').checked) {
-        setStatus(`Ready · ${word} ${sizes} · shine-through: legend + stem print in the legend filament (use transparent to light up).`);
-      } else if ($('single').checked) {
-        setStatus(`Ready · ${word} ${sizes} · single colour: legend engraved ${oneOpts.depth} mm deep, prints in one filament.`);
-      } else {
-        setStatus(`Ready · ${word} ${sizes} · ${oneOpts.depth} mm deep.`);
-      }
-    } catch (e) {
-      console.error(e);
-      setStatus('Could not generate this legend (try a simpler icon/letter or smaller size).', 'err');
-    } finally {
-      setBusyState(null);
-      running = false;
-    }
+  /** The single cap as a carve reads it (rebuild.js), or null when there is nothing to carve. */
+  function carveSettings() {
+    if (!canRegen()) return null;
+    return {
+      shell: shellGeometry,
+      meta,
+      profile: currentProfile,
+      profileTag: profileSlug(),
+      legend: currentLegend,
+      opts: currentOpts(),
+      extras: extraLegends.map((layer) => ({ legend: layer.legend, opts: placementOpts(layer.placement) })),
+    };
   }
 
-  /** The rebuild lock. A batch (the alphabet set, a paid set) takes it, so no preview rebuild
-   *  runs Manifold beside it, and gives it back to a rebuild of the current inputs. */
+  /** The carve on screen, whose geometry is freed when the next one replaces it. */
+  let shownCarve = null;
+  /** The busy chip is the rebuild's while it shows it: a batch or a paid mode may own it. */
+  let chipIsRebuilds = false;
+
+  const loop = rebuildLoop({
+    settings: carveSettings,
+    onStart: () => {
+      if (!canRegen()) return;
+      chipIsRebuilds = true;
+      setBusyState('generating…');
+    },
+    onShow: showCarve,
+    onFail: (e) => {
+      console.error(e);
+      setStatus('Could not generate this legend (try a simpler icon/letter or smaller size).', 'err');
+    },
+    onIdle: () => {
+      if (!chipIsRebuilds) return;
+      chipIsRebuilds = false;
+      setBusyState(null);
+    },
+  });
+  cleanups.push(() => loop.dispose()); // a queued rebuild would otherwise run into a torn-down scene
+
+  /** Something the cap is carved from changed: carve it again, 200 ms after the last change. */
+  function scheduleRegen() {
+    if (canRegen()) loop.request();
+  }
+
+  /** Carve it again now, with no wait: a new legend was picked. */
+  function regenNow() {
+    if (!canRegen()) return;
+    loop.request();
+    loop.flush();
+  }
+
+  /** A finished carve, on screen. */
+  function showCarve(carve) {
+    const { keycapGeometry: capG, logoGeometry: logoG, extraGeometries: extraG } = carve.bodies;
+    // Preview meshes get creased normals (cosmetic); export keeps the clean indexed solids.
+    capMesh.geometry?.dispose();
+    logoMesh.geometry?.dispose();
+    if (shownCarve) {
+      shownCarve.bodies.keycapGeometry?.dispose();
+      shownCarve.bodies.logoGeometry?.dispose();
+      for (const g of shownCarve.bodies.extraGeometries ?? []) g?.dispose();
+    }
+    capMesh.geometry = creaseNormals(capG);
+    // Single-colour mode returns no legend body — hide the legend mesh; the icon is now a
+    // recess carved into the cap geometry itself.
+    if (logoG) {
+      logoMesh.geometry = creaseNormals(logoG);
+      logoMesh.visible = true;
+    } else {
+      logoMesh.geometry = undefined;
+      logoMesh.visible = false;
+    }
+    ensureExtraMeshes(extraG.length);
+    extraG.forEach((g, i) => {
+      const { mesh, mat } = extraLegendMeshes[i];
+      mesh.geometry?.dispose();
+      mesh.geometry = g ? creaseNormals(g) : undefined;
+      mesh.visible = !!g;
+      mat.color.set(extraLegends[i].color);
+    });
+    updateStemMaterial();
+    shownCarve = carve;
+
+    const { diagnostics, ok } = carve.report;
+    if (diagnostics.length) setStatus(diagnostics[0].message, 'warn');
+    else setStatus(ok);
+  }
+
+  /** The rebuild lock. A batch (the alphabet set, a paid set) holds the loop, so no preview
+   *  rebuild runs Manifold beside it, and gives it back to a rebuild of the current inputs. */
+  let releaseBatch = null;
   const rebuildLock = {
+    /** Take the lock. False while a carve runs or another batch holds it. */
     begin() {
-      if (running) return false;
-      clearTimeout(regenTimer); // a queued preview rebuild must not run mid-batch
-      running = true;
+      const release = loop.hold();
+      if (!release) return false;
+      releaseBatch = release;
       return true;
     },
     end() {
-      if (!running) return; // already released — never schedule two rebuilds for one batch
-      running = false;
+      if (!releaseBatch) return; // already released — never schedule two rebuilds for one batch
+      const release = releaseBatch;
+      releaseBatch = null;
+      release();
       scheduleRegen(); // back to the live preview for the current inputs
     },
+    /** A batch holds the loop. */
+    held: () => !!releaseBatch,
   };
 
   // ---------------------------------------------------------------- legend sink
@@ -1194,7 +1192,7 @@ export function mount(container, host) {
       currentLegend = { ...parseLogo(await getText()), name };
       lastIconSelection = { el, getText, name };
       updateSizeMax();
-      doRegen();
+      regenNow();
     } catch (e) {
       console.error(e);
       setStatus(`Couldn't read “${name}”.`, 'err');
@@ -1281,6 +1279,9 @@ export function mount(container, host) {
     } catch (e) {
       console.error(e);
       currentLegend = null;
+      // The cap on screen is the previous legend's, which these letters no longer describe:
+      // an Export now says so instead of quietly sending it.
+      loop.invalidate();
       setStatus(e.message || 'Could not read this letter.', 'err');
     }
   }
@@ -1568,15 +1569,13 @@ export function mount(container, host) {
     }
   }
 
-  /** What an export reads, as the controls and the loaded cap say it now (exports.js). */
+  /** What an export reads, as the controls and the loaded cap say it now (exports.js). The
+   *  carved cap itself comes from the rebuild loop, settled. */
   function exportState() {
     return {
-      bodies: lastBodies,
-      legendName: currentLegend?.name,
       capColor: $('capColor').value,
       logoColor: $('logoColor').value,
       through: $('through').checked,
-      single: $('single').checked,
       extraColors: extraLegends.map((l) => l?.color),
       stem: stemGeometry,
       shell: shellGeometry,
@@ -1603,7 +1602,8 @@ export function mount(container, host) {
     pro: () => proPanel,
     begin: rebuildLock.begin,
     end: rebuildLock.end,
-    busy: () => running,
+    busy: rebuildLock.held,
+    settled: () => loop.settled(),
     flushStem: flushStemApply,
     state: exportState,
   });
@@ -1641,6 +1641,9 @@ export function mount(container, host) {
   }
 
   function setKeycap(kc) {
+    // A carve of the previous cap no longer describes what is on screen: dropped when it lands,
+    // and never handed to an export.
+    loop.invalidate();
     // Free everything tied to the previous cap before swapping references.
     shellGeometry?.dispose();
     if (stemGeometry && stemGeometry !== baseStemGeometry) stemGeometry.dispose();
@@ -1813,7 +1816,7 @@ export function mount(container, host) {
     if (pro) {
       // Any rebuild still queued will now decline, so the chip it was going to clear has to be
       // put away here — before the mode starts using it for progress of its own.
-      clearTimeout(regenTimer);
+      chipIsRebuilds = false;
       setBusyState(null);
     } else {
       resize();       // the viewport may have been resized while we weren't watching it
