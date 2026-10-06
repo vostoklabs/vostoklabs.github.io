@@ -18,6 +18,7 @@ import {
   licenseAfterExport,
   el,
   buildLoop,
+  BuildTimeoutError,
   markProject,
   readProjectFile,
 } from '@vostok/ui-kit';
@@ -35,7 +36,7 @@ import {
 } from 'virtual:makerlab';
 import { HOST_LICENCE_NOTE, exportToHost, type HostLink } from '@vostok/export/makerlab';
 import { coverDataUrl, cutExport, cutFileStem, cutZip, readmeText } from './export/makerlabArtifacts';
-import { build } from './engine/engine';
+import { build, restartEngine } from './engine/engine';
 import { mergeBatch, sheetOf, sheetsClause } from './engine/batch';
 import type { BuildInput, BuildOutput, KeyringSpec } from './engine/types';
 import { coerceValues, defaultsOf, type TemplateDef, type Values } from './templates';
@@ -70,6 +71,10 @@ const PROJECT = { app: 'laser-studio', keys: ['template', 'values'] } as const;
 
 /** One build as the screen shows it: what the template asked for, and what the worker made of it. */
 interface Built { input: BuildInput; output: BuildOutput }
+
+/** A build still running after this long is stuck, not slow: the slowest design takes about two
+ *  seconds. It counts as failed, and the worker it is stuck in is replaced. */
+const BUILD_TIMEOUT_MS = 60_000;
 
 export function createEditor(opts: EditorOptions): HTMLElement {
   const t = opts.template;
@@ -138,6 +143,7 @@ export function createEditor(opts: EditorOptions): HTMLElement {
   // screen, for the export.
   const loop = buildLoop<Built>({
     debounceMs: 120,
+    timeoutMs: BUILD_TIMEOUT_MS,
     run: async () => {
       // One painted frame before the build starts, so the chip is on screen before any
       // synchronous template work can hold the main thread.
@@ -159,6 +165,9 @@ export function createEditor(opts: EditorOptions): HTMLElement {
       describe(output);
     },
     onError: (err) => {
+      // The worker is still busy with the build that timed out: every build after it would
+      // queue behind it, so it goes, and the next build starts a fresh one.
+      if (err instanceof BuildTimeoutError) restartEngine();
       status.set(`Could not build it: ${err.message}`, 'error');
       console.error(err);
     },

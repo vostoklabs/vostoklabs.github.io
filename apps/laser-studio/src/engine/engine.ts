@@ -17,3 +17,9 @@ engine.call({ type: 'warm' }).catch((err) => console.error('[laser-studio] the g
 export async function build(input: BuildInput): Promise<BuildOutput> {
   return (await engine.call({ type: 'build', input }))!;
 }
+
+/** A build that never came back: stop the worker it is stuck in. The next build starts a fresh
+ *  one, so one bad build cannot hold up every build after it. */
+export function restartEngine(): void {
+  engine.restart();
+}
