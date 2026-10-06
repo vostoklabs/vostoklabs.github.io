@@ -66,10 +66,16 @@ const mm = (v: number) => v.toFixed(1).replace(/\.0$/, '');
 
 export function createModelMode(deps: ModelModeDeps) {
   const { store, viewer } = deps;
+  type Loaded = { name: string; bytes: ArrayBuffer | null; sample: SampleId | null };
   /** What the worker currently has cached; null until the first model or sample lands. */
-  let loaded: { name: string; bytes: ArrayBuffer | null; sample: SampleId | null } | null = null;
+  let loaded: Loaded | null = null;
   /** A load in flight, so a build is not posted against the previous model meanwhile. */
   let loading = false;
+  /** What the load in flight replaces: the model the worker still holds, the tab it was on, and
+   *  what the panel said of it. A load that fails puts them back, so the design on screen stays
+   *  the loaded one through the next edit, and Export names and credits it. Null when no load is
+   *  in flight. */
+  let before: (Pick<UiState, 'importMode' | 'modelInfo' | 'modelMeta'> & { loaded: Loaded | null }) | null = null;
   /** Set when a saved project is reopened: its cut settings are the point, so the model that
    *  arrives for it must not reset them the way a fresh upload does. */
   let keepCutOnce = false;
@@ -133,6 +139,22 @@ export function createModelMode(deps: ModelModeDeps) {
     }
   }
 
+  /** A load starts: keep what it replaces, unless a load already in flight kept it first. */
+  function keepBefore(): void {
+    if (loading) return;
+    const s = store.get();
+    before = { loaded, importMode: s.importMode, modelInfo: s.modelInfo, modelMeta: s.modelMeta };
+  }
+
+  /** A load failed: what it was to replace is the loaded model again, on its tab. Returns the
+   *  state to put back. */
+  function putBack(): Partial<UiState> {
+    const back = before;
+    before = null;
+    loaded = back ? back.loaded : null;
+    return back ? { importMode: back.importMode, modelInfo: back.modelInfo, modelMeta: back.modelMeta } : { modelInfo: null };
+  }
+
   async function loadFile(file: File): Promise<void> {
     if (!modelFormatOf(file.name)) {
       store.set({ status: 'That is not a 3D model. Use an STL, 3MF or OBJ file.' });
@@ -143,10 +165,10 @@ export function createModelMode(deps: ModelModeDeps) {
       return;
     }
     const bytes = await file.arrayBuffer();
+    keepBefore();
     // A copy stays here for the project file; the worker gets its own, transferred.
     loaded = { name: file.name, bytes, sample: null };
     loading = true;
-    resetCards();
     store.set({ importMode: 'model', building: true, status: `Reading ${file.name}…`, modelMeta: null });
     const copy = bytes.slice(0);
     deps.post({ type: 'importModel', bytes: copy, name: file.name }, [copy]);
@@ -156,9 +178,9 @@ export function createModelMode(deps: ModelModeDeps) {
   async function loadSample(id: SampleId): Promise<void> {
     const sample = sampleById(id) ?? sampleById(FIRST_SAMPLE)!;
     const mine = { name: sample.label, bytes: null, sample: sample.id };
+    keepBefore();
     loaded = mine;
     loading = true;
-    resetCards();
     store.set({ importMode: 'model', building: true, status: 'Loading sample…', modelMeta: null });
     try {
       const res = await fetch(assetUrl(sampleFile(sample.id)));
@@ -171,8 +193,7 @@ export function createModelMode(deps: ModelModeDeps) {
       if (loaded !== mine) return;
       console.error('[model] sample', err);
       loading = false;
-      loaded = null;
-      store.set({ building: false, status: 'Could not load that sample.' });
+      store.set({ ...putBack(), building: false, status: 'Could not load that sample.' });
     }
   }
 
@@ -202,6 +223,10 @@ export function createModelMode(deps: ModelModeDeps) {
    *  a sample opens the way its tile shows it; an upload starts on Split and is chosen for. */
   function onModelInfo(raw: ModelInfo): void {
     loading = false;
+    before = null;
+    // The cards go with the model they were built for: only now, so a load that fails leaves
+    // those of the model still loaded.
+    resetCards();
     const sample = loaded?.sample ? sampleById(loaded.sample) : undefined;
     const info = sample ? { ...raw, name: sample.label } : raw;
     const c = store.get().modelCut;
@@ -242,15 +267,15 @@ export function createModelMode(deps: ModelModeDeps) {
   }
 
   /** A worker error while a model was loading is an import failure: say it plainly and forget
-   *  the file, so the next build does not run against a model that never arrived. Whatever was
-   *  on screen before stays there and exports as it was, credited as it was, and the status says
-   *  so, so the design on screen is not taken for the file that failed. */
+   *  the file, so the next build does not run against a model that never arrived. What it was
+   *  to replace is loaded again, on its tab: the worker still holds that model and the screen
+   *  still shows its design, so the next edit cuts it, and Export names and credits it as before.
+   *  The status says so, so the design on screen is not taken for the file that failed. */
   function onError(message: string): boolean {
     if (!loading) return false;
     loading = false;
     const reason = message.split('\n')[0].replace(/^\w*Error:\s*/, '').replace(/[.\s]+$/, '');
-    loaded = null;
-    store.set({ building: false, modelInfo: null, status: `Could not open that model: ${reason}. The design on screen is unchanged.` });
+    store.set({ ...putBack(), building: false, status: `Could not open that model: ${reason}. The design on screen is unchanged.` });
     return true;
   }
 

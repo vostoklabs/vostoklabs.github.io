@@ -695,6 +695,65 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   finish(unmount);
 }
 
+/* "The design on screen is unchanged" holds past the next edit: the model that failed replaces
+   nothing, so an edit cuts the model still loaded, and Export names and credits it. */
+
+{
+  const unmount = await fresh();
+  ui().onModelFile(new File([new Uint8Array(16)], 'figure.stl'));
+  await clock.advance(100);
+  press();
+  await clock.advance(10);
+  const named = seen.downloads[0]?.name;
+  worker.failIf = (msg) => (msg.type === 'importModel' ? 'That file has no triangles' : null);
+  ui().onModelFile(new File([new Uint8Array(16)], 'broken.stl'));
+  await clock.advance(100); // read, sent, and refused by the worker
+  worker.failIf = null;
+  const sent = posted.length;
+  seen.modelPanel.setCut({ ...seen.state.modelCut, sizeMm: 61 }, false); // an edit after it
+  const exp = press();
+  await clock.advance(300);
+  const last = seen.downloads.at(-1);
+  check('a model that failed to open, then an edit: the edit cuts the model still loaded, and Export writes it', written().at(-1) === 'model:slice|size=61|st=0' && !posted.slice(sent).some((m) => m.type === 'importModel'), `${describe(exp)}; asked the worker for ${posted.slice(sent).map((m) => m.type).join(', ')}`);
+  check('…named and credited as before the failed file', !!named && last?.name === named && last?.opts.sourceModel === 'figure.stl', `${named} then ${last?.name}, credited to ${last?.opts.sourceModel}`);
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(200);
+  press();
+  await clock.advance(10);
+  const named = seen.downloads[0]?.name;
+  worker.failIf = (msg) => (msg.type === 'importModel' ? 'That file has no triangles' : null);
+  ui().onModelFile(new File([new Uint8Array(16)], 'broken.stl')); // dropped on the picture
+  await clock.advance(100);
+  worker.failIf = null;
+  check('a model dropped on the picture that fails to open: back on the picture\'s tab', seen.state?.importMode === 'image', String(seen.state?.importMode));
+  ui().onWidth(41);
+  const exp = press();
+  await clock.advance(300);
+  const last = seen.downloads.at(-1);
+  check('…and the next edit rebuilds the picture, which Export writes, named as before and credited to no model', written().at(-1) === 'built:image:cc=4|w=41|st=0' && !!named && last?.name === named && last?.opts.sourceModel === undefined, `${describe(exp)}; ${named} then ${last?.name}, credited to ${last?.opts.sourceModel}`);
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onModelFile(new File([new Uint8Array(16)], 'figure.stl'));
+  await clock.advance(100);
+  net.fails.add('pumpkin');
+  seen.modelPanel.onSample('pumpkin');
+  await clock.advance(100);
+  check('a sample that cannot be fetched: the status says so', status() === 'Could not load that sample.', status());
+  seen.modelPanel.setCut({ ...seen.state.modelCut, sizeMm: 61 }, false);
+  const exp = press();
+  await clock.advance(300);
+  check('…and the next edit still cuts the model loaded before it', written().at(-1) === 'model:slice|size=61|st=0' && seen.downloads.at(-1)?.opts.sourceModel === 'figure.stl', `${describe(exp)}, credited to ${seen.downloads.at(-1)?.opts.sourceModel}`);
+  finish(unmount);
+}
+
 {
   const unmount = await fresh();
   ui().onImportMode('model');
