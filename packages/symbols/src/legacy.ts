@@ -7,9 +7,9 @@
   every project saved before. Each code below is the symbol the customer picked, by the name the
   button showed, matched by eye: Material's filled glyph where one is close (nearest to Font
   Awesome's solid style), then Tabler's, then a Fluent drawing. No set draws the peace sign
-  without a frame, so Peace becomes the victory hand, the other peace sign. Key on a project's
-  version stamp, never on the character alone: 16 of these codes are also valid Material
-  characters.
+  without a frame, so Peace has no twin: null, as for a Lucide name none of the sets draws. Key
+  on a project's version stamp, never on the character alone: 16 of these codes are also valid
+  Material characters.
 
   Lucide. The clicker and keycap list a shortlist of Lucide icons first in their icon gallery,
   and the clicker's Arrows preset names four. Lucide is not a set of this library and is never
@@ -19,8 +19,8 @@
   sets draws.
 */
 
-/** [code point, the name the button showed, the library id]. */
-export const FONT_AWESOME_TWINS: readonly (readonly [number, string, string])[] = [
+/** [code point, the name the button showed, the library id, or null where no set has one]. */
+export const FONT_AWESOME_TWINS: readonly (readonly [number, string, string | null])[] = [
   [0xf118, 'Smile', 'material:sentiment_satisfied'],
   [0xf599, 'Laugh', 'fluent:grinning-squinting-face'],
   [0xf004, 'Heart', 'material:favorite'],
@@ -72,15 +72,16 @@ export const FONT_AWESOME_TWINS: readonly (readonly [number, string, string])[] 
   [0xf1e2, 'Bomb', 'fluent:bomb'],
   [0xf2fe, 'Poo', 'fluent:pile-of-poo'],
   [0xf6ad, 'Yin Yang', 'tabler:yin-yang'],
-  [0xf67c, 'Peace', 'fluent:victory-hand'],
+  [0xf67c, 'Peace', null],
 ];
 
 const BY_CODE = new Map(FONT_AWESOME_TWINS.map(([cp, , id]) => [cp, id]));
 
 /** The library id for a Font Awesome character from an old Name Keychain project, or undefined
- *  for any other character, and for anything a project file holds that is not a string. */
+ *  where the library has none (Peace), for any other character, and for anything a project file
+ *  holds that is not a string. */
 export function fontAwesomeTwin(char: unknown): string | undefined {
-  return typeof char === 'string' && char.length === 1 ? BY_CODE.get(char.charCodeAt(0)) : undefined;
+  return typeof char === 'string' && char.length === 1 ? (BY_CODE.get(char.charCodeAt(0)) ?? undefined) : undefined;
 }
 
 /** Lucide name → library id, or null where no set has one. */

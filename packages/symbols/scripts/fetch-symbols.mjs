@@ -69,7 +69,7 @@ const FLUENT_PICKS = [
   ['Slightly smiling face', 'smileys'], ['Grinning squinting face', 'smileys'], ['Pile of poo', 'smileys'],
   ['Black cat', 'animals'], ['Dog', 'animals'], ['Horse', 'animals'], ['Dragon', 'animals'], ['Fish', 'animals'],
   ['Spider', 'animals'], ['Honeybee', 'animals'], ['Seedling', 'nature'], ['Comet', 'nature'], ['Guitar', 'music'],
-  ['Ring', 'shapes'], ['Bomb', 'shapes'], ['Victory hand', 'people'],
+  ['Ring', 'shapes'], ['Bomb', 'shapes'],
 ];
 
 const TABLER_PICKS = [

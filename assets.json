@@ -5604,8 +5604,8 @@
       "kind": "symbols",
       "files": {
         "apps/laser-studio/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3",
-        "packages/symbols/data/fluent-emoji-high-contrast.json": "e6637f511ed4bd002bd7bf3728b27c5baebe2dd58f0e77e756c4313c91f616d3",
-        "packages/symbols/data/fluent-emoji-high-contrast.outlines.json": "b0706b6cf2362d7d37d8c848caa55032e285080776ae71022032e57602c0e3c5",
+        "packages/symbols/data/fluent-emoji-high-contrast.json": "e251d7fdc0f9b9ff5789b18a03bca7d98d8621ce640e01d426718e60173122c0",
+        "packages/symbols/data/fluent-emoji-high-contrast.outlines.json": "bbf3e5d3db741e566b026f8ab807dd751e31fca41f0c4c9122a27382bc698077",
         "packages/ui-kit/src/symbols/catalog.json": "22c6b3bb1ebfb5de7d83f7fb867e54fcbe1ad516879cdcc8289810b2664ed1c3"
       },
       "licence": "MIT",

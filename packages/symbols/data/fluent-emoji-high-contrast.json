@@ -75,7 +75,6 @@
     ["comet","Comet","nature","space",0],
     ["guitar","Guitar","music","instrument music",0],
     ["ring","Ring","shapes","diamond",0],
-    ["bomb","Bomb","shapes","comic",1],
-    ["victory-hand","Victory hand","people","v",0]
+    ["bomb","Bomb","shapes","comic",1]
   ]
 }

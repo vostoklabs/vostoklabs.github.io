@@ -104,7 +104,7 @@ check('Popular shows a heart, a star, a moon, a crown, a paw once, not again fro
 check('…and search still finds the Material ones', S.searchSymbols('favorite').some((e) => e.id === 'material:favorite') && S.searchSymbols('crown').some((e) => e.id === 'material:crown'));
 check('Popular lists each symbol once', new Set(popular).size === popular.length);
 check('Everything lists the whole library', S.listSymbols('all').length === all.length);
-check('Yin yang and Peace come unframed: Fluent\'s framed drawings are not in the library', !S.symbolById('fluent:yin-yang') && !S.symbolById('fluent:peace-symbol') && !!S.symbolById('tabler:yin-yang'));
+check('Yin yang comes unframed: Fluent\'s framed Yin yang and Peace symbol are not in the library', !S.symbolById('fluent:yin-yang') && !S.symbolById('fluent:peace-symbol') && !!S.symbolById('tabler:yin-yang'));
 check('Lucide is never a set of the library', all.every((e) => ['fluent', 'tabler', 'material'].includes(e.set)) && !S.symbolById('lucide:heart'));
 check('an unknown category lists nothing', S.listSymbols('nope').length === 0);
 check('a set filter keeps to its sets', S.listSymbols('animals', { sets: ['fluent'] }).every((e) => e.set === 'fluent'));
@@ -289,9 +289,12 @@ check('every Material symbol is the glyph as the font fills it, to a thousandth'
 // ── old codes ──
 const fa = S.FONT_AWESOME_TWINS;
 check('52 Font Awesome codes, each once', fa.length === 52 && new Set(fa.map((r) => r[0])).size === 52);
-const faLost = fa.filter(([, , id]) => !S.symbolById(id));
-check('every Font Awesome code has its symbol', !faLost.length, faLost.map((r) => r[1]).join(' '));
+const faLost = fa.filter(([, , id]) => id && !S.symbolById(id));
+check('every Font Awesome twin exists', !faLost.length, faLost.map((r) => r[1]).join(' '));
 check('a Font Awesome character finds its twin', S.fontAwesomeTwin('\uf6d5') === 'fluent:dragon' && S.fontAwesomeTwin('a') === undefined);
+const noTwin = fa.filter(([, , id]) => !id).map((r) => r[1]);
+check('Peace alone has no twin, and its character finds none', noTwin.join() === 'Peace' && S.fontAwesomeTwin('\uf67c') === undefined, noTwin.join(' '));
+check('Fluent\'s victory hand is not in the library', !S.symbolById('fluent:victory-hand') && !S.searchSymbols('victory').some((e) => e.set === 'fluent'));
 const lucide = Object.entries(S.LUCIDE_TWINS);
 const lucideLost = lucide.filter(([, id]) => id && !S.symbolById(id));
 check('the Lucide shortlist (86 names) is covered', lucide.length === 86, String(lucide.length));
