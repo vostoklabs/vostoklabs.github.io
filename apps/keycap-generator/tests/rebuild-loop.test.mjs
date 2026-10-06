@@ -12,103 +12,30 @@
 
   The second half runs the app's own exports (src/exports.js) on the same loop: the alphabet set
   holds it, an Export pressed during the set waits for the set and then sends the new cap, and a
-  set that throws still lets go. Only the browser's edges are stood in for: the MakerLab seam
-  (absent, as on the web), the kit's toast and licence nudge, and the download, which records the
-  file instead.
-
-  manifold-3d stays external, so node loads the npm build itself, as the export golden does.
+  set that throws still lets go. Only the browser's edges are stood in for (support/app-bundle.mjs):
+  the MakerLab seam (absent, as on the web), the kit's toast and licence nudge, and the download,
+  which records the file instead. What each export path writes is export-paths.test.mjs's.
 */
-import { build } from 'esbuild';
-import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { APP, bundleApp } from './support/app-bundle.mjs';
 
-const APP = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-globalThis.DOMParser = DOMParser;
-globalThis.XMLSerializer = XMLSerializer;
-globalThis.fetch = async (url) => {
-  const file = join(APP, 'public', String(url));
-  if (!existsSync(file)) return { ok: false, status: 404 };
-  const buf = readFileSync(file);
-  return { ok: true, status: 200, json: async () => JSON.parse(buf.toString('utf8')), arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
-};
-
-const WASM = createRequire(join(APP, 'package.json')).resolve('manifold-3d/manifold.wasm');
-const manifoldNode = {
-  name: 'manifold-node',
-  setup(b) {
-    b.onResolve({ filter: /^manifold-3d\/manifold\.wasm\?url$/ }, () => ({ path: 'wasm', namespace: 'manifold-wasm-url' }));
-    b.onLoad({ filter: /.*/, namespace: 'manifold-wasm-url' }, () => ({ contents: `export default ${JSON.stringify(WASM)};`, loader: 'js' }));
-    b.onResolve({ filter: /^manifold-3d$/ }, () => ({ path: 'manifold-3d', external: true }));
-  },
-};
-/* The browser's edges, for exports.js: the MakerLab seam as the public build has it, the kit's
-   toast and licence nudge as no-ops, and a download that records the file. */
-const EXPORT_SRC = createRequire(join(APP, 'package.json')).resolve('@vostok/export');
-const KIT_SRC = createRequire(join(APP, 'package.json')).resolve('@vostok/ui-kit');
-const edges = {
-  name: 'browser-edges',
-  setup(b) {
-    const fromExports = (args) => args.importer.replace(/\\/g, '/').endsWith('/src/exports.js');
-    b.onResolve({ filter: /^virtual:makerlab$/ }, () => ({ path: 'makerlab', namespace: 'edge' }));
-    b.onResolve({ filter: /^@vostok\/ui-kit$/ }, (args) => (fromExports(args) ? { path: 'kit', namespace: 'edge' } : null));
-    b.onResolve({ filter: /^@vostok\/export$/ }, (args) => (fromExports(args) ? { path: 'export', namespace: 'edge' } : null));
-    b.onLoad({ filter: /^makerlab$/, namespace: 'edge' }, () => ({
-      contents: 'export const MAKERLAB = false; export const isReady = () => false; export const can = () => false;'
-        + ' export async function sdkExport() { throw new Error("no host"); } export async function sdkToast() {}',
-      loader: 'js',
-    }));
-    b.onLoad({ filter: /^kit$/, namespace: 'edge' }, () => ({
-      contents: `export * from ${JSON.stringify(KIT_SRC)};\nexport const toast = () => {};\nexport const licenseAfterExport = () => {};`,
-      loader: 'js',
-      resolveDir: APP,
-    }));
-    b.onLoad({ filter: /^export$/, namespace: 'edge' }, () => ({
-      contents: `export * from ${JSON.stringify(EXPORT_SRC)};\n`
-        + 'export function downloadFile(data, name, mime) { (globalThis.__downloads ??= []).push({ data, name, mime, at: Date.now() }); }',
-      loader: 'js',
-      resolveDir: APP,
-    }));
-  },
-};
-
-const cacheDir = join(APP, 'node_modules', '.cache');
-mkdirSync(cacheDir, { recursive: true });
-const outfile = join(cacheDir, `rebuild-loop-${process.pid}.mjs`);
-await build({
-  stdin: {
-    contents: [
-      "export { rebuildLoop, carveCap, carveReport, CarveDeclined, createRebuildLock } from './src/rebuild.js';",
-      "export { createExports, stageCover } from './src/exports.js';",
-      "export { BLANK_COVER } from '@vostok/export/makerlab';",
-      "export { ExportBlockedError } from '@vostok/ui-kit';",
-      "export { capParts, orientForPrint } from './src/exportParts.js';",
-      "export { keycapThreeMF } from './src/export3mf.js';",
-      "export { parseLogo } from './src/logo.js';",
-      "export { LUCIDE_ICONS, buildSvg } from './src/lucideIcons.js';",
-      "export { loadKeycap } from './src/keycap.js';",
-      "export { initManifold } from './src/manifold.js';",
-      "export { loadBundledFonts } from './src/letter.js';",
-      "export { BufferGeometry, Float32BufferAttribute } from 'three';",
-      "export { unzipSync, strFromU8 } from 'fflate';",
-    ].join('\n'),
-    resolveDir: APP,
-    sourcefile: 'rebuild-loop-entry.js',
-    loader: 'js',
-  },
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  outfile,
-  logLevel: 'error',
-  plugins: [manifoldNode, edges],
-  define: { __KEYCAP_ARTWORK__: 'false' },
-});
-const app = await import(pathToFileURL(outfile).href);
-rmSync(outfile, { force: true });
+const app = await bundleApp([
+  "export { rebuildLoop, carveCap, carveReport, CarveDeclined, createRebuildLock } from './src/rebuild.js';",
+  "export { createExports, stageCover } from './src/exports.js';",
+  "export { BLANK_COVER } from '@vostok/export/makerlab';",
+  "export { ExportBlockedError } from '@vostok/ui-kit';",
+  "export { capParts, orientForPrint } from './src/exportParts.js';",
+  "export { keycapThreeMF } from './src/export3mf.js';",
+  "export { parseLogo } from './src/logo.js';",
+  "export { LUCIDE_ICONS, buildSvg } from './src/lucideIcons.js';",
+  "export { loadKeycap } from './src/keycap.js';",
+  "export { initManifold } from './src/manifold.js';",
+  "export { loadBundledFonts } from './src/letter.js';",
+  "export { BufferGeometry, Float32BufferAttribute } from 'three';",
+  "export { unzipSync, strFromU8 } from 'fflate';",
+], 'rebuild-loop');
 
 let failures = 0;
 let passes = 0;
