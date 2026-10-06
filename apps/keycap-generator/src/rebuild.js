@@ -84,6 +84,40 @@ export function carveReport({ footprints, room, surfaceVariation, through, singl
 }
 
 /**
+ * The rebuild lock: how a batch of the app's own (the alphabet set, a paid set) holds the loop, so
+ * no preview carve runs Manifold beside it, and gives it back.
+ *
+ * `begin()` takes it, and says false while a carve runs or another batch holds it. `end()` gives it
+ * back, once however often it is called, and only then calls `afterRelease` (the app asks for a
+ * carve of what the panel says now), so nothing that runs after the release can keep the loop held.
+ * A batch calls `end()` first in its `finally`, and never awaits the loop's `settled()` between the
+ * two: that waits for this very release. `held()` says the lock is taken; the loop's own `busy`
+ * does not count a hold.
+ *
+ * @param {{ hold: () => (() => void) | null }} loop
+ * @param {() => void} [afterRelease]
+ */
+export function createRebuildLock(loop, afterRelease) {
+  let release = null;
+  return {
+    begin() {
+      const r = loop.hold();
+      if (!r) return false;
+      release = r;
+      return true;
+    },
+    end() {
+      if (!release) return; // already given back: never ask for two carves for one batch
+      const r = release;
+      release = null;
+      r();
+      afterRelease?.();
+    },
+    held: () => release !== null,
+  };
+}
+
+/**
  * The rebuild loop.
  *
  * `settings()` is read when a carve STARTS: `{ shell, meta, profile, legend, opts, extras }` as

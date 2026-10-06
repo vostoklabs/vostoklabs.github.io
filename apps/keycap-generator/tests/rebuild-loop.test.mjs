@@ -81,7 +81,7 @@ const outfile = join(cacheDir, `rebuild-loop-${process.pid}.mjs`);
 await build({
   stdin: {
     contents: [
-      "export { rebuildLoop, carveCap, carveReport, CarveDeclined } from './src/rebuild.js';",
+      "export { rebuildLoop, carveCap, carveReport, CarveDeclined, createRebuildLock } from './src/rebuild.js';",
       "export { createExports, stageCover } from './src/exports.js';",
       "export { BLANK_COVER } from '@vostok/export/makerlab';",
       "export { capParts, orientForPrint } from './src/exportParts.js';",
@@ -115,6 +115,12 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  —  ${detail}` : ''}`);
   if (ok) passes++; else failures++;
 };
+// A run that waits for good (a hold never given back leaves every export waiting) fails here, in
+// words, instead of ending on node's "unsettled top-level await".
+setTimeout(() => {
+  console.log('FAIL  the run did not finish in 3 minutes: something waits for good (a hold never given back?)');
+  process.exit(1);
+}, 180_000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ------------------------------------------------------------------ a Standard 1u, as the app opens
@@ -230,15 +236,37 @@ check('a carve that fits says Ready, with no warning', okReport.diagnostics.leng
 const both = app.carveReport({ footprints: [{ w: 16, h: 8 }], room: 15.2, surfaceVariation: 0.6, through: false, single: false, depth: 0.5 });
 check('a legend too big for the top and a curved top are both warnings, the size first', both.diagnostics.map((d) => `${d.level}:${d.code}`).join(' ') === 'warning:legend-too-big warning:curved-top', both.diagnostics.map((d) => d.code).join(', '));
 
+// ------------------------------------------------------------------ the rebuild lock
+// mount.js's own lock (rebuild.js), the one it hands exports.js and a paid set. Its `afterRelease`
+// here is mount.js's scheduleRegen: a carve of the panel, when there is one to carve.
+let afterReleases = 0;
+const lock = app.createRebuildLock(loop, () => { afterReleases++; if (!panel.off) loop.request(); });
+await loop.settled();
+check('the lock is taken while nothing runs', lock.begin() === true && lock.held());
+check('…and refused to a second batch', lock.begin() === false);
+check('…and while it is taken the loop is held', loop.hold() === null);
+lock.end();
+const holdAfterEnd = loop.hold();
+check('end() gives the loop back', typeof holdAfterEnd === 'function' && !lock.held(), holdAfterEnd ? 'the loop can be held again' : 'the loop is still held');
+holdAfterEnd?.();
+lock.end();
+check('…once however often it is called, then asks for a carve once', afterReleases === 1, `${afterReleases} carve requests`);
+// Bounded: with a lock that never gave the loop back, this would wait for good.
+await Promise.race([loop.settled().catch(() => {}), sleep(5000)]);
+const throwing = app.createRebuildLock(loop, () => { throw new Error('the carve request broke'); });
+throwing.begin();
+try { throwing.end(); } catch { /* the request's own error, after the release */ }
+const holdAfterThrow = loop.hold();
+check('the loop is given back before the carve is asked for: a request that throws cannot keep it held', typeof holdAfterThrow === 'function');
+holdAfterThrow?.();
+if (failures) {
+  // Everything below takes and gives back this lock; with it broken the run would only wait.
+  console.log(`\n${failures} FAILED, ${passes} passed: the rest needs a lock that gives the loop back`);
+  process.exit(1);
+}
+
 // ================================================================== the app's exports on the loop
 await app.loadBundledFonts();
-// mount.js's rebuild lock, as it hands it to exports.js and to a paid set.
-let releaseBatch = null;
-const lock = {
-  begin() { const r = loop.hold(); if (!r) return false; releaseBatch = r; return true; },
-  end() { if (!releaseBatch) return; const r = releaseBatch; releaseBatch = null; r(); loop.request(); },
-  held: () => !!releaseBatch,
-};
 const button = { disabled: false, listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } };
 const elements = { alphabetSet: button, alphabetHelp: { textContent: '' } };
 const statuses = [];

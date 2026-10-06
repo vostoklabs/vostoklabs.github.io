@@ -43,7 +43,7 @@ import { keycapThreeMF } from './export3mf.js';
 import { keycapObjMtl } from './exportObj.js';
 import { profileTag } from './exportParts.js';
 import { createExports, LICENSE_NOTE, stageCover } from './exports.js';
-import { rebuildLoop } from './rebuild.js';
+import { rebuildLoop, createRebuildLock } from './rebuild.js';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
@@ -1123,27 +1123,9 @@ export function mount(container, host) {
     status.setDiagnostics(carve.report.diagnostics, carve.report.ok);
   }
 
-  /** The rebuild lock. A batch (the alphabet set, a paid set) holds the loop, so no preview
-   *  rebuild runs Manifold beside it, and gives it back to a rebuild of the current inputs. */
-  let releaseBatch = null;
-  const rebuildLock = {
-    /** Take the lock. False while a carve runs or another batch holds it. */
-    begin() {
-      const release = loop.hold();
-      if (!release) return false;
-      releaseBatch = release;
-      return true;
-    },
-    end() {
-      if (!releaseBatch) return; // already released — never schedule two rebuilds for one batch
-      const release = releaseBatch;
-      releaseBatch = null;
-      release();
-      scheduleRegen(); // back to the live preview for the current inputs
-    },
-    /** A batch holds the loop. */
-    held: () => !!releaseBatch,
-  };
+  /** The rebuild lock (rebuild.js): a batch (the alphabet set, a paid set) holds the loop, so no
+   *  preview rebuild runs Manifold beside it, and gives it back to a rebuild of the current inputs. */
+  const rebuildLock = createRebuildLock(loop, scheduleRegen);
 
   // ---------------------------------------------------------------- legend sink
   /**
