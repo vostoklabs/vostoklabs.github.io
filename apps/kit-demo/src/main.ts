@@ -18,6 +18,7 @@ import {
   supportLinks,
   exportPanel,
   sidebarFooter,
+  captureCover,
   offlineDownloadButton,
   presetShareButton,
   readParamsFromHash,
@@ -1777,6 +1778,49 @@ app.append(
       },
       note: 'Buttons disable while an export runs; errors surface as toasts.',
     }),
+  ),
+);
+
+/* A cover from the stage. The "stage" is a 2D canvas the page draws a star on, standing in for
+   an app's three.js renderer; the one that cannot be read has no size, so it reads back as
+   `data:,`, the way a lost WebGL context gives nothing back. */
+const coverStage = el('canvas', { className: 'kit-cover', attrs: { width: '96', height: '96', 'aria-label': 'The stage' } });
+const stageRenderer = (canvas: HTMLCanvasElement) => ({
+  domElement: canvas,
+  render: () => {
+    const g = canvas.getContext('2d');
+    if (!g) return;
+    g.fillStyle = themeColor('--bg', 'transparent');
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.fillStyle = themeColor('--accent', 'gray');
+    g.fill(new Path2D(ringPath(polyPoints(5, 40, 17, -Math.PI / 2, 48, 50))));
+  },
+});
+const coverShot = el('img', { className: 'kit-cover', attrs: { alt: 'The captured cover' } });
+const coverNote = el('p', { className: 'vl-hint' });
+/** The picture handed back when the canvas cannot be read: here, the plain square. */
+const coverFallback = shapePicture(shapeOf('square').d);
+function takeCover(canvas: HTMLCanvasElement): void {
+  const url = captureCover(stageRenderer(canvas), null, null, { fallback: coverFallback });
+  coverShot.src = url;
+  coverNote.textContent =
+    url === coverFallback ? 'The canvas could not be read, so the fallback came back.' : `A ${canvas.width} × ${canvas.height} px PNG from the stage.`;
+}
+takeCover(coverStage);
+
+app.append(
+  entry(
+    'captureCover(renderer, scene, camera, { fallback })',
+    'Cover image capture',
+    'Draws one fresh frame of the stage and reads it back in the same task, as the picture for a ' +
+      'listing cover. With fallback, a canvas that cannot be read (a lost context, a tainted canvas, ' +
+      'one with no size) hands back the picture given instead of failing the export, and says why ' +
+      'in the console.',
+    el('div', { className: 'kit-chosen' }, [coverStage, coverShot, coverNote]),
+    row(
+      button({ label: 'Capture the stage', onClick: () => takeCover(coverStage) }),
+      button({ label: 'Capture a canvas that cannot be read', emphasis: 'secondary', onClick: () => takeCover(el('canvas', { attrs: { width: '0', height: '0' } })) }),
+    ),
   ),
 );
 

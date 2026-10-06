@@ -76,7 +76,7 @@ export {
 } from './components/changelog';
 export { supportLinks } from './components/support-links';
 export { exportPanel, setExportNote, buildExportMetadata, type ExportFormat, type ExportPanelOptions } from './components/export-panel';
-export { captureCover, type RendererLike } from './components/cover-image';
+export { captureCover, type RendererLike, type CaptureCoverOptions } from './components/cover-image';
 export {
   FILAMENTS,
   filamentRow,

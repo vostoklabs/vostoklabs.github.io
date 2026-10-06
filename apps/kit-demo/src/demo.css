@@ -191,6 +191,14 @@ body {
   inline-size: 100%;
   block-size: 100%;
 }
+/* The stage a cover is captured from, and the cover that came back, side by side. */
+.kit-cover {
+  inline-size: 96px;
+  block-size: 96px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
 .kit-symbol-preview {
   margin: 0;
   min-block-size: 1.4em;
