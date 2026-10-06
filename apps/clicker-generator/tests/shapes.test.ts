@@ -40,6 +40,7 @@ import Module from 'manifold-3d';
 import { parse3MF } from '../src/geometry/threemfImport.ts';
 import { buildClicker } from '../src/geometry/buildClicker.ts';
 import * as paths from '../src/geometry/shapePaths.ts';
+import { circleRing } from '@vostok/shapes';
 import type { BaseShapeKind, BuildParams, BuildRegion, Ring } from '../src/types.ts';
 
 const asset = (p: string) =>
@@ -278,7 +279,7 @@ for (const [name, ring] of Object.entries({
   ngon: paths.ngonRing(6),
   cross: paths.crossRing(), squircle: paths.squircleRing(), capsule: paths.capsuleRing(),
   shield: paths.shieldRing(), tag: paths.tagRing(), arch: paths.archRing(),
-  circle: paths.circleRing(), star: paths.starRing(),
+  circle: circleRing(0, 0, 1), star: paths.starRing(),
   heart: paths.heartRing(), egg: paths.eggRing(),
 })) {
   const d = paths.ringToPath(ring as Ring, 40);
@@ -509,7 +510,7 @@ check(
      shape was re-proportioned rather than the switch moved. */
   for (const [name, ring, tol] of [
     ['heart', paths.heartRing(), 0.03],
-    ['circle', paths.circleRing(), 0.001],
+    ['circle', circleRing(0, 0, 1), 0.001],
     ['squircle', paths.squircleRing(), 0.001],
   ] as [string, Ring, number][]) {
     let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity;

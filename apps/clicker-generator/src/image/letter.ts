@@ -6,6 +6,7 @@ import robotoRegular from '../typefaces/roboto_regular.typeface.json';
 import robotoBold from '../typefaces/roboto_bold.typeface.json';
 import { FONTS, fontSupportsText, getFont, getRequiredSubsets, importFontFiles, pathCommandsToPolygons } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg } from './lucideIcons';
+import { ringBox } from '@vostok/shapes';
 import { parseSvg } from '@vostok/trace';
 import type { BlockSlot, LegendLook, RegionSet, Ring, RGB } from '../types';
 import { lookRings, normaliseRings, type SymbolLook } from './symbolRings';
@@ -368,17 +369,6 @@ export function parseLetter(
 // Letter blocks
 // ---------------------------------------------------------------------------
 
-function bboxOf(rings: Ring[]) {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const r of rings) for (const [x, y] of r) {
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
-}
-
 /**
  * Build the region list for a letter-block chain: one region per block, in chain order.
  *
@@ -440,7 +430,7 @@ export function parseBlockChain(
   let charMax = 0;
   for (const r of raw) {
     if (r.icon) continue;
-    const b = bboxOf(r.rings);
+    const b = ringBox(r.rings);
     charMax = Math.max(charMax, b.w, b.h);
   }
   if (!charMax) charMax = 1;

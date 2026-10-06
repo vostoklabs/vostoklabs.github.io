@@ -78,6 +78,9 @@ importers:
       '@vostok/plates':
         specifier: workspace:*
         version: link:../../packages/plates
+      '@vostok/shapes':
+        specifier: workspace:*
+        version: link:../../packages/shapes
       '@vostok/trace':
         specifier: workspace:*
         version: link:../../packages/trace

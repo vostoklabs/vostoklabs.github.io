@@ -17,6 +17,8 @@
 //
 // Miter joins, so the cross keeps the square corners the switch stem meets. The outer post and
 // the post's height are never touched, so everything stacked on `stemBB` stays where it was.
+import { ringBox, signedArea } from '@vostok/shapes';
+
 type Wasm = any;
 type Solid = any;
 
@@ -43,34 +45,13 @@ const INSET_MM = 0.002;
 
 type Poly = [number, number][];
 
-function signedArea(p: Poly): number {
-  let a = 0;
-  for (let i = 0; i < p.length; i++) {
-    const [x1, y1] = p[i];
-    const [x2, y2] = p[(i + 1) % p.length];
-    a += x1 * y2 - x2 * y1;
-  }
-  return a / 2;
-}
-
-function bboxOf(p: Poly) {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const [x, y] of p) {
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
-}
-
 /** The holes in one slice of the post, largest first. */
 function holesAt(stem: Solid, z: number): { poly: Poly; w: number; h: number }[] {
   const cs = stem.slice(z);
   const polys: Poly[] = cs.toPolygons();
   cs.delete();
   const items = polys
-    .map((poly) => ({ poly, area: Math.abs(signedArea(poly)), box: bboxOf(poly) }))
+    .map((poly) => ({ poly, area: Math.abs(signedArea(poly)), box: ringBox([poly]) }))
     .sort((a, b) => b.area - a.area);
   const outer = items[0];
   if (!outer) return [];

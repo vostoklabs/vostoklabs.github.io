@@ -22,6 +22,7 @@
 // is the floor of the keycap well. Key (0, 0) sits wherever the layout puts it; the whole
 // arrangement is centred on the origin.
 import { csOf, extrude, ringsOf } from '@vostok/manifold';
+import { signedArea } from '@vostok/shapes';
 import { ShapeUtils, Vector2 } from 'three';
 import type { BlockStyle, BlockTexture } from '../types';
 
@@ -174,12 +175,6 @@ const TEXTURES: Record<Exclude<BodyTexture, 'smooth'>, TextureSpec> = {
 // ---------------------------------------------------------------------------------------------
 // The outer wall
 // ---------------------------------------------------------------------------------------------
-
-function signedArea(r: Ring): number {
-  let a = 0;
-  for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += r[j][0] * r[i][1] - r[i][0] * r[j][1];
-  return a / 2;
-}
 
 /** `n` points evenly spaced by arc length round a closed ring, starting at its first vertex. */
 function resample(ring: Ring, n: number): { pts: Ring; length: number } {

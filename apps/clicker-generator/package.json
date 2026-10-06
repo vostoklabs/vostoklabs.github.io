@@ -22,6 +22,7 @@
     "@vostok/fonts": "workspace:*",
     "@vostok/manifold": "workspace:*",
     "@vostok/plates": "workspace:*",
+    "@vostok/shapes": "workspace:*",
     "@vostok/trace": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "@vostok/watermark": "workspace:*",

@@ -26,10 +26,11 @@
  * `BaseShapeKind` or rings. That is the whole contract, and it is why the 2-D editor's output
  * will slot in as a third source without touching this file's consumers.
  */
+import { circleRing } from '@vostok/shapes';
 import type { BaseShapeKind, Ring } from '../types';
 import {
-  archRing, capsuleRing, circleRing, crossRing, eggRing, heartRing,
-  ngonRing, ringToPath, roundedRectRing, shieldRing, squircleRing, starRing, tagRing,
+  archRing, capsuleRing, crossRing, eggRing, heartRing,
+  ngonRing, pctRoundedRectRing, ringToPath, shieldRing, squircleRing, starRing, tagRing,
 } from '../geometry/shapePaths';
 import { inSeason, loadShapeRings, orderedPacks, shapeToken } from '../packs';
 
@@ -79,15 +80,15 @@ const t = (r: Ring) => ringToPath(r);
 /** The built-ins. `kind` is the value that goes into `baseShape`, so these ids ARE the
  *  existing `BaseShapeKind` strings — every project ever saved keeps working untouched. */
 const BUILT_IN: ShapeEntry[] = [
-  { id: 'circle', name: 'Circle', cats: ['basic'], thumb: t(circleRing()), kind: 'circle' },
+  { id: 'circle', name: 'Circle', cats: ['basic'], thumb: t(circleRing(0, 0, 1)), kind: 'circle' },
   {
-    id: 'square', name: 'Square', cats: ['basic'], thumb: t(roundedRectRing(2, 2)), kind: 'square',
+    id: 'square', name: 'Square', cats: ['basic'], thumb: t(pctRoundedRectRing(2, 2)), kind: 'square',
     // The control Ian found missing: `shapeCornerPct` reached `genShape` and `shapeInBox` and
     // had no way to be set, so a square was stuck at whatever 0.22 happened to look like.
     corner: { label: 'Corner radius', min: 0, max: 40, step: 2, value: 22 },
   },
   {
-    id: 'rect', name: 'Rectangle', cats: ['basic'], thumb: t(roundedRectRing(2.6, 1.6)), kind: 'rect',
+    id: 'rect', name: 'Rectangle', cats: ['basic'], thumb: t(pctRoundedRectRing(2.6, 1.6)), kind: 'rect',
     corner: { label: 'Corner radius', min: 0, max: 40, step: 2, value: 22 },
   },
   { id: 'squircle', name: 'Squircle', cats: ['basic'], thumb: t(squircleRing()), kind: 'squircle' },

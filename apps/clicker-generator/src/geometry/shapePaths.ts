@@ -406,15 +406,6 @@ export const archRing = memo((steps = 40): Ring => {
    approximation nobody checks is how a picker starts lying.
    ------------------------------------------------------------------------------------ */
 
-export function circleRing(steps = 64): Ring {
-  const pts: Ring = [];
-  for (let i = 0; i < steps; i++) {
-    const a = (Math.PI * 2 * i) / steps;
-    pts.push([Math.cos(a), Math.sin(a)]);
-  }
-  return pts;
-}
-
 /** Rounded rectangle, as points. `cornerPct` is the radius as a fraction of the short side.
  *
  *  Deliberately WITHOUT `buildClicker`'s `roundedRect` floor of 0.1 mm on the radius. That
@@ -423,7 +414,7 @@ export function circleRing(steps = 64): Ring {
  *  shape people pick because it is plain, at some sizes only. The visible cost of leaving it
  *  out is that a corner set to 0 draws sharp here and prints with a 0.1 mm radius, which at a
  *  40 mm base is a quarter of a screen pixel. */
-export function roundedRectRing(w: number, h: number, cornerPct = 0.22, perCorner = 8): Ring {
+export function pctRoundedRectRing(w: number, h: number, cornerPct = 0.22, perCorner = 8): Ring {
   const r = Math.max(0, Math.min(0.5, cornerPct)) * Math.min(w, h);
   const ix = w / 2 - r;
   const iy = h / 2 - r;
