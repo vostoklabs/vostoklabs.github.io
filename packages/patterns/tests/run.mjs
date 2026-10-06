@@ -1,6 +1,7 @@
 // The pattern engine's node suite: bundle src with esbuild, then hold every rule to account.
 //   node tests/run.mjs
 import { build as esbuild } from 'esbuild';
+import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -573,6 +574,58 @@ for (const def of P.PATTERNS) {
   ok(tight.closed.length === 1 && tight.open.length === 0 && tight.closed[0].length === ring.length, `compact: one closed ring of ${ring.length} points (${tight.closed.length} closed, ${tight.open.length} open)`);
   const line = [[-10, 2], [-5, 2], [-5, 2], [5, 2]];
   ok(P.clipPolylines([line], plate, { compact: true }).length === 1, 'compact: a line with a step of no length stays one run');
+}
+
+// ---- 15. the engine's own order of summing an area ----
+// The engine sums a ring's area starting from its closing edge, as it always has; the shape core's
+// own signedArea starts from the first point. Floating point is not associative, so the two can
+// differ in the last bit, and a fill sorts and filters by area: on these six fills the order
+// shows. They are pinned as the engine drew them before its geometry moved into @vostok/shapes.
+{
+  const closingFirst = (r) => {
+    let a = 0;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += r[j][0] * r[i][1] - r[i][0] * r[j][1];
+    return a / 2;
+  };
+  const closingLast = (r) => {
+    let a = 0;
+    for (let i = 0; i < r.length; i++) {
+      const q = r[(i + 1) % r.length];
+      a += r[i][0] * q[1] - q[0] * r[i][1];
+    }
+    return a / 2;
+  };
+  // Jittered polygons at several sizes and offsets, kept when the two orders sum them differently.
+  let seed = 20261005;
+  const rnd = () => (seed = (seed * 48271) % 2147483647) / 2147483647;
+  const rings = [];
+  for (let k = 0; k < 400 && rings.length < 40; k++) {
+    const n = 3 + Math.floor(rnd() * 30);
+    const s = [0.3, 4, 37, 210][k % 4];
+    const ring = Array.from({ length: n }, (_, i) => {
+      const t = (i / n) * 2 * Math.PI;
+      const r = s * (0.4 + 0.6 * rnd());
+      return [s * (k % 7) + r * Math.cos(t), -s * (k % 5) + r * Math.sin(t)];
+    });
+    if (!Object.is(closingFirst(ring), closingLast(ring))) rings.push(ring);
+  }
+  ok(rings.length === 40, `rings the two orders sum differently: ${rings.length}`);
+  ok(rings.every((r) => Object.is(P.signedArea(r), closingFirst(r))), 'signedArea sums from the closing edge, bit for bit, on every one of them');
+  const digest = (r) => createHash('sha256').update(JSON.stringify([r.shapes, r.paths, r.stats, r.warnings])).digest('hex').slice(0, 16);
+  const disc = [[P.circle(0, 0, 40, 128)]];
+  const plate = [[P.roundedRect(0, 0, 90, 60, 8), P.circle(10, 5, 12, 64).reverse()]];
+  const PINNED = [
+    ['slots', 'engrave', plate, '477ff462fcfa934f'],
+    ['star-cross-8', 'cut', disc, 'e390334d9a4dba88'],
+    ['hishi-yotsu', 'engrave', plate, 'afcd14f3d3f2251b'],
+    ['basketweave', 'cut', disc, '05baf4f7d987cde0'],
+    ['radial-slots', 'cut', disc, '4fe2d22479b48496'],
+    ['voronoi', 'engrave', plate, 'b9ba24901e98d0fe'],
+  ];
+  for (const [id, op, region, want] of PINNED) {
+    const got = digest(P.fillShape(region, P.patternById(id), { op }));
+    ok(got === want, `${id}, ${op}, on the ${region === disc ? 'disc' : 'plate'}: ${got} (pinned ${want})`);
+  }
 }
 
 /** Least distance between two closed rings, mm. */
