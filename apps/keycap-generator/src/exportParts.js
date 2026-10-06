@@ -3,10 +3,44 @@
 // and for its export golden (tests/export-golden.test.mjs), so the golden tests the code that
 // ships instead of a copy of it. No DOM and no app state: everything comes in as arguments.
 import * as THREE from 'three';
-import { printMatrix } from './meshUtils.js';
+import { printMatrix, weldPositions } from './meshUtils.js';
 
 /** A name as a file-name part: runs of anything but letters and digits become one hyphen. */
 const slug = (s) => s.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+
+/** "#rrggbb" -> [r, g, b]. */
+const rgbOf = (hex) => {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+};
+
+/**
+ * One keycap part in the shape the shelf's writers take: the 3MF (export3mf.js) and the OBJ
+ * (exportObj.js). One conversion for both, so the two files cannot describe different solids.
+ *
+ * @param {{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}} p
+ */
+export function shelfPart(p) {
+  // Manifold output is already a clean, indexed, watertight solid — use it as-is.
+  // Only weld when handed a non-indexed mesh (don't re-weld and risk false merges).
+  const g = p.geom.index ? p.geom : weldPositions(p.geom);
+  const idx = g.getIndex().array;
+  return {
+    name: p.name,
+    color: rgbOf(p.color),
+    extruder: p.extruder,
+    positions: g.getAttribute('position').array,
+    // three keeps a small mesh's index as 16-bit; the writers take 32.
+    indices: idx instanceof Uint32Array ? idx : Uint32Array.from(idx),
+  };
+}
+
+/** Who made the file, for the provenance mark every keycap file carries (invariant #2). */
+export function keycapMark() {
+  // Read without assuming Vite, so a node script that imports this file still runs.
+  const env = import.meta.env ?? {};
+  return { title: 'Keycap', generator: 'keycap-generator', buildId: env.VITE_BUILD_ID };
+}
 
 /**
  * The single cap's parts: the cap, the legend, any extra legends, and the stem. Shared by the

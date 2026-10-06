@@ -1,13 +1,13 @@
 // The keycap's OBJ and MTL, the files the MakerLab export hands the host, written by the shelf's
 // writer (@vostok/export, "OBJ export"). This file only says what the keycap is to it: the parts
-// keycapThreeMF takes (export3mf.js converts both), one material per filament slot, and the
-// provenance mark in the header (invariant #2).
+// keycapThreeMF takes (exportParts.js converts them for both), one material per filament slot,
+// and the provenance mark in the header (invariant #2).
 //
 // A material per SLOT rather than per colour: a cap and a legend set to the same colour are
 // still two filaments in the 3MF, someone may have asked for that on purpose, and the OBJ keeps
 // them as two materials too.
 import { buildObjMtl, objWriter, objMaterials } from '@vostok/export';
-import { keycapMark, shelfPart } from './export3mf.js';
+import { keycapMark, shelfPart } from './exportParts.js';
 
 /**
  * The OBJ (+ matching MTL) of one print plate.

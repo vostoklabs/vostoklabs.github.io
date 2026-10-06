@@ -22,12 +22,12 @@ import '@vostok/plates/plates.css';
 import {
   topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs,
   promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile,
-  button, dropZone, toast, themeColorHex, licenseAfterExport,
+  button, dropZone, toast, themeColorHex,
   nudgePad, busyChip, panelCredit, paletteRow, segmentedControl, readProjectFile, appShell,
 } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
-import { downloadFile, textToArrayBuffer } from '@vostok/export';
+import { downloadFile } from '@vostok/export';
 // 1x1 transparent PNG — last-resort cover if the canvas can't be read (the shelf's, shared with
 // every MakerLab app). In practice preserveDrawingBuffer makes the real capture succeed.
 import { BLANK_COVER } from '@vostok/export/makerlab';
@@ -45,22 +45,12 @@ import {
 } from './fitTest.js';
 import { keycapThreeMF } from './export3mf.js';
 import { keycapObjMtl } from './exportObj.js';
-import {
-  capParts, orientForPrint, blankParts, fitTestParts, profileTag, capFileName, blankFileName,
-  fitTestFileName, alphabetFileName, ALPHABET_MTL, ALPHABET, alphabetEntryName,
-} from './exportParts.js';
+import { profileTag } from './exportParts.js';
+import { createExports, LICENSE_NOTE } from './exports.js';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
-import { zipSync } from 'fflate';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
-import {
-  MAKERLAB,
-  initMakerlab,
-  isReady as mlReady,
-  can as mlCan,
-  sdkExport,
-  sdkToast,
-} from 'virtual:makerlab';
+import { MAKERLAB, initMakerlab } from 'virtual:makerlab';
 // Paid features (MakerWorld-only). Imported statically so the MAKERLAB=false constant lets
 // the bundler drop the whole feature — tabs, layouts and set builder — from the public build.
 // Through the same kind of virtual seam as the host glue above, because src/pro/ is gitignored: the
@@ -478,7 +468,7 @@ export function mount(container, host) {
     THREE, scene, camera, renderer, capMesh, logoMesh, stemMesh, keycapThreeMF, keycapObjMtl,
     get exportParts() {
       return lastBodies
-        ? buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked)
+        ? exportsApi.buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked)
         : null;
     },
     get meta() { return meta; },
@@ -887,7 +877,7 @@ export function mount(container, host) {
      default: variable-width walls keep a legend's thin strokes from dropping out and make
      layer lines less visible. Ian asked for it to be the user's call: "add a print setting
      section where user can set arachne wall for his export". Read at export time by
-     `printConfig()` and `projectProcess()` below. */
+     `printConfig()` and `projectProcess()` in exports.js. */
   let wallGenerator = 'arachne';
   const wallsRow = segmentedControl({
     label: 'Walls',
@@ -1140,6 +1130,22 @@ export function mount(container, host) {
       running = false;
     }
   }
+
+  /** The rebuild lock. A batch (the alphabet set, a paid set) takes it, so no preview rebuild
+   *  runs Manifold beside it, and gives it back to a rebuild of the current inputs. */
+  const rebuildLock = {
+    begin() {
+      if (running) return false;
+      clearTimeout(regenTimer); // a queued preview rebuild must not run mid-batch
+      running = true;
+      return true;
+    },
+    end() {
+      if (!running) return; // already released — never schedule two rebuilds for one batch
+      running = false;
+      scheduleRegen(); // back to the live preview for the current inputs
+    },
+  };
 
   // ---------------------------------------------------------------- legend sink
   /**
@@ -1549,19 +1555,6 @@ export function mount(container, host) {
   });
 
   // ---------------------------------------------------------------- export
-  // The parts one set of carved bodies exports (exportParts.js), at the stem's current fit,
-  // laid out the way the profile prints.
-  function buildExportParts(bodies, capColor, logoColor, through) {
-    flushStemApply();
-    const extraColors = extraLegends.map((l) => l?.color);
-    return orientForPrint(
-      capParts(bodies, { capColor, logoColor, through, extraColors, stem: stemGeometry }),
-      currentProfile,
-      meta,
-    );
-  }
-
-
   // Grab the live preview as a PNG data URL for the MakerLab export cover. Render once first so
   // the buffer holds the current frame at the moment of capture.
   function captureCover() {
@@ -1575,317 +1568,47 @@ export function mount(container, host) {
     }
   }
 
-  /**
-   * The licence nudge, per invariant #3: the full modal on the first export of a session, a
-   * quiet reminder after. Every export path in this file ends here — single cap, blank cap,
-   * A-Z batch, host or browser — because a path that forgets to call it is a silent export,
-   * which is the thing the invariant exists to prevent. Both no-op inside a desktop host.
-   */
-  function nudgeLicense() {
-    if (proPanel?.hasLicence?.()) return; // owns the lifetime licence: nothing left to pitch
-    licenseAfterExport();
+  /** What an export reads, as the controls and the loaded cap say it now (exports.js). */
+  function exportState() {
+    return {
+      bodies: lastBodies,
+      legendName: currentLegend?.name,
+      capColor: $('capColor').value,
+      logoColor: $('logoColor').value,
+      through: $('through').checked,
+      single: $('single').checked,
+      extraColors: extraLegends.map((l) => l?.color),
+      stem: stemGeometry,
+      shell: shellGeometry,
+      meta,
+      profile: currentProfile,
+      profileTag: profileSlug(),
+      unit: currentUnit,
+      unitId: $('unitSelect').value,
+      fontId: $('fontSelect').value,
+      opts: meta ? currentOpts() : null,
+      fitTestActive,
+      fitTestPieces,
+      wallGenerator,
+    };
   }
 
-  /**
-   * Deliver the finished keycap.
-   *
-   * In the MakerWorld build, when embedded, hand the host an OBJ (one `o` object per
-   * filament region) plus an MTL carrying the two colours.
-   *
-   * Standalone (public site, or the built app opened outside the host) still downloads the
-   * two-colour .3mf we build ourselves — unchanged.
-   *
-   * @param {() => Array} makeParts  Deferred so the standalone path doesn't pay for OBJ work
-   *                                 and the host path doesn't pay for 3MF zipping.
-   */
-  /* The licence, on the one export path a file-level mark cannot reach: a comment in an OBJ
-     is not metadata, so on the embedded route the licence rides in the export description. */
-  const LICENSE_NOTE = `Free for personal use; selling prints requires a commercial license: ${BRAND.urls.mwCommercial}`;
-
-  /* The Print settings choice, in the two shapes the two export routes need.
-
-     `printConfig()` is the same choice for the embedded export.
-
-     `projectProcess()` is the same choice for a 3MF we build ourselves: an override over the
-     system process in project_settings.config. Classic is the system preset's own value, so it
-     is left out rather than written, or Studio would show an untouched process as modified. */
-  const printConfig = () => ({ wallGenerator });
-  const projectProcess = () => (wallGenerator === 'classic' ? {} : { wall_generator: wallGenerator });
-
-  async function deliverModel(makeParts, baseName, downloadMsg, description) {
-    if (MAKERLAB && mlReady() && mlCan('export')) {
-      setStatus('Sending to MakerLab…');
-      try {
-        const { obj, mtl } = keycapObjMtl(makeParts(), { mtlFileName: `${baseName}.mtl` });
-        const result = await sdkExport({
-          artifacts: [
-            {
-              fileName: `${baseName}.obj`,
-              format: 'obj',
-              buffer: textToArrayBuffer(obj),
-              mtl,
-              coverImage: captureCover(),
-              description: `${description} ${LICENSE_NOTE}`,
-              printConfig: printConfig(),
-            },
-          ],
-        });
-        if (result.success) {
-          setStatus('Exported to MakerLab ✓');
-          sdkToast({ message: 'Keycap exported to MakerLab', type: 'success' });
-          nudgeLicense();
-        } else {
-          setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
-          sdkToast({ message: 'Export failed', type: 'error' });
-        }
-      } catch (err) {
-        console.error(err);
-        setStatus(`Export failed: ${err.message || err}`, 'err');
-      }
-      return;
-    }
-
-    const blob = keycapThreeMF(makeParts(), { process: projectProcess() });
-
-    if (host) {
-      // With a host the file goes to the host's own export path rather than the browser's
-      // download bar.
-      try {
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        const { indexed } = await host.exportToLibrary(
-          { name: `${baseName}.3mf`, bytes },
-          { designer: 'Keycap Legend Generator' },
-        );
-        setStatus(indexed ? 'Exported to your library ✓' : `Exported as ${baseName}.3mf ✓`);
-        toast(indexed ? 'Exported to your library' : `Exported as ${baseName}.3mf`, { kind: 'success' });
-        nudgeLicense();
-      } catch (err) {
-        console.error(err);
-        setStatus(`Export failed: ${err.message || err}`, 'err');
-      }
-      return;
-    }
-
-    downloadFile(blob, `${baseName}.3mf`, 'model/3mf');
-    setStatus(downloadMsg);
-    // The status line is 12px of muted grey in the corner of the viewport, which is the whole
-    // reason a finished export used to feel like nothing had happened. The detail stays there;
-    // the toast is the part you cannot miss.
-    toast(downloadMsg.split('  ')[0], { kind: 'success' });
-    nudgeLicense();
-  }
-
-  /** Export whatever fit-test row is currently on screen, through the one export function
-   *  every other path in this app uses — provenance, the licence nudge, and the MakerLab vs
-   *  browser branching all come for free (invariant 8). */
-  async function exportFitTest() {
-    if (!fitTestPieces?.length) return;
-    const n = fitTestPieces.length;
-    await deliverModel(
-      () => fitTestParts(fitTestPieces, $('capColor').value),
-      fitTestFileName(profileSlug()),
-      `Exported fit test 3MF ✓  ${n} piece${n === 1 ? '' : 's'} to test-fit, one filament.`,
-      `Keycap stem fit test (${n} piece${n === 1 ? '' : 's'}), made with the Keycap Legend Generator.`,
-    );
-  }
-
-  /**
-   * The one primary action, whatever the mode is pointed at.
-   *
-   * A named async function rather than the click handler it used to be, because the footer has
-   * to be able to AWAIT it. The kit's export panel disables its buttons for as long as
-   * `onExport` is pending — but the footer reached this through `$('export').click()`, which
-   * returns the moment the handler starts, so the button un-greyed itself immediately and a
-   * twenty-minute keyboard set ran with no sign that anything had happened.
-   */
-  async function runPrimaryExport() {
-    // Checked BEFORE the Pro panel gets a say: Fit test is free, and unlike Full set it does
-    // not take the stage, so a paid mode active underneath it (Double legends) would otherwise
-    // get first refusal here even while Fit test is what is actually on screen.
-    if (fitTestActive) { await exportFitTest(); return; }
-    // The footer's primary button is the same button in every mode. When a Pro mode owns the
-    // stage it owns this too — the keyboard set generates a board, not the cap behind it — so
-    // it gets first refusal before the single-cap path runs.
-    if (await proPanel?.handleExport?.()) return;
-    if (!lastBodies) return;
-    const baseName = capFileName(currentLegend?.name, profileSlug());
-    // Counted from the parts rather than assumed to be two: a cap with a second legend in its
-    // own colour is a three-filament print, and "assign two filaments" would be wrong advice
-    // at the one moment the user is standing in front of the slicer.
-    const parts = buildExportParts(lastBodies, $('capColor').value, $('logoColor').value, $('through').checked);
-    const filaments = new Set(parts.map((p) => p.extruder)).size;
-    const count = ['no', 'one', 'two', 'three', 'four'][filaments] ?? String(filaments);
-    await deliverModel(
-      () => parts,
-      baseName,
-      $('single').checked
-        ? 'Exported 3MF ✓  Single-colour cap with an engraved legend, one filament.'
-        : `Exported 3MF ✓  Open in your slicer and assign ${count} filaments.`,
-      `Keycap in ${count} colour${filaments === 1 ? '' : 's'}, made with the Keycap Legend Generator.`
-    );
-  }
-
-  // Export the bare cap (uncarved shell + stem) in a single colour — no legend.
-  // Works for any size; uses the loaded shell directly (already a clean indexed solid).
-  $('exportBlank').addEventListener('click', async () => {
-    flushStemApply();
-    if (!shellGeometry) return;
-    await deliverModel(
-      () => blankParts(shellGeometry, stemGeometry, $('capColor').value),
-      blankFileName(profileSlug(), $('unitSelect').value),
-      'Exported blank keycap ✓  Single-colour cap with no legend.',
-      'Blank keycap, made with the Keycap Legend Generator.'
-    );
+  const exportsApi = createExports({
+    $,
+    host,
+    setStatus,
+    setBusy: setBusyState,
+    busyText: (text) => busyEl.setText(text),
+    cover: captureCover,
+    pro: () => proPanel,
+    begin: rebuildLock.begin,
+    end: rebuildLock.end,
+    busy: () => running,
+    flushStem: flushStemApply,
+    state: exportState,
   });
-
-  // -------------------------------------------------------- full alphabet set
-  // Batch-generate A–Z keycaps in the current font + placement/colour settings and
-  // download them as a single ZIP of 3MFs. 1u-only for now (button is disabled on
-  // other sizes). Each letter is carved with the same buildBodies path as the live
-  // preview, so what you set up for one letter is what every cap in the pack gets.
-  const alphabetBtn = $('alphabetSet');
-  const alphabetHelp = $('alphabetHelp');
-
-  // The set only makes sense for a 1u cap right now; reflect that on the button.
-  function updateAlphabetAvailability() {
-    const ok = currentUnit === 1;
-    alphabetBtn.disabled = !ok || running;
-    alphabetHelp.textContent = ok
-      ? 'Generates 26 keycaps (A–Z) in the current font & settings, zipped as 3MF files.'
-      : 'Full alphabet set is available for the 1u keycap only. Switch size to 1u to enable.';
-  }
-
-  async function generateAlphabetSet() {
-    if (currentUnit !== 1 || !meta || !shellGeometry || running) return;
-
-    const fontId = $('fontSelect').value;
-    const fontName = FONT_OPTIONS.find((f) => f.id === fontId)?.name || 'font';
-    const opts = currentOpts();
-    const capColor = $('capColor').value;
-    const logoColor = $('logoColor').value;
-    const through = $('through').checked;
-
-    // Hold the regen lock so live preview rebuilds don't run Manifold concurrently.
-    clearTimeout(regenTimer);
-    running = true;
-    alphabetBtn.disabled = true;
-    // Twenty-six carves. Same trap the paid keyboard set had: without this the only way out
-    // of a slow font was closing the tab.
-    let cancelled = false;
-    setBusyState('generating…', () => { cancelled = true; });
-    const files = {};
-    // Host path: one OBJ per letter, handed over as a multi-plate export. Every letter
-    // shares the same two colours, so one MTL covers the whole set. Standalone path still
-    // zips 26 of our own .3mf files.
-    const toHost = MAKERLAB && mlReady() && mlCan('export');
-    const plates = [];
-    let plateMtl = '';
-
-    try {
-      for (let i = 0; i < ALPHABET.length; i++) {
-        if (cancelled) break;
-        const ch = ALPHABET[i];
-        setStatus(`Generating alphabet set… ${ch} (${i + 1}/26)`);
-        // Text only: rebuilding the chip here would throw away the Cancel button's own
-        // "Cancelling…" state twenty-six times.
-        busyEl.setText(`generating ${ch} (${i + 1}/26)…`);
-        await new Promise((r) => setTimeout(r, 0)); // let the spinner/status paint
-
-        const legend = parseLetter(ch, fontId, 1);
-        const bodies = await buildBodies(shellGeometry, meta, legend, opts);
-        const parts = buildExportParts(bodies, capColor, logoColor, through);
-        if (toHost) {
-          const { obj, mtl } = keycapObjMtl(parts, { mtlFileName: ALPHABET_MTL });
-          plates.push(textToArrayBuffer(obj));
-          plateMtl = mtl;
-        } else {
-          files[alphabetEntryName(ch)] = new Uint8Array(await keycapThreeMF(parts, { process: projectProcess() }).arrayBuffer());
-        }
-        bodies.keycapGeometry.dispose();
-        bodies.logoGeometry?.dispose();
-      }
-
-      if (cancelled) {
-        setStatus('Alphabet set cancelled. Nothing was exported.', 'warn');
-        // Toast as well as status: the `finally` hands the preview back, and the rebuild's own
-        // "Ready ·  …" lands on this line a moment later and wipes the only notice there was.
-        toast('Alphabet set cancelled', { kind: 'warn' });
-        return; // the finally below still runs: lock released, chip cleared, preview restored
-      }
-
-      const baseName = alphabetFileName(fontName, profileSlug());
-
-      if (toHost) {
-        setStatus('Sending alphabet set to MakerLab…');
-        const result = await sdkExport({
-          artifacts: [
-            {
-              fileName: `${baseName}.obj`,
-              format: 'obj',
-              buffer: plates, // ArrayBuffer[] — one print plate per letter
-              mtl: plateMtl,
-              coverImage: captureCover(),
-              description: `Full A–Z keycap alphabet set (26 print plates). ${LICENSE_NOTE}`,
-              printConfig: printConfig(),
-            },
-          ],
-        });
-        if (result.success) {
-          setStatus('Exported alphabet set to MakerLab ✓  26 keycaps (A–Z).');
-          sdkToast({ message: 'Alphabet set exported', type: 'success' });
-          nudgeLicense();
-        } else {
-          setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
-          sdkToast({ message: 'Export failed', type: 'error' });
-        }
-      } else {
-        // 3MFs are already deflated zips — store (level 0) rather than re-compress.
-        const zipped = zipSync(files, { level: 0 });
-
-        if (host) {
-          /*
-           * An embedding host takes the set through its own export path, the same way the
-           * single-cap path does. `toHost` above is MakerWorld's host, a different one, so
-           * without this branch the set would fall through to the browser download below.
-           *
-           * One zip rather than twenty-six exports: the set is one thing the user asked for.
-           */
-          try {
-            const { indexed } = await host.exportToLibrary(
-              { name: `${baseName}.zip`, bytes: new Uint8Array(zipped) },
-              { designer: 'Keycap Legend Generator' },
-            );
-            setStatus(
-              indexed
-                ? 'Exported the full alphabet set to your library ✓  26 keycaps (A–Z).'
-                : `Exported the full alphabet set ✓  26 keycaps (A–Z), as ${baseName}.zip.`,
-            );
-            toast('Alphabet set exported', { kind: 'success' });
-            nudgeLicense();
-          } catch (err) {
-            console.error(err);
-            setStatus(`Export failed: ${err.message || err}`, 'err');
-          }
-          return;
-        }
-
-        downloadFile(zipped, `${baseName}.zip`, 'application/zip');
-        setStatus('Exported full alphabet set ✓  26 keycaps (A–Z) zipped. Open each 3MF in your slicer.');
-        toast('Alphabet set exported ✓', { kind: 'success' });
-        nudgeLicense();
-      }
-    } catch (e) {
-      console.error(e);
-      setStatus('Could not generate the alphabet set (try a simpler font or smaller size).', 'err');
-    } finally {
-      setBusyState(null);
-      running = false;
-      updateAlphabetAvailability();
-      scheduleRegen(); // refresh the live preview to the current inputs after the batch
-    }
-  }
-
-  alphabetBtn.addEventListener('click', generateAlphabetSet);
+  const { runPrimaryExport, updateAlphabetAvailability, nudgeLicense, printConfig } = exportsApi;
+  $('exportBlank').addEventListener('click', () => exportsApi.exportBlank());
 
   // ---------------------------------------------------------------- keycap swap
   // Install a freshly loaded keycap: dispose the old geometry, clean the new stem,
@@ -2382,17 +2105,8 @@ export function mount(container, host) {
           // what the set is laid out for. `grid` has no size — the builder falls back to 256².
           plateSize: getPlate(loadPlateChoice())?.size,
         }),
-        begin: () => {
-          if (running) return false;
-          clearTimeout(regenTimer); // a queued preview rebuild must not run mid-batch
-          running = true;
-          return true;
-        },
-        end: () => {
-          if (!running) return; // already released — never schedule two rebuilds for one batch
-          running = false;
-          scheduleRegen(); // back to the live preview for the current inputs
-        },
+        begin: rebuildLock.begin,
+        end: rebuildLock.end,
         setStatus,
         // `onCancel` is optional and only a batch passes one: it puts a Cancel button in the
         // chip, which is what makes "let it finish or cancel it first" a true sentence.
