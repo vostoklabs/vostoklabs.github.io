@@ -35,15 +35,13 @@ const WINDOW = 12;
 */
 const BUDGET = {
   'apps/bubble-pop-generator': 1444,
-  'apps/clicker-generator': 207,
+  'apps/clicker-generator': 168,
   'apps/house-number': 37,
-  'apps/keycap-generator': 55,
+  'apps/keycap-generator': 35,
   'apps/keychain-carabiner': 15,
-  'apps/laser-studio': 13,
-  'apps/magnet-generator': 1566,
+  'apps/magnet-generator': 1551,
   'apps/name-keychain': 45,
   'apps/pen-topper': 24,
-  'packages/patterns': 13,
   // The image tracer moved here from packages/laser; magnet and bubble-pop still hold their own
   // copies of it.
   'packages/trace': 914,

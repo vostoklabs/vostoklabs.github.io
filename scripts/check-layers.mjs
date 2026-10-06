@@ -77,14 +77,6 @@ const KNOWN = new Set([
   // the laser core takes it from the shapes core.
   'packages/laser/src/csg2d.ts -> packages/export/src/index.ts',
   'packages/laser/src/text.ts -> packages/export/src/index.ts',
-  // Takes FONTS from the registry file directly, past the package's front door. The fix is a
-  // './registry' subpath export in @vostok/fonts.
-  'apps/foldbox/src/logoFonts.ts -> packages/fonts/src/registry.ts',
-  // The font registry (see the end of this file). Laser Studio's geometry worker builds through
-  // its engine, whose files take only shape maths from @vostok/laser's root, and the root
-  // carries the text module. The fix is the subpaths in those files (@vostok/laser/rings,
-  // /csg2d, /blanks, /keyring).
-  'apps/laser-studio/src/engine/worker.ts -> ./build',
   // Meant: these tests are about the fonts or the text drawn with them, so they reach the
   // registry through the code they test, and their commands put the glob stand-in in place
   // (packages/fonts/tests/vite-glob-shim.mts).

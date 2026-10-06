@@ -178,8 +178,7 @@ void HISTORY_OF_TOTALS;
 */
 const BUDGET = {
   'bubble-pop-generator': { button: 1, html: 2, restyle: 17 },
-  'clicker-generator': { button: 6, input: 5, html: 17, restyle: 7 },
-  foldbox: { html: 1, restyle: 8 },
+  'clicker-generator': { button: 4, input: 2, html: 9, restyle: 6 },
   'house-number': { restyle: 5 },
   hub: { html: 2, restyle: 10 },
   'keycap-generator': { button: 14, select: 3, input: 12, range: 5, html: 2 },

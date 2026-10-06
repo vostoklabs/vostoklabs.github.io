@@ -49,13 +49,12 @@ import { ROOT, rel, appSourceFiles, read, blankComments, ignored, uncommitted, p
 */
 const BUDGET = {
   'bubble-pop-generator': { shadow: 14, viewer: 1, fileformat: 2, worker: 1 },
-  'clicker-generator': { shadow: 14, viewer: 1, fileformat: 5, fonts: 3, worker: 1 },
-  foldbox: { shadow: 4, fonts: 1 },
+  'clicker-generator': { shadow: 1, viewer: 1, fonts: 3, worker: 1 },
   'house-number': { shadow: 2, worker: 1 },
   hub: { shadow: 1 },
-  'keycap-generator': { shadow: 4, viewer: 1, fileformat: 1, fonts: 7 },
+  'keycap-generator': { viewer: 1, fonts: 7 },
   'keychain-carabiner': { shadow: 2, worker: 1 },
-  'laser-studio': { shadow: 3, worker: 1, project: 2 },
+  'laser-studio': { shadow: 1 },
   'magnet-generator': { shadow: 15, viewer: 1 },
   'name-keychain': { shadow: 4, viewer: 1, project: 2 },
   'pen-topper': { shadow: 1, worker: 1 },
