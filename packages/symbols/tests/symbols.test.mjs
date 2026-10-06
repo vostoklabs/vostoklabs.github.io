@@ -8,6 +8,7 @@ import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = fileURLToPath(new URL('.', import.meta.url)).split('\\').join('/');
@@ -142,6 +143,43 @@ check('the drawing path is made from the same shapes', (await S.symbolPath('tabl
 let unknown = '';
 await S.symbolShapes('nope').catch((e) => { unknown = e.message; });
 check('an unknown id rejects', /Unknown symbol/.test(unknown));
+
+// ── a chunk that fails to load is fetched again ──
+// A second build of the library whose Tabler chunk fails the first time it is read and loads
+// the second, as a chunk does over a connection that drops once.
+const flakyOut = `${tmp}/symbols-flaky-${process.pid}.mjs`;
+await build({
+  entryPoints: [`${pkg}/src/index.ts`], outfile: flakyOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'error',
+  define: { 'import.meta.glob': 'globalThis.__viteGlob' },
+  banner: { js: 'globalThis.__viteGlob = () => ({});' },
+  plugins: [{
+    name: 'flaky-chunk',
+    setup(b) {
+      b.onResolve({ filter: /tabler-icons-filled\.outlines\.json$/ }, (args) =>
+        args.namespace === 'flaky' ? undefined : { path: join(args.resolveDir, args.path), namespace: 'flaky' });
+      b.onLoad({ filter: /.*/, namespace: 'flaky' }, (args) => ({
+        resolveDir: dirname(args.path),
+        loader: 'js',
+        contents: `import real from ${JSON.stringify(args.path)};
+export default { get outlines() {
+  globalThis.__chunkReads = (globalThis.__chunkReads ?? 0) + 1;
+  if (globalThis.__chunkReads === 1) throw new Error('the chunk failed to load');
+  return real.outlines;
+} };`,
+      }));
+    },
+  }],
+});
+const F = await import(pathToFileURL(flakyOut).href);
+let failed = '';
+await F.symbolShapes('tabler:heart').catch((e) => { failed = e.message; });
+check('a symbol whose chunk fails to load rejects', failed === 'the chunk failed to load', failed);
+const next = await F.symbolShapes('tabler:star').catch((e) => e.message);
+check('…and the next symbol of that set loads the chunk again', Array.isArray(next) && wellFormed(next) && globalThis.__chunkReads === 2, `${typeof next === 'string' ? next : 'shapes'}, ${globalThis.__chunkReads} loads`);
+const retried = await F.symbolShapes('tabler:heart').catch((e) => e.message);
+check('…as does the symbol that failed, asked again', Array.isArray(retried) && wellFormed(retried), typeof retried === 'string' ? retried : '');
+await F.symbolShapes('tabler:moon');
+check('…and a chunk that loaded is kept', globalThis.__chunkReads === 2, `${globalThis.__chunkReads} loads`);
 
 // ── the stored data ──
 const material = all.filter((e) => e.set === 'material');

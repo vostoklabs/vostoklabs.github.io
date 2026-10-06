@@ -29,7 +29,15 @@ function unitShapes(id: string): Promise<Shapes> {
   if (!work) {
     const set = entry.set;
     let data = loaded.get(set);
-    if (!data) loaded.set(set, (data = OUTLINES[set]()));
+    if (!data) {
+      const load = OUTLINES[set]();
+      loaded.set(set, (data = load));
+      // A chunk that failed to load (a dropped connection) is fetched again by the next symbol
+      // asked for; kept, it would fail every symbol of its set until the page reloads.
+      load.catch(() => {
+        if (loaded.get(set) === load) loaded.delete(set);
+      });
+    }
     work = data.then((all) => decodeOutline(all[entry.name] ?? ''));
     cache.set(entry.id, work);
     work.catch(() => cache.delete(entry.id));
