@@ -461,13 +461,13 @@ const mount = read('mount.ts');
 const worker = read('workers/geometry.worker.ts');
 
 const onExport = mount.slice(mount.indexOf('onExport: async () => {'), mount.indexOf('onRenderPng:'));
-const writers = ['buildObjMtl(', 'buildThreeMF(', 'downloadThreeMF('];
+const writers = ['clickerObjMtl(', 'buildThreeMF(', 'downloadThreeMF('];
 const firstWrite = Math.min(...writers.map((w) => onExport.indexOf(w)).filter((i) => i >= 0));
 const settledAt = onExport.indexOf('await onScreen.settled()');
 check('Export awaits the build on screen before it writes anything', settledAt >= 0 && settledAt < firstWrite);
 check("Export never reads the preview's own parts variables", !/\b(latestParts|fitStripParts)\b/.test(onExport));
 
-const exporterCalls = [...mount.matchAll(/\b(downloadThreeMF|buildThreeMF|buildObjMtl)\(\s*([\w$]+)/g)].map((m) => `${m[1]}(${m[2]}`);
+const exporterCalls = [...mount.matchAll(/\b(downloadThreeMF|buildThreeMF|clickerObjMtl)\(\s*([\w$]+)/g)].map((m) => `${m[1]}(${m[2]}`);
 check('every exporter call in mount.ts is handed the settled parts', exporterCalls.length === 3 && exporterCalls.every((c) => c.endsWith('(parts')), exporterCalls.join(', '));
 
 // A debounced build Export does not know about is one it would export past.

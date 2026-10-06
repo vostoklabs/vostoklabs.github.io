@@ -521,6 +521,18 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   const sent = seen.sdkExports[0]?.artifacts?.[0];
   const cover = sent ? new TextDecoder().decode(Buffer.from(String(sent.coverImage).replace('data:image/png;base64,', ''), 'base64')) : undefined;
   check('in MakerLab: the cover sent with the model shows the build in it', exp.done && seen.objs.length === 1 && cover === seen.objs[0][0].name, `model ${shown(seen.objs[0]?.[0].name)}, cover of ${shown(cover)}`);
+  check('…and its OBJ, a picture of ours, credits no model', seen.objOpts[0]?.sourceModel === undefined, String(seen.objOpts[0]?.sourceModel));
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh(() => (knobs.makerlab = true));
+  ui().onImportMode('model');
+  await clock.advance(300);
+  const exp = press();
+  await clock.advance(300);
+  check('in MakerLab, Model mode: the OBJ sent is the cut on screen', exp.done && seen.objs[0]?.[0].name === 'model:slice|size=40|st=0', `${shown(seen.objs[0]?.[0].name)}`);
+  check('…and its mark says whose shape it is, as the 3MF\'s does', seen.objOpts[0]?.sourceModel === 'Skull', String(seen.objOpts[0]?.sourceModel));
   finish(unmount);
 }
 

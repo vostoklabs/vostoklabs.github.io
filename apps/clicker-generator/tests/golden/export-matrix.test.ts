@@ -72,9 +72,7 @@ const { FALLBACK_POST_SEAT, makeSwitchKit, measurePostSeat, measureSwitchBands, 
 const { buildModelClicker } = await import('../../src/model/buildModel.ts');
 const { DEFAULT_MODEL_CUT } = await import('../../src/model/types.ts');
 const { buildThreeMF } = await import('../../src/export/threemfExport.ts');
-const { buildObjMtl } = await import('../../src/export/objExport.ts');
-const { assemblyMinZ, objectKeyOf, place, plateLayout } = await import('../../src/export/plateLayout.ts');
-const { buildObjMtl: shelfObjMtl } = await import('@vostok/export');
+const { clickerObjMtl } = await import('../../src/export/objExport.ts');
 
 type BuildParams = import('../../src/types.ts').BuildParams;
 type BuildRegion = import('../../src/types.ts').BuildRegion;
@@ -390,31 +388,10 @@ const DESIGNS: Record<string, () => Built> = {
   },
 };
 
-/* ------------------------------------------------------------------ the shelf's OBJ writer */
-
-/**
- * The same plate through the shelf's OBJ writer: every vertex placed the way the clicker's own
- * writer places it (dropped to the bed, packed onto the plate, tops face down), each part in
- * its group, coloured by colour, for the comparison at the end.
- */
-function shelfObj(parts: ClickerPart[], plate: PlateChoice) {
-  const minZ = assemblyMinZ(parts);
-  const layout = plateLayout(parts, minZ, { plate });
-  return shelfObjMtl(parts.map((p) => {
-    const pl = layout.placementFor(objectKeyOf(p));
-    const out = new Float64Array((p.vertProperties.length / p.numProp) * 3);
-    for (let i = 0, j = 0; i < p.vertProperties.length; i += p.numProp, j += 3) {
-      const [x, y, z] = place(p.vertProperties[i]!, p.vertProperties[i + 1]!, p.vertProperties[i + 2]! - minZ, pl);
-      out[j] = x;
-      out[j + 1] = y;
-      out[j + 2] = z;
-    }
-    return { name: p.name, group: p.group, color: p.colorRgb, positions: out, indices: p.triVerts };
-  }), { mtlFileName: 'clicker.mtl' });
-}
-const shelfObjs = new Map<Built, { obj: string; mtl: string; shelf: { obj: string; mtl: string } }>();
-
 /* ------------------------------------------------------------------ measuring and hashing */
+
+/** Each design's OBJ as text, for the check on its header at the end. */
+const objTexts = new Map<Built, string>();
 
 const hash = (...chunks: (string | Uint8Array)[]): string => {
   const h = createHash('sha256');
@@ -459,8 +436,8 @@ function record(built: Built) {
 
   const plate = built.plate ?? 'a1';
   const threeMF = unzipSync(buildThreeMF(built.parts, { plate, ...(built.sourceModel ? { sourceModel: built.sourceModel } : {}) }));
-  const { obj, mtl } = buildObjMtl(built.parts, 'clicker.mtl', { plate });
-  shelfObjs.set(built, { obj, mtl, shelf: shelfObj(built.parts, plate) });
+  const { obj, mtl } = clickerObjMtl(built.parts, { plate, ...(built.sourceModel ? { sourceModel: built.sourceModel } : {}) });
+  objTexts.set(built, obj);
   return {
     warnings: built.warnings,
     parts,
@@ -477,12 +454,12 @@ function record(built: Built) {
 
 type Record_ = ReturnType<typeof record>;
 const actual: Record<string, Record_> = {};
-const objs: Record<string, { obj: string; mtl: string; shelf: { obj: string; mtl: string } }> = {};
+const objs: Record<string, { obj: string; sourceModel?: string }> = {};
 for (const [name, build] of Object.entries(DESIGNS)) {
   const started = performance.now();
   const built = build();
   actual[name] = record(built);
-  objs[name] = shelfObjs.get(built)!;
+  objs[name] = { obj: objTexts.get(built)!, sourceModel: built.sourceModel };
   console.log(`built  ${name}  (${actual[name]!.parts.length} parts, ${actual[name]!.tris} triangles, ${((performance.now() - started) / 1000).toFixed(1)} s)`);
 }
 
@@ -525,15 +502,15 @@ for (const [name, got] of Object.entries(actual)) {
   check(`${name}: the OBJ and the MTL unchanged`, got.obj === want.obj && got.mtl === want.mtl, got.obj === want.obj ? (got.mtl === want.mtl ? '' : 'the MTL changed') : 'the OBJ changed');
 }
 
-// The shelf's writer, given the plate the clicker's writer lays out, writes the same file but
-// for the header comment: the clicker's two lines ("# Clicker Generator - Vostok Labs" and its
-// units line) against the shelf's one. Everything from `mtllib` on is the same text.
-const fromMtllib = (obj: string) => obj.slice(obj.indexOf('\nmtllib ') + 1);
+// The OBJ's header is the provenance mark the 3MF carries (invariant #2), and a model cut from
+// someone's file says so rather than claiming the shape.
 for (const [name, o] of Object.entries(objs)) {
+  const header = o.obj.slice(0, o.obj.indexOf('\nmtllib '));
   check(
-    `${name}: the shelf's OBJ writer writes the same plate, header comment aside`,
-    fromMtllib(o.shelf.obj) === fromMtllib(o.obj) && o.shelf.mtl === o.mtl,
-    o.obj.slice(0, o.obj.indexOf('\nmtllib ')).split('\n').length + ' header lines here, ' + o.shelf.obj.slice(0, o.shelf.obj.indexOf('\nmtllib ')).split('\n').length + ' on the shelf',
+    `${name}: the OBJ carries the provenance mark${o.sourceModel ? ', crediting the model' : ''}`,
+    header.startsWith('# Vostok Labs - Clicker\n') && header.includes('# Created: 2026-01-02')
+      && (o.sourceModel ? header.includes(`made from an uploaded model: ${o.sourceModel}.`) : header.includes('generated by the Vostok Labs Clicker Generator')),
+    `${header.split('\n').length} header lines`,
   );
 }
 

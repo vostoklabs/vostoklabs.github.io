@@ -47,7 +47,7 @@
       "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "55279106909bc280",
+    "obj": "c12fa865c4830eff",
     "mtl": "1a5c3f5bbf20d97d"
   },
   "text: three lines, tracked and leaded, keychain": {
@@ -96,7 +96,7 @@
       "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "df7a0be05e393f8e",
+    "obj": "9f4ff5319a17dab8",
     "mtl": "1a5c3f5bbf20d97d"
   },
   "text: Standard Bold, made bolder": {
@@ -148,7 +148,7 @@
       "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "bde5e7f2f1745f6d",
+    "obj": "eaacf1418bb7e9e5",
     "mtl": "1a5c3f5bbf20d97d"
   },
   "blocks: ABCD in a row": {
@@ -245,7 +245,7 @@
       "Metadata/project_settings.config": "11e6dc9c202f9c2b",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "68d2e1ed0f95a6a9",
+    "obj": "134bedd6c03211ae",
     "mtl": "295f2c2e68781bc2"
   },
   "blocks: WASD, a symbol on W, open, knurled": {
@@ -342,7 +342,7 @@
       "Metadata/project_settings.config": "11e6dc9c202f9c2b",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "117f3037a8e0c81c",
+    "obj": "085215892643585a",
     "mtl": "295f2c2e68781bc2"
   },
   "SVG on a circle": {
@@ -407,7 +407,7 @@
       "Metadata/project_settings.config": "d639441d3076f550",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "829bc7f36941cfea",
+    "obj": "9dfedc7e68c2a9ec",
     "mtl": "050bcdc073c21b3b"
   },
   "SVG on a star, keychain, on the A1 mini": {
@@ -472,7 +472,7 @@
       "Metadata/project_settings.config": "d639441d3076f550",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "b97305e352c0915e",
+    "obj": "b4836dfada461081",
     "mtl": "050bcdc073c21b3b"
   },
   "image: heart, four colours": {
@@ -569,7 +569,7 @@
       "Metadata/project_settings.config": "c616a21fe3cc6971",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "d9104ff9726129a7",
+    "obj": "d53b6c1733435ed9",
     "mtl": "fc2df1090903e6b5"
   },
   "icon: Lucide heart": {
@@ -618,7 +618,7 @@
       "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "4287e6e35509278f",
+    "obj": "b56f641214e2dbf0",
     "mtl": "1a5c3f5bbf20d97d"
   },
   "icon on a rounded square, smaller design, offset": {
@@ -667,7 +667,7 @@
       "Metadata/project_settings.config": "91728eb2cddf0c63",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "4e83ed07d49fd64d",
+    "obj": "ee4a2f4c28352d77",
     "mtl": "fc984ca3189aafcc"
   },
   "text: two switches": {
@@ -718,7 +718,7 @@
       "Metadata/project_settings.config": "a4f3e9bc5d4fce69",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "ec186a95870533b3",
+    "obj": "f71ee5abf318bde7",
     "mtl": "1a5c3f5bbf20d97d"
   },
   "fit test strip": {
@@ -783,7 +783,7 @@
       "Metadata/project_settings.config": "335fd37335e77329",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "228a8b4b2c8818a9",
+    "obj": "1e64652fcbc4a867",
     "mtl": "5cbc5c2eba3feeba"
   },
   "Model mode: skull, sliced": {
@@ -824,7 +824,7 @@
       "Metadata/project_settings.config": "cfb91d435cf2e073",
       "Metadata/vostok_labs.txt": "8d605277fe1188c4"
     },
-    "obj": "a52a29a8b512a9eb",
+    "obj": "71ed67f16509f0d6",
     "mtl": "31dd38b8ba5c7ffc"
   },
   "Model mode: pumpkin, button": {
@@ -865,7 +865,7 @@
       "Metadata/project_settings.config": "cfb91d435cf2e073",
       "Metadata/vostok_labs.txt": "991debf63d3937df"
     },
-    "obj": "f099cc323b76c350",
+    "obj": "d4aa315b5de6bb85",
     "mtl": "31dd38b8ba5c7ffc"
   },
   "Model mode: duck, on a stand": {
@@ -914,7 +914,7 @@
       "Metadata/project_settings.config": "cfb91d435cf2e073",
       "Metadata/vostok_labs.txt": "a5a971bd75255541"
     },
-    "obj": "942062f529d84166",
+    "obj": "98b331bb3e58e77a",
     "mtl": "31dd38b8ba5c7ffc"
   },
   "Halloween pack: pumpkin shape round a traced design": {
@@ -1003,7 +1003,7 @@
       "Metadata/project_settings.config": "e6baf712bc3cf119",
       "Metadata/vostok_labs.txt": "00a799cc5a2c9eb7"
     },
-    "obj": "eb5e6931b24fefa8",
+    "obj": "209d4ec2c97a89fe",
     "mtl": "a6ff67b6184ad317"
   }
 }

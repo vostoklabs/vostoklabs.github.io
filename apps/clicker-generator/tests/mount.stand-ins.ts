@@ -24,6 +24,8 @@ export const seen = {
   built: [] as { parts: ClickerPart[]; opts: Record<string, unknown> }[],
   /** The parts of every OBJ made for the MakerLab host. */
   objs: [] as ClickerPart[][],
+  /** …and what each was told about the design (whose shape it is). */
+  objOpts: [] as Record<string, unknown>[],
   /** What each cover drawing shows: the name of the part on screen when the picture was taken. */
   covers: [] as string[],
   /** createUi's callbacks: the controls a scenario presses. */
@@ -64,6 +66,7 @@ export function reset() {
   seen.downloads.length = 0;
   seen.built.length = 0;
   seen.objs.length = 0;
+  seen.objOpts.length = 0;
   seen.covers.length = 0;
   seen.ui = null;
   seen.state = null;
@@ -188,11 +191,12 @@ export function buildThreeMF(parts: ClickerPart[], opts: Record<string, unknown>
 export function downloadThreeMF(parts: ClickerPart[], name: string, opts: Record<string, unknown> = {}) {
   seen.downloads.push({ parts, name, opts });
 }
-export function buildObjMtl(parts: ClickerPart[]) {
+export function clickerObjMtl(parts: ClickerPart[], opts: Record<string, unknown> = {}) {
   seen.objs.push(parts);
+  seen.objOpts.push(opts);
   return { obj: '', mtl: '' };
 }
-export const objToArrayBuffer = () => new ArrayBuffer(0);
+export const textToArrayBuffer = () => new ArrayBuffer(0);
 export const downloadFile = noop;
 export const assemblyMinZ = () => 0;
 export const groupBBox = () => ({ minX: 0, maxX: 10, minY: 0, maxY: 10 });

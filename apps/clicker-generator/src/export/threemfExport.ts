@@ -8,10 +8,10 @@
 //    flipped face-down — and the placement is BAKED INTO THE VERTICES rather than written as an
 //    `<item transform>`; see plateLayout() for why. The writer only slides the whole
 //    arrangement to the middle of the bed.
-import { buildThreeMF as writeThreeMF, downloadFile, type ExportPart } from '@vostok/export';
+import { buildThreeMF as writeThreeMF, downloadFile, type ExportPart, type ProvenanceMeta } from '@vostok/export';
 import { plateSize, type PlateChoice } from '@vostok/plates';
 import type { ClickerPart } from '../types';
-import { assemblyMinZ, objectKeyOf, objectKeys, place, plateLayout, type Placement } from './plateLayout';
+import { assemblyMinZ, objectKeyOf, objectKeys, placed, plateLayout } from './plateLayout';
 
 export interface ThreeMFOptions {
   /** The bed to lay the model out on. Defaults to the plate picker's shared preference —
@@ -44,19 +44,18 @@ function labelFor(parts: ClickerPart[], key: string): string {
   return p?.objectLabel ?? (p?.group === 'top' ? 'clicker_top' : 'clicker_base');
 }
 
-/** A part's xyz with its plate placement baked in, as Float64 so every vertex reaches the
- *  writer exactly as the placement maths left it, not rounded to a Float32 on the way. */
-function placed(p: ClickerPart, minZ: number, pl: Placement): Float64Array {
-  const np = p.numProp;
-  const vp = p.vertProperties;
-  const out = new Float64Array((vp.length / np) * 3);
-  for (let i = 0, j = 0; i < vp.length; i += np, j += 3) {
-    const [x, y, z] = place(vp[i], vp[i + 1], vp[i + 2] - minZ, pl);
-    out[j] = x;
-    out[j + 1] = y;
-    out[j + 2] = z;
-  }
-  return out;
+/** The provenance mark every clicker file carries, the 3MF and the OBJ alike (invariant #2).
+ *  `sourceModel` is the file a Model-mode clicker was cut from: see `ThreeMFOptions`. */
+export function clickerMark(sourceModel?: string): ProvenanceMeta {
+  // Read without assuming Vite, so a node script that imports this file still runs.
+  const env = (import.meta as unknown as { env?: Record<string, string> }).env ?? {};
+  return {
+    title: 'Clicker',
+    generator: 'clicker-generator',
+    application: 'Vostok Labs Clicker Generator',
+    buildId: env.VITE_BUILD_ID,
+    sourceModel,
+  };
 }
 
 export function buildThreeMF(parts: ClickerPart[], opts: ThreeMFOptions = {}): Uint8Array {
@@ -78,8 +77,6 @@ export function buildThreeMF(parts: ClickerPart[], opts: ThreeMFOptions = {}): U
     groupOf.set(key, group);
   }
 
-  // Read without assuming Vite, so a node script that imports this file still runs.
-  const env = (import.meta as unknown as { env?: Record<string, string> }).env ?? {};
   return writeThreeMF(
     parts.map((p): ExportPart<Float64Array> => ({
       name: p.name,
@@ -90,11 +87,7 @@ export function buildThreeMF(parts: ClickerPart[], opts: ThreeMFOptions = {}): U
       group: groupOf.get(objectKeyOf(p)),
     })),
     {
-      title: 'Clicker',
-      generator: 'clicker-generator',
-      application: 'Vostok Labs Clicker Generator',
-      buildId: env.VITE_BUILD_ID,
-      sourceModel: opts.sourceModel,
+      ...clickerMark(opts.sourceModel),
       plateSize: plateSize(layout.plate),
       cover: opts.coverPng,
       coverSmall: opts.coverSmallPng,

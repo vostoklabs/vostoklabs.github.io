@@ -29,14 +29,14 @@ import {
 import './style.css';
 import { createViewer, type SectionAxis } from './viewer/viewer';
 import { mountPlatePicker } from '@vostok/plates';
-import { downloadFile } from '@vostok/export';
+import { downloadFile, textToArrayBuffer } from '@vostok/export';
 import { createUi, type UiState } from './ui/ui';
 import { loadFileToImage, parseSvg, processImage, type RgbaImage, type SvgOptions } from '@vostok/trace';
 import { runWizard } from './ui/wizard';
 import { buildThreeMF, downloadThreeMF } from './export/threemfExport';
 import { shownBuild, type Shown } from './export/shownBuild';
 import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
-import { buildObjMtl, objToArrayBuffer } from './export/objExport';
+import { clickerObjMtl } from './export/objExport';
 import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from './geometry/stemFit';
 import { FIT_TEST_FONT_ID, FIT_TEST_STEP_MM, fitTestLabel, fitTestLadder } from './geometry/fitStrip';
 import { openSvgPreview } from './ui/svgPreview';
@@ -892,8 +892,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       if (!shown) return;
       const file = exportable(shown);
       if (MAKERLAB && mlReady() && mlCan('export')) {
-        // Embedded path: hand the host an OBJ (one `o` object per colour region) plus an MTL
-        // carrying those colours.
+        // Embedded path: hand the host an OBJ (one `o` object per part) plus an MTL carrying
+        // their colours, with the provenance mark in the OBJ's header as the 3MF carries it.
         const status = (msg: string) => store.set({ status: msg });
         status('Sending to MakerLab…');
         try {
@@ -901,15 +901,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           // `canvas.toDataURL()` with no render in front of it — it survived only because the
           // renderer keeps its drawing buffer, and it handed MakerWorld the whole viewport:
           // build plate, grid, and the model wherever the user had last dragged it.
-          const { parts, fitTest, fileBase, png } = await withCover(file);
-          const { obj, mtl } = buildObjMtl(parts, 'clicker.mtl');
+          const { parts, fitTest, fileBase, source, png } = await withCover(file);
+          const { obj, mtl } = clickerObjMtl(parts, source);
           const coverImage = png ? 'data:image/png;base64,' + bytesToBase64(png) : '';
           const result = await sdkExport({
             artifacts: [
               {
                 fileName: `${fileBase}.obj`,
                 format: 'obj',
-                buffer: objToArrayBuffer(obj),
+                buffer: textToArrayBuffer(obj),
                 mtl,
                 coverImage,
                 description: fitTest

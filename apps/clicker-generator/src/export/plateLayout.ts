@@ -42,6 +42,22 @@ export function place(
     : [x + pl.tx, y + pl.ty, z + pl.tz];
 }
 
+/** A part's xyz with its plate placement baked in, dropped by `minZ` first: what the 3MF and the
+ *  OBJ are written from. Float64, so every vertex reaches the writer exactly as the placement
+ *  maths left it, not rounded to a Float32 on the way. */
+export function placed(p: ClickerPart, minZ: number, pl: Placement): Float64Array {
+  const np = p.numProp;
+  const vp = p.vertProperties;
+  const out = new Float64Array((vp.length / np) * 3);
+  for (let i = 0, j = 0; i < vp.length; i += np, j += 3) {
+    const [x, y, z] = place(vp[i], vp[i + 1], vp[i + 2] - minZ, pl);
+    out[j] = x;
+    out[j + 1] = y;
+    out[j + 2] = z;
+  }
+  return out;
+}
+
 /**
  * Which independently-movable object a part belongs to on the plate.
  *
