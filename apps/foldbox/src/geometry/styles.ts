@@ -9,7 +9,7 @@
 // the clamps are the interesting part.
 
 import type { BoxParams, HangHole, HangTab, LoosePart, Panel, Poly, Pt, Slit, StyleParts } from '../types';
-import { bboxOf, rect, roundCorners, roundedRect, stadium, translate } from './poly';
+import { polysBounds, rect, roundCorners, roundedRect, stadium, translate } from './poly';
 import { slotFit } from './fit';
 import { machineById } from './solve';
 import {
@@ -583,7 +583,7 @@ function applyHangTab(
     heightMm: p.hangTabHeightMm,
     fit: slotFit(p, machineById(p.machineId), p.caliperMm),
   });
-  const bb = bboxOf([back.outline]);
+  const bb = polysBounds([back.outline]);
   const out = panels.map((q) =>
     q.id === back.id
       ? {
@@ -1031,7 +1031,7 @@ function buildCakeBox(p: BoxParams): StyleParts {
     // own depth term here. A formula in two places is a formula that will not be kept
     // in step, and the wings would silently stop matching the deck they hang from.
     const deck = cover.panels[0] as Panel;
-    const [dx0, dy0, dx1, dy1] = bboxOf([deck.outline]);
+    const [dx0, dy0, dx1, dy1] = polysBounds([deck.outline]);
     // Chamfered on the leading corner — the one that meets the rim first as the lid
     // comes down. A square corner catches on the wall and levers the wing back out.
     const wingCh = Math.min(wingD * 0.35, Math.max(0, (dy1 - dy0 - 2 * g) * 0.25));
@@ -1115,7 +1115,7 @@ function buildTrayLid(p: BoxParams): StyleParts {
   // Measured off the built panels rather than predicted from L/W/H: a tray's blank
   // now reaches out by a roll's worth at each end and a wall's at each side, and a
   // formula that has to be kept in step with the builder is a formula that will not be.
-  const bb = (parts: { panels: Panel[] }) => bboxOf(parts.panels.map((q) => q.outline));
+  const bb = (parts: { panels: Panel[] }) => polysBounds(parts.panels.map((q) => q.outline));
   const [tx0, , , ty1] = bb(base);
   const [lx0, ly0, lx1] = bb(lid);
   const dx = tx0 + (L + 5 * t) / 2 - (lx0 + lx1) / 2;

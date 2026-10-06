@@ -12,7 +12,7 @@ import { MACHINES, SHEETS, STOCKS } from '../types';
 import { buildNet, placeNet } from './net';
 import { TRADE_INSET, buildStyle, insideDims, styleMeta } from './styles';
 import { slotFit } from './fit';
-import { at, bboxOf, offsetRing, pathLength, signedArea } from './poly';
+import { at, polysBounds, offsetRing, pathLength, signedArea } from './poly';
 import { markFaceFor, markInsetMm, placeMarks, type MarkProblem } from './marks';
 
 export const SHEET_MARGIN_MM = 5;
@@ -81,7 +81,7 @@ function applyKerf(net: Net, kerfMm: number): Net {
     // Recompute, or the blank silently reports its pre-kerf size — which makes the
     // fit check wrong by exactly the amount the compensation just added, on the one
     // axis where it matters most.
-    bbox: bboxOf([...cutRings, ...loose.map((l) => l.outline)]),
+    bbox: polysBounds([...cutRings, ...loose.map((l) => l.outline)]),
   };
 }
 

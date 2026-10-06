@@ -20,7 +20,7 @@
 
 import * as THREE from 'three';
 import type { Net, Panel, Poly, Pt } from '../types';
-import { bboxOf, pointInRing, signedArea } from '../geometry/poly';
+import { polysBounds, pointInRing, signedArea } from '../geometry/poly';
 
 /** Net-space -> panel-local: rotate by -angle about origin. */
 interface Frame {
@@ -106,7 +106,7 @@ function shapeFrom(outline: Poly, holes: Poly[], f: Frame): THREE.Shape {
 }
 
 function centroid(poly: Poly): Pt {
-  const [minX, minY, maxX, maxY] = bboxOf([poly]);
+  const [minX, minY, maxX, maxY] = polysBounds([poly]);
   return [(minX + maxX) / 2, (minY + maxY) / 2];
 }
 
@@ -443,7 +443,7 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
         const lastFoldT1 = Math.min(1, (maxFoldStage - 1) * span * 0.92 + span * 1.35);
         node.t0 = Math.min(0.85, lastFoldT1);
         node.t1 = Math.min(1, node.t0 + span * 1.35);
-        node.rootEdge = bboxOf([panel.outline])[1] - c[1];
+        node.rootEdge = polysBounds([panel.outline])[1] - c[1];
       } else {
         node.t0 = 0.45;
         node.t1 = 1;
@@ -452,7 +452,7 @@ export function buildRig(net: Net, style: RigStyle): FoldRig {
           // itself 18 mm through the plate. Lifted by half its diagonal at mid-turn it
           // clears the table however it is proportioned, and reads as picked up,
           // turned over and set down.
-          const [x0, y0, x1, y1] = bboxOf([panel.outline]);
+          const [x0, y0, x1, y1] = polysBounds([panel.outline]);
           node.rootHover = Math.hypot(x1 - x0, y1 - y0) / 2;
         }
       }

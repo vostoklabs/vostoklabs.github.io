@@ -3,7 +3,14 @@
 // cost more than it buys. The one thing that has to be right is that shared corners
 // compare EQUAL, which is what `snap` is for.
 
+import { pointInRing, ringBox, signedArea } from '@vostok/shapes';
 import type { Poly, Pt } from '../types';
+
+/* Area and winding, and even-odd point-in-ring, are the shelf's: positive area is
+   counter-clockwise, which Manifold and every laser convention agree on and the exporter uses to
+   tell an outer ring from a hole; the point test is blind to winding, so it can ask "is this ring
+   nested inside that one" before either has been wound the right way. */
+export { pointInRing, signedArea };
 
 /** Grid the whole app rounds to. Fine enough that no real dimension lands on the
  *  boundary between two cells, coarse enough that two panels built by different
@@ -58,18 +65,6 @@ export function dot(a: Pt, b: Pt): number {
   return a[0] * b[0] + a[1] * b[1];
 }
 
-/** Positive for counter-clockwise. Manifold and every laser convention agree on
- *  this sign, and the exporter uses it to tell an outer ring from a hole. */
-export function signedArea(ring: Poly): number {
-  let s = 0;
-  for (let i = 0, n = ring.length; i < n; i++) {
-    const a = at(ring, i);
-    const b = at(ring, i + 1);
-    s += a[0] * b[1] - b[0] * a[1];
-  }
-  return s / 2;
-}
-
 export function ensureCCW(ring: Poly): Poly {
   return signedArea(ring) < 0 ? [...ring].reverse() : ring;
 }
@@ -81,21 +76,11 @@ export function ensureCW(ring: Poly): Poly {
   return signedArea(ring) > 0 ? [...ring].reverse() : ring;
 }
 
-export function bboxOf(polys: Poly[]): [number, number, number, number] {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const poly of polys) {
-    for (const [x, y] of poly) {
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-  }
-  if (!Number.isFinite(minX)) return [0, 0, 0, 0];
-  return [minX, minY, maxX, maxY];
+/** The box round some rings as `[x0, y0, x1, y1]`, the order every caller here destructures;
+ *  `[0, 0, 0, 0]` when there are no points at all. */
+export function polysBounds(polys: Poly[]): [number, number, number, number] {
+  const b = ringBox(polys);
+  return Number.isFinite(b.minX) ? [b.minX, b.minY, b.maxX, b.maxY] : [0, 0, 0, 0];
 }
 
 export function translate(poly: Poly, dx: number, dy: number): Poly {
@@ -399,19 +384,4 @@ export function offsetRing(ring: Poly, d: number): Poly {
     out.push([p1[0] + e1[0] * t, p1[1] + e1[1] * t]);
   }
   return out;
-}
-
-/** Even-odd point-in-polygon. Deliberately blind to winding, so it can ask "is this
- *  ring nested inside that one" before either has been wound the right way. */
-export function pointInRing(p: Pt, ring: Poly): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = at(ring, i);
-    const b = at(ring, j);
-    if (a[1] > p[1] !== b[1] > p[1]) {
-      const x = ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0];
-      if (p[0] < x) inside = !inside;
-    }
-  }
-  return inside;
 }

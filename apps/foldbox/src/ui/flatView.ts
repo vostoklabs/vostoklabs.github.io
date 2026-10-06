@@ -6,7 +6,7 @@ import { el } from '@vostok/ui-kit';
 import type { Op, Pt, SolveResult } from '../types';
 import { OP_COLOR, collectPaths, explodeDashes } from '../export/paths';
 import { sheetById } from '../geometry/solve';
-import { bboxOf } from '../geometry/poly';
+import { polysBounds } from '../geometry/poly';
 
 export interface FlatView {
   root: HTMLElement;
@@ -34,7 +34,7 @@ export function createFlatView(): FlatView {
     // Frame whichever is bigger: the sheet when it is shown, or the blank when the
     // blank has outgrown it. A net that overflows must stay visible — hiding the
     // overflow is how a user ends up cutting a part that was never on the sheet.
-    const netBox = bboxOf([...net.cutRings, ...net.loose.map((l) => l.outline)]);
+    const netBox = polysBounds([...net.cutRings, ...net.loose.map((l) => l.outline)]);
     const view: [number, number, number, number] = opts.showSheet
       ? [
           Math.min(0, netBox[0] - 4),
@@ -112,7 +112,7 @@ export function createFlatView(): FlatView {
       const size = Math.max(2.2, Math.min(vw, vh) / 55);
       for (const p of net.panels) {
         if (p.role === 'flap' && p.label === 'dust flap') continue;
-        const b = bboxOf([p.outline]);
+        const b = polysBounds([p.outline]);
         const cx = (b[0] + b[2]) / 2;
         const cy = (b[1] + b[3]) / 2;
         if (b[2] - b[0] < size * 3 || b[3] - b[1] < size * 1.6) continue;
@@ -122,7 +122,7 @@ export function createFlatView(): FlatView {
         );
       }
       for (const l of net.loose) {
-        const b = bboxOf([l.outline]);
+        const b = polysBounds([l.outline]);
         out.push(
           `<text x="${((b[0] + b[2]) / 2).toFixed(2)}" y="${(fy((b[1] + b[3]) / 2) + size * 0.35).toFixed(2)}" ` +
             `font-size="${size.toFixed(2)}" class="fb-flat__label">${escape(l.label)}</text>`,

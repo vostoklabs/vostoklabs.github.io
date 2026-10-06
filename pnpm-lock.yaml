@@ -130,6 +130,9 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@vostok/shapes':
+        specifier: workspace:*
+        version: link:../../packages/shapes
       '@vostok/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit

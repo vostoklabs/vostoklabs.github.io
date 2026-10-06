@@ -26,7 +26,7 @@
 import { buildStl, buildThreeMF, downloadFile, type ExportPart, type RGB } from '@vostok/export';
 import { BRAND } from '@vostok/brand';
 import type { Net, Panel, Poly, Pt } from '../types';
-import { EPS, at, bboxOf, cross, len, pointInRing, signedArea, sub } from '../geometry/poly';
+import { EPS, at, polysBounds, cross, len, pointInRing, signedArea, sub } from '../geometry/poly';
 import {
   effectiveHingeWidthMm,
   hingeThicknessMm,
@@ -431,7 +431,7 @@ function panelTop(
 ): Poly | null {
   if (!mine.length) return panel.outline;
 
-  const [x0, y0, x1, y1] = bboxOf([panel.outline]);
+  const [x0, y0, x1, y1] = polysBounds([panel.outline]);
   const minDim = Math.min(x1 - x0, y1 - y0);
   const want = Math.min(back, minDim * 0.35);
   if (want <= EPS) return panel.outline;
@@ -451,7 +451,7 @@ function panelTop(
   // A pull-back that ate the panel, folded it inside out, or somehow grew it is not
   // a shape to extrude. Drop the top slab and leave that panel at hinge thickness.
   if (area <= 0.3 || area > signedArea(ring) + EPS) return null;
-  const [ix0, iy0, ix1, iy1] = bboxOf([inset]);
+  const [ix0, iy0, ix1, iy1] = polysBounds([inset]);
   if (ix0 < x0 - EPS || iy0 < y0 - EPS || ix1 > x1 + EPS || iy1 > y1 + EPS) return null;
   return inset;
 }

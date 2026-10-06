@@ -22,7 +22,7 @@
 // logo on it.
 
 import type { Artwork, BoxParams, Mark, Net, Panel, Poly, Pt, StyleId } from '../types';
-import { at, bboxOf, pointInRing, signedArea } from './poly';
+import { at, polysBounds, pointInRing, signedArea } from './poly';
 import { WINDOW_PANEL, styleMeta } from './styles';
 import { grooveHalfOpeningMm } from './fit';
 
@@ -72,13 +72,13 @@ export function windByNesting(rings: Poly[]): Poly[] {
  *  thing for a word and for a badge. Rings that are not shapes — the odd two-point
  *  contour a font emits, the slivers a stroke tessellation leaves — are dropped here. */
 export function normalizeArtwork(rings: Poly[], lines: Poly[]): Artwork {
-  const box = bboxOf([...rings, ...lines]);
+  const box = polysBounds([...rings, ...lines]);
   const side = Math.max(box[2] - box[0], box[3] - box[1]) || 1;
   const cleanRings = rings
     .map(dedupe)
     .filter((r) => r.length >= 3 && Math.abs(signedArea(r)) > side * side * 1e-8);
   const cleanLines = lines.map(dedupe).filter((l) => l.length >= 2);
-  const all = bboxOf([...cleanRings, ...cleanLines]);
+  const all = polysBounds([...cleanRings, ...cleanLines]);
   const cx = (all[0] + all[2]) / 2;
   const cy = (all[1] + all[3]) / 2;
   const maxSide = Math.max(all[2] - all[0], all[3] - all[1]) || 1;
@@ -89,7 +89,7 @@ export function normalizeArtwork(rings: Poly[], lines: Poly[]): Artwork {
 /** The clear rectangle of a face, [x, y, w, h]. */
 function faceRect(panel: Panel): [number, number, number, number] {
   if (panel.windowRect) return panel.windowRect;
-  const [x0, y0, x1, y1] = bboxOf([panel.outline]);
+  const [x0, y0, x1, y1] = polysBounds([panel.outline]);
   return [x0, y0, x1 - x0, y1 - y0];
 }
 
@@ -213,7 +213,7 @@ export function placeMarks(
   const turns = p.logoRotation / 90;
   const rings = art.rings.map((r) => rotateQuarter(r, turns));
   const lines = art.lines.map((l) => rotateQuarter(l, turns));
-  const [ax0, ay0, ax1, ay1] = bboxOf([...rings, ...lines]);
+  const [ax0, ay0, ax1, ay1] = polysBounds([...rings, ...lines]);
   const aw = Math.max(ax1 - ax0, 1e-9);
   const ah = Math.max(ay1 - ay0, 1e-9);
   const acx = (ax0 + ax1) / 2;

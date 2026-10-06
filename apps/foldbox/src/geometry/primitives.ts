@@ -9,7 +9,7 @@
 // fit inside.
 
 import type { HangHole, HangTab, Panel, Poly, Pt, Slit } from '../types';
-import { EPS, arcPoints, at, bboxOf, rect, roundCorners, signedArea, stadium } from './poly';
+import { EPS, arcPoints, at, polysBounds, rect, roundCorners, signedArea, stadium } from './poly';
 import { DEFAULT_SLOT_FIT, type SlotFit } from './fit';
 
 export const HALF = Math.PI / 2;
@@ -307,7 +307,7 @@ export function tray(o: TrayOpts): { panels: Panel[]; slits: Slit[]; extent: [nu
     ear(`${p}ne`, wallN.id, x + BL - g, 1, y + BW + g, y + BW + wallH - g),
   ];
 
-  const b = bboxOf(panels.map((q) => q.outline));
+  const b = polysBounds(panels.map((q) => q.outline));
   return { panels, slits: [], extent: [b[2] - b[0], b[3] - b[1]] };
 }
 
@@ -798,7 +798,7 @@ export function webbedTray(o: WebbedTrayOpts): {
     ...web(`${p}ne`, wallN.id, x + BL, 1, y + BW, y + BW + wallH),
   ];
 
-  const b = bboxOf(panels.map((q) => q.outline));
+  const b = polysBounds(panels.map((q) => q.outline));
   return { panels, slits, extent: [b[2] - b[0], b[3] - b[1]] };
 }
 

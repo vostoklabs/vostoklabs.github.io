@@ -18,7 +18,7 @@
     "test:net": "esbuild tests/net.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/net.mjs --log-level=error && node node_modules/.cache/net.mjs",
     "test:export": "esbuild tests/export.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/export.mjs --log-level=error && node node_modules/.cache/export.mjs",
     "test:fold": "esbuild tests/fold.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/fold.mjs --log-level=error && node node_modules/.cache/fold.mjs",
-    "test": "pnpm run test:net && pnpm run test:fold && pnpm run test:corners && pnpm run test:sink && pnpm run test:print && pnpm run test:thin && pnpm run test:hang && pnpm run test:export && pnpm run test:lac && pnpm run test:marks && pnpm run test:makerlab",
+    "test": "pnpm run test:net && pnpm run test:fold && pnpm run test:corners && pnpm run test:sink && pnpm run test:print && pnpm run test:thin && pnpm run test:hang && pnpm run test:export && pnpm run test:lac && pnpm run test:marks && pnpm run test:makerlab && pnpm run test:poly",
     "demo": "esbuild scripts/demo.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/demo.mjs --log-level=error && node node_modules/.cache/demo.mjs",
     "test:print": "esbuild tests/print.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/print.mjs --log-level=error && node node_modules/.cache/print.mjs",
     "build:offline": "node ../../scripts/offline.mjs foldbox --mode full",
@@ -28,12 +28,15 @@
     "test:hang": "esbuild tests/hang.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/hang.mjs --log-level=error && node node_modules/.cache/hang.mjs",
     "test:lac": "esbuild tests/lac.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/lac.mjs --log-level=error && node node_modules/.cache/lac.mjs",
     "test:marks": "esbuild tests/marks.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/marks.mjs --log-level=error && node node_modules/.cache/marks.mjs",
-    "test:makerlab": "esbuild tests/makerlab.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/makerlab.mjs --log-level=error && node node_modules/.cache/makerlab.mjs"
+    "test:makerlab": "esbuild tests/makerlab.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/makerlab.mjs --log-level=error && node node_modules/.cache/makerlab.mjs",
+    "test:poly": "esbuild tests/poly.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/poly.mjs --log-level=error && node node_modules/.cache/poly.mjs",
+    "test:public": "pnpm run test:poly"
   },
   "dependencies": {
     "@vostok/brand": "workspace:*",
     "@vostok/export": "workspace:*",
     "@vostok/fonts": "workspace:*",
+    "@vostok/shapes": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "@vostok/viewer": "workspace:*",
     "fflate": "^0.8.3",

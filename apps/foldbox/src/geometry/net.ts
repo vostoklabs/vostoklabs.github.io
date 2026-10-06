@@ -16,7 +16,7 @@
 // edge and the twin test is exact.
 
 import type { Crease, Net, Op, Panel, Poly, Pt, StyleParts } from '../types';
-import { EPS, at, bboxOf, dist, ensureCCW, ensureCW, key, onSegment, pathLength, snapPt } from './poly';
+import { EPS, at, polysBounds, dist, ensureCCW, ensureCW, key, onSegment, pathLength, snapPt } from './poly';
 
 interface DirEdge {
   a: Pt;
@@ -320,7 +320,7 @@ export function buildNet(parts: StyleParts, minFoldMm = MIN_WEB_FOLD_MM): Net {
     for (const h of l.holes) lengthByOp[l.op] += pathLength(h, true);
   }
 
-  const bbox = bboxOf([...cutRings, ...parts.loose.map((l) => l.outline)]);
+  const bbox = polysBounds([...cutRings, ...parts.loose.map((l) => l.outline)]);
 
   return {
     panels,
