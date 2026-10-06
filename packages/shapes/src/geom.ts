@@ -5,8 +5,6 @@ import type { Box, Island, Pt, Polyline, Ring, Shapes } from './types';
 export const TAU = Math.PI * 2;
 export const SQRT3 = Math.sqrt(3);
 
-export const pt = (x: number, y: number): Pt => [x, y];
-
 /**
  * `signedArea` summed from the closing edge: the same terms, the edge from the last point back to
  * the first added first rather than last. Floating point is not associative, so the two orders
@@ -54,10 +52,6 @@ export function bboxOfShapes(shapes: Shapes): Box {
 }
 
 export const boxValid = (b: Box): boolean => Number.isFinite(b.minX) && b.maxX >= b.minX && b.maxY >= b.minY;
-
-export function padBox(b: Box, pad: number): Box {
-  return { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad };
-}
 
 export const boxCentre = (b: Box): Pt => [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2];
 
@@ -144,8 +138,6 @@ export function ringCentroid(ring: Ring): Pt {
 }
 
 // ---- transforms -------------------------------------------------------------------------
-
-export const translatePts = (points: Pt[], dx: number, dy: number): Pt[] => points.map(([x, y]) => [x + dx, y + dy]);
 
 /** Scale a ring about its centroid — how a hole gets its web without an offset routine. */
 export function shrinkRing(ring: Ring, k: number): Ring {
@@ -241,17 +233,6 @@ export function star(cx: number, cy: number, points: number, rOuter: number, rIn
 }
 
 export const seg = (a: Pt, b: Pt): Polyline => [a, b];
-
-/** A polyline y = f(x) sampled every `step` from x0 to x1. */
-export function sampled(x0: number, x1: number, step: number, f: (x: number) => number): Polyline {
-  const n = Math.max(1, Math.ceil((x1 - x0) / step));
-  const out: Polyline = [];
-  for (let i = 0; i <= n; i++) {
-    const x = x0 + ((x1 - x0) * i) / n;
-    out.push([x, f(x)]);
-  }
-  return out;
-}
 
 // ---- nesting -------------------------------------------------------------------------------
 
