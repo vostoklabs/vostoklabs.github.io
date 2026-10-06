@@ -252,8 +252,16 @@ function interiorPoint(ring: Ring): [number, number] {
  * INSIDE the outline — the heart (`favorite`) carries two coincident inner contours wound against
  * each other — and until they annihilate, containment reads the second as a hole of the first and
  * manifold resolves an annulus: a bold outline of a heart where the customer asked for a heart.
+ *
+ * A font fills by the NON-ZERO rule instead, `{ fill: 'nonzero' }`, and there a contour drawn twice
+ * the SAME way round winds twice. Copies are then read by the winding they add: with w the winding
+ * of every other contour at a point inside them and n their own net direction, the region inside
+ * them winds w + n and the one around them w. They are an edge of the ink only where exactly one of
+ * the two is 0, and then one copy stays, wound as n; otherwise they all go, a pair wound against
+ * each other as before, and copies lying in the ink, which add nothing to it. Material Symbols'
+ * `biotech` draws its eyepiece twice inside the body's counter, and the font fills it.
  */
-export function cancelCoincidentRings(rings: Ring[]): Ring[] {
+export function cancelCoincidentRings(rings: Ring[], opts: { fill?: 'evenodd' | 'nonzero' } = {}): Ring[] {
   if (rings.length < 2) return rings;
   const q = (v: number) => Math.round(v * 1e6);
   // Only rings that could possibly coincide are keyed, and the key may only use quantities that
@@ -272,6 +280,26 @@ export function cancelCoincidentRings(rings: Ring[]): Ring[] {
   const drop = new Set<number>();
   for (const group of bucket.values()) {
     if (group.length < 2) continue;
+    if (opts.fill === 'nonzero') {
+      const copies = new Map<string, number[]>();
+      for (const i of group) {
+        const key = ringKey(rings[i]!, q);
+        copies.set(key, [...(copies.get(key) ?? []), i]);
+      }
+      for (const same of copies.values()) {
+        if (same.length < 2) continue;
+        const n = same.reduce((s, i) => s + Math.sign(signedArea(rings[i]!)), 0);
+        let keep = -1;
+        if (n !== 0) {
+          const p = interiorPoint(rings[same[0]!]!);
+          let w = 0;
+          rings.forEach((r, j) => { if (!same.includes(j)) w += windingOf(r, p); });
+          if ((w === 0) !== (w + n === 0)) keep = same.find((i) => Math.sign(signedArea(rings[i]!)) === Math.sign(n))!;
+        }
+        for (const i of same) if (i !== keep) drop.add(i);
+      }
+      continue;
+    }
     const seen = new Map<string, number>();
     for (const i of group) {
       const key = ringKey(rings[i]!, q);
@@ -281,6 +309,18 @@ export function cancelCoincidentRings(rings: Ring[]): Ring[] {
     }
   }
   return drop.size ? rings.filter((_, i) => !drop.has(i)) : rings;
+}
+
+/** How many times one ring winds round `p`, counter-clockwise counting up. */
+function windingOf(ring: Ring, p: Pt): number {
+  let w = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!;
+    const b = ring[(i + 1) % ring.length]!;
+    const cross = (b[0] - a[0]) * (p[1] - a[1]) - (p[0] - a[0]) * (b[1] - a[1]);
+    if (a[1] <= p[1]) { if (b[1] > p[1] && cross > 0) w++; } else if (b[1] <= p[1] && cross < 0) w--;
+  }
+  return w;
 }
 
 /** A ring's identity, independent of where it starts and which way it is wound. */
@@ -314,7 +354,8 @@ function ringKey(ring: Ring, q: (v: number) => number): string {
  * "8". So winding decides, and containment only says whose hole it is.
  */
 export function islandsFromContours(contours: number[][][]): Ring[][] {
-  const rings = cancelCoincidentRings(contours.filter((c) => c.length >= 3).map((c) => c.map(([x, y]) => [x!, y!] as [number, number])));
+  // A font fills by the non-zero rule, so a contour it draws twice counts by its winding.
+  const rings = cancelCoincidentRings(contours.filter((c) => c.length >= 3).map((c) => c.map(([x, y]) => [x!, y!] as [number, number])), { fill: 'nonzero' });
   const signed = rings.map((r) => signedArea(r));
   const areas = signed.map((a) => Math.abs(a));
   const probes = rings.map((r) => interiorPoint(r));

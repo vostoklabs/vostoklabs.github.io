@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "esbuild tests/pins.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/pins.test.mjs --log-level=error && node node_modules/.cache/pins.test.mjs"
+    "test": "esbuild tests/pins.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/pins.test.mjs --log-level=error && node node_modules/.cache/pins.test.mjs && node tests/font-fill.test.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.24.2",
