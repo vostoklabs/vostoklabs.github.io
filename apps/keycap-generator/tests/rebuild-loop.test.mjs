@@ -84,6 +84,7 @@ await build({
       "export { rebuildLoop, carveCap, carveReport, CarveDeclined, createRebuildLock } from './src/rebuild.js';",
       "export { createExports, stageCover } from './src/exports.js';",
       "export { BLANK_COVER } from '@vostok/export/makerlab';",
+      "export { ExportBlockedError } from '@vostok/ui-kit';",
       "export { capParts, orientForPrint } from './src/exportParts.js';",
       "export { keycapThreeMF } from './src/export3mf.js';",
       "export { parseLogo } from './src/logo.js';",
@@ -274,7 +275,7 @@ let chip = null;
 let chipTexts = 0;
 let breakChipAt = 0; // the chip's Nth relabel throws, for a batch that fails half way
 let breakChipClear = false; // clearing the chip throws once, for a batch whose clean-up fails
-const exportsApi = app.createExports({
+const exportCtx = {
   $: (id) => elements[id],
   host: undefined,
   setStatus: (msg, kind = '') => statuses.push(`${kind}:${msg}`),
@@ -296,7 +297,8 @@ const exportsApi = app.createExports({
     fontId: 'helvetiker-regular', opts: optsAt(panel.rot), fitTestActive: false, fitTestPieces: null,
     wallGenerator: 'arachne',
   }),
-});
+};
+const exportsApi = app.createExports(exportCtx);
 globalThis.__downloads = [];
 const steadyModel = async (blobOrBytes) => {
   const bytes = blobOrBytes instanceof Uint8Array ? blobOrBytes : new Uint8Array(await blobOrBytes.arrayBuffer());
@@ -385,6 +387,18 @@ await until(() => chipTexts > chipsBefore, 'the set to start after the carve');
 check('the set pressed during a carve runs once the carve is done', lock.held());
 chip.cancel();
 await late;
+
+// ------------------------------------------------------------------ an export refused
+// Each refusal is said, and thrown, so the export panel says it too (a toast).
+const spare = { alphabetSet: { disabled: false, addEventListener() {} }, alphabetHelp: { textContent: '' } };
+const refusedBy = (reason) => app.createExports({ ...exportCtx, $: (id) => spare[id], settled: () => Promise.reject(reason) });
+const ownWords = 'This legend would print as a hole: give it more depth than the wall.';
+const blocked = await refusedBy(new app.ExportBlockedError({ level: 'error', message: ownWords })).runPrimaryExport().then(() => null, (e) => e);
+check('a cap the build refuses for an error is refused in that error\'s own words, on the status line and in the panel', blocked?.message === ownWords && statuses.at(-1) === `err:${ownWords}`, blocked?.message ?? 'not refused');
+const failedCarve = await refusedBy(new Error('Stroke geometry produced no usable triangles.')).runPrimaryExport().then(() => null, (e) => e);
+check('a failed carve is refused with the app\'s sentence', /could not be carved/.test(failedCarve?.message ?? ''), failedCarve?.message ?? 'not refused');
+const notYet = await refusedBy(new app.CarveDeclined()).runPrimaryExport().then(() => null, (e) => e);
+check('…and nothing carved yet with its own', /^Nothing to export yet/.test(notYet?.message ?? ''), notYet?.message ?? 'not refused');
 
 // ------------------------------------------------------------------ the MakerLab cover
 // The stage as the export's cover, or the shelf's blank picture when the canvas cannot be read.

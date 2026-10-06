@@ -21,7 +21,7 @@
 import { BRAND } from '@vostok/brand';
 import { buildZip, downloadFile, textToArrayBuffer } from '@vostok/export';
 import { BLANK_COVER } from '@vostok/export/makerlab';
-import { captureCover, licenseAfterExport, toast } from '@vostok/ui-kit';
+import { captureCover, ExportBlockedError, licenseAfterExport, toast } from '@vostok/ui-kit';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
 import { MAKERLAB, isReady as mlReady, can as mlCan, sdkExport, sdkToast } from 'virtual:makerlab';
@@ -207,9 +207,13 @@ export function createExports(ctx) {
     try {
       carve = await ctx.settled();
     } catch (err) {
-      const msg = err instanceof CarveDeclined || err?.name === 'NothingBuiltError'
-        ? 'Nothing to export yet: pick a legend for the cap first.'
-        : 'Nothing exported: this legend could not be carved (try a simpler icon/letter or smaller size).';
+      // A cap the build refuses for an error it found (its diagnostics, decision 17) is refused
+      // in that error's own words; "nothing yet" and a failed carve get the app's sentences.
+      const msg = err instanceof ExportBlockedError
+        ? err.message
+        : err instanceof CarveDeclined || err?.name === 'NothingBuiltError'
+          ? 'Nothing to export yet: pick a legend for the cap first.'
+          : 'Nothing exported: this legend could not be carved (try a simpler icon/letter or smaller size).';
       setStatus(msg, 'err');
       throw new Error(msg); // the export panel says it too
     }
