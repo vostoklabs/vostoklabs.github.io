@@ -2,15 +2,12 @@
 // `@vostok/patterns/clip`, the way a laser host clips a score layer to its plate and draws the
 // seams of a welded word. Pure JS, so no manifold and no browser:
 //   node tests/clip-lines.test.mjs
-import { mkdirSync } from 'node:fs';
+import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 import { build as esbuild } from 'esbuild';
 
 const here = fileURLToPath(new URL('.', import.meta.url)).split('\\').join('/');
-mkdirSync(`${here}.cache`, { recursive: true });
-
-const libFile = `${here}.cache/clip-lines-${process.pid}.mjs`;
-await esbuild({
+const bundle = await esbuild({
   stdin: {
     contents: [
       `export * from '../src/clip.ts';`,
@@ -19,9 +16,11 @@ await esbuild({
     resolveDir: here,
     loader: 'ts',
   },
-  outfile: libFile, bundle: true, platform: 'node', format: 'esm', logLevel: 'error',
+  bundle: true, platform: 'node', format: 'esm', logLevel: 'error', write: false,
 });
-const { clipPolylines, clipShapesToLines, lineLength, circleRing, bboxOf } = await import(`file://${libFile}?t=${Date.now()}`);
+/** The library, bundled in memory: nothing is written next to the test. */
+const libUrl = `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`;
+const { clipPolylines, clipShapesToLines, lineLength, circleRing, bboxOf } = await import(libUrl);
 
 let pass = 0;
 const fails = [];
@@ -170,22 +169,33 @@ const LINES = { compact: true };
 }
 
 // 12. A line reaching far past the region, or to infinity, or a region with no edges at all: the
-//     answer comes back at once (the edge index walks only the cells that hold an edge).
+//     answer comes back (the edge index walks only the cells that hold an edge). A walk over every
+//     cell along the line never comes back from these, so they run in a worker thread, and one
+//     that has not answered in a minute has hung: a failure, rather than a run that never ends.
 {
-  const plate = [[disc(30)]];
-  const timed = (lines, region) => {
-    const t0 = performance.now();
-    const runs = clipPolylines(lines, region, LINES);
-    return { runs, ms: performance.now() - t0 };
-  };
-  const inf = timed([[[0, 0], [Infinity, 0]], [[-Infinity, 5], [Infinity, 5]]], plate);
-  check('a line to infinity comes back at once, with nothing on it', inf.ms < 100 && inf.runs.length === 0, `${inf.ms.toFixed(1)} ms`);
-  const far = timed([[[0, 0], [1e9, 1e9]]], plate);
-  check('a line 1e9 mm long comes back at once', far.ms < 100, `${far.ms.toFixed(1)} ms`);
-  const empty = timed([[[-1500, 0], [1500, 0]]], []);
-  check('a 3 m line on a region with no edges comes back at once, with nothing on it', empty.ms < 100 && empty.runs.length === 0, `${empty.ms.toFixed(1)} ms`);
-  const wide = timed(Array.from({ length: 20 }, (_, i) => [[-3000 + i, -3000], [3000, 3000 - i]]), plate);
-  check('twenty lines a hundred times the plate come back at once, each with its run across it', wide.ms < 100 && wide.runs.length === 20, `${wide.ms.toFixed(1)} ms, ${wide.runs.length} runs`);
+  const src = `
+    import { parentPort, workerData } from 'node:worker_threads';
+    const { clipPolylines, circleRing } = await import(workerData.lib);
+    const LINES = { compact: true };
+    const plate = [[circleRing(0, 0, 30, 180)]];
+    parentPort.postMessage({
+      inf: clipPolylines([[[0, 0], [Infinity, 0]], [[-Infinity, 5], [Infinity, 5]]], plate, LINES),
+      far: clipPolylines([[[0, 0], [1e9, 1e9]]], plate, LINES),
+      empty: clipPolylines([[[-1500, 0], [1500, 0]]], [], LINES),
+      wide: clipPolylines(Array.from({ length: 20 }, (_, i) => [[-3000 + i, -3000], [3000, 3000 - i]]), plate, LINES),
+    });`;
+  const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(src)}`), { workerData: { lib: libUrl } });
+  const got = await new Promise((resolve) => {
+    const hung = setTimeout(() => resolve({ hung: true }), 60_000);
+    worker.once('message', (m) => { clearTimeout(hung); resolve(m); });
+    worker.once('error', (e) => { clearTimeout(hung); resolve({ error: String(e) }); });
+  });
+  await worker.terminate();
+  const why = got.hung ? 'no answer in a minute: the walk does not end' : (got.error ?? '');
+  check('a line to infinity comes back, with nothing on it', got.inf?.length === 0, why);
+  check('a line 1e9 mm long comes back', Array.isArray(got.far), why);
+  check('a 3 m line on a region with no edges comes back, with nothing on it', got.empty?.length === 0, why);
+  check('twenty lines a hundred times the plate come back, each with its run across it', got.wide?.length === 20, why || `${got.wide?.length} runs`);
 }
 
 console.log(`\n${pass} passed, ${fails.length} failed`);

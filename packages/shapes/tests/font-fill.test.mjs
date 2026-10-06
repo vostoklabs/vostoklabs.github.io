@@ -13,17 +13,16 @@
 //   node tests/font-fill.test.mjs
 import { build as esbuild } from 'esbuild';
 import { createRequire } from 'node:module';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('.', import.meta.url)).split('\\').join('/');
-mkdirSync(`${here}.cache`, { recursive: true });
-const lib = `${here}.cache/font-fill-${process.pid}.mjs`;
-await esbuild({
+// Bundled in memory: nothing is written next to the test.
+const bundle = await esbuild({
   stdin: { contents: `export * from '../src/index.ts';`, resolveDir: here, loader: 'ts' },
-  outfile: lib, bundle: true, platform: 'node', format: 'esm', logLevel: 'error',
+  bundle: true, platform: 'node', format: 'esm', logLevel: 'error', write: false,
 });
-const S = await import(`file://${lib}?t=${Date.now()}`);
+const S = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 
 let pass = 0;
 const fails = [];
