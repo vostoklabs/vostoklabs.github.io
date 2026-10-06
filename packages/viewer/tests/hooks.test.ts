@@ -183,6 +183,19 @@ const emissive = (v: ReturnType<typeof createViewer>) => v.partMeshes().map((m) 
     page.pointer('pointerup', ...RED_AT);
     check('multiSelect: a plain click selects one', emissive(v).filter((e) => e > 0).length === 1);
     check('the pick callback is told the part clicked', picks.every((p) => p === hit), picks.join());
+    // Clicks on nothing, and the selection as the app reads it.
+    const tapAt = (x: number, y: number, shiftKey = false) => {
+      page.pointer('pointerdown', x, y, { shiftKey });
+      page.pointer('pointerup', x, y, { shiftKey });
+    };
+    tapAt(...WHITE_AT, true);
+    tapAt(5, 5, true);
+    check('multiSelect: a shift-click on nothing keeps the selection', emissive(v).map((e) => (e > 0 ? 1 : 0)).join() === '1,0,1', emissive(v).join());
+    const read = v.selection();
+    read.push(1);
+    check('selection: the parts selected, in the order they were, as a copy', v.selection().join() === `${hit},2`, v.selection().join());
+    tapAt(5, 5);
+    check('multiSelect: a plain click on nothing clears it', emissive(v).every((e) => e === 0) && v.selection().length === 0, emissive(v).join());
   } else {
     check('the red part is under the pointer', false, 'nothing under the pointer');
   }

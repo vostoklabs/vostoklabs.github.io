@@ -81,8 +81,9 @@ export interface ViewerOptions {
   /** Draw into this canvas rather than one of the viewer's own. The viewer does not move it
    *  and leaves it where it is on dispose. Default: a new canvas, added to the container. */
   canvas?: HTMLCanvasElement;
-  /** Shift-click adds a part to the selection or takes it out of it; a plain click still
-   *  selects one. Default false: every click selects one part. */
+  /** Shift-click adds a part to the selection or takes it out of it, and a shift-click on
+   *  nothing leaves it as it is; a plain click still selects one, or clears the selection on
+   *  nothing. Default false: every click selects one part, or none. */
   multiSelect?: boolean;
   /** Draw the selected parts' edges (or the hovered part's, when none is selected) over
    *  everything else, on the part itself, so they move, turn and hide with it. Default false:
@@ -129,6 +130,8 @@ export interface Viewer {
   highlightPart(index: number | null): void;
   /** Select several parts at once, as shift-clicking each does with `multiSelect`. */
   highlightParts(indices: number[]): void;
+  /** The selected parts' indices, in the order they were selected: a copy. */
+  selection(): number[];
   clearHighlight(): void;
   /** Screen point -> model coordinates (mm, relative to the model's centre), or
    *  null if the ray misses. */
@@ -677,8 +680,9 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   /** A tap on part `idx`, or on empty space: select it (with `multiSelect` and shift, add it to
    *  the selection or take it out), and tell the app. */
   function tapPart(idx: number | null, e: PointerEvent) {
-    if (opts.multiSelect && e.shiftKey && idx !== null) {
-      selected = selected.includes(idx) ? selected.filter((i) => i !== idx) : [...selected, idx];
+    if (opts.multiSelect && e.shiftKey) {
+      // Shift on nothing is a slip while adding to a selection, not a request to drop it.
+      if (idx !== null) selected = selected.includes(idx) ? selected.filter((i) => i !== idx) : [...selected, idx];
     } else {
       selected = idx === null ? [] : [idx];
     }
@@ -1040,6 +1044,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       selected = [...indices];
       applyHighlight();
     },
+    selection: () => selected.slice(),
     clearHighlight() {
       selected = [];
       hoveredIndex = null;
