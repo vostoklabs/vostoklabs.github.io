@@ -20,7 +20,8 @@
  */
 import { BRAND } from '@vostok/brand';
 import { buildZip, downloadFile, textToArrayBuffer } from '@vostok/export';
-import { licenseAfterExport, toast } from '@vostok/ui-kit';
+import { BLANK_COVER } from '@vostok/export/makerlab';
+import { captureCover, licenseAfterExport, toast } from '@vostok/ui-kit';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
 import { MAKERLAB, isReady as mlReady, can as mlCan, sdkExport, sdkToast } from 'virtual:makerlab';
@@ -37,6 +38,14 @@ import { CarveDeclined } from './rebuild.js';
 /* The licence, on the one export path a file-level mark cannot reach: a comment in an OBJ
    is not metadata, so on the embedded route the licence rides in the export description. */
 export const LICENSE_NOTE = `Free for personal use; selling prints requires a commercial license: ${BRAND.urls.mwCommercial}`;
+
+/**
+ * The stage as a PNG data URL, for the MakerLab export's cover: one fresh frame, read back in the
+ * same task (the kit's `captureCover`). When the canvas cannot be read (a lost WebGL context, or
+ * a canvas with no size, which reads back as `data:,`) the shelf's blank picture stands in, so a
+ * cover can never cost an export.
+ */
+export const stageCover = (renderer, scene, camera) => captureCover(renderer, scene, camera, { fallback: BLANK_COVER });
 
 export function createExports(ctx) {
   const { $, host, setStatus } = ctx;

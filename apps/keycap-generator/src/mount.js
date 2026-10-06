@@ -22,15 +22,12 @@ import '@vostok/plates/plates.css';
 import {
   topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs,
   promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile,
-  button, dropZone, toast, themeColorHex,
+  button, dropZone, toast, themeColorHex, captureCover,
   nudgePad, busyChip, panelCredit, paletteRow, segmentedControl, readProjectFile, appShell,
 } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
 import { createBuildPlate } from '@vostok/plates/three';
 import { downloadFile } from '@vostok/export';
-// 1x1 transparent PNG — last-resort cover if the canvas can't be read (the shelf's, shared with
-// every MakerLab app). In practice preserveDrawingBuffer makes the real capture succeed.
-import { BLANK_COVER } from '@vostok/export/makerlab';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadKeycap } from './keycap.js';
@@ -45,7 +42,7 @@ import {
 import { keycapThreeMF } from './export3mf.js';
 import { keycapObjMtl } from './exportObj.js';
 import { profileTag } from './exportParts.js';
-import { createExports, LICENSE_NOTE } from './exports.js';
+import { createExports, LICENSE_NOTE, stageCover } from './exports.js';
 import { rebuildLoop } from './rebuild.js';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from './lucideIcons.js';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
@@ -1556,18 +1553,9 @@ export function mount(container, host) {
   });
 
   // ---------------------------------------------------------------- export
-  // Grab the live preview as a PNG data URL for the MakerLab export cover. Render once first so
-  // the buffer holds the current frame at the moment of capture.
-  function captureCover() {
-    try {
-      renderer.render(scene, camera);
-      const url = renderer.domElement.toDataURL('image/png');
-      return url && url.length > 128 ? url : BLANK_COVER;
-    } catch (e) {
-      console.error('Cover capture failed:', e);
-      return BLANK_COVER;
-    }
-  }
+  /** The live preview as the MakerLab export's cover (exports.js `stageCover`). In practice
+   *  preserveDrawingBuffer, on in the MakerWorld build, makes the real capture succeed. */
+  const cover = () => stageCover(renderer, scene, camera);
 
   /** What an export reads, as the controls and the loaded cap say it now (exports.js). The
    *  carved cap itself comes from the rebuild loop, settled. */
@@ -1598,7 +1586,7 @@ export function mount(container, host) {
     setStatus,
     setBusy: setBusyState,
     busyText: (text) => busyEl.setText(text),
-    cover: captureCover,
+    cover,
     pro: () => proPanel,
     begin: rebuildLock.begin,
     end: rebuildLock.end,
@@ -2114,7 +2102,7 @@ export function mount(container, host) {
         // `onCancel` is optional and only a batch passes one: it puts a Cancel button in the
         // chip, which is what makes "let it finish or cancel it first" a true sentence.
         setBusy: (text, onCancel) => setBusyState(text ?? null, onCancel),
-        captureCover,
+        captureCover: cover,
         // Invariant #3, on the one export path a file-level mark cannot reach: a comment in
         // an OBJ is not metadata, so the licence line has to ride in the export's
         // description instead, and the nudge has to fire from there too. See
@@ -2227,10 +2215,9 @@ export function mount(container, host) {
   function capturePreview() {
     try {
       // The renderer only keeps its drawing buffer when preserveDrawingBuffer is on, which
-      // outside the MakerWorld build it is not — so draw one more frame and read it in the
-      // same tick, before the browser clears it.
-      renderer.render(scene, camera);
-      return renderer.domElement.toDataURL('image/png');
+      // outside the MakerWorld build it is not — so the kit draws one more frame and reads it in
+      // the same tick, before the browser clears it.
+      return captureCover(renderer, scene, camera);
     } catch {
       return undefined;
     }

@@ -48,6 +48,7 @@ const manifoldNode = {
 /* The browser's edges, for exports.js: the MakerLab seam as the public build has it, the kit's
    toast and licence nudge as no-ops, and a download that records the file. */
 const EXPORT_SRC = createRequire(join(APP, 'package.json')).resolve('@vostok/export');
+const KIT_SRC = createRequire(join(APP, 'package.json')).resolve('@vostok/ui-kit');
 const edges = {
   name: 'browser-edges',
   setup(b) {
@@ -60,7 +61,11 @@ const edges = {
         + ' export async function sdkExport() { throw new Error("no host"); } export async function sdkToast() {}',
       loader: 'js',
     }));
-    b.onLoad({ filter: /^kit$/, namespace: 'edge' }, () => ({ contents: 'export const toast = () => {}; export const licenseAfterExport = () => {};', loader: 'js' }));
+    b.onLoad({ filter: /^kit$/, namespace: 'edge' }, () => ({
+      contents: `export * from ${JSON.stringify(KIT_SRC)};\nexport const toast = () => {};\nexport const licenseAfterExport = () => {};`,
+      loader: 'js',
+      resolveDir: APP,
+    }));
     b.onLoad({ filter: /^export$/, namespace: 'edge' }, () => ({
       contents: `export * from ${JSON.stringify(EXPORT_SRC)};\n`
         + 'export function downloadFile(data, name, mime) { (globalThis.__downloads ??= []).push({ data, name, mime, at: Date.now() }); }',
@@ -77,7 +82,8 @@ await build({
   stdin: {
     contents: [
       "export { rebuildLoop, carveCap, carveReport, CarveDeclined } from './src/rebuild.js';",
-      "export { createExports } from './src/exports.js';",
+      "export { createExports, stageCover } from './src/exports.js';",
+      "export { BLANK_COVER } from '@vostok/export/makerlab';",
       "export { capParts, orientForPrint } from './src/exportParts.js';",
       "export { keycapThreeMF } from './src/export3mf.js';",
       "export { parseLogo } from './src/logo.js';",
@@ -332,6 +338,15 @@ await until(() => chipTexts > chipsBefore, 'the set to start after the carve');
 check('the set pressed during a carve runs once the carve is done', lock.held());
 chip.cancel();
 await late;
+
+// ------------------------------------------------------------------ the MakerLab cover
+// The stage as the export's cover, or the shelf's blank picture when the canvas cannot be read.
+const stage = (render, url) => ({ render, domElement: { toDataURL: () => url } });
+const picture = `data:image/png;base64,${'A'.repeat(200)}`;
+const coverOf = (r) => { const log = console.error; console.error = () => {}; try { return app.stageCover(r, {}, {}); } finally { console.error = log; } };
+check('the MakerLab cover is the stage when it can be read', coverOf(stage(() => {}, picture)) === picture);
+check('…and the blank cover when the context is lost', coverOf(stage(() => { throw new Error('context lost'); }, picture)) === app.BLANK_COVER);
+check('…or when the canvas reads back empty', coverOf(stage(() => {}, 'data:,')) === app.BLANK_COVER);
 
 loop.dispose();
 console.log(failures ? `\n${failures} FAILED, ${passes} passed` : `\nall ${passes} rebuild loop checks pass: an Export gets the cap the panel describes`);
