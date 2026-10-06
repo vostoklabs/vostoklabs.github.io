@@ -7,9 +7,10 @@ import { toast } from './toast';
   symbol window beside the library's own, the way Laser Studio and the clicker each kept theirs.
 
   The app gives the storage key, so an app that already kept a list under its own key goes on
-  reading it. Newest first, at most MY_ICONS_MAX. An entry under the key that is not an icon of
-  this shape (another version's, another format's) is not listed, and keeps its place in the list
-  until it falls off the end like any other.
+  reading it. Newest first, at most MY_ICONS_MAX icons and MY_ICONS_MAX_CHARS characters between
+  them: browser storage is small, and every app on the site shares it. An entry under the key that
+  is not an icon of this shape (another version's, another format's) is not listed, does not
+  count against either limit, and is never dropped: it is kept after the icons.
 
   No symbol data and no font here: the symbol chooser weaves this into its window, and a node test
   can hold the rules without loading the library.
@@ -23,6 +24,8 @@ export interface MyIcon {
 }
 
 export const MY_ICONS_MAX = 40;
+/** The most the icons of one list take as stored, in characters; one icon may take a fifth. */
+export const MY_ICONS_MAX_CHARS = 1_000_000;
 /** The category the window lists them under. */
 export const MY_ICONS_CATEGORY = { id: 'mine', label: 'My icons' } as const;
 
@@ -30,12 +33,21 @@ export const MY_ICONS_CATEGORY = { id: 'mine', label: 'My icons' } as const;
 type Traced = { id?: string; label: string; shapes: Shapes };
 const isTraced = (x: unknown): x is Traced =>
   !!x && typeof (x as Traced).label === 'string' && Array.isArray((x as Traced).shapes);
-const isIcon = (x: unknown): x is MyIcon => isTraced(x) && typeof x.id === 'string';
+const isIcon = (x: unknown): x is MyIcon => isTraced(x) && typeof x.id === 'string' && x.id !== '';
 
-/** Everything stored under `key`, as it is. Storage that cannot be read is an empty list. */
-function stored(key: string): unknown[] {
+/** What is stored under `key`: null when nothing is, or storage cannot be read. */
+function rawOf(key: string): string | null {
   try {
-    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Every entry of a stored list, as it is. A list that cannot be read is an empty one. */
+function entriesOf(raw: string | null): unknown[] {
+  try {
+    const list = JSON.parse(raw || '[]');
     return Array.isArray(list) ? list : [];
   } catch {
     return [];
@@ -44,26 +56,64 @@ function stored(key: string): unknown[] {
 
 /** The icons under `key`, newest first. */
 export function readMyIcons(key: string): MyIcon[] {
-  return stored(key).filter(isIcon);
+  return entriesOf(rawOf(key)).filter(isIcon);
+}
+
+/** A write refused for want of room, rather than because storage is off. */
+const isQuota = (e: unknown) => /quota/i.test(`${(e as Error | null)?.name} ${(e as Error | null)?.message}`);
+const BLOCKED = 'This browser does not let the page save anything, so My icons cannot keep it.';
+
+/** Store the list under `key` with `kept` first. Says why not, or null when it is kept. */
+function store(key: string, kept: MyIcon): string | null {
+  let first: string;
+  try {
+    first = JSON.stringify(kept);
+  } catch {
+    return 'My icons cannot keep it.';
+  }
+  if (first.length > MY_ICONS_MAX_CHARS / 5) return 'It is too detailed for My icons to keep.';
+  let storage: Storage;
+  let raw: string | null;
+  try {
+    storage = localStorage;
+    raw = storage.getItem(key);
+  } catch {
+    return BLOCKED; // and nothing is written over a list that could not be read
+  }
+  const rest = entriesOf(raw);
+  const icons = [first, ...rest.filter((x) => isIcon(x) && x.id !== kept.id).map((x) => JSON.stringify(x))].slice(0, MY_ICONS_MAX);
+  const foreign = rest.filter((x) => !isIcon(x)).map((x) => JSON.stringify(x));
+  // The oldest go first: past the limit in characters, then for as long as the browser has no
+  // room. What the kit cannot read is not its to drop.
+  let n = icons.length;
+  let chars = icons.reduce((sum, s) => sum + s.length, 0);
+  while (n > 1 && chars > MY_ICONS_MAX_CHARS) chars -= icons[--n]!.length;
+  for (; n > 0; n--) {
+    try {
+      storage.setItem(key, `[${[...icons.slice(0, n), ...foreign].join(',')}]`);
+      return null;
+    } catch (e) {
+      if (!isQuota(e)) return BLOCKED;
+    }
+  }
+  return 'Browser storage is full, so My icons cannot keep it.';
 }
 
 /**
  * Keep an icon under `key`, first, as the one it replaces if it has that one's id, and named
- * `mine:…` if it has no id of its own. The list stops at MY_ICONS_MAX. A browser whose storage is
- * full says so; the icon still comes back, so the import it came from still stands.
+ * `mine:…` if it has no id of its own (an id must be a string with something in it). Its shapes
+ * are in the symbol frame, as `MyIcon`'s are. The oldest icons go when the list passes
+ * MY_ICONS_MAX or MY_ICONS_MAX_CHARS, or the browser has no room left. An icon that cannot be
+ * kept still comes back, so the import it came from still stands, and a toast says why.
  */
 export function keepMyIcon(key: string, icon: Traced): MyIcon {
   const kept: MyIcon = {
-    id: icon.id ?? `mine:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    id: typeof icon.id === 'string' && icon.id !== '' ? icon.id : `mine:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     label: icon.label,
     shapes: icon.shapes,
   };
-  const list = [kept, ...stored(key).filter((x) => !isIcon(x) || x.id !== kept.id)].slice(0, MY_ICONS_MAX);
-  try {
-    localStorage.setItem(key, JSON.stringify(list));
-  } catch {
-    toast('Icon added. Browser storage is full, so My icons cannot keep it.', { kind: 'warn' });
-  }
+  const refused = store(key, kept);
+  if (refused) toast(`Icon added. ${refused}`, { kind: 'warn' });
   return kept;
 }
 
@@ -85,12 +135,24 @@ export interface MyIconsWeave {
 export function withMyIcons(lib: SymbolLibraryOptions, mine: MyIconsWeave): SymbolLibraryOptions {
   /** The icon each listed entry stands for: the window hands the same entry back to draw and pick. */
   const iconOf = new WeakMap<SymbolLibraryEntry, MyIcon>();
-  const entries = (): SymbolLibraryEntry[] =>
-    readMyIcons(mine.key).map((icon) => {
-      const entry = { id: icon.id, label: icon.label, source: MY_ICONS_CATEGORY.label };
-      iconOf.set(entry, icon);
-      return entry;
-    });
+  /** The entries, made again only when what is stored has changed: a search asks on every key. */
+  let made: { raw: string | null; entries: SymbolLibraryEntry[] } | null = null;
+  const entries = (): SymbolLibraryEntry[] => {
+    const raw = rawOf(mine.key);
+    if (!made || made.raw !== raw) {
+      made = {
+        raw,
+        entries: entriesOf(raw)
+          .filter(isIcon)
+          .map((icon) => {
+            const entry = { id: icon.id, label: icon.label, source: MY_ICONS_CATEGORY.label };
+            iconOf.set(entry, icon);
+            return entry;
+          }),
+      };
+    }
+    return made.entries;
+  };
   const [first, ...rest] = lib.categories;
   const upload = lib.upload;
   return {

@@ -16,6 +16,10 @@ import { svgNode } from '../dom';
 import { withMyIcons } from './my-icons';
 import { openSymbolLibrary, type SymbolLibraryEntry, type SymbolLibraryHandle, type SymbolLibraryOptions } from './symbol-library';
 
+/** For an app that brings an icon in through a flow of its own (an SVG field, not the window's
+ *  upload): keep it, or read them, under the same key and by the same rules as `myIcons`. */
+export { keepMyIcon, readMyIcons, type MyIcon } from './my-icons';
+
 /*
   THE symbol picker: the symbol library window over every set the shelf has (Material Symbols,
   Tabler Icons, Fluent Emoji), with its categories and its one search, handing back the symbol
