@@ -48,6 +48,20 @@ const RAIL = () => [
   check('a panel with no flush rail keeps the half-screen cap on a phone, as before', v(plainLeft, 'max-height', 390) === '50vh', v(plainLeft, 'max-height', 390));
 }
 
+/* ------------------------------------------------- the phone layout's pinned footer */
+
+{
+  const phone = appShell({ phone: true, left: { scroll: [el('p')] }, stage: [el('p')], right: { scroll: [el('p')], footer: [el('p', { text: 'Download' })] } });
+  mount(phone.root);
+  const footer = phone.root.querySelector('.vl-panel--right > .vl-panel__footer')!;
+  check('phone (390 px): the right footer is pinned, above the page', v(footer, 'position', 390) === 'sticky' && v(footer, 'z-index', 390) === '5');
+  check('phone: the stage is a stacking context of its own, so its overlays cannot rise over the pinned footer', v(phone.stage, 'isolation', 390) === 'isolate' && v(phone.stage, 'isolation', 900) === 'isolate', v(phone.stage, 'isolation', 390));
+  check('phone layout, desktop: the stage is left as it was', v(phone.stage, 'isolation', 1280) === '');
+  const plain = appShell({ left: { scroll: [el('p')] }, stage: [el('p')], right: { scroll: [] } });
+  mount(plain.root);
+  check('no phone layout: the stage is left as it was on a phone too', v(plain.stage, 'isolation', 390) === '');
+}
+
 /* ------------------------------------------------- the preview card at Laser Studio's numbers */
 
 {

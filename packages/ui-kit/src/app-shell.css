@@ -258,6 +258,9 @@
     border-top: 1px solid var(--line);
   }
   .vl-app--phone > .vl-panel--right > .vl-panel__footer { position: sticky; bottom: 0; z-index: 5; }
+  /* The stage's overlays (the mode bar and the stage panel sit at z-index 20) stay inside the
+     stage, so the pinned footer is above them as the page scrolls the stage under it. */
+  .vl-app--phone > .vl-stage { isolation: isolate; }
   /* Download (when the footer is a `sidebarFooter()`) takes the width, Settings beside it. */
   .vl-app--phone .vl-app__phone-bar {
     display: grid;
