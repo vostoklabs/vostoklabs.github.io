@@ -2,7 +2,7 @@
 // writes. That is the whole point of it: if it looks wrong here it IS wrong in the
 // file, so there is no class of bug that can hide between the preview and the export.
 
-import { el } from '@vostok/ui-kit';
+import { el, svgNode } from '@vostok/ui-kit';
 import type { Op, Pt, SolveResult } from '../types';
 import { OP_COLOR, collectPaths, explodeDashes } from '../export/paths';
 import { sheetById } from '../geometry/solve';
@@ -56,12 +56,17 @@ export function createFlatView(): FlatView {
         .join(' ') +
       (closed ? ' Z' : '');
 
-    const out: string[] = [];
+    const out: SVGElement[] = [];
 
     if (opts.showSheet) {
       out.push(
-        `<rect x="0" y="${fy(sheet.heightMm).toFixed(2)}" width="${sheet.widthMm}" height="${sheet.heightMm}" ` +
-          `class="fb-flat__sheet"/>`,
+        svgNode('rect', {
+          x: '0',
+          y: fy(sheet.heightMm).toFixed(2),
+          width: sheet.widthMm,
+          height: sheet.heightMm,
+          class: 'fb-flat__sheet',
+        }),
       );
     }
 
@@ -69,9 +74,7 @@ export function createFlatView(): FlatView {
     // as a tangle of lines. Drawn under everything.
     for (const p of net.panels) {
       const holes = p.holes.map((h) => d(h, true)).join(' ');
-      out.push(
-        `<path d="${d(p.outline, true)} ${holes}" fill-rule="evenodd" class="fb-flat__panel"/>`,
-      );
+      out.push(svgNode('path', { d: `${d(p.outline, true)} ${holes}`, 'fill-rule': 'evenodd', class: 'fb-flat__panel' }));
     }
 
     // The logo, as one filled shape per mark rather than a stroke per ring, so a
@@ -84,15 +87,16 @@ export function createFlatView(): FlatView {
     for (const m of net.marks) {
       if (m.rings.length) {
         out.push(
-          `<path d="${m.rings.map((r) => d(r, true)).join(' ')}" fill-rule="evenodd" ` +
-            `class="fb-flat__mark${under ? ' fb-flat__mark--under' : ''}"/>`,
+          svgNode('path', {
+            d: m.rings.map((r) => d(r, true)).join(' '),
+            'fill-rule': 'evenodd',
+            class: `fb-flat__mark${under ? ' fb-flat__mark--under' : ''}`,
+          }),
         );
       }
       for (const l of m.lines) {
         if (l.length < 2) continue;
-        out.push(
-          `<path d="${d(l, false)}" class="fb-flat__mark-line${under ? ' fb-flat__mark--under' : ''}"/>`,
-        );
+        out.push(svgNode('path', { d: d(l, false), class: `fb-flat__mark-line${under ? ' fb-flat__mark--under' : ''}` }));
       }
     }
 
@@ -103,47 +107,56 @@ export function createFlatView(): FlatView {
       const colour = OP_COLOR[path.op];
       const w = path.op === 'cut' ? 0.9 : 0.7;
       out.push(
-        `<path d="${d(path.points, path.closed)}" fill="none" stroke="${colour}" ` +
-          `stroke-width="${w}" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`,
+        svgNode('path', {
+          d: d(path.points, path.closed),
+          fill: 'none',
+          stroke: colour,
+          'stroke-width': w,
+          'stroke-linejoin': 'round',
+          'vector-effect': 'non-scaling-stroke',
+        }),
       );
     }
 
     if (opts.showLabels) {
       const size = Math.max(2.2, Math.min(vw, vh) / 55);
+      const label = (x: number, y: number, text: string) =>
+        svgNode(
+          'text',
+          { x: x.toFixed(2), y: (fy(y) + size * 0.35).toFixed(2), 'font-size': size.toFixed(2), class: 'fb-flat__label' },
+          [document.createTextNode(text)],
+        );
       for (const p of net.panels) {
         if (p.role === 'flap' && p.label === 'dust flap') continue;
         const b = polysBounds([p.outline]);
         const cx = (b[0] + b[2]) / 2;
         const cy = (b[1] + b[3]) / 2;
         if (b[2] - b[0] < size * 3 || b[3] - b[1] < size * 1.6) continue;
-        out.push(
-          `<text x="${cx.toFixed(2)}" y="${(fy(cy) + size * 0.35).toFixed(2)}" ` +
-            `font-size="${size.toFixed(2)}" class="fb-flat__label">${escape(p.label)}</text>`,
-        );
+        out.push(label(cx, cy, p.label));
       }
       for (const l of net.loose) {
         const b = polysBounds([l.outline]);
-        out.push(
-          `<text x="${((b[0] + b[2]) / 2).toFixed(2)}" y="${(fy((b[1] + b[3]) / 2) + size * 0.35).toFixed(2)}" ` +
-            `font-size="${size.toFixed(2)}" class="fb-flat__label">${escape(l.label)}</text>`,
-        );
+        out.push(label((b[0] + b[2]) / 2, (b[1] + b[3]) / 2, l.label));
       }
     }
 
-    root.innerHTML =
-      `<svg viewBox="${view[0]} ${view[1]} ${vw} ${vh}" preserveAspectRatio="xMidYMid meet" ` +
-      `role="img" aria-label="Flat dieline, ${result.netSizeMm[0].toFixed(0)} by ${result.netSizeMm[1].toFixed(0)} millimetres">` +
-      out.join('') +
-      '</svg>';
+    root.replaceChildren(
+      svgNode(
+        'svg',
+        {
+          viewBox: `${view[0]} ${view[1]} ${vw} ${vh}`,
+          preserveAspectRatio: 'xMidYMid meet',
+          role: 'img',
+          'aria-label': `Flat dieline, ${result.netSizeMm[0].toFixed(0)} by ${result.netSizeMm[1].toFixed(0)} millimetres`,
+        },
+        out,
+      ),
+    );
 
     return new Set(paths.filter((p) => p.points.length >= 2).map((p) => p.op));
   }
 
   return { root, render };
-}
-
-function escape(s: string): string {
-  return s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] as string);
 }
 
 /** A little drawn icon per style for the picker. Cheaper and sharper than shipping
