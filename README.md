@@ -1,6 +1,6 @@
 # vostok-labs-tools
 
-Monorepo for [Vostok Labs](https://ko-fi.com/vostoklabs) generators, seller tools, the hub,
+Monorepo for [Vostok Labs](https://vostoklabs.github.io/) generators, seller tools, the hub,
 and the shared design system.
 
 - `packages/ui-kit` — design tokens + shared components (license nudge, support links,

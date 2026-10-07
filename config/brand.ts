@@ -7,7 +7,11 @@ export const BRAND = {
   urls: {
     // TODO(ian): replace with the real hub URL once deployed (and later, the custom domain)
     hub: 'https://vostoklabs.github.io',
-    kofi: 'https://ko-fi.com/vostoklabs',
+    buyMeACoffee: 'https://buymeacoffee.com/vostoklabs',
+    // The clicker's lifetime commercial licence, sold on Buy Me a Coffee.
+    clickerLifetimeLicence: 'https://buymeacoffee.com/vostoklabs/e/584226',
+    // The keycap generator's lifetime commercial licence, sold on Buy Me a Coffee.
+    keycapLifetimeLicence: 'https://buymeacoffee.com/vostoklabs/e/584242',
     makerworld: 'https://makerworld.com/en/@Vostok_Labs',
     // The "Get commercial license" target (from the live clicker topbar):
     mwCommercial: 'https://makerworld.com/en/@Vostok_Labs#commercial-membership-open',

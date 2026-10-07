@@ -37,7 +37,7 @@ export {
   type LicenceOfferOptions,
   type LicenceCertificateOptions,
 } from './components/lifetime-licence';
-export { topbarLinks, type TopbarLinksOptions } from './components/topbar-links';
+export { topbarLinks, type TopbarLinksOptions, type TopbarLifetimeLicence } from './components/topbar-links';
 export { THEME_KEY, resolveTheme, applyTheme, themeToggleButton, type ThemeToggleOptions } from './components/theme';
 export {
   resolveMotion,

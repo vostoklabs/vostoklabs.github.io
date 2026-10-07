@@ -127,8 +127,19 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       oldTopbar.remove();
     } else {
       oldTopbar.replaceWith(topbarLinks({
-        githubUrl: BRAND.urls.github,
         boostUrl: BRAND.urls.makerworld,
+        // Sold on Buy Me a Coffee; the terms match the licence document the buyer receives.
+        lifetimeLicence: {
+          product: 'Clicker Generator',
+          href: BRAND.urls.clickerLifetimeLicence,
+          terms: [
+            'Sell digital files',
+            'Pay once, get a lifetime license',
+            'Sell physical prints',
+            'No subscription',
+            'No credit or attribution required',
+          ],
+        },
       }));
     }
   }

@@ -226,17 +226,8 @@ function pricingFeature(text: string): HTMLElement {
   return li;
 }
 
-// A single lifetime-license price tier: bold "$X for N designs" on one line.
-function lifetimeTier(price: string, count: string): HTMLElement {
-  return el('li', { className: 'hub-pricing__tier' }, [
-    el('span', { className: 'hub-pricing__tier-price', text: price }),
-    el('span', { className: 'hub-pricing__tier-count', text: `for ${count}` }),
-  ]);
-}
-
 function buildLicensing(): HTMLElement {
   const s = BRAND.pricing.subscription;
-  const l = BRAND.pricing.lifetime;
 
   const subCard = el('div', { className: 'hub-pricing__card hub-pricing__card--featured' }, [
     el('span', { className: 'hub-pricing__label', text: 'Subscription' }),
@@ -255,42 +246,6 @@ function buildLicensing(): HTMLElement {
     }),
   ]);
 
-  // Inner lifetime card: just the header + features + CTA.
-  const lifeCard = el('div', { className: 'hub-pricing__card' }, [
-    el('span', { className: 'hub-pricing__label', text: 'Lifetime License' }),
-    el('div', { className: 'hub-pricing__price', text: `From ${fmt(l.one)}` }),
-    el('ul', { className: 'hub-pricing__features' }, [
-      pricingFeature('One-time payment, yours forever'),
-      pricingFeature('Sell prints with no recurring fees'),
-      pricingFeature('Flexible scope, set at purchase'),
-    ]),
-    el('a', {
-      className: 'vl-btn vl-btn--secondary vl-btn--block hub-pricing__cta',
-      text: 'Get License →',
-      attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
-    }),
-  ]);
-
-  // One big block that wraps the lifetime card + tiers/info side-by-side
-  // into a single visual unit beside the subscription card.
-  const lifetimeInfo = el('div', { className: 'hub-pricing__lifetime-info' }, [
-    el('ul', { className: 'hub-pricing__tiers' }, [
-      lifetimeTier(fmt(l.one), '1 design'),
-      lifetimeTier(fmt(l.three), '3 designs'),
-      lifetimeTier(fmt(l.twelve), '12 designs'),
-    ]),
-    el('h3', { className: 'hub-pricing__explain-title', text: 'How lifetime licensing works' }),
-    el('p', {
-      className: 'hub-pricing__explain-text',
-      text: 'Own specific designs outright with a single payment, no subscription. A "design" is any one generator, model, app, or seller tool of your choice.',
-    }),
-  ]);
-
-  const lifetimeGroup = el('div', { className: 'hub-pricing__lifetime-group' }, [
-    lifeCard,
-    lifetimeInfo,
-  ]);
-
   const freeLine = el('p', { className: 'hub-pricing__free' });
   freeLine.append(
     el('strong', { text: 'Personal use is free.' }),
@@ -306,13 +261,10 @@ function buildLicensing(): HTMLElement {
         el('h2', { className: 'hub-section__title', text: 'Commercial Licensing' }),
         el('p', {
           className: 'hub-section__desc',
-          text: 'Sell what you print. Two paths: rent the catalog or own it outright.',
+          text: 'Sell what you print. One membership covers the whole catalog.',
         }),
       ]),
-      el('div', { className: 'hub-pricing__wrap' }, [
-        subCard,
-        lifetimeGroup,
-      ]),
+      el('div', { className: 'hub-pricing__wrap' }, [subCard]),
       freeLine,
     ]),
   ]);
@@ -328,7 +280,7 @@ function buildFooter(): HTMLElement {
     el('h3', { className: 'hub-footer__support-title', text: 'Support the Designer' }),
     el('p', {
       className: 'hub-footer__support-desc',
-      text: 'Vostok Labs provides free parametric models for the maker community. If you find these tools useful, please consider supporting the project by donating on Ko-fi or boosting our models on MakerWorld.',
+      text: 'Vostok Labs provides free parametric models for the maker community. If you find these tools useful, please consider supporting the project by buying me a coffee or boosting our models on MakerWorld.',
     }),
     supportLinks(),
   ]);

@@ -55,7 +55,7 @@ This layout is the house style. Keep it, or the catalogue drifts apart.
 
 ```
  ┌──────────────────────────────────────────────────────────────┐
- │ topbar: GitHub · licence · MakerWorld · Ko-fi                │
+ │ topbar: generators · licence · MakerWorld · Buy me a coffee   │
  ├───────────────┬──────────────────────────────┬───────────────┤
  │ LEFT          │ STAGE                        │ RIGHT         │
  │               │                              │               │

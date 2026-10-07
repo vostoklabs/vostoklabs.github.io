@@ -70,6 +70,7 @@ DEV_PLAN.md
 **/makerlab/
 **/source 3d models/
 apps/*/src/pro/
+apps/*/store/
 packages/laser/src/photo/
 packages/manifold-noeval/README.md
 apps/foldbox/src/export/cutFiles.ts

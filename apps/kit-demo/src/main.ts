@@ -1,4 +1,5 @@
 import '@vostok/ui-kit/styles.css';
+import { BRAND } from '@vostok/brand';
 import {
   el,
   toast,
@@ -209,8 +210,9 @@ const fullWidth = (e: HTMLElement) => { e.classList.add('kit-entry--full'); retu
 
 app.append(
   group('Chrome'),
-  fullWidth(entry('topbarLinks()', 'Topbar', 'The standard generator header: GitHub and commercial license on the left, donate actions on the right.', topbarLinks())),
-  fullWidth(entry('supportLinks()', 'Support links', 'Ko-fi, MakerWorld, and GitHub as one styled row. Placeholder URLs are hidden automatically.', supportLinks())),
+  fullWidth(entry('topbarLinks()', 'Topbar', 'The standard generator header: all generators and commercial license on the left, donate actions on the right.', topbarLinks())),
+  fullWidth(entry('topbarLinks({ lifetimeLicence })', 'Topbar with lifetime licence', 'The same header with a lifetime commercial licence offer in the middle. Opens the offer; buying happens on the store.', topbarLinks({ lifetimeLicence: { product: 'Demo Generator', href: BRAND.urls.buyMeACoffee, terms: ['Sell physical prints', 'Pay once, get a lifetime license', 'No subscription'] } }))),
+  fullWidth(entry('supportLinks()', 'Support links', 'Buy me a coffee, MakerWorld, and GitHub as one styled row. Placeholder URLs are hidden automatically.', supportLinks())),
   entry(
     'panelCredit()',
     'Panel credit',

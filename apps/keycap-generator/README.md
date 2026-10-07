@@ -44,7 +44,7 @@ for the best finish):
 
 If this saved you a few bucks, you can support it **for free** — download the model on
 MakerWorld, give it a like and a boost, and follow the page. Or
-[buy me a Ko-fi ☕](https://ko-fi.com/vostoklabs).
+[buy me a coffee ☕](https://buymeacoffee.com/vostoklabs).
 
 ## Run it locally
 

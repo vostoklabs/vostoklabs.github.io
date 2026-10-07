@@ -51,7 +51,7 @@ import { CHANGELOG } from './changelog';
 
   WHERE THINGS GO (the house layout; keep it, or the generators drift apart):
 
-    topbar        GitHub · commercial licence · MakerWorld · Ko-fi   (ui-kit)
+    topbar        all generators · commercial licence · MakerWorld · Buy me a coffee   (ui-kit)
     LEFT panel    header -> quality callout -> YOUR SETTINGS
     STAGE         the 3D preview, plus its overlays:
                     top-left      "Live 3D Preview" label
@@ -445,7 +445,7 @@ const hint = el('p', {
 });
 
 const shell = appShell({
-  topbar: topbarLinks({ githubUrl: BRAND.urls.github, themeToggle: false }),
+  topbar: topbarLinks({ themeToggle: false }),
   left: {
     scroll: [
       generatorHeader({

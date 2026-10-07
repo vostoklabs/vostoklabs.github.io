@@ -14,6 +14,24 @@
 .vl-topbar-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .vl-donate-label { color: var(--muted); font-size: 14px; margin-right: 2px; }
 
+/* `lifetimeLicence`: three groups, the offer truly centred whatever the side groups measure.
+   Space-between only centres the middle child when both sides are the same width. */
+.vl-topbar--centred {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+}
+.vl-topbar-group--centre { justify-content: center; }
+.vl-topbar-group--end { justify-content: flex-end; }
+/* The kit's cta, at the topbar's height rather than a footer's. */
+.vl-topbar-group--centre .vl-btn--cta { padding: 7px 18px; font-size: 15px; line-height: 1; }
+@media (max-width: 1240px) {
+  /* Too narrow for three across: the offer takes its own row underneath. The two side columns
+     are equal, so three across needs twice the wider side group plus the offer, about 1200px;
+     below that the donate group wrapped onto two lines instead. */
+  .vl-topbar--centred { grid-template-columns: 1fr auto; }
+  .vl-topbar--centred .vl-topbar-group--centre { grid-column: 1 / -1; grid-row: 2; }
+}
+
 .vl-topbar-btn {
   display: inline-flex;
   align-items: center;
@@ -36,16 +54,16 @@
 .vl-topbar-btn svg { flex: 0 0 auto; }
 .vl-topbar-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-/* Commercial license + Ko-fi: red, emphasized. */
+/* Commercial license + Buy me a coffee: red, emphasized. */
 .vl-topbar-btn--license,
-.vl-topbar-btn--kofi {
+.vl-topbar-btn--coffee {
   background: var(--red);
   border-color: var(--red);
   color: #ffffff;
   font-weight: 700;
 }
 .vl-topbar-btn--license:hover,
-.vl-topbar-btn--kofi:hover {
+.vl-topbar-btn--coffee:hover {
   background: var(--red-hover);
   border-color: var(--red-hover);
   color: #ffffff;
@@ -777,7 +795,7 @@
 .vl-toast--warn { border-color: var(--warn); }
 .vl-toast--error { border-color: var(--red); }
 
-/* ---------- Support links (Ko-fi / MakerWorld / GitHub) ---------- */
+/* ---------- Support links (Buy me a coffee / MakerWorld / GitHub) ---------- */
 .vl-support {
   display: flex;
   flex-wrap: wrap;

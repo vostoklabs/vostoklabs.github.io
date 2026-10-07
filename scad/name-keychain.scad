@@ -1,4 +1,4 @@
-// Name Keychain — Vostok Labs (https://ko-fi.com/vostoklabs)
+// Name Keychain — Vostok Labs (https://buymeacoffee.com/vostoklabs)
 // © Vostok Labs. Personal use only (MakerWorld Standard Digital File License).
 // Selling prints or redistributing this file requires a Vostok Labs commercial
 // license — see the listing description.
