@@ -12,6 +12,8 @@ export const BRAND = {
     clickerLifetimeLicence: 'https://buymeacoffee.com/vostoklabs/e/584226',
     // The keycap generator's lifetime commercial licence, sold on Buy Me a Coffee.
     keycapLifetimeLicence: 'https://buymeacoffee.com/vostoklabs/e/584242',
+    // Laser Box's lifetime commercial licence, sold on Buy Me a Coffee.
+    laserBoxLifetimeLicence: 'https://buymeacoffee.com/vostoklabs/e/584245',
     makerworld: 'https://makerworld.com/en/@Vostok_Labs',
     // The "Get commercial license" target (from the live clicker topbar):
     mwCommercial: 'https://makerworld.com/en/@Vostok_Labs#commercial-membership-open',

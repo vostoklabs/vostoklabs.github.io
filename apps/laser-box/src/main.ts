@@ -1,3 +1,4 @@
+import { BRAND } from '@vostok/brand';
 import '@vostok/ui-kit/styles.css';
 import './style.css';
 
@@ -346,7 +347,21 @@ const resetRow = buttonRow(reset);
 // the kit's drawer; Save, Load, Help and Light mode follow the box. On a desktop nothing moves.
 const shell = appShell({
   // Inside MakerLab the host draws the chrome and the embed opens no links: no top bar.
-  topbar: MAKERLAB ? undefined : topbarLinks({ themeToggle: false }),
+  topbar: MAKERLAB ? undefined : topbarLinks({
+    themeToggle: false,
+    // Sold on Buy Me a Coffee; the terms match the licence document the buyer receives.
+    lifetimeLicence: {
+      product: 'Laser Box',
+      href: BRAND.urls.laserBoxLifetimeLicence,
+      terms: [
+        'Sell digital cut files',
+        'Pay once, get a lifetime license',
+        'Sell laser-cut boxes',
+        'No subscription',
+        'No credit or attribution required',
+      ],
+    },
+  }),
   phone: true,
   left: {
     compact: true,
