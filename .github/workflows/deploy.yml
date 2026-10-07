@@ -115,6 +115,13 @@ jobs:
       - name: Copy Laser Studio to Hub Dist
         run: cp -r apps/laser-studio/dist apps/hub/dist/laser-studio
 
+      # Default build, like Laser Studio's: the MakerWorld build is `build:mw` into dist-mw/.
+      - name: Build Laser Box
+        run: pnpm build:laserBox
+
+      - name: Copy Laser Box to Hub Dist
+        run: cp -r apps/laser-box/dist apps/hub/dist/laser-box
+
       # Every generator the hub links to has to exist under the path generators.json gives it,
       # or the card is a 404 — which is exactly what shipped: the app was written, the registry
       # entry was added, and nothing here ever built it. Cheap to assert, and it fails the

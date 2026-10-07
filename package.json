@@ -52,7 +52,9 @@
     "check:notices": "node scripts/third-party-notices.mjs --check",
     "dev:laserStudio": "pnpm --filter laser-studio dev",
     "build:laserStudio": "pnpm --filter laser-studio build",
-    "render:laserStudioThumb": "node scripts/render-laser-studio-thumb.mjs"
+    "render:laserStudioThumb": "node scripts/render-laser-studio-thumb.mjs",
+    "dev:laserBox": "pnpm --filter laser-box dev",
+    "build:laserBox": "pnpm --filter laser-box build"
   },
   "devDependencies": {
     "esbuild": "^0.24.2",

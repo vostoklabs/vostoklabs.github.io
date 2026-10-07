@@ -363,6 +363,46 @@ importers:
         specifier: ^6.0.5
         version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
 
+  apps/laser-box:
+    dependencies:
+      '@vostok/brand':
+        specifier: workspace:*
+        version: link:../../config
+      '@vostok/export':
+        specifier: workspace:*
+        version: link:../../packages/export
+      '@vostok/laser':
+        specifier: workspace:*
+        version: link:../../packages/laser
+      '@vostok/patterns':
+        specifier: workspace:*
+        version: link:../../packages/patterns
+      '@vostok/shapes':
+        specifier: workspace:*
+        version: link:../../packages/shapes
+      '@vostok/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
+      manifold-3d:
+        specifier: ^3.0.1
+        version: 3.5.1(@gltf-transform/core@4.4.1)(@gltf-transform/extensions@4.4.1)(@gltf-transform/functions@4.4.1)(esbuild-wasm@0.27.7)
+      three:
+        specifier: ^0.171.0
+        version: 0.171.0
+    devDependencies:
+      '@types/three':
+        specifier: ^0.171.0
+        version: 0.171.0
+      esbuild:
+        specifier: ^0.24.2
+        version: 0.24.2
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.5
+        version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
+
   apps/laser-studio:
     dependencies:
       '@vostok/brand':

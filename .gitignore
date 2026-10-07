@@ -36,6 +36,7 @@ apps/*/
 !apps/keychain-carabiner/
 !apps/kit-demo/
 !apps/laser-studio/
+!apps/laser-box/
 !apps/magnet-generator/
 !apps/name-keychain/
 !apps/pen-topper/

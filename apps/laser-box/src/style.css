@@ -1,0 +1,124 @@
+/* App-specific styles only. Structure, controls and colours come from @vostok/ui-kit; this is
+   placement — the side chips as the box unfolds, the stage card and the 3D view's overlays. The
+   rail on the left, the zoom tools, the switches and the phone layout are the kit's. */
+
+/* The panels scroll, not the page — on a desktop. Stacked on a phone, the page scrolls. */
+@media (min-width: 901px) {
+  body {
+    overflow: hidden;
+  }
+}
+
+/* The sides, as the box unfolds: the lid (a drawer's top) over the front, the four walls in a
+   row, the bottom under the front. Each a kit chip, stretched to its cell. */
+.lb-sides {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-areas: '. lid . .' 'left front right back' '. bottom . .';
+  grid-auto-rows: 30px;
+  gap: 4px;
+}
+.lb-sides > [data-side='lid'], .lb-sides > [data-side='top'] { grid-area: lid; }
+.lb-sides > [data-side='left'] { grid-area: left; }
+.lb-sides > [data-side='front'] { grid-area: front; }
+.lb-sides > [data-side='right'] { grid-area: right; }
+.lb-sides > [data-side='back'] { grid-area: back; }
+.lb-sides > [data-side='bottom'] { grid-area: bottom; }
+
+.lb-help p { margin: 0 0 var(--space-3); line-height: 1.5; }
+.lb-help .lb-help__title { margin: var(--space-4) 0 var(--space-2); font-family: var(--font-display); font-weight: 600; color: var(--text); }
+.lb-help__steps { margin: 0; padding-left: 1.3em; line-height: 1.5; }
+.lb-help__steps li { margin: 0 0 var(--space-2); }
+
+/* ------------------------------------------------------------------ the stage -- */
+
+.lb-stage { position: absolute; inset: 0; }
+
+.lb-preview {
+  position: absolute;
+  inset: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/* The view switch on the left, the unit switch on the right, above the picture. */
+.lb-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lb-canvas { position: relative; flex: 1 1 0; min-height: 0; }
+.lb-three { position: absolute; inset: 0; overflow: hidden; }
+.lb-three canvas { display: block; width: 100%; height: 100%; }
+.lb-flat { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.lb-preview[data-view="file"] .lb-flat { background: #ffffff; }
+.lb-flat__label { fill: var(--muted); font-family: var(--font-body); }
+.lb-flat__name { fill: var(--text); }
+.lb-preview[data-view="file"] .lb-flat__label { fill: #6b7280; }
+
+.lb-canvas > .vl-stage-status { bottom: 12px; left: 12px; right: auto; max-width: calc(100% - 210px); }
+.lb-preview[data-view="three"] .vl-stage-status { background: color-mix(in srgb, var(--panel) 88%, transparent); }
+
+/* The box's three dimensions, hung on the 3D view where the camera projects them. */
+.lb-dims { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lb-dims__label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #374151;
+  font: 600 12px/1.4 var(--font-body);
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.lb-flat { cursor: grab; touch-action: none; }
+.lb-flat.is-panning { cursor: grabbing; }
+
+/* Under the 3D view: open the lid, pull the box apart. */
+.lb-tools {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* Under the cut file: what the colours do, and the one sentence about the kerf. */
+.lb-legend {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.lb-legend span { display: inline-flex; align-items: center; white-space: nowrap; }
+.lb-legend span::before { content: ''; flex: 0 0 10px; width: 10px; height: 10px; margin-right: 7px; border-radius: 3px; background: #000000; }
+.lb-legend [data-op="cut"]::before { background: #ff0000; }
+.lb-legend [data-op="score"]::before { background: #0000ff; }
+.lb-legend__note { flex: 1 1 100%; margin: 0; font-size: 12px; }
+
+@media (max-width: 900px) {
+  .lb-preview { inset: var(--space-2); }
+  .lb-bar { flex-wrap: wrap; }
+  .lb-tools { gap: var(--space-3); padding: 6px 10px; }
+}
+/* A phone: the kit's zoom tools move to the picture's top corner, so the status line takes its width. */
+@media (max-width: 760px) {
+  .lb-canvas > .vl-stage-status { max-width: calc(100% - 24px); }
+}

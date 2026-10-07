@@ -54,6 +54,7 @@ const BUDGET = {
   hub: { shadow: 1 },
   'keycap-generator': { viewer: 1, fonts: 7 },
   'keychain-carabiner': { shadow: 2, worker: 1 },
+  'laser-box': { viewer: 1 },
   'laser-studio': { shadow: 1 },
   'magnet-generator': { shadow: 15, viewer: 1 },
   'name-keychain': { shadow: 4, viewer: 1, project: 2 },

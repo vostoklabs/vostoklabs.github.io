@@ -1,0 +1,33 @@
+Laser Box — offline copy
+========================
+
+Unzip anywhere and double-click laser-box-offline.html. That is the whole thing: one
+file, no install, no server, no internet. It works on a plane.
+
+Everything is inside it — the geometry engine, the patterns and the ready-made boxes —
+so give it a few seconds the first time your browser opens it. After that it is quick.
+
+Chrome, Edge, Firefox and Safari all run it. If your browser asks whether to allow local
+files, say yes — that is the page reading itself, not the network.
+
+WHAT IT DOES
+  Finger-jointed boxes for a laser cutter: an open tray, a lift-off lid, a hinged lid
+  that latches shut, or a chest of one to three drawers. Pick a box on the right — or
+  start from a ready-made one under the box types — set its size, and put a pattern on
+  the sides you choose.
+
+  "3D Preview" shows the box assembled. "2D Design" names every piece. "Export Preview"
+  is the cut file exactly as it downloads.
+
+  "Download SVG" gives you the cut file in millimetres: red lines cut, blue lines score,
+  black areas engrave. The kerf is already in it, so set your laser software's own
+  offset to 0. "Save" writes a small .json of your settings that "Load" reads back.
+
+CUTTING IT
+  Measure your sheet with calipers and type its thickness under Material. Cut one corner
+  first: if it falls apart, move Fit one step tighter; if it will not go together, one
+  step looser. Help shows how to put the box you designed together, step by step.
+
+Made by Vostok Labs.
+Free to use. Selling what you make with it needs a commercial licence; the link is in
+the top bar.

@@ -17,6 +17,10 @@ Present:
   (`pnpm render:laserStudioThumb`). A catalogue app is badly served by one product photo:
   the pitch is that there are forty-two of these. Replace it with a photo of a cut piece
   when there is one worth showing.
+- `laser-box.png` — six of its templates, from the template pictures in
+  `apps/laser-box/src/assets/templates/`, three across, at 800×600: the card crops to 4:3
+  (`--hub-thumb-ratio`), so a 16:10 grid loses its outer columns. Replace it with a photo of a cut box when
+  there is one.
 
 Missing:
 

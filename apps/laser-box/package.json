@@ -1,0 +1,35 @@
+{
+  "name": "laser-box",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "build:mw": "tsc -p tsconfig.json && vite build --mode makerworld",
+    "build:offline": "node ../../scripts/offline.mjs laser-box",
+    "preview": "vite preview",
+    "preview:mw": "vite preview --mode makerworld --port 5178 --strictPort",
+    "pack:mw": "pnpm run build:mw && node makerlab/pack.mjs",
+    "serve:mw": "node makerlab/server.cjs -c config.json -p 8041",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node tests/run.mjs && node tests/ui.test.mjs"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/laser": "workspace:*",
+    "@vostok/patterns": "workspace:*",
+    "@vostok/shapes": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
+    "manifold-3d": "^3.0.1",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.171.0",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "description": "Pick a box, set its size and material, add a pattern, download a cut file that fits together."
+}

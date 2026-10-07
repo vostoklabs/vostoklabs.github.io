@@ -76,6 +76,14 @@
       "blurb": "Pick a design, type your name, download the cut file. 43 laser templates — keychains, pet tags, ornaments, QR stands, coasters and signs — with 241 fonts, a symbol library and pattern fills, in millimetres for Bambu Suite or any laser software that reads SVG."
     },
     {
+      "id": "laser-box",
+      "name": "Laser Box",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/laser-box/",
+      "blurb": "Pick a box, set its size and material, add a pattern, download a cut file that fits together. Lift-off lids, hinged lids with a latch, open trays and chests of drawers, with finger or flex joints."
+    },
+    {
       "id": "large-box",
       "name": "Large Customizable Box",
       "route": "mw",
