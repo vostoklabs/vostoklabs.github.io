@@ -24,10 +24,10 @@ check('reads its label', plain.textContent === 'Details', plain.textContent);
 check('plain by default', plain.className === 'vl-btn', plain.className);
 check('same tab by default', !plain.hasAttribute('target') && !plain.hasAttribute('rel'));
 
-const primary = linkButton({ label: 'Open app', href: '/clicker/', emphasis: 'primary', block: true, className: 'x-place' });
+const primary = linkButton({ label: 'Open app', href: '/clicker/', emphasis: 'primary', block: true, className: 'vl-row' });
 check('primary rung', primary.classList.contains('vl-btn--primary'), primary.className);
 check('block shape', primary.classList.contains('vl-btn--block'), primary.className);
-check('placement class kept', primary.classList.contains('x-place'), primary.className);
+check('placement class kept', primary.classList.contains('vl-row'), primary.className);
 
 const cta = linkButton({ label: 'Get a licence', href: '/licences/', emphasis: 'cta' });
 check('cta rung is primary plus cta', cta.classList.contains('vl-btn--primary') && cta.classList.contains('vl-btn--cta'), cta.className);
