@@ -15,6 +15,7 @@ import { panel, type PanelOptions } from './app-shell';
      designBody     the canvas view: context bar over rail | panel | canvas | objects
      studioView     a studio: the generator's settings | stage | output, without its topbar
      toolRail       the vertical switcher (Bambu's rail)
+     navRail        the same rail as a site's links (the hub's menu)
      floatingPanel  the selected object's own controls, at the canvas edge
      popover        content anchored to a control (the Sheet dropdown, a distance slider)
 
@@ -274,6 +275,76 @@ export function toolRail<T extends string = string>(opts: ToolRailOptions<T>): T
   }
   setValue(opts.value);
   return { root, setValue, button: (v) => buttons.get(v) };
+}
+
+// ------------------------------------------------------------------- nav rail --
+
+export interface NavRailItem {
+  /** The page it goes to. */
+  href: string;
+  /** One word, as on the tool rail. */
+  label: string;
+  /** Inline SVG markup, a member of `ICONS`. */
+  icon: string;
+  /** Native tooltip. Default none: the label is already on screen. */
+  title?: string;
+  /** A hairline above this item. */
+  divider?: boolean;
+  /** Another site: opens in a new tab. Only for a page that is not embedded (the hub), never a
+   *  generator. */
+  external?: boolean;
+}
+
+export interface NavRailOptions {
+  items: NavRailItem[];
+  /** Items pinned to the far end of the rail. */
+  trailing?: NavRailItem[];
+  /** The `href` of the item for the page being shown: it is marked current. */
+  current?: string;
+  /** Above the first item: a logo that goes home. */
+  leading?: HTMLElement[];
+  /** The landmark's accessible name. Default 'Main'. */
+  label?: string;
+  /** `'large'`: wider items, bigger icons and labels, for a rail that is a whole site's menu
+   *  rather than a column beside a panel of settings. Desktop only; on a phone the row is the
+   *  same either way. Default: the tool rail's size. */
+  size?: 'large';
+  /** Placement only. */
+  className?: string;
+}
+
+/** The tool rail as a site's navigation: the same column, icon over a one-word label, with each
+ *  item a link to a page rather than a button. A generator's settings rail and the hub's menu
+ *  are one look, and the links work in a page rendered ahead of time with no script. Below
+ *  900 px it lies down into a row, as the tool rail does. */
+export function navRail(opts: NavRailOptions): HTMLElement {
+  const root = el('nav', {
+    className: `vl-tool-rail vl-tool-rail--nav${opts.size ? ` vl-tool-rail--${opts.size}` : ''}${opts.className ? ` ${opts.className}` : ''}`,
+    attrs: { 'aria-label': opts.label ?? 'Main' },
+  });
+  const make = (item: NavRailItem) => {
+    if (item.divider) root.append(el('span', { className: 'vl-tool-rail__rule', attrs: { 'aria-hidden': 'true' } }));
+    const here = item.href === opts.current;
+    const a = el('a', {
+      className: `vl-tool-rail__btn${here ? ' is-active' : ''}`,
+      attrs: {
+        href: item.href,
+        ...(item.title ? { title: item.title } : {}),
+        ...(here ? { 'aria-current': 'page' } : {}),
+        ...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
+      },
+    });
+    a.append(svgEl(item.icon), el('span', { className: 'vl-tool-rail__label', text: item.label }));
+    root.append(a);
+  };
+
+  if (opts.leading?.length) root.append(...opts.leading);
+  for (const item of opts.items) make(item);
+  if (opts.trailing?.length) {
+    root.append(el('span', { className: 'vl-tool-rail__gap', attrs: { 'aria-hidden': 'true' } }));
+    for (const item of opts.trailing) make(item);
+  }
+  return root;
 }
 
 // -------------------------------------------------------------------- toolbar --

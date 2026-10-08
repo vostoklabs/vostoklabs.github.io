@@ -26,6 +26,7 @@
     { "name": "List row", "category": "ui", "use": ["listRow"], "for": "A full-width row: thumbnail, label and trailing detail." },
     { "name": "Gallery cards", "category": "ui", "use": ["galleryCard", "galleryGrid"], "for": "Picture cards in a responsive grid, for choosing a template or a design." },
     { "name": "Side navigation", "category": "ui", "use": ["sideNav"], "for": "A vertical list of pages or groups to switch between." },
+    { "name": "Navigation rail", "category": "ui", "use": ["navRail"], "for": "A site's menu as the generators' left rail: icon over a one-word label, each a link to a page, the current one marked; a logo above, items pinned to the end. Lies down into a row on a phone." },
     { "name": "Source cards", "category": "ui", "use": ["sourceCards"], "for": "The Image / SVG / Text cards at the top of an input panel; layout tiles for a longer list (icon over a two-line name)." },
     { "name": "File drop zone", "category": "ui", "use": ["dropZone", "uploadCta"], "for": "Click or drag a file in, and the slim \"replace this file\" row once one is loaded. pick (on either) opens a host's own file picker instead of the browser's; bubble leaves a drop to the page's own handler, which sorts files by type." },
     { "name": "Sample tiles", "category": "ui", "use": ["sampleGrid", "thumbGrid"], "with": ["thumbTile"], "for": "Square picture tiles to start from a sample, in a grid." },

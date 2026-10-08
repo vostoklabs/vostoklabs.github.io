@@ -46,6 +46,7 @@ import {
   openMenu,
   searchField,
   sideNav,
+  navRail,
   galleryCard,
   galleryGrid,
   fontCards,
@@ -821,6 +822,25 @@ app.append(
           { id: 'recent', title: 'Recently opened', items: [{ id: 'bag-charm', label: 'Bag charm' }], selectable: false },
         ],
         onSelect: (id) => toast(id),
+      }),
+    ),
+  ),
+  entry(
+    'navRail()',
+    'Navigation rail',
+    'A site’s menu as the generators’ left rail: icon over a one-word label, each a link, the ' +
+      'current page lit. A logo can sit above; trailing items pin to the end. The hub’s menu.',
+    panel(
+      navRail({
+        leading: [el('span', { className: 'vl-label', text: 'Logo' })],
+        items: [
+          { href: '#generators', label: 'Generators', icon: ICONS.grid },
+          { href: '#licences', label: 'Licences', icon: ICONS.license },
+          { href: '#faq', label: 'FAQ', icon: ICONS.help },
+        ],
+        trailing: [{ href: '#sell', label: 'Sell', icon: ICONS.tag }],
+        current: '#generators',
+        label: 'Demo site',
       }),
     ),
   ),

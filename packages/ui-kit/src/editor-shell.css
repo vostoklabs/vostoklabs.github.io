@@ -251,6 +251,14 @@
   color: var(--accent);
 }
 .vl-tool-rail__label { display: block; text-align: center; }
+/* navRail(): the items are links. */
+.vl-tool-rail--nav .vl-tool-rail__btn { text-decoration: none; }
+/* navRail({ size: 'large' }): a whole site's menu. The phone row below keeps the usual size. */
+@media (min-width: 901px) {
+  .vl-tool-rail--large { padding: var(--space-3) var(--space-2); gap: var(--space-1); }
+  .vl-tool-rail--large .vl-tool-rail__btn { width: 80px; min-height: 64px; gap: 6px; font-size: var(--fs-small); }
+  .vl-tool-rail--large .vl-tool-rail__btn svg { width: 24px; height: 24px; }
+}
 .vl-tool-rail__gap { flex: 1 1 auto; }
 .vl-tool-rail__rule { display: block; height: 1px; margin: 6px 8px; background: var(--line); }
 .vl-tool-rail__rule[hidden] { display: none; }
