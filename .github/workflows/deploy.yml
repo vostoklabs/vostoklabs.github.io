@@ -23,11 +23,13 @@ jobs:
     uses: ./.github/workflows/check.yml
     secrets: inherit
 
-  build-and-deploy:
+  # Build and deploy are two jobs, the way GitHub's own Pages template has them. In one job the
+  # deploy step asked for the uploaded site a fraction of a second after the upload finished,
+  # before GitHub listed it ("No artifacts named github-pages"), and re-running that job only
+  # uploaded a second copy for the deploy to refuse ("Multiple artifacts"). Apart, the deploy
+  # starts after the upload is listed, and a re-run of a failed deploy re-runs only the deploy.
+  build:
     needs: check
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     env:
       # Every export names the build it came from (Metadata/vostok_labs.txt, the SVG metadata).
@@ -150,6 +152,13 @@ jobs:
         with:
           path: apps/hub/dist
 
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
