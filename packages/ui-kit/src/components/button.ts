@@ -193,6 +193,46 @@ export function button(opts: ButtonOptions): ButtonHandle {
   return node;
 }
 
+export interface LinkButtonOptions {
+  label: string;
+  href: string;
+  /** Default `plain`. The same ladder as `button()`. */
+  emphasis?: ButtonEmphasis;
+  /** Raw SVG string, i.e. a member of `ICONS`. Rendered before the label. */
+  icon?: string;
+  block?: boolean;
+  /** Opens in a new tab. Only for a page that is not embedded: the hub, never a generator. */
+  external?: boolean;
+  /** Placement only, exactly as on `button()`. */
+  className?: string;
+}
+
+/**
+ * A link that looks like a button: the hub's "Open app", "Get it on MakerWorld" and every
+ * other action that goes to an address rather than doing something on the page.
+ *
+ * An `<a>` and not a `<button>` with a click handler, because it is a navigation: it can be
+ * opened in a new tab, it shows its address on hover, and it works in a page that was
+ * rendered ahead of time with no script attached. The hub wrote these by hand as
+ * `el('a', { className: 'vl-btn …' })`, which is the class-name-instead-of-a-component
+ * pattern this file exists to end.
+ */
+export function linkButton(opts: LinkButtonOptions): HTMLAnchorElement {
+  const classes = [EMPHASIS[opts.emphasis ?? 'plain']];
+  if (opts.block) classes.push('vl-btn--block');
+  if (opts.className) classes.push(opts.className);
+  const node = el('a', {
+    className: classes.join(' '),
+    attrs: {
+      href: opts.href,
+      ...(opts.external ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
+    },
+  }) as HTMLAnchorElement;
+  if (opts.icon) node.append(svgEl(opts.icon));
+  node.append(document.createTextNode(opts.label));
+  return node;
+}
+
 export interface IconButtonOptions extends Omit<ButtonOptions, 'label' | 'icon' | 'block'> {
   /** Raw SVG string, i.e. a member of `ICONS`. */
   icon: string;

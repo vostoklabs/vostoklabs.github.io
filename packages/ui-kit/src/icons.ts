@@ -129,6 +129,8 @@ export const ICONS = {
   // A plate leaning on a base — stands, feet, stakes, posts.
   stand: stroke('<path d="M8 20h8"/><path d="M12 20v-4"/><path d="m6 4 12 2v10L6 14z"/>', 18),
   // A list with bullets — names, guests, lines.
+  // Three bars — the menu button a narrow page folds its navigation into.
+  menu: stroke('<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>', 18),
   list: stroke('<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>', 18),
   // Two sliders — a category of plain settings.
   sliders: stroke('<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/>', 18),

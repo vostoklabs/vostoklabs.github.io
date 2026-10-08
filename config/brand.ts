@@ -15,6 +15,8 @@ export const BRAND = {
     // Laser Box's lifetime commercial licence, sold on Buy Me a Coffee.
     laserBoxLifetimeLicence: 'https://buymeacoffee.com/vostoklabs/e/584245',
     makerworld: 'https://makerworld.com/en/@Vostok_Labs',
+    // The same commercial membership, sold on Buy Me a Coffee as well as on MakerWorld.
+    buyMeACoffeeMembership: 'https://buymeacoffee.com/vostoklabs/membership',
     // The "Get commercial license" target (from the live clicker topbar):
     mwCommercial: 'https://makerworld.com/en/@Vostok_Labs#commercial-membership-open',
     github: 'https://github.com/vostoklabs',
@@ -40,11 +42,10 @@ export const BRAND = {
       covers: 'the entire catalog',
       note: 'valid while the membership is active',
     },
+    // Sold per generator on Buy Me a Coffee: Clicker, Keycap and Laser Box today.
     lifetime: {
-      one: 150,
-      three: 400,
-      twelve: 1500,
-      covers: 'a design (whole generator or a specific model), set at purchase',
+      one: 99,
+      covers: 'one generator',
       note: 'one-time payment, yours forever',
     },
   },

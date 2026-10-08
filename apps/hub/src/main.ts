@@ -1,340 +1,182 @@
-// Vostok Labs Hub — main entry point.
-// Renders the full landing page: nav, hero, generators, seller tools, license, footer.
-
-import '@vostok/ui-kit/styles.css';
-import './hub.css';
+// Vostok Labs Hub: the browser half. Every page arrives prerendered (src/site/), with its
+// stylesheet linked from index.html; this only adds what needs a script: the phone menu, the
+// header search, the catalogue filter, the membership term switch and the licence finder.
 
 import { BRAND } from '@vostok/brand';
-import { el, button, openCommercialModal, segmentedControl, supportLinks, textField, ICONS, svgEl, resolveTheme } from '@vostok/ui-kit';
-import registryData from '../../../generators.json';
-import type { Registry } from './registry';
-import { generatorCard, sellerToolCard } from './cards';
-
-const registry = registryData as unknown as Registry;
+import { el, linkButton, resolveTheme, segmentedControl, textField } from '@vostok/ui-kit';
+import { live } from './site/content';
+import { mediaNode } from './site/blocks';
 
 // The light/dark choice made in any generator holds here too: they share one key. Read only:
 // the hub has no switch of its own, so it must not save the system default as a choice.
 document.documentElement.setAttribute('data-theme', resolveTheme());
 
-// Inline the logo SVG so it inherits currentColor for theming.
-const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 568.55431 524.21602" fill="none" stroke="currentColor" stroke-width="16.551" role="img" aria-label="Vostok Labs" class="hub-logo-svg">
-  <path d="M385.471,8.276 h171.043 l-194.874,507.665 h-165.99 l82.995,-229.373 z"/>
-  <path d="M255.292,225.733 l-82.995,229.373 l-23.352,-60.835 l82.995,-229.373 z"/>
-  <path d="M208.588,104.064 l-82.995,229.373 l-23.352,-60.835 l82.995,-229.373 z"/>
-  <path d="M152.519,8.276 l-73.63,203.492 l-23.352,-60.835 l51.618,-142.657 z"/>
-  <path d="M61.79,8.276 l-29.606,81.823 l-23.352,-60.835 l7.594,-20.988 z"/>
-</svg>`;
-
-function parseSvg(raw: string): Element {
-  const tpl = document.createElement('template');
-  tpl.innerHTML = raw.trim();
-  return tpl.content.firstElementChild!;
-}
-
 const fmt = (n: number) => `$${n.toLocaleString('en-US')}`;
 
-// ---------------------------------------------------------------------------
-// NAV
-// ---------------------------------------------------------------------------
-function buildNav(): HTMLElement {
-  const logoLink = el('a', {
-    className: 'hub-nav__logo',
-    attrs: { href: '/', 'aria-label': 'Vostok Labs home' },
+function navMenu(): void {
+  const nav = document.querySelector<HTMLElement>('.hub-nav');
+  const toggle = nav?.querySelector<HTMLButtonElement>('[data-nav-toggle]');
+  if (!nav || !toggle) return;
+  toggle.addEventListener('click', () => {
+    const open = nav.classList.toggle('hub-nav--open');
+    toggle.setAttribute('aria-expanded', String(open));
   });
-  logoLink.append(parseSvg(LOGO_SVG));
-  logoLink.append(el('span', { className: 'hub-nav__logo-text', text: 'Vostok Labs' }));
-
-  const links = el('nav', { className: 'hub-nav__links' }, [
-    el('a', { className: 'hub-nav__link', text: 'Generators', attrs: { href: '#generators', 'data-filter': 'all' } }),
-    // Seller tools live inside the combined catalog; this jumps there and flips
-    // the category filter to Tools (handled by the anchor click delegate).
-    el('a', { className: 'hub-nav__link', text: 'Seller Tools', attrs: { href: '#generators', 'data-filter': 'tools' } }),
-    el('a', { className: 'hub-nav__link', text: 'Pricing', attrs: { href: '#licensing' } }),
-  ]);
-
-  // Same behavior as the app topbar's commercial button: open the kit's
-  // two-lane license modal rather than jumping straight off-site.
-  const cta = button({
-    label: 'Get Commercial License',
-    className: 'hub-nav__cta',
-    onClick: () => openCommercialModal(),
-  });
-
-  const inner = el('div', { className: 'hub-nav__inner hub-container' }, [logoLink, links, cta]);
-  return el('header', { className: 'hub-nav' }, [inner]);
 }
 
-// ---------------------------------------------------------------------------
-// HERO
-// ---------------------------------------------------------------------------
-function buildHero(): HTMLElement {
-  const eyebrow = el('p', {
-    className: 'hub-hero__eyebrow',
-    text: 'Free for makers · License for sellers',
+/** The header search is a prerendered kit field; Enter takes its words to the catalogue. */
+function navSearch(): void {
+  const input = document.querySelector<HTMLInputElement>('[data-nav-search] input');
+  if (!input) return;
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const q = input.value.trim();
+    // On the catalogue its own search answers; anywhere else, go there.
+    const here = document.querySelector<HTMLInputElement>('[data-catalogue-filter] input');
+    if (here) {
+      here.value = q;
+      here.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+    location.href = `/make/${q ? `?q=${encodeURIComponent(q)}` : ''}`;
   });
-
-  const title = el('h1', { className: 'hub-hero__title' });
-  title.innerHTML = 'Free 3D Print <em>Generators</em>';
-
-  const sub = el('p', {
-    className: 'hub-hero__sub',
-    text: 'Parametric model generators for makers and sellers. Customize, download, print. No account needed.',
-  });
-
-  const licenseLink = el('a', {
-    className: 'vl-btn vl-btn--secondary hub-hero__license-btn',
-    text: 'See commercial licensing',
-    attrs: { href: '#licensing' },
-  });
-
-  const actions = el('div', { className: 'hub-hero__actions' }, [
-    el('a', {
-      className: 'vl-btn vl-btn--primary',
-      text: 'Browse generators ↓',
-      attrs: { href: '#generators' },
-    }),
-    licenseLink,
-  ]);
-
-  return el('section', { className: 'hub-hero' }, [
-    el('div', { className: 'hub-container' }, [
-      el('div', { className: 'hub-hero__inner' }, [eyebrow, title, sub, actions]),
-    ]),
-  ]);
 }
 
-// ---------------------------------------------------------------------------
-// CATALOG — generators + seller tools in one grid, filtered by category.
-// The category switch is a per-item axis, distinct from the header's page-nav.
-// ---------------------------------------------------------------------------
-type Category = 'all' | 'app' | 'mw' | 'tools';
+type Process = 'all' | '3d-print' | 'laser';
 
-function buildCatalog(): HTMLElement {
-  // Seller tools from the registry, with upcoming ones as a fallback.
-  const tools = registry.sellerTools.length > 0
-    ? registry.sellerTools
-    : [
-        { id: 'profit-calc', name: 'Profit Calculator', status: 'coming-soon' as const, blurb: '3D print pricing: material, time, margin, all in one.' },
-        { id: 'photo-render', name: 'Product Photo Tool', status: 'coming-soon' as const, blurb: 'Upload your model, get store-ready product shots.' },
-        { id: 'listing-copy', name: 'Listing Copy Helper', status: 'coming-soon' as const, blurb: 'Generate Etsy & MakerWorld titles, tags, and descriptions.' },
-        { id: 'review-qr', name: 'Review QR Cards', status: 'coming-soon' as const, blurb: '"Scan to leave a review" cards to include with shipments.' },
-      ];
+function catalogueFilter(): void {
+  const mount = document.querySelector<HTMLElement>('[data-catalogue-filter]');
+  if (!mount) return;
+  const cards = [...document.querySelectorAll<HTMLElement>('[data-card]')];
+  const shelves = [...document.querySelectorAll<HTMLElement>('.hub-shelf')];
+  const empty = document.querySelector<HTMLElement>('[data-empty]');
+  let query = (new URLSearchParams(location.search).get('q') ?? '').trim().toLowerCase();
+  let process: Process = 'all';
 
-  const grid = el('div', { className: 'hub-grid' });
-
-  // Current filter state: category (segmented control) + free-text search.
-  let activeCat: Category = 'all';
-  let query = '';
-
-  const matches = (...fields: (string | undefined)[]) => {
-    if (!query) return true;
-    const q = query.toLowerCase();
-    return fields.some((f) => f && f.toLowerCase().includes(q));
+  const apply = () => {
+    for (const card of cards) {
+      const okText = !query || (card.dataset.search ?? '').includes(query);
+      // A coming-soon tool has no process: it only shows under "All".
+      const okProcess = process === 'all' || card.dataset.process === process;
+      card.hidden = !(okText && okProcess);
+    }
+    let any = false;
+    for (const shelf of shelves) {
+      const shown = shelf.querySelector('[data-card]:not([hidden])') !== null;
+      shelf.hidden = !shown;
+      any ||= shown;
+    }
+    if (empty) empty.hidden = any;
   };
 
-  // Empty-state shown when a search matches nothing.
-  const emptyState = el('p', {
-    className: 'hub-grid__empty',
-    text: 'No generators or tools match your search.',
-  });
-
-  // Re-render the grid for the chosen category + search query.
-  const render = () => {
-    grid.replaceChildren();
-    let count = 0;
-    if (activeCat !== 'tools') {
-      for (const gen of registry.generators) {
-        const isApp = gen.route === 'app' || gen.route === 'both';
-        const isMw = gen.route === 'mw' || gen.route === 'both';
-        const inCat = activeCat === 'all' || (activeCat === 'app' && isApp) || (activeCat === 'mw' && isMw);
-        if (inCat && matches(gen.name, gen.blurb)) {
-          grid.append(generatorCard(gen));
-          count++;
-        }
-      }
-    }
-    if (activeCat === 'all' || activeCat === 'tools') {
-      for (const tool of tools) {
-        if (matches(tool.name, tool.blurb)) {
-          grid.append(sellerToolCard(tool));
-          count++;
-        }
-      }
-    }
-    if (count === 0) grid.append(emptyState);
-  };
-
-  const filter = el('div', { className: 'hub-catalog__filter', attrs: { id: 'catalog-filter' } }, [
-    segmentedControl<Category>({
-      value: 'all',
-      onChange: (cat) => { activeCat = cat; render(); },
-      options: [
-        { value: 'all', label: 'All' },
-        { value: 'app', label: 'Web App' },
-        { value: 'mw', label: 'MakerWorld' },
-        { value: 'tools', label: 'Tools' },
-      ],
-    }),
-  ]);
-
-  // Search box: filters visible cards by name/blurb, live as you type.
-  const searchField = textField({
-    label: 'Search generators and tools',
+  const search = textField({
+    label: 'Search generators',
     type: 'search',
-    placeholder: 'Search generators & tools…',
-    onInput: (value) => {
-      query = value.trim();
-      render();
-    },
+    placeholder: 'Search generators…',
+    value: query,
+    onInput: (v) => { query = v.trim().toLowerCase(); apply(); },
   });
-  // Not exposed by textField()'s options — set directly on the underlying input.
-  searchField.field.autocomplete = 'off';
-  searchField.field.spellcheck = false;
-  const search = el('div', { className: 'hub-search' }, [
-    svgEl(ICONS.search),
-    searchField,
-  ]);
-
-  render();
-
-  return el('section', {
-    className: 'hub-section',
-    attrs: { id: 'generators' },
-  }, [
-    el('div', { className: 'hub-container' }, [
-      el('div', { className: 'hub-catalog__head' }, [
-        el('div', { className: 'hub-catalog__headings' }, [
-          el('h2', { className: 'hub-section__title', text: 'Generators' }),
-          el('p', {
-            className: 'hub-section__desc',
-            text: 'Free for personal use. Filter by where each one runs.',
-          }),
-        ]),
-        el('div', { className: 'hub-catalog__controls' }, [search, filter]),
-      ]),
-      grid,
-    ]),
-  ]);
+  const kind = segmentedControl<Process>({
+    value: 'all',
+    onChange: (v) => { process = v; apply(); },
+    options: [
+      { value: 'all', label: 'All' },
+      { value: '3d-print', label: '3D print' },
+      { value: 'laser', label: 'Laser' },
+    ],
+  });
+  mount.append(search, kind);
+  apply();
 }
 
-// ---------------------------------------------------------------------------
-// LICENSE / PRICING
-// ---------------------------------------------------------------------------
-function pricingFeature(text: string): HTMLElement {
-  const li = el('li');
-  li.append(svgEl(ICONS.check), text);
-  return li;
-}
+type Term = 'month' | 'quarter' | 'year';
 
-function buildLicensing(): HTMLElement {
+/** Month / quarter / year on the membership card, rewriting the price under it. */
+function termSwitch(): void {
+  const mount = document.querySelector<HTMLElement>('[data-term-switch]');
+  const price = mount?.parentElement?.querySelector<HTMLElement>('.hub-plan__price');
+  if (!mount || !price) return;
   const s = BRAND.pricing.subscription;
-
-  const subCard = el('div', { className: 'hub-pricing__card hub-pricing__card--featured' }, [
-    el('span', { className: 'hub-pricing__label', text: 'Subscription' }),
-    el('div', { className: 'hub-pricing__price', text: `${fmt(s.month)}/mo` }),
-    el('p', { className: 'hub-pricing__desc', text: `Or ${fmt(s.quarter)}/quarter · ${fmt(s.year)}/year` }),
-    el('ul', { className: 'hub-pricing__features' }, [
-      pricingFeature(`Covers ${s.covers}`),
-      pricingFeature('Sell prints on Etsy, fairs, your own shop'),
-      pricingFeature('Valid while membership is active'),
-      pricingFeature('Cancel anytime'),
-    ]),
-    el('a', {
-      className: 'vl-btn vl-btn--primary vl-btn--block hub-pricing__cta',
-      text: 'Get Commercial License →',
-      attrs: { href: BRAND.urls.mwCommercial, target: '_blank', rel: 'noopener noreferrer' },
-    }),
-  ]);
-
-  const freeLine = el('p', { className: 'hub-pricing__free' });
-  freeLine.append(
-    el('strong', { text: 'Personal use is free.' }),
-    ' You can download and print as many models as you like. A commercial license is only required if you sell the physical prints.',
-  );
-
-  return el('section', {
-    className: 'hub-section',
-    attrs: { id: 'licensing' },
-  }, [
-    el('div', { className: 'hub-container' }, [
-      el('div', { className: 'hub-section__header' }, [
-        el('h2', { className: 'hub-section__title', text: 'Commercial Licensing' }),
-        el('p', {
-          className: 'hub-section__desc',
-          text: 'Sell what you print. One membership covers the whole catalog.',
-        }),
-      ]),
-      el('div', { className: 'hub-pricing__wrap' }, [subCard]),
-      freeLine,
-    ]),
-  ]);
+  const per: Record<Term, string> = { month: '/month', quarter: '/quarter', year: '/year' };
+  const show = (t: Term) => price.replaceChildren(fmt(s[t]), el('span', { text: per[t] }));
+  mount.append(segmentedControl<Term>({
+    value: 'month',
+    onChange: show,
+    options: [
+      { value: 'month', label: 'Month' },
+      { value: 'quarter', label: 'Quarter' },
+      { value: 'year', label: 'Year' },
+    ],
+  }));
 }
 
-// ---------------------------------------------------------------------------
-// FOOTER
-// ---------------------------------------------------------------------------
-function buildFooter(): HTMLElement {
-  const year = new Date().getFullYear();
+/** Three questions to the one licence that fits. The comparison table says the same thing. */
+function licenceFinder(): void {
+  const mount = document.querySelector<HTMLElement>('[data-licence-finder]');
+  if (!mount) return;
+  const s = BRAND.pricing.subscription;
+  const l = BRAND.pricing.lifetime;
+  const lifetime = live.filter((g) => g.lifetimeLicence).map((g) => g.name);
+  const names = `${lifetime.slice(0, -1).join(', ')} or ${lifetime.at(-1)}`;
+  // Every question starts on its first answer, so what the switches show is what the result reads.
+  const answers: { sell: 'no' | 'yes'; only: 'yes' | 'no'; time: 'short' | 'long' } = { sell: 'no', only: 'yes', time: 'short' };
 
-  const supportBanner = el('div', { className: 'hub-footer__support' }, [
-    el('h3', { className: 'hub-footer__support-title', text: 'Support the Designer' }),
-    el('p', {
-      className: 'hub-footer__support-desc',
-      text: 'Vostok Labs provides free parametric models for the maker community. If you find these tools useful, please consider supporting the project by buying me a coffee or boosting our models on MakerWorld.',
-    }),
-    supportLinks(),
-  ]);
-
-  const copy = el('p', {
-    className: 'hub-footer__copy',
-    text: `© ${year} Vostok Labs. Free for personal use (CC BY-NC-ND 4.0).`,
-  });
-
-  return el('footer', { className: 'hub-footer' }, [
-    el('div', { className: 'hub-footer__inner hub-container' }, [
-      supportBanner,
-      el('hr', { className: 'hub-footer__divider' }),
-      copy,
-    ]),
-  ]);
-}
-
-// ---------------------------------------------------------------------------
-// INIT
-// ---------------------------------------------------------------------------
-function init() {
-  const app = document.getElementById('app')!;
-  app.className = 'hub-page';
-
-  app.append(
-    buildNav(),
-    buildHero(),
-    buildCatalog(),
-    buildLicensing(),
-    buildFooter(),
-  );
-
-  // Smooth scroll for anchor links
-  app.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    const anchor = target.closest<HTMLAnchorElement>('a[href^="#"]');
-    if (anchor) {
-      e.preventDefault();
-      const id = anchor.getAttribute('href')!.slice(1);
-      // A link may also flip the catalog category filter (e.g. "Seller Tools"
-      // → Tools). Click the matching segmented-control tab so its state stays
-      // in sync with the grid.
-      const filter = anchor.getAttribute('data-filter');
-      if (filter) {
-        const label = filter === 'tools' ? 'Tools' : filter;
-        const tab = Array.from(
-          document.querySelectorAll<HTMLButtonElement>('#catalog-filter .vl-tab'),
-        ).find((b) => b.textContent?.trim().toLowerCase() === label.toLowerCase());
-        tab?.click();
-      }
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  const result = el('div', { className: 'hub-finder__result', attrs: { 'aria-live': 'polite' } });
+  const show = (title: string, text: string, action?: HTMLElement) => {
+    result.replaceChildren(
+      el('h3', { className: 'hub-finder__title', text: title }),
+      el('p', { text }),
+      ...(action ? [action] : []),
+    );
+  };
+  const update = () => {
+    rows.only.hidden = answers.sell !== 'yes';
+    rows.time.hidden = answers.sell !== 'yes';
+    if (answers.sell === 'no') return show('Free', 'Printing for yourself, friends and family is free, with every feature.');
+    if (answers.only === 'yes' && answers.time === 'long') {
+      return show('Lifetime', `Pay ${fmt(l.one)} once for each generator you sell from. It covers the digital files too.`,
+        linkButton({ label: 'See lifetime licences', href: '#lifetime', emphasis: 'cta' }));
     }
-  });
+    show('Membership', answers.time === 'long'
+      ? `The whole catalogue for ${fmt(s.year)}/year, cheaper than paying monthly.`
+      : `The whole catalogue from ${fmt(s.month)}/month. Stop when you stop selling.`,
+      linkButton({ label: 'See membership', href: '#membership', emphasis: 'cta' }));
+  };
+
+  const question = <T extends string>(label: string, options: { value: T; label: string }[], set: (v: T) => void) =>
+    segmentedControl<T>({ label, options, value: options[0]!.value, onChange: (v) => { set(v); update(); } });
+
+  const rows = {
+    sell: question('Do you sell what you print?', [{ value: 'no', label: 'No, it’s for me' }, { value: 'yes', label: 'Yes' }], (v) => { answers.sell = v; }),
+    only: question(`Only from ${names}?`, [{ value: 'yes', label: 'Yes, only those' }, { value: 'no', label: 'Others too' }], (v) => { answers.only = v; }),
+    time: question('For how long?', [{ value: 'short', label: 'Trying it out' }, { value: 'long', label: 'For years' }], (v) => { answers.time = v; }),
+  };
+  mount.append(rows.sell, rows.only, rows.time, result);
+  update();
 }
 
-init();
+/** The product gallery: a strip item swaps the main picture instead of opening its file. */
+function gallery(): void {
+  const main = document.querySelector<HTMLElement>('[data-gallery-main]');
+  const items = [...document.querySelectorAll<HTMLAnchorElement>('[data-gallery-item]')];
+  if (!main || items.length === 0) return;
+  for (const item of items) {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      main.replaceChildren(mediaNode({
+        type: item.dataset.type === 'video' ? 'video' : 'image',
+        src: item.getAttribute('href') ?? '',
+        alt: item.getAttribute('aria-label') ?? '',
+        poster: item.dataset.poster,
+      }));
+      for (const other of items) other.removeAttribute('aria-current');
+      item.setAttribute('aria-current', 'true');
+    });
+  }
+}
+
+navMenu();
+navSearch();
+gallery();
+catalogueFilter();
+termSwitch();
+licenceFinder();

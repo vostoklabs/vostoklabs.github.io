@@ -8,7 +8,78 @@
       "status": "live",
       "appUrl": "/Clicker-Generator/",
       "mwUrl": "https://makerworld.com/en/models/2980346",
-      "blurb": "Turn any image, logo, or custom text into a clicker fidget."
+      "blurb": "Turn any image, logo, or custom text into a clicker fidget.",
+      "topics": [
+        "fidgets",
+        "keychains"
+      ],
+      "process": "3d-print",
+      "featured": 1,
+      "lifetimeLicence": "clickerLifetimeLicence",
+      "intro": "Clicker Generator turns any image, icon, word or 3D model into a satisfying, print-ready clicker: a multicolor 3D-printed cap and body built around a Cherry MX mechanical keyboard switch.\n\nDrop in a PNG, pick from 1,700+ built-in vector icons, import your own SVG, or type a word in one of 257 bundled fonts, plus 1,500+ symbols. Or load an STL, 3MF or OBJ and cut it into a clicker: split it in two, cut a button into its top, or stand it on a plate.\n\nPaint each color region a different filament, raise parts of the design and chamfer their edges, swap the base shape, spell a word as snap-together letter blocks, add a keychain loop, and print a fit test for the switch pocket and stem.\n\nExport a 3MF with the multicolor data already baked in, and open it straight in Bambu Studio.",
+      "features": [
+        [
+          "Cut out of 3D model",
+          "Load an STL, 3MF or OBJ and make it click: split in two, a button in the top, or on a stand."
+        ],
+        [
+          "Image, icon or text",
+          "Trace a picture into color regions, search 1,700+ icons, drop in an SVG or type a word."
+        ],
+        [
+          "Symbols and fonts",
+          "A library of 1,500+ symbols and 257 fonts, plus your own SVG and font files."
+        ],
+        [
+          "Letter blocks",
+          "Spell a word as snap-together keys in a row, grid, WASD or arrow layout, with five wall textures."
+        ],
+        [
+          "Shapes and keychain loop",
+          "Thirteen base shapes with their own knobs, and a loop you can slide anywhere round the edge."
+        ],
+        [
+          "Printable fit test",
+          "Dial the switch pocket and stem fit in millimetres on a short test piece first."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/clicker/clicker-set.jpg",
+          "alt": "A set of printed clickers"
+        },
+        {
+          "type": "image",
+          "src": "/media/clicker/logo-keychain.jpg",
+          "alt": "A logo clicker on a keyring"
+        },
+        {
+          "type": "image",
+          "src": "/media/clicker/switch-inside.jpg",
+          "alt": "Opened, with the switch inside"
+        },
+        {
+          "type": "image",
+          "src": "/media/clicker/your-text-cap.jpg",
+          "alt": "A text clicker"
+        },
+        {
+          "type": "image",
+          "src": "/media/clicker/app-1.jpg",
+          "alt": "The app with a witch hat clicker"
+        },
+        {
+          "type": "image",
+          "src": "/media/clicker/app-2.jpg",
+          "alt": "The app with a pumpkin clicker opened"
+        },
+        {
+          "type": "image",
+          "src": "/media/clicker/app-3.jpg",
+          "alt": "The app with a symbol on a round base"
+        }
+      ]
     },
     {
       "id": "magnet",
@@ -17,7 +88,71 @@
       "status": "live",
       "appUrl": "/magnet/",
       "mwUrl": "https://makerworld.com/en/models/3137555",
-      "blurb": "Turn any image into a printable fridge magnet — or a two-piece magnetic fidget slider that clicks as it slides."
+      "blurb": "Turn any image into a printable fridge magnet, or a two-piece magnetic fidget slider that clicks as it slides.",
+      "topics": [
+        "fidgets",
+        "desk-home"
+      ],
+      "process": "3d-print",
+      "intro": "Fridge Magnet and Fidget Slider turns any image, logo or word into a printable fridge magnet, or into a two-piece magnetic slider that clicks as it slides.\n\nUpload a PNG or an SVG, or type a word in one of 257 bundled fonts. Colors are carved into the front face as separate parts, over a flat back, with an optional beveled front edge. Follow the image outline, or use a circle, rounded square, rectangle, square or hexagon.\n\nTell it which magnet you own: pick from 13 stock disc and block sizes or type your own, then glue it on, embed it in a round or hex pocket with an adjustable press-fit gap, or use magnetic sheet instead. For the slider, choose 4, 6 or 8 magnets per half and the app works out the pitch and the number of clicks.\n\nExport a 3MF with one part per color.",
+      "features": [
+        [
+          "Image, SVG or text in",
+          "Colors are traced from your picture, or you type a word in any of 257 fonts."
+        ],
+        [
+          "Magnet or slider",
+          "A fridge magnet, or a two-piece magnetic slider that clicks as it slides."
+        ],
+        [
+          "Sized to your magnet",
+          "Choose from 13 stock disc and block sizes, or type your own dimensions."
+        ],
+        [
+          "Three ways to attach",
+          "Glue-on, embedded in a pocket, or a flat back for magnetic sheet."
+        ],
+        [
+          "Slider click control",
+          "Four, six or eight magnets per half, with spacing that sets the click distance."
+        ],
+        [
+          "Six outline choices",
+          "Follow the image, or use a circle, rounded square, rectangle, square or hexagon."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/magnet/dog.jpg",
+          "alt": "Dog face fridge magnet"
+        },
+        {
+          "type": "image",
+          "src": "/media/magnet/cheese-raised.jpg",
+          "alt": "Cheese magnet with raised layers"
+        },
+        {
+          "type": "image",
+          "src": "/media/magnet/radiation-round.jpg",
+          "alt": "Round magnet"
+        },
+        {
+          "type": "image",
+          "src": "/media/magnet/heart.jpg",
+          "alt": "Heart magnet"
+        },
+        {
+          "type": "image",
+          "src": "/media/magnet/app-1.jpg",
+          "alt": "The app with a heart magnet"
+        },
+        {
+          "type": "image",
+          "src": "/media/magnet/app-3.jpg",
+          "alt": "The app with the magnetic slider"
+        }
+      ]
     },
     {
       "id": "keycap",
@@ -26,14 +161,168 @@
       "status": "live",
       "appUrl": "/SVG-keycap-generator/",
       "mwUrl": "https://makerworld.com/en/models/2959969",
-      "blurb": "Custom keycaps with icons, logos, or letters."
+      "blurb": "Custom keycaps with icons, logos, or letters.",
+      "topics": [
+        "desk-home"
+      ],
+      "process": "3d-print",
+      "featured": 3,
+      "lifetimeLicence": "keycapLifetimeLicence",
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/keycap/all-sizes.jpg",
+          "alt": "Every keycap size, printed"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/icons-and-svg.jpg",
+          "alt": "Icons and SVG legends, printed"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/shine-through.jpg",
+          "alt": "Shine-through legends on a backlit board"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/app-1.jpg",
+          "alt": "The app with an icon keycap"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/app-2.jpg",
+          "alt": "The app with a letter keycap"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/app-3.jpg",
+          "alt": "The app with a crown legend"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/profile-standard.jpg",
+          "alt": "Standard profile keycap"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/profile-low.jpg",
+          "alt": "Low profile keycap"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/profile-thocky.jpg",
+          "alt": "Thocky profile keycap"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/profile-choc-v1.jpg",
+          "alt": "Choc v1 keycap"
+        },
+        {
+          "type": "image",
+          "src": "/media/keycap/size-range.jpg",
+          "alt": "Keycaps from 1u to a spacebar"
+        }
+      ],
+      "intro": "Keycap Legend Generator turns any icon, logo, or letter into a print-ready mechanical keyboard keycap with a two-color legend.\n\nPick a profile and size: Standard, Low, Thocky or Choc v1, from 1u up to a 6.5u spacebar, then choose your legend: search 1,700+ built-in vector icons, upload your own SVG, or type a letter in one of 29 bundled fonts. Size, rotate, nudge and mirror it against a live 3D preview.\n\nPrint it the way you like: two filaments for a crisp colored legend, shine-through for a backlit board, or a single-color recessed engraving. A stem fit tolerance control dials the switch grip in to your own printer, and a homing bump can be added to Standard, Low and Thocky caps.\n\nExport a 3MF that opens as one object with two pre-colored parts, ready to slice and print face-down (Choc v1 caps print on their side). Everything above is free. The optional Pro Pack adds whole-keyboard sets and a second legend on the same cap.",
+      "features": [
+        [
+          "Four keycap profiles",
+          "Standard, Low, Thocky and Choc v1, with 11 sizes up to a 6.5u spacebar (3 on Choc v1)."
+        ],
+        [
+          "Icons, SVG or letters",
+          "Search 1,700+ built-in icons, drop in an SVG, or type a letter in one of 29 fonts."
+        ],
+        [
+          "Three print styles",
+          "Two filaments, shine-through for backlit boards, or a single-color recessed legend."
+        ],
+        [
+          "Stem fit tolerance",
+          "Tighten or loosen the stem by up to 0.4 mm, and print a fit test row first."
+        ],
+        [
+          "Full A to Z set",
+          "Make all 26 letters in your font and settings as a zip of 3MFs, on 1u caps."
+        ],
+        [
+          "Exact placement",
+          "Size, depth, rotate, nudge and mirror the legend, and add a homing bump."
+        ]
+      ]
     },
     {
       "id": "name-keychain",
       "name": "Name Keychain Generator",
       "route": "both",
       "status": "live",
-      "blurb": "Personalized plate-style name keychains with live font preview, pixel & script styles, multi-language, 1 to 3 colour layers, and AMS & no-AMS printing."
+      "blurb": "Personalized plate-style name keychains with live font preview, pixel & script styles, multi-language, 1 to 3 colour layers, and AMS & no-AMS printing.",
+      "topics": [
+        "keychains"
+      ],
+      "process": "3d-print",
+      "intro": "Name Keychain Generator makes a personalised plate-style name keychain from a name and an optional second line, with a live 3D preview as you type.\n\nPick from 257 bundled fonts, from clean and script faces to pixel ones, with coverage for Cyrillic, Greek, Vietnamese, Korean, Japanese and Chinese text, or import your own. Insert any of 52 symbols into the text, set size, boldness and spacing, and raise or engrave the letters.\n\nChoose a plate that hugs the letters or a rounded rectangle, a loop tab or a corner hole for the keyring that you can nudge and rotate, and one, two or three colours: plate, name and an outline halo. Print with an AMS, or with manual swaps and the heights to pause at shown for you.\n\nExport a 3MF with a part per colour, or an SVG for a laser cutter.",
+      "features": [
+        [
+          "Live font preview",
+          "257 fonts as cards in your own text, pixel and script styles included, or import your own."
+        ],
+        [
+          "Names in any language",
+          "Fonts that cover Cyrillic, Greek, Vietnamese, Korean, Japanese and Chinese, and a second line."
+        ],
+        [
+          "Symbols in the text",
+          "Insert any of 52 symbols beside the letters."
+        ],
+        [
+          "One to three colours",
+          "Plate, name and an outline halo, each its own filament."
+        ],
+        [
+          "AMS or manual swap",
+          "Prints in one job on an AMS, or lists the heights to pause for a filament swap."
+        ],
+        [
+          "3MF or laser SVG",
+          "A 3MF with a part per colour, or an SVG with halo, engrave and cut layers."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/name-keychain/three-colour.jpg",
+          "alt": "Three colours with a halo"
+        },
+        {
+          "type": "image",
+          "src": "/media/name-keychain/two-lines.jpg",
+          "alt": "Two-line keychain"
+        },
+        {
+          "type": "image",
+          "src": "/media/name-keychain/tag-plate.jpg",
+          "alt": "Block letters on a tag plate"
+        },
+        {
+          "type": "image",
+          "src": "/media/name-keychain/app-1.jpg",
+          "alt": "The app with a two-colour name"
+        },
+        {
+          "type": "image",
+          "src": "/media/name-keychain/app-2.jpg",
+          "alt": "The app with a block-letter name"
+        },
+        {
+          "type": "image",
+          "src": "/media/name-keychain/app-3.jpg",
+          "alt": "The app with a script name"
+        }
+      ],
+      "thumb": "name-keychain.jpg"
     },
     {
       "id": "house-number",
@@ -41,7 +330,75 @@
       "route": "app",
       "status": "live",
       "appUrl": "/house-number/",
-      "blurb": "Type a number, pick a plate, print a house or office sign that fits your door. Custom fonts, independent line sizes, and keyhole slots so no fixings show."
+      "blurb": "Type a number, pick a plate, print a house or office sign that fits your door. Custom fonts, independent line sizes, and keyhole slots so no fixings show.",
+      "topics": [
+        "signs"
+      ],
+      "process": "3d-print",
+      "intro": "House and Office Number Generator makes a printed door or wall sign from a number and, if you want one, a second line such as a street or room name.\n\nStart from one of eight examples: house, office door, apartment, street with no plate, name in a band, edge band, inset panel or mailbox. Choose a rounded, rectangle, pill or plaque plate, or no plate at all, and set the size of each line on its own. Lettering can be raised, inlaid or engraved, with an optional frame, divider or stencil ties.\n\nPick a font from a shortlist of twelve made for signs, browse all 257, or import your own. Mount it with tape, screws or keyhole slots that hide the fixings, and check it in a live 3D preview. A note suggests ASA for outdoor signs.\n\nExport a 3MF with the colors as separate parts.",
+      "features": [
+        [
+          "Eight starting examples",
+          "House, office door, apartment, street, name in a band, edge band, inset panel or mailbox."
+        ],
+        [
+          "Five plate choices",
+          "Rounded, rectangle, pill, plaque, or no plate with loose numbers."
+        ],
+        [
+          "Two independent lines",
+          "A number and a street or room name, each with its own size, above, below or beside."
+        ],
+        [
+          "Three relief styles",
+          "Raised, inlay or engraved, with stencil ties for cut-out letters."
+        ],
+        [
+          "Hidden fixings",
+          "Keyhole slots, screw holes, or a flat back for tape."
+        ],
+        [
+          "Your own font",
+          "Twelve sign-ready faces, 257 to browse, or import your own."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/house-number/house.jpg",
+          "alt": "House number on a rounded plate"
+        },
+        {
+          "type": "image",
+          "src": "/media/house-number/name-in-a-band.jpg",
+          "alt": "Number with a street name band"
+        },
+        {
+          "type": "image",
+          "src": "/media/house-number/edge-band.jpg",
+          "alt": "Number with a bottom band"
+        },
+        {
+          "type": "image",
+          "src": "/media/house-number/inset-panel.jpg",
+          "alt": "Number in an inset panel"
+        },
+        {
+          "type": "image",
+          "src": "/media/house-number/app-1.jpg",
+          "alt": "The app with a house number"
+        },
+        {
+          "type": "image",
+          "src": "/media/house-number/app-2.jpg",
+          "alt": "The app with a raised number plate"
+        },
+        {
+          "type": "image",
+          "src": "/media/house-number/app-3.jpg",
+          "alt": "The app with a two-line office sign"
+        }
+      ]
     },
     {
       "id": "pen-topper",
@@ -49,7 +406,80 @@
       "route": "app",
       "status": "live",
       "appUrl": "/pen-topper/",
-      "blurb": "Personalised pen and pencil toppers: any name, 152 fonts, 1392 solid symbols, and a socket sized to the pen you actually own."
+      "blurb": "Personalised pen and pencil toppers: any name, 257 fonts, 1,487 symbols, and a socket sized to the pen you actually own.",
+      "topics": [
+        "desk-home"
+      ],
+      "process": "3d-print",
+      "intro": "Pen Topper Generator makes a personalised topper that snaps onto a pen, pencil, stylus, drinking straw or cord, from a name, a second line and symbols.\n\nPick what it fits from nine presets, from a hex pencil, a stylus and a BIC Cristal to a Sharpie, a bubble tea straw and a drawstring, or type your own barrel diameter. Choose a round or hex hole and a snug, normal or loose grip, and whether the pen sits inside the name, straight through, or in a separate collar.\n\nSet the name in one of 257 fonts and add symbols from a library of 1,487. Choose raised or engraved letters, an outline plate or a block, and one, two or three colours, for an AMS or by manual swap.\n\nNeed a class set? Paste up to 100 names, one per line, and build them all on plates in one go. Export a 3MF.",
+      "features": [
+        [
+          "Nine pen presets",
+          "Hex pencil, stylus, BIC Cristal, Sharpie, straws, a drawstring and more, or a custom diameter."
+        ],
+        [
+          "Round or hex hole",
+          "A hex hole matches a hex pencil face for face; snug, normal or loose grip."
+        ],
+        [
+          "Three ways to sit",
+          "The pen goes inside the name, straight through, or in a separate collar."
+        ],
+        [
+          "Fonts and symbols",
+          "Names in 257 fonts, with a symbol library of 1,487 to drop into the text."
+        ],
+        [
+          "Sets of names",
+          "Paste up to 100 names, one per line, and build the whole set on plates."
+        ],
+        [
+          "Copy a link",
+          "Share the design as a link that opens with the same settings."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/pen-topper/name-plate.jpg",
+          "alt": "Name on a dark plate"
+        },
+        {
+          "type": "image",
+          "src": "/media/pen-topper/two-lines.jpg",
+          "alt": "Two-line topper"
+        },
+        {
+          "type": "image",
+          "src": "/media/pen-topper/three-colour-halo.jpg",
+          "alt": "Three colours with a halo"
+        },
+        {
+          "type": "image",
+          "src": "/media/pen-topper/standing-totem.jpg",
+          "alt": "Vertical topper with a pen collar"
+        },
+        {
+          "type": "image",
+          "src": "/media/pen-topper/letters-only.jpg",
+          "alt": "Letters only, no plate"
+        },
+        {
+          "type": "image",
+          "src": "/media/pen-topper/app-1.jpg",
+          "alt": "The app with a red name topper"
+        },
+        {
+          "type": "image",
+          "src": "/media/pen-topper/app-2.jpg",
+          "alt": "The app with a blue name topper"
+        },
+        {
+          "type": "image",
+          "src": "/media/pen-topper/app-3.jpg",
+          "alt": "The app with a two-line topper"
+        }
+      ]
     },
     {
       "id": "foldbox",
@@ -57,7 +487,70 @@
       "route": "app",
       "status": "live",
       "appUrl": "/foldbox/",
-      "blurb": "Set the size, pick a structure, print it flat as one thin grooved sheet — then fold it into a box. Four glue-free mailers and trays, with a live fold animation before you commit."
+      "blurb": "Set the size, pick a structure, print it flat as one thin grooved sheet, then fold it into a box. Twelve structures, from mailers and trays to a cake box and tuck cartons, with a live fold animation before you commit.",
+      "topics": [
+        "boxes"
+      ],
+      "process": "3d-print",
+      "intro": "Folding Box Generator designs boxes that fold up from one flat sheet and lock themselves shut, sized to whatever you want to put in them.\n\nPick one of twelve structures, from a mailer or a cake box to a retail tuck carton, a gable carry box or a set of slot-together dividers. Type the inside or outside size in mm or inches, add a window, a hang tab or your own logo, and watch it fold up and unfold in a live 3D preview.\n\nPrint it flat, with no supports, as a 3MF whose fold lines are grooved in.",
+      "features": [
+        [
+          "Twelve structures",
+          "Mailers, trays, a cake box, tuck cartons, a gable carry box, a sleeve and dividers."
+        ],
+        [
+          "Sized to your contents",
+          "Type the inside or outside size in millimetres or inches."
+        ],
+        [
+          "Window and hang tab",
+          "Cut a window, or add a hang tab with a euro or round hole."
+        ],
+        [
+          "Your own logo",
+          "Add text, a symbol or a dropped-in SVG, in one of about 190 fonts."
+        ],
+        [
+          "Live fold preview",
+          "Watch the box fold and unfold in 3D, and see the flat dieline beside it."
+        ],
+        [
+          "Print it flat",
+          "A one-piece 3MF with grooved fold lines, no supports, at the card thickness you set."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/foldbox/mailer.jpg",
+          "alt": "Kraft mailer box"
+        },
+        {
+          "type": "image",
+          "src": "/media/foldbox/gable.jpg",
+          "alt": "Gable box with a carry handle"
+        },
+        {
+          "type": "image",
+          "src": "/media/foldbox/tray-with-lid.jpg",
+          "alt": "Tray with a lid"
+        },
+        {
+          "type": "image",
+          "src": "/media/foldbox/tuck-top.jpg",
+          "alt": "Tuck-top carton"
+        },
+        {
+          "type": "image",
+          "src": "/media/foldbox/app-1.jpg",
+          "alt": "The app with a tray and lid box"
+        },
+        {
+          "type": "image",
+          "src": "/media/foldbox/app-2.jpg",
+          "alt": "The box mid-fold"
+        }
+      ]
     },
     {
       "id": "keychain-carabiner",
@@ -65,7 +558,85 @@
       "route": "app",
       "status": "live",
       "appUrl": "/keychain-carabiner/",
-      "blurb": "A snap-hook clip and a chain to hang your keys or a fidget on. Every part in any shape, a symbol you drag onto the clip, an optional charm — printed flat in one job, or a chain that prints already linked."
+      "blurb": "A snap-hook clip and a chain to hang your keys or a fidget on. Every part in any shape, a symbol you drag onto the clip and an optional charm, printed flat in one job, or a chain that prints already linked.",
+      "topics": [
+        "keychains"
+      ],
+      "process": "3d-print",
+      "intro": "Keychain Carabiner Set makes a snap-hook clip, a chain and an optional charm that print flat in one job, ready to hang your keys or a fidget on.\n\nStart from one of four sets: a classic clip, a charm dangle, a print-in-place chain or the hook on its own. Choose the hook shape from 20 built-in outlines plus three seasonal ones, drag a symbol onto its face where you want it, and set the bar width, thickness and how firm the gate feels.\n\nHang the chain from a printed swivel that really turns, a plain loop, or a ring through the hook. Build the chain from open links in round, oval, long or Cuban shapes, or print it in place, already linked. Add a charm with a symbol cut through, engraved or raised.\n\nSwitch between the print layout and the assembled keychain hanging as worn, then export a 3MF.",
+      "features": [
+        [
+          "Four starter sets",
+          "A classic clip, a charm dangle, a print-in-place chain, or the hook on its own."
+        ],
+        [
+          "23 hook shapes",
+          "Twenty built-in outlines and three seasonal ones, for the hook, links and charm."
+        ],
+        [
+          "Drag-on symbols",
+          "Drag a symbol to any spot on the hook, in the clip color or its own."
+        ],
+        [
+          "A swivel that turns",
+          "A printed barrel-and-stem swivel, a plain loop, or a ring through the hook."
+        ],
+        [
+          "Print-in-place chain",
+          "Round, oval, long or Cuban links that come off the bed already joined."
+        ],
+        [
+          "Charm with a symbol",
+          "Cut it through, engrave it or raise it, with nothing left floating."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/keychain-carabiner/oval-heart.jpg",
+          "alt": "Oval clip with a heart and round links"
+        },
+        {
+          "type": "image",
+          "src": "/media/keychain-carabiner/carabiner-bolt-print-in-place.jpg",
+          "alt": "Print-in-place chain"
+        },
+        {
+          "type": "image",
+          "src": "/media/keychain-carabiner/heart-star-charm.jpg",
+          "alt": "Heart hook with a star charm"
+        },
+        {
+          "type": "image",
+          "src": "/media/keychain-carabiner/pear-round-links.jpg",
+          "alt": "Pear hook with round links"
+        },
+        {
+          "type": "image",
+          "src": "/media/keychain-carabiner/star-oval-links.jpg",
+          "alt": "Star hook with oval links"
+        },
+        {
+          "type": "image",
+          "src": "/media/keychain-carabiner/teardrop-moon-flower-charm.jpg",
+          "alt": "Teardrop hook with a flower charm"
+        },
+        {
+          "type": "image",
+          "src": "/media/keychain-carabiner/app-1.jpg",
+          "alt": "The app with an oval hook and chain"
+        },
+        {
+          "type": "image",
+          "src": "/media/keychain-carabiner/app-2.jpg",
+          "alt": "A heart hook with a star symbol"
+        },
+        {
+          "type": "image",
+          "src": "/media/keychain-carabiner/app-3.jpg",
+          "alt": "A round hook with a heart charm on the chain"
+        }
+      ]
     },
     {
       "id": "laser-studio",
@@ -73,7 +644,87 @@
       "route": "app",
       "status": "live",
       "appUrl": "/laser-studio/",
-      "blurb": "Pick a design, type your name, download the cut file. 43 laser templates — keychains, pet tags, ornaments, QR stands, coasters and signs — with 241 fonts, a symbol library and pattern fills, in millimetres for Bambu Suite or any laser software that reads SVG."
+      "blurb": "Pick a design, type your name, download the cut file. 58 laser templates (keychains, pet tags, ornaments, QR stands, coasters and signs) with 257 fonts, a symbol library and pattern fills, in millimetres for Bambu Suite or any laser software that reads SVG.",
+      "topics": [
+        "keychains",
+        "signs"
+      ],
+      "process": "laser",
+      "featured": 2,
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/laser-studio/app-2.jpg",
+          "alt": "The template gallery"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-studio/coaster-pattern.jpg",
+          "alt": "A cork coaster with a pattern fill"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-studio/phone-stand.jpg",
+          "alt": "A phone stand"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-studio/couples-keychains.jpg",
+          "alt": "Matching couples keychains"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-studio/business-card-stand.jpg",
+          "alt": "A business card on its stand"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-studio/tic-tac-toe.jpg",
+          "alt": "A tic-tac-toe board"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-studio/simple-phone-stands.jpg",
+          "alt": "Simple phone stands"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-studio/app-1.jpg",
+          "alt": "The app with matching couples keychains"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-studio/app-3.jpg",
+          "alt": "The QR display stand in 3D"
+        }
+      ],
+      "intro": "Laser Studio turns a name, a word or a symbol into a cut file for a laser cutter: pick a design, type your text and download an SVG in millimetres.\n\nChoose from 58 templates in 11 groups: keychains, gifts, business cards, QR codes, tags, ornaments, signs and stands, party pieces, toys and games, and pattern fills. Set the text in one of 257 bundled fonts, add symbols from the library, or import your own font or SVG.\n\nFill shapes with a pattern from a library of 330, cut out, engraved or scored. Check the part flat, in 3D or in laser colours, and drag the keyring hole where you want it. Run a list of names across a sheet on 23 of the designs.\n\nDownload an SVG with one group per operation, ready for Bambu Suite or any laser software that reads SVG.",
+      "features": [
+        [
+          "58 templates",
+          "Keychains, tags, ornaments, QR stands, business cards, signs and more, in 11 groups."
+        ],
+        [
+          "Fonts and symbols",
+          "257 bundled fonts and a symbol library, plus your own font and SVG files."
+        ],
+        [
+          "Pattern fills",
+          "Fill a shape with one of 330 library patterns, cut out, engraved or scored."
+        ],
+        [
+          "2D, 3D and export views",
+          "Check the design flat, in 3D, or in laser colours before you download."
+        ],
+        [
+          "Names by the sheet",
+          "Run a list of names onto A4, A3, Letter or larger sheets, on 23 designs."
+        ],
+        [
+          "A cut file that fits",
+          "An SVG in millimetres, one group per operation, for Bambu Suite or any SVG laser software."
+        ]
+      ]
     },
     {
       "id": "laser-box",
@@ -81,7 +732,56 @@
       "route": "app",
       "status": "live",
       "appUrl": "/laser-box/",
-      "blurb": "Pick a box, set its size and material, add a pattern, download a cut file that fits together. Lift-off lids, hinged lids with a latch, open trays and chests of drawers, with finger or flex joints."
+      "blurb": "Pick a box, set its size and material, add a pattern, download a cut file that fits together. Lift-off lids, hinged lids with a latch, open trays and chests of drawers, with finger or flex joints.",
+      "topics": [
+        "boxes"
+      ],
+      "process": "laser",
+      "lifetimeLicence": "laserBoxLifetimeLicence",
+      "intro": "Laser Box designs boxes you cut from flat sheet on a laser: set the size, pick the material, add a pattern and download a cut file whose joints fit together.\n\nChoose an open tray, a lift-off lid, a hinged lid that latches shut, or a chest of one to three drawers. Size it from the inside or the outside, in millimetres or inches, add compartments, or start from one of eight ready-made boxes, such as a card box or a tealight lantern.\n\nJoints are flex tabs that press together without glue, or plain fingers, with the kerf built in and a fit setting from looser to tighter. Pick from seven materials, from 3 mm plywood to clear acrylic and card.\n\nPut a pattern on the lid, the sides or any face you click, whole or inside a heart, circle, star or other shape, and cut it out, engrave it or score it. Download an SVG per sheet, or one zip when there are several.",
+      "features": [
+        [
+          "Four box types",
+          "An open tray, a lift-off lid, a hinged lid with a latch, or a chest of one to three drawers."
+        ],
+        [
+          "Eight ready-made boxes",
+          "Jewellery, card, keepsake, photo and coaster boxes, a chest, a trinket drawer and a lantern."
+        ],
+        [
+          "Glue-free joints",
+          "Flex tabs or plain fingers, with kerf built in and a fit setting from looser to tighter."
+        ],
+        [
+          "Seven materials",
+          "Three plywoods, two MDFs, clear acrylic and card, on sheet sizes you can set."
+        ],
+        [
+          "Patterns on any face",
+          "Pick a pattern from the library for any face, and cut, engrave or score it."
+        ],
+        [
+          "Opens in 3D",
+          "Open the lid or pull the box apart in the 3D view before you cut."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/laser-box/app-1.jpg",
+          "alt": "The app with a hinged jewellery box"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-box/app-2.jpg",
+          "alt": "A chest of three drawers in 3D"
+        },
+        {
+          "type": "image",
+          "src": "/media/laser-box/app-3.jpg",
+          "alt": "The chest laid out as a cut sheet"
+        }
+      ]
     },
     {
       "id": "large-box",
@@ -89,7 +789,11 @@
       "route": "mw",
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/2300059",
-      "blurb": "Large customizable print-in-place box. No hardware/screws required."
+      "blurb": "Large customizable print-in-place box. No hardware/screws required.",
+      "topics": [
+        "boxes"
+      ],
+      "process": "3d-print"
     },
     {
       "id": "rugged-box",
@@ -97,7 +801,11 @@
       "route": "mw",
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/1642041",
-      "blurb": "Super customizable rugged box. Print in place, no extra hardware."
+      "blurb": "Super customizable rugged box. Print in place, no extra hardware.",
+      "topics": [
+        "boxes"
+      ],
+      "process": "3d-print"
     },
     {
       "id": "washer-spacer",
@@ -105,7 +813,11 @@
       "route": "mw",
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/1669724",
-      "blurb": "Customizable washer and spacer generator. Set ID, OD, and thickness."
+      "blurb": "Customizable washer and spacer generator. Set ID, OD, and thickness.",
+      "topics": [
+        "desk-home"
+      ],
+      "process": "3d-print"
     },
     {
       "id": "headphone-hook",
@@ -113,7 +825,11 @@
       "route": "mw",
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/2483947",
-      "blurb": "Adjustable desk headphone hook. Parametric to fit any desk thickness."
+      "blurb": "Adjustable desk headphone hook. Parametric to fit any desk thickness.",
+      "topics": [
+        "desk-home"
+      ],
+      "process": "3d-print"
     },
     {
       "id": "edge-mount-dock",
@@ -121,7 +837,11 @@
       "route": "mw",
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/1684531",
-      "blurb": "Customizable edge mount dock for devices. Customize to fit your phone, Kindle, or tablet."
+      "blurb": "Customizable edge mount dock for devices. Customize to fit your phone, Kindle, or tablet.",
+      "topics": [
+        "desk-home"
+      ],
+      "process": "3d-print"
     },
     {
       "id": "powerstrip-holder",
@@ -129,7 +849,11 @@
       "route": "mw",
       "status": "live",
       "mwUrl": "https://makerworld.com/en/models/1732918",
-      "blurb": "Customizable screw-on power strip holder. Mount strip securely under desks."
+      "blurb": "Customizable screw-on power strip holder. Mount strip securely under desks.",
+      "topics": [
+        "desk-home"
+      ],
+      "process": "3d-print"
     }
   ],
   "sellerTools": [

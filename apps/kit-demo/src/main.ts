@@ -2,6 +2,7 @@ import '@vostok/ui-kit/styles.css';
 import { BRAND } from '@vostok/brand';
 import {
   el,
+  linkButton,
   toast,
   dialog,
   splitDialog,
@@ -323,6 +324,7 @@ app.append(
       button({ label: 'Default' }),
       button({ label: 'Ghost', emphasis: 'ghost' }),
       button({ label: 'Disabled', disabled: true }),
+      linkButton({ label: 'Link', href: '#buttons', emphasis: 'secondary' }),
     ),
   ),
 );

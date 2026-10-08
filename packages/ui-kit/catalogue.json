@@ -1,7 +1,7 @@
 {
   "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
   "blocks": [
-    { "name": "Button", "category": "ui", "use": ["button", "buttonRow"], "with": ["buttonGrid"], "for": "The standard button (primary, secondary, ghost, busy), and rows or grids of them sharing the width." },
+    { "name": "Button", "category": "ui", "use": ["button", "buttonRow", "linkButton"], "with": ["buttonGrid"], "for": "The standard button (primary, secondary, ghost, busy), rows or grids of them sharing the width, and the same look on a link that goes to an address." },
     { "name": "Icon button", "category": "ui", "use": ["iconButton", "bareIconButton"], "for": "A square icon-only button, and the quiet borderless one for a close X or a clear-field cross." },
     { "name": "Switch", "category": "ui", "use": ["toggleSwitch"], "for": "A labelled on/off switch; tapping its text flips it. compact: a smaller label close to its switch, for the stage or under a preview." },
     { "name": "Slider", "category": "ui", "use": ["sliderRow"], "with": ["slider"], "for": "A labelled slider with a typed value box, clamping, units and a help tip." },

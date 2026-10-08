@@ -1,0 +1,4 @@
+/* The hub's one stylesheet, linked from index.html so it arrives with the page rather than after
+   the script: the pages are prerendered, and a page without its styles flashed the logo full-size. */
+@import '@vostok/ui-kit/styles.css';
+@import './hub.css';

@@ -180,7 +180,7 @@ const BUDGET = {
   'bubble-pop-generator': { button: 1, html: 2, restyle: 17 },
   'clicker-generator': { button: 4, input: 2, html: 9, restyle: 6 },
   'house-number': { restyle: 5 },
-  hub: { html: 2, restyle: 10 },
+  hub: { restyle: 1 },
   'keycap-generator': { button: 14, select: 3, input: 12, range: 5, html: 2 },
   'keychain-carabiner': { restyle: 1 },
   'kit-demo': { licence: 4 },
@@ -224,7 +224,7 @@ const KNOWN_ORPHAN_CLASSES = new Set([
   // `.ls-preview__bar .vl-tabs`; these names carry no paint and are not meant to.
   'ls-preview__unit', 'ls-symbol-text-field', 'ls-symbol-readout',
   // the rest
-  'hn-report', 'hub-hero__license-btn', 'nk-reset-section', 'nk-reset-btn',
+  'hn-report', 'nk-reset-section', 'nk-reset-btn',
   'pt-pauses',
 ]);
 

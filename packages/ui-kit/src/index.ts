@@ -116,6 +116,8 @@ export {
 } from './components/controls';
 export {
   button,
+  linkButton,
+  type LinkButtonOptions,
   iconButton,
   buttonRow,
   buttonGrid,
