@@ -3,7 +3,7 @@
 // browser, so every page arrives as finished HTML.
 
 import { BRAND } from '@vostok/brand';
-import { header, footer } from './layout';
+import { footer, rail } from './layout';
 import { allPages, type Page } from './pages';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -30,7 +30,11 @@ export function renderPage(path: string): { title: string; head: string; body: s
   const main = document.createElement('main');
   main.className = 'hub-main';
   main.append(...page.render());
-  const body = [header(page.path), main, footer()].map((n) => n.outerHTML).join('\n');
+  // The rail down the left; the page and its footer beside it.
+  const column = document.createElement('div');
+  column.className = 'hub-body';
+  column.append(main, footer());
+  const body = [rail(page.path), column].map((n) => n.outerHTML).join('\n');
   return { title: esc(page.title), head: head(page), body };
 }
 

@@ -5,11 +5,11 @@ import { BRAND } from '@vostok/brand';
 import { el, linkButton } from '@vostok/ui-kit';
 import type { Generator } from '../registry';
 import {
-  breadcrumb, cardGrid, faqList, heroProducts, homeTopicOf, licenceDecision, mobileActionBar,
-  productCard, productLayout, section, statsStrip, supportStrip, toolCard, topicTiles, whatsNew,
+  breadcrumb, cardGrid, faqList, featuredGrid, hero, homeTopicOf, licenceBand, mobileActionBar,
+  productCard, productLayout, section, supportStrip, toolCard, topicTiles, whatsNew,
 } from './blocks';
 import {
-  featured, fmtPrice, inTopic, live, mwOnly, productPath, related, sellerTools, TOPICS, topicPath, webApps,
+  fmtPrice, inTopic, live, moreLike, mwOnly, productPath, sellerTools, TOPICS, topicPath, webApps,
 } from './content';
 import { FAQ } from './faq';
 import type { Topic } from './topics';
@@ -35,15 +35,11 @@ function home(): Page {
     title: `${BRAND.name}: generators for things you print and cut`,
     description: 'Free browser generators and MakerWorld models for keychains, boxes, signs, fidgets and laser cuts. Customise, download, print. Commercial licences for sellers.',
     render: () => blocks([
-      heroProducts(),
-      section({ title: 'What do you want to make?', lead: 'Pick by what comes off the plate, not by where the tool lives.' }, [topicTiles()]),
-      section({ title: 'Featured web apps', more: ['See all generators', '/make/'] }, [cardGrid(featured.map(productCard))]),
-      section({ title: 'Printing for yourself or selling?' }, [licenceDecision()]),
-      section({ title: 'Made with Vostok Labs' }, [statsStrip()]),
-      news && section({ title: 'New this month', more: ['All generators', '/make/'] }, [news]),
-      section({ title: 'Seller tools: coming soon', lead: 'Tools for running a print shop.', more: ['See the list', '/make/#coming-soon'] }, [
-        cardGrid(sellerTools.map(toolCard), 'hub-grid--compact'),
-      ]),
+      hero(),
+      section({ title: 'Featured', more: ['All generators', '/make/'] }, [featuredGrid()]),
+      section({ title: 'Browse by what you make' }, [topicTiles()]),
+      news && section({ title: 'New this month' }, [news]),
+      section({ title: 'Free to make, licensed to sell' }, [licenceBand()]),
     ]),
   };
 }
@@ -54,13 +50,16 @@ function catalogue(): Page {
     title: `Generators · ${BRAND.name}`,
     description: 'Every Vostok Labs generator: web apps that run in your browser, MakerWorld listings, and the seller tools on the way.',
     render: () => [
-      section({ title: 'Generators', level: 'h1', lead: 'Free for personal use. Web apps run here in your browser; MakerWorld models customise on MakerWorld.' }, [
-        el('div', { className: 'hub-topic-links' }, TOPICS.map((t) =>
-          linkButton({ label: t.name, href: topicPath(t), emphasis: 'ghost' }))),
-        // The script mounts the search and the 3D print / laser switch here.
+      section({
+        title: 'Generators',
+        level: 'h1',
+        lead: 'Free for personal use. Web apps run in your browser; MakerWorld models customise on MakerWorld.',
+        // The script mounts the search here, and the topic and process filters below.
+        aside: el('div', { className: 'hub-search', attrs: { 'data-catalogue-search': '' } }),
+      }, [
         el('div', { className: 'hub-filter', attrs: { 'data-catalogue-filter': '' } }),
       ]),
-      section({ id: 'web-apps', title: `Web apps · ${webApps.length}`, lead: 'Run right here in your browser, with a live 3D preview.', className: 'hub-shelf' }, [
+      section({ id: 'web-apps', title: `Web apps · ${webApps.length}`, lead: 'Run right here in your browser, with a live preview.', className: 'hub-shelf' }, [
         cardGrid(webApps.map(productCard)),
       ]),
       section({ id: 'makerworld', title: `On MakerWorld · ${mwOnly.length}`, lead: 'Customise in MakerWorld’s Parametric Model Maker and print from there.', className: 'hub-shelf' }, [
@@ -81,9 +80,9 @@ function topicPage(t: Topic): Page {
     title: `${t.name} generators · ${BRAND.name}`,
     description: `${t.line} ${items.length} free generators: customise in your browser or on MakerWorld, then print.`,
     render: () => [
-      section({}, [breadcrumb([['Generators', '/make/'], [t.name]])]),
+      section({ className: 'hub-section--crumbs' }, [breadcrumb([['Generators', '/make/'], [t.name]])]),
       section({ title: t.name, level: 'h1', lead: t.line }, [cardGrid(items.map(productCard))]),
-      section({ title: 'Selling what you make?' }, [licenceDecision()]),
+      section({ title: 'Selling what you make?' }, [licenceBand()]),
       section({ title: 'Make something else' }, [topicTiles(TOPICS.filter((o) => o.id !== t.id))]),
     ],
   };
@@ -91,14 +90,13 @@ function topicPage(t: Topic): Page {
 
 function productPage(g: Generator): Page {
   const topic = homeTopicOf(g);
-  const others = related(g);
   return {
     path: productPath(g),
     title: `${g.name} · ${BRAND.name}`,
     description: g.blurb,
     render: () => blocks([
-      section({}, [breadcrumb([['Generators', '/make/'], ...(topic ? [[topic.name, topicPath(topic)] as [string, string]] : []), [g.name]])]),
-      section({ className: 'hub-product' }, [productLayout(g, others.length ? cardGrid(others.slice(0, 2).map(productCard)) : null)]),
+      section({ className: 'hub-section--crumbs' }, [breadcrumb([['Generators', '/make/'], ...(topic ? [[topic.name, topicPath(topic)] as [string, string]] : []), [g.name]])]),
+      section({ className: 'hub-product' }, [productLayout(g, moreLike(g))]),
       mobileActionBar(g),
     ]),
   };
@@ -115,7 +113,7 @@ function plan(opts: {
     opts.mount ? el('div', { attrs: { [opts.mount]: '' } }) : null,
     price,
     el('p', { className: 'hub-plan__note', text: opts.note }),
-    el('ul', { className: 'hub-checks' }, opts.points.map((p) => el('li', { text: p }))),
+    el('ul', { className: 'hub-points' }, opts.points.map((p) => el('li', { text: p }))),
     el('div', { className: 'hub-plan__actions' }, opts.actions),
   ]));
 }

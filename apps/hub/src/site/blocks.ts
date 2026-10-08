@@ -2,11 +2,10 @@
 // block whose data is missing returns null and the page leaves it out.
 
 import { BRAND } from '@vostok/brand';
-import { el, linkButton, supportLinks, svgEl, ICONS } from '@vostok/ui-kit';
+import { el, linkButton, supportLinks } from '@vostok/ui-kit';
 import type { Generator, Media, SellerTool } from '../registry';
 import {
-  appHref, featured, fmtPrice, inTopic, isApp, isMw, live, mwHref, mwOnly, productPath, thumbPath,
-  topicById, topicPath, TOPICS, webApps,
+  appHref, featured, fmtPrice, inTopic, isApp, live, mwHref, productPath, thumbPath, topicById, topicPath, TOPICS,
 } from './content';
 import type { Topic } from './topics';
 import type { FaqGroup } from './faq';
@@ -15,9 +14,12 @@ import { NEWS } from './news';
 type Child = HTMLElement | null | false | undefined;
 const kids = (list: Child[]) => list.filter(Boolean) as HTMLElement[];
 
-/** A page section: the rail, an optional heading row, the content. */
+const s = BRAND.pricing.subscription;
+const l = BRAND.pricing.lifetime;
+
+/** A page section: an optional heading row, then the content. */
 export function section(opts: {
-  id?: string; title?: string; lead?: string; more?: [string, string]; className?: string; level?: 'h1' | 'h2';
+  id?: string; title?: string; lead?: string; more?: [string, string]; className?: string; level?: 'h1' | 'h2'; aside?: HTMLElement;
 }, content: Child[]): HTMLElement {
   const head = opts.title
     ? el('div', { className: 'hub-section__head' }, kids([
@@ -26,6 +28,7 @@ export function section(opts: {
           opts.lead ? el('p', { className: 'hub-section__lead', text: opts.lead }) : null,
         ])),
         opts.more ? el('a', { className: 'hub-section__more', text: opts.more[0], attrs: { href: opts.more[1] } }) : null,
+        opts.aside ?? null,
       ]))
     : null;
   return el('section', {
@@ -34,54 +37,56 @@ export function section(opts: {
   }, [el('div', { className: 'hub-container' }, kids([head, ...content]))]);
 }
 
-function badge(text: string, tone?: 'accent'): HTMLElement {
-  return el('span', { className: `hub-badge${tone ? ` hub-badge--${tone}` : ''}`, text });
+/** A bordered block with the generators' section label over it. */
+export function panel(title: string, content: Child[], opts: { id?: string; className?: string } = {}): HTMLElement {
+  return el('section', {
+    className: `hub-panel${opts.className ? ` ${opts.className}` : ''}`,
+    attrs: opts.id ? { id: opts.id } : {},
+  }, kids([el('h2', { className: 'vl-label', text: title }), ...content]));
 }
 
-export function routeBadges(g: Generator): HTMLElement {
-  return el('div', { className: 'hub-badges' }, kids([
-    isApp(g) ? badge('Web app', 'accent') : null,
-    isMw(g) ? badge('MakerWorld', 'accent') : null,
-    badge(g.process === 'laser' ? 'Laser' : '3D print'),
-  ]));
+/** "3D print · Web app": what it makes and where it runs, in one quiet line. */
+export function metaLine(g: Generator): string {
+  return `${g.process === 'laser' ? 'Laser' : '3D print'} · ${isApp(g) ? 'Web app' : 'MakerWorld'}`;
 }
 
 function thumb(g: Generator, alt: string): HTMLElement {
   return el('img', { className: 'hub-thumb', attrs: { src: thumbPath(g), alt, loading: 'lazy', width: '800', height: '600' } });
 }
 
-/** The catalogue card. Its data-* attributes are what the catalogue filter reads. */
+/** The catalogue card: the picture and the name go to the product page; the buttons are the
+ *  app, when there is one, and the details. MakerWorld is on the product page. Its data-*
+ *  attributes are what the catalogue filter reads. */
 export function productCard(g: Generator): HTMLElement {
   const href = productPath(g);
-  const actions = el('div', { className: 'hub-card__actions' }, kids([
-    appHref(g) ? linkButton({ label: 'Open app', href: appHref(g)!, emphasis: 'primary' }) : null,
-    mwHref(g) ? linkButton({ label: 'MakerWorld ↗', href: mwHref(g)!, emphasis: isApp(g) ? 'plain' : 'primary', external: true }) : null,
-    linkButton({ label: 'Details', href, emphasis: 'ghost' }),
-  ]));
+  const app = appHref(g);
   return el('article', {
     className: 'hub-card',
     attrs: {
       'data-card': '',
       'data-topics': g.topics.join(' '),
       'data-process': g.process,
-      'data-search': `${g.name} ${g.blurb}`.toLowerCase(),
+      'data-search': `${g.name} ${g.blurb} ${g.process === 'laser' ? 'laser' : '3d print'}`.toLowerCase(),
     },
   }, [
     el('a', { className: 'hub-card__media', attrs: { href, tabindex: '-1', 'aria-hidden': 'true' } }, [thumb(g, '')]),
     el('div', { className: 'hub-card__body' }, [
-      routeBadges(g),
+      el('p', { className: 'hub-card__meta', text: metaLine(g) }),
       el('h3', { className: 'hub-card__name' }, [el('a', { text: g.name, attrs: { href } })]),
-      el('p', { className: 'hub-card__blurb', text: g.blurb }),
-      actions,
+      el('p', { className: 'hub-card__blurb', text: g.blurb, attrs: { title: g.blurb } }),
+      el('div', { className: 'hub-card__actions' }, kids([
+        app ? linkButton({ label: 'Open app', href: app, emphasis: 'primary' }) : null,
+        linkButton({ label: 'Details', href }),
+      ])),
     ]),
   ]);
 }
 
-/** A coming-soon tool: same shape as a card, no actions to press. */
+/** A coming-soon tool: the same card with no picture and nothing to press. */
 export function toolCard(t: SellerTool): HTMLElement {
   return el('article', { className: 'hub-card hub-card--soon', attrs: { 'data-card': '', 'data-search': `${t.name} ${t.blurb}`.toLowerCase() } }, [
     el('div', { className: 'hub-card__body' }, [
-      el('div', { className: 'hub-badges' }, [badge('Coming soon')]),
+      el('p', { className: 'hub-card__meta', text: 'Coming soon' }),
       el('h3', { className: 'hub-card__name', text: t.name }),
       el('p', { className: 'hub-card__blurb', text: t.blurb }),
     ]),
@@ -96,27 +101,25 @@ export function cardGrid(cards: HTMLElement[], className = ''): HTMLElement {
 // Home
 // ---------------------------------------------------------------------------
 
-export function heroProducts(): HTMLElement {
-  const tiles = featured.slice(0, 4).map((g) =>
-    el('a', { className: 'hub-hero__tile', attrs: { href: productPath(g) } }, [thumb(g, g.name)]));
+export function hero(): HTMLElement {
   return el('section', { className: 'hub-hero' }, [
     el('div', { className: 'hub-container hub-hero__inner' }, [
-      el('div', { className: 'hub-hero__copy' }, [
-        el('p', { className: 'hub-eyebrow', text: 'Free for makers · Licence for sellers' }),
-        el('h1', { className: 'hub-hero__title', text: 'Make it yours, then print it.' }),
-        el('p', {
-          className: 'hub-hero__sub',
-          text: 'Browser generators and MakerWorld models for keychains, boxes, signs, fidgets and laser cuts. Customise, download, print. No account needed.',
-        }),
-        el('div', { className: 'hub-actions' }, [
-          linkButton({ label: 'Browse generators', href: '/make/', emphasis: 'primary' }),
-          linkButton({ label: 'I sell prints', href: '/licences/', emphasis: 'secondary', icon: ICONS.arrowRight }),
-        ]),
-        el('p', { className: 'hub-hero__note', text: 'Runs in your browser · Personal use is free and fully functional · No watermark' }),
+      el('h1', { className: 'hub-hero__title', text: 'Make it yours, then print it.' }),
+      el('p', {
+        className: 'hub-hero__sub',
+        text: 'Generators for keychains, boxes, signs, fidgets and laser cuts. Customise in your browser, download, print.',
+      }),
+      el('div', { className: 'hub-actions' }, [
+        linkButton({ label: 'Browse generators', href: '/make/', emphasis: 'primary' }),
+        linkButton({ label: 'Selling prints?', href: '/licences/' }),
       ]),
-      el('div', { className: 'hub-hero__tiles' }, tiles),
+      el('p', { className: 'hub-hero__note', text: 'Free for personal use · No account · No watermark' }),
     ]),
   ]);
+}
+
+export function featuredGrid(): HTMLElement {
+  return cardGrid(featured.map(productCard));
 }
 
 export function topicTiles(topics: Topic[] = TOPICS): HTMLElement {
@@ -130,41 +133,44 @@ export function topicTiles(topics: Topic[] = TOPICS): HTMLElement {
       cover ? el('div', { className: 'hub-topic__media' }, [thumb(cover, '')]) : null,
       el('div', { className: 'hub-topic__body' }, [
         el('h3', { className: 'hub-topic__name', text: t.name }),
-        el('p', { className: 'hub-topic__count', text: `${items.length} generator${items.length === 1 ? '' : 's'}` }),
+        el('span', { className: 'hub-topic__count', text: String(items.length) }),
       ]),
     ]));
   }));
 }
 
-const s = BRAND.pricing.subscription;
-const l = BRAND.pricing.lifetime;
-
-function checkList(items: string[]): HTMLElement {
-  return el('ul', { className: 'hub-checks' }, items.map((text) =>
-    el('li', {}, [svgEl(ICONS.check), text])));
+/** Free for yourself, a licence to sell: the one decision a visitor has to make, side by side. */
+export function licenceBand(): HTMLElement {
+  const side = (label: string, big: (string | HTMLElement)[], line: string, action?: HTMLElement) =>
+    el('div', { className: 'hub-band__side' }, kids([
+      el('h3', { className: 'vl-label', text: label }),
+      el('p', { className: 'hub-band__big' }, big),
+      el('p', { className: 'hub-band__line', text: line }),
+      action ?? null,
+    ]));
+  return el('div', { className: 'hub-band' }, [
+    side('For yourself', ['Free'], 'Every feature of every generator. No account, no watermark, print as many as you like.',
+      el('div', { className: 'hub-actions' }, [linkButton({ label: 'Browse generators', href: '/make/' })])),
+    side('Selling prints', ['From ', fmtPrice(s.month), el('small', { text: '/month' })],
+      `A membership covers the whole catalogue; a lifetime licence is ${fmtPrice(l.one)} once for one generator.`,
+      el('div', { className: 'hub-actions' }, [linkButton({ label: 'Compare licences', href: '/licences/' })])),
+  ]);
 }
 
-/** "Printing for yourself or selling?": the one decision a visitor has to make. */
-export function licenceDecision(): HTMLElement {
-  return el('div', { className: 'hub-decision' }, [
-    el('div', { className: 'hub-decision__side' }, [
-      el('h3', { className: 'hub-decision__title', text: 'For yourself: free' }),
-      checkList(['Every feature, every generator', 'No watermark, no account', 'Print as many as you like']),
-      el('div', { className: 'hub-actions' }, [linkButton({ label: 'Start making', href: '/make/', emphasis: 'secondary' })]),
-    ]),
-    el('div', { className: 'hub-decision__side hub-decision__side--sell' }, [
-      el('h3', { className: 'hub-decision__title', text: 'Selling the prints: licence' }),
-      checkList([
-        `Membership: the whole catalogue, from ${fmtPrice(s.month)}/month`,
-        `Lifetime: one generator forever, ${fmtPrice(l.one)} once`,
-        'Buy on MakerWorld or Buy Me a Coffee',
+/** "New this month": the latest three items of news.ts, as rows. */
+export function whatsNew(): HTMLElement | null {
+  const rows = NEWS.slice(0, 3).flatMap((n) => {
+    const g = live.find((x) => x.id === n.generator);
+    if (!g) return [];
+    return [el('li', {}, [el('a', { className: 'hub-news', attrs: { href: productPath(g) } }, [
+      el('img', { className: 'hub-news__thumb', attrs: { src: thumbPath(g), alt: '', loading: 'lazy', width: '800', height: '600' } }),
+      el('span', { className: 'hub-news__body' }, [
+        el('span', { className: 'hub-news__name' }, [g.name, el('span', { className: 'hub-news__kind', text: n.kind })]),
+        el('span', { className: 'hub-news__text', text: n.text }),
       ]),
-      el('div', { className: 'hub-actions' }, [
-        linkButton({ label: 'Compare licences', href: '/licences/', emphasis: 'cta' }),
-        linkButton({ label: 'Which one do I need?', href: '/licences/#finder', emphasis: 'secondary' }),
-      ]),
-    ]),
-  ]);
+    ])])];
+  });
+  return rows.length ? el('ul', { className: 'hub-news-list' }, rows) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,101 +216,116 @@ export function mediaNode(m: Media): HTMLElement {
   return el('img', { attrs: { src: m.src, alt: m.alt, width: '800', height: '600' } });
 }
 
-/** Name, badges, the one-line pitch and the longer explanation. */
-export function productIntro(g: Generator): HTMLElement {
+/** The name, the one-line pitch, and a quiet line of what it makes and where it belongs. */
+export function productTitle(g: Generator): HTMLElement {
   const topics = g.topics.map((id) => topicById(id)).filter((t): t is Topic => Boolean(t));
-  return el('div', { className: 'hub-intro' }, kids([
-    el('div', { className: 'hub-badges' }, kids([
-      isApp(g) ? badge('Web app', 'accent') : null,
-      isMw(g) ? badge('On MakerWorld', 'accent') : null,
-      ...topics.map((t) => el('a', { className: 'hub-badge hub-badge--link', text: t.name, attrs: { href: topicPath(t) } })),
-      badge(g.process === 'laser' ? 'Laser' : '3D print'),
-    ])),
-    el('h1', { className: 'hub-intro__title', text: g.name }),
-    el('p', { className: 'hub-intro__pitch', text: g.blurb }),
-    // Paragraphs are separated by a blank line in the registry.
-    ...(g.intro ?? '').split(/\n\s*\n/).filter(Boolean).map((p) => el('p', { className: 'hub-intro__text', text: p })),
-  ]));
+  const meta = el('p', { className: 'hub-title__meta' }, [metaLine(g)]);
+  for (const t of topics) meta.append(' · ', el('a', { text: t.name, attrs: { href: topicPath(t) } }));
+  return el('div', { className: 'hub-title' }, [
+    el('h1', { className: 'hub-title__name', text: g.name }),
+    el('p', { className: 'hub-title__pitch', text: g.blurb }),
+    meta,
+  ]);
 }
 
-/** Everything about getting this design and selling what it makes, in one box beside the page. */
-export function actionBox(g: Generator): HTMLElement {
+/** Getting it, then selling what it makes: two parts, one main button. */
+export function buyBox(g: Generator): HTMLElement {
   const app = appHref(g);
   const mw = mwHref(g);
-  const lane = (label: string, price: string, href: string, external = false) =>
-    el('a', { className: 'hub-lane', attrs: { href, ...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {}) } }, [
-      el('span', { text: label }),
-      el('strong', { text: price }),
-    ]);
-  const lifetimeUrl = g.lifetimeLicence ? BRAND.urls[g.lifetimeLicence] : null;
   const formats = g.process === 'laser' ? 'SVG cut file' : '3MF';
-  return el('aside', { className: 'hub-action-box' }, kids([
-    el('div', { className: 'hub-badges' }, [badge('Free for personal use', 'accent')]),
-    el('h2', { className: 'hub-action-box__title', text: g.name }),
-    el('div', { className: 'hub-action-box__buttons' }, kids([
+  const lifetimeUrl = g.lifetimeLicence ? BRAND.urls[g.lifetimeLicence] : null;
+  const tile = (name: string, price: string, per: string, what: string, go: string, href: string) =>
+    el('a', { className: 'hub-plan-tile', attrs: { href } }, [
+      el('span', { className: 'hub-plan-tile__name', text: name }),
+      el('span', { className: 'hub-plan-tile__price' }, [price, el('small', { text: per })]),
+      el('span', { className: 'hub-plan-tile__what', text: what }),
+      el('span', { className: 'hub-plan-tile__go', text: go }),
+    ]);
+  return el('aside', { className: 'hub-buy', attrs: { 'aria-label': `Get ${g.name}` } }, [
+    el('div', { className: 'hub-buy__part' }, kids([
+      el('h2', { className: 'vl-label', text: 'Free for personal use' }),
       app ? linkButton({ label: 'Open web app', href: app, emphasis: 'primary', block: true }) : null,
-      mw ? linkButton({ label: 'Get it on MakerWorld ↗', href: mw, emphasis: app ? 'secondary' : 'primary', block: true, external: true }) : null,
-      g.offlineUrl ? linkButton({ label: 'Download offline version', href: g.offlineUrl, emphasis: 'ghost', icon: ICONS.download, block: true }) : null,
+      mw ? linkButton({ label: app ? 'Get it on MakerWorld' : 'Open on MakerWorld', href: mw, emphasis: app ? 'plain' : 'primary', block: true, external: true }) : null,
+      el('p', { className: 'hub-buy__note', text: app ? `${formats} · Runs in your browser` : `${formats} · Customise on MakerWorld` }),
+      g.offlineUrl ? el('a', { className: 'hub-buy__link', text: 'Download the offline version', attrs: { href: g.offlineUrl } }) : null,
     ])),
-    el('hr', { className: 'hub-action-box__rule' }),
-    el('h3', { className: 'hub-action-box__sub', text: 'Selling prints?' }),
-    lane('Membership · all generators', `${fmtPrice(s.month)}/mo`, '/licences/#membership'),
-    lifetimeUrl ? lane(`Lifetime · ${g.name} only`, fmtPrice(l.one), lifetimeUrl, true) : null,
-    linkButton({ label: 'Get a commercial licence', href: '/licences/', emphasis: 'cta', block: true }),
-    el('hr', { className: 'hub-action-box__rule' }),
-    el('p', { className: 'hub-action-box__meta', text: app ? `${formats} · Runs in your browser` : `${formats} · Customise on MakerWorld` }),
-  ]));
+    el('div', { className: 'hub-buy__part' }, [
+      el('h2', { className: 'vl-label', text: 'Selling prints?' }),
+      el('div', { className: 'hub-buy__plans' }, kids([
+        tile('Membership', fmtPrice(s.month), '/mo', lifetimeUrl ? 'Every generator' : 'Every generator, this one included', 'See membership', '/licences/#membership'),
+        lifetimeUrl ? tile('Lifetime', fmtPrice(l.one), ' once', 'Just this one, forever', 'Buy lifetime', lifetimeUrl) : null,
+      ])),
+      el('a', { className: 'hub-buy__link', text: 'Compare licences', attrs: { href: '/licences/' } }),
+    ]),
+  ]);
 }
 
-function block(title: string, content: Child[], id?: string): HTMLElement {
-  return el('div', { className: 'hub-block', attrs: id ? { id } : {} }, kids([el('h2', { className: 'hub-block__title', text: title }), ...content]));
+/** The longer explanation. Paragraphs are separated by a blank line in the registry. */
+export function aboutPanel(g: Generator): HTMLElement | null {
+  const paras = (g.intro ?? '').split(/\n\s*\n/).filter(Boolean);
+  if (!paras.length) return null;
+  return panel('About', [el('div', { className: 'hub-prose' }, paras.map((p) => el('p', { text: p })))]);
 }
 
+/** The features as a plain list: the name on the left, what it does beside it. */
 export function featureList(g: Generator): HTMLElement | null {
   if (!g.features?.length) return null;
-  return block('Features', [el('ul', { className: 'hub-features' }, g.features.map((f) => {
+  return panel('Features', [el('dl', { className: 'hub-specs' }, g.features.map((f) => {
     const [title, line] = typeof f === 'string' ? [f, ''] : f;
-    return el('li', { className: 'hub-feature' }, [
-      svgEl(ICONS.check),
-      el('div', {}, kids([el('strong', { text: title }), line ? el('span', { text: line }) : null])),
-    ]);
+    return el('div', { className: 'hub-specs__row' }, [el('dt', { text: title }), el('dd', { text: line })]);
   }))]);
 }
 
 /** "Can I sell what I print?" in words, with the way to the licences. */
 export function licenceBox(g: Generator): HTMLElement {
   const lifetime = g.lifetimeLicence
-    ? `; a lifetime licence for ${g.name} covers this one forever, digital files included`
+    ? ` A lifetime licence for ${g.name} covers this one forever, digital files included.`
     : '';
-  return block('Can I sell what I print?', [
-    el('p', { className: 'hub-block__text', text: `Personal use is free and fully functional. To sell prints you need a commercial licence: the membership covers this and every other generator${lifetime}.` }),
-    el('div', { className: 'hub-actions' }, [linkButton({ label: 'Compare licences', href: '/licences/', emphasis: 'secondary' })]),
-    el('p', { className: 'hub-block__note' }, [
+  return panel('Selling what you print', [
+    el('p', { className: 'hub-panel__text', text: `Personal use is free and fully functional. To sell prints you need a commercial licence: the membership covers this and every other generator.${lifetime}` }),
+    el('p', { className: 'hub-panel__note' }, [
       'Every export carries an invisible provenance mark. It does not show on the print and never locks a feature. ',
       el('a', { text: 'What is this?', attrs: { href: '/faq/#licences' } }),
     ]),
-  ], 'licence');
+    el('div', { className: 'hub-actions' }, [linkButton({ label: 'Compare licences', href: '/licences/' })]),
+  ], { id: 'licence' });
 }
 
 /** This generator's lines from news.ts. */
 export function changelog(g: Generator): HTMLElement | null {
   const items = NEWS.filter((n) => n.generator === g.id);
   if (!items.length) return null;
-  return block('What’s new', [el('ul', { className: 'hub-changelog' }, items.map((n) =>
+  return panel('What’s new', [el('ul', { className: 'hub-changelog' }, items.map((n) =>
     el('li', {}, [el('span', { className: 'hub-changelog__date', text: n.date }), el('span', { text: n.text })])))]);
 }
 
-/** The whole product page body: content on the left, the action box beside it. */
-export function productLayout(g: Generator, related: HTMLElement | null): HTMLElement {
+/** "More generators" down the side, as a video site lists what to watch next. */
+export function relatedList(items: Generator[]): HTMLElement | null {
+  if (!items.length) return null;
+  return el('section', { className: 'hub-related', attrs: { 'aria-label': 'More generators' } }, [
+    el('h2', { className: 'vl-label', text: 'More generators' }),
+    el('ul', { className: 'hub-related__list' }, items.map((o) => el('li', {}, [
+      el('a', { className: 'hub-related__item', attrs: { href: productPath(o) } }, [
+        el('img', { className: 'hub-related__thumb', attrs: { src: thumbPath(o), alt: '', loading: 'lazy', width: '800', height: '600' } }),
+        el('span', { className: 'hub-related__body' }, [
+          el('span', { className: 'hub-related__name', text: o.name }),
+          el('span', { className: 'hub-related__blurb', text: o.blurb }),
+          el('span', { className: 'hub-related__meta', text: metaLine(o) }),
+        ]),
+      ]),
+    ]))),
+  ]);
+}
+
+/** The product page body: the picture and the story on the left; getting it and what to look at
+ *  next on the right. On a narrow screen the box comes straight after the title. */
+export function productLayout(g: Generator, related: Generator[]): HTMLElement {
   return el('div', { className: 'hub-pdp' }, [
-    el('div', { className: 'hub-pdp__top' }, [gallery(g), productIntro(g)]),
-    actionBox(g),
-    el('div', { className: 'hub-pdp__rest' }, kids([
-      featureList(g),
-      licenceBox(g),
-      changelog(g),
-      related ? block('You might also like', [related]) : null,
-    ])),
+    el('div', { className: 'hub-pdp__main' }, [
+      el('div', { className: 'hub-pdp__top' }, [gallery(g), productTitle(g)]),
+      el('div', { className: 'hub-pdp__rest' }, kids([aboutPanel(g), featureList(g), licenceBox(g), changelog(g)])),
+    ]),
+    el('div', { className: 'hub-pdp__aside' }, kids([buyBox(g), relatedList(related)])),
   ]);
 }
 
@@ -316,33 +337,6 @@ export function homeTopicOf(g: Generator): Topic | undefined {
 // ---------------------------------------------------------------------------
 // Shared bands
 // ---------------------------------------------------------------------------
-
-/** Counts that come from the registry, so they are never out of date. */
-export function statsStrip(): HTMLElement {
-  const laser = live.filter((g) => g.process === 'laser').length;
-  const stat = (n: number, label: string) =>
-    el('div', { className: 'hub-stat' }, [el('strong', { text: String(n) }), el('span', { text: label })]);
-  return el('div', { className: 'hub-stats' }, [
-    stat(live.length, 'generators live'),
-    stat(webApps.length, 'run in your browser'),
-    stat(mwOnly.length + webApps.filter(isMw).length, 'on MakerWorld'),
-    stat(laser, 'for laser cutting'),
-  ]);
-}
-
-/** "New this month": the latest three items of news.ts. */
-export function whatsNew(): HTMLElement | null {
-  const items = NEWS.slice(0, 3).flatMap((n) => {
-    const g = live.find((x) => x.id === n.generator);
-    if (!g) return [];
-    return [el('a', { className: 'hub-news', attrs: { href: productPath(g) } }, [
-      el('span', { className: `hub-badge${n.kind === 'New' ? ' hub-badge--accent' : ''}`, text: n.kind }),
-      el('h3', { className: 'hub-news__title', text: g.name }),
-      el('p', { className: 'hub-news__text', text: n.text }),
-    ])];
-  });
-  return items.length ? el('div', { className: 'hub-news-grid' }, items) : null;
-}
 
 /** Questions as native disclosures: they open without a script and are found by search engines. */
 export function faqList(groups: FaqGroup[], headings = true): HTMLElement {
@@ -365,13 +359,13 @@ export function supportStrip(): HTMLElement {
   ]);
 }
 
-/** On a phone the action box scrolls away, so the main action and the licence stay pinned. */
+/** On a phone the box scrolls away, so the main action and the licence stay pinned. */
 export function mobileActionBar(g: Generator): HTMLElement {
   const app = appHref(g);
   const mw = mwHref(g);
   return el('div', { className: 'hub-mobile-bar' }, kids([
     app ? linkButton({ label: 'Open app', href: app, emphasis: 'primary' })
-      : mw ? linkButton({ label: 'MakerWorld ↗', href: mw, emphasis: 'primary', external: true }) : null,
-    linkButton({ label: 'Licence', href: '/licences/', emphasis: 'secondary' }),
+      : mw ? linkButton({ label: 'MakerWorld', href: mw, emphasis: 'primary', external: true }) : null,
+    linkButton({ label: 'Licence', href: '/licences/' }),
   ]));
 }

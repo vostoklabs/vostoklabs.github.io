@@ -1,10 +1,10 @@
 // Vostok Labs Hub: the browser half. Every page arrives prerendered (src/site/), with its
-// stylesheet linked from index.html; this only adds what needs a script: the phone menu, the
-// header search, the catalogue filter, the membership term switch and the licence finder.
+// stylesheet linked from index.html; this only adds what needs a script: the catalogue's search
+// and filters, the gallery strip, the membership term switch and the licence finder.
 
 import { BRAND } from '@vostok/brand';
-import { el, linkButton, resolveTheme, segmentedControl, textField } from '@vostok/ui-kit';
-import { live } from './site/content';
+import { el, linkButton, resolveTheme, searchField, segmentedControl } from '@vostok/ui-kit';
+import { live, TOPICS } from './site/content';
 import { mediaNode } from './site/blocks';
 
 // The light/dark choice made in any generator holds here too: they share one key. Read only:
@@ -13,36 +13,10 @@ document.documentElement.setAttribute('data-theme', resolveTheme());
 
 const fmt = (n: number) => `$${n.toLocaleString('en-US')}`;
 
-function navMenu(): void {
-  const nav = document.querySelector<HTMLElement>('.hub-nav');
-  const toggle = nav?.querySelector<HTMLButtonElement>('[data-nav-toggle]');
-  if (!nav || !toggle) return;
-  toggle.addEventListener('click', () => {
-    const open = nav.classList.toggle('hub-nav--open');
-    toggle.setAttribute('aria-expanded', String(open));
-  });
-}
-
-/** The header search is a prerendered kit field; Enter takes its words to the catalogue. */
-function navSearch(): void {
-  const input = document.querySelector<HTMLInputElement>('[data-nav-search] input');
-  if (!input) return;
-  input.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    const q = input.value.trim();
-    // On the catalogue its own search answers; anywhere else, go there.
-    const here = document.querySelector<HTMLInputElement>('[data-catalogue-filter] input');
-    if (here) {
-      here.value = q;
-      here.dispatchEvent(new Event('input', { bubbles: true }));
-      return;
-    }
-    location.href = `/make/${q ? `?q=${encodeURIComponent(q)}` : ''}`;
-  });
-}
-
 type Process = 'all' | '3d-print' | 'laser';
 
+/** The catalogue's search, topic switch and 3D print / laser switch, all narrowing one set of
+ *  cards. A shelf with nothing left in it hides. */
 function catalogueFilter(): void {
   const mount = document.querySelector<HTMLElement>('[data-catalogue-filter]');
   if (!mount) return;
@@ -50,14 +24,16 @@ function catalogueFilter(): void {
   const shelves = [...document.querySelectorAll<HTMLElement>('.hub-shelf')];
   const empty = document.querySelector<HTMLElement>('[data-empty]');
   let query = (new URLSearchParams(location.search).get('q') ?? '').trim().toLowerCase();
+  let topic = 'all';
   let process: Process = 'all';
 
   const apply = () => {
     for (const card of cards) {
       const okText = !query || (card.dataset.search ?? '').includes(query);
-      // A coming-soon tool has no process: it only shows under "All".
+      // A coming-soon tool has no topic or process: it only shows under "All".
+      const okTopic = topic === 'all' || (card.dataset.topics ?? '').split(' ').includes(topic);
       const okProcess = process === 'all' || card.dataset.process === process;
-      card.hidden = !(okText && okProcess);
+      card.hidden = !(okText && okTopic && okProcess);
     }
     let any = false;
     for (const shelf of shelves) {
@@ -68,15 +44,24 @@ function catalogueFilter(): void {
     if (empty) empty.hidden = any;
   };
 
-  const search = textField({
+  document.querySelector<HTMLElement>('[data-catalogue-search]')?.append(searchField({
     label: 'Search generators',
-    type: 'search',
-    placeholder: 'Search generators…',
+    placeholder: 'Search generators',
     value: query,
     onInput: (v) => { query = v.trim().toLowerCase(); apply(); },
+  }));
+
+  const topics = segmentedControl<string>({
+    value: 'all',
+    fit: 'content',
+    ariaLabel: 'Topic',
+    onChange: (v) => { topic = v; apply(); },
+    options: [{ value: 'all', label: 'All' }, ...TOPICS.map((t) => ({ value: t.id, label: t.name }))],
   });
   const kind = segmentedControl<Process>({
     value: 'all',
+    fit: 'content',
+    ariaLabel: 'Process',
     onChange: (v) => { process = v; apply(); },
     options: [
       { value: 'all', label: 'All' },
@@ -84,7 +69,7 @@ function catalogueFilter(): void {
       { value: 'laser', label: 'Laser' },
     ],
   });
-  mount.append(search, kind);
+  mount.append(el('div', { className: 'hub-filter__scroll' }, [topics]), el('div', { className: 'hub-filter__scroll' }, [kind]));
   apply();
 }
 
@@ -174,8 +159,6 @@ function gallery(): void {
   }
 }
 
-navMenu();
-navSearch();
 gallery();
 catalogueFilter();
 termSwitch();

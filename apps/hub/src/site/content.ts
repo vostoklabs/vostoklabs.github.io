@@ -56,6 +56,14 @@ export function related(g: Generator, max = 4): Generator[] {
   return out;
 }
 
+/** What to look at next: the ones sharing a topic first, then the web apps, then the rest. */
+export function moreLike(g: Generator, max = 8): Generator[] {
+  const near = related(g, max);
+  const seen = new Set([g.id, ...near.map((o) => o.id)]);
+  const rest = [...webApps, ...mwOnly].filter((o) => !seen.has(o.id));
+  return [...near, ...rest].slice(0, max);
+}
+
 export const fmtPrice = (n: number) => `$${n.toLocaleString('en-US')}`;
 
 export { TOPICS };

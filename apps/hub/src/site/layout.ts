@@ -1,7 +1,7 @@
-// The frame every page shares: the header with its menu, and the footer.
+// The frame every page shares: the rail down the left with the menu, and the footer.
 
 import { BRAND } from '@vostok/brand';
-import { el, iconButton, linkButton, supportLinks, svgEl, textField, ICONS } from '@vostok/ui-kit';
+import { el, navRail, supportLinks, svgEl, ICONS } from '@vostok/ui-kit';
 import { TOPICS, topicPath } from './content';
 
 // Inline so it inherits currentColor for theming.
@@ -13,49 +13,38 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 568.55431
   <path d="M61.79,8.276 l-29.606,81.823 l-23.352,-60.835 l7.594,-20.988 z"/>
 </svg>`;
 
-const NAV: [label: string, href: string][] = [
-  ['Generators', '/make/'],
-  ['Licences', '/licences/'],
-];
-const NAV_QUIET: [label: string, href: string][] = [
-  ['FAQ', '/faq/'],
-];
+/** The section a path belongs to, as its rail item's address. */
+function sectionOf(path: string): string | undefined {
+  if (path.startsWith('/make/') || path.startsWith('/generators/')) return '/make/';
+  if (path.startsWith('/licences/')) return '/licences/';
+  if (path.startsWith('/faq/')) return '/faq/';
+  return undefined;
+}
 
-/** `current` is the page's path, so its section is marked in the nav. */
-export function header(current: string): HTMLElement {
-  const logo = el('a', { className: 'hub-nav__logo', attrs: { href: '/', 'aria-label': 'Vostok Labs home' } }, [
+/** The menu: the generators' left rail, with the logo and the name on top and the studio's
+ *  other homes at the foot. `current` is the page's path. */
+export function rail(current: string): HTMLElement {
+  const logo = el('a', { className: 'hub-rail__logo', attrs: { href: '/', 'aria-label': `${BRAND.name} home` } }, [
     svgEl(LOGO_SVG),
-    el('span', { className: 'hub-nav__logo-text', text: BRAND.name }),
+    el('span', { className: 'hub-rail__name', text: BRAND.name, attrs: { 'aria-hidden': 'true' } }),
   ]);
-
-  const link = ([label, href]: [string, string], quiet = false) => {
-    const a = el('a', { className: `hub-nav__link${quiet ? ' hub-nav__link--quiet' : ''}`, text: label, attrs: { href } });
-    const here = href === '/make/' ? current.startsWith('/make/') || current.startsWith('/generators/') : current.startsWith(href);
-    if (here) a.setAttribute('aria-current', 'page');
-    return a;
-  };
-  const links = el('nav', { className: 'hub-nav__links', attrs: { 'aria-label': 'Main' } }, [
-    ...NAV.map((item) => link(item)),
-    el('span', { className: 'hub-nav__sep', attrs: { 'aria-hidden': 'true' } }),
-    ...NAV_QUIET.map((item) => link(item, true)),
-  ]);
-  // Enter takes the words to the catalogue (the script does that); the catalogue filters by them.
-  const search = textField({ label: 'Search generators', type: 'search', placeholder: 'Search generators…' });
-  search.classList.add('hub-nav__search');
-  search.setAttribute('data-nav-search', '');
-
-  const cta = linkButton({ label: 'Selling prints?', href: '/licences/', emphasis: 'cta' });
-  // The script opens and closes the menu; without it the links still sit in the page.
-  const toggle = iconButton({ icon: ICONS.menu, label: 'Menu', className: 'hub-nav__toggle' });
-  toggle.setAttribute('data-nav-toggle', '');
-  toggle.setAttribute('aria-expanded', 'false');
-
-  const inner = el('div', { className: 'hub-nav__inner hub-container' }, [
-    logo,
-    el('div', { className: 'hub-nav__menu' }, [links, el('div', { className: 'hub-nav__end' }, [search, cta])]),
-    toggle,
-  ]);
-  return el('header', { className: 'hub-nav' }, [inner]);
+  // A link whose address is still a placeholder in brand.ts is left out, as supportLinks() does.
+  const away = [
+    { href: BRAND.urls.makerworld, label: 'MakerWorld', icon: ICONS.zap, title: `${BRAND.name} on MakerWorld`, external: true },
+    { href: BRAND.urls.buyMeACoffee, label: 'Coffee', icon: ICONS.coffee, title: 'Buy me a coffee', external: true },
+  ].filter((item) => !item.href.startsWith('TODO'));
+  return navRail({
+    leading: [logo],
+    items: [
+      { href: '/make/', label: 'Generators', icon: ICONS.grid, divider: true },
+      { href: '/licences/', label: 'Licences', icon: ICONS.license },
+      { href: '/faq/', label: 'FAQ', icon: ICONS.help },
+    ],
+    trailing: away,
+    current: sectionOf(current),
+    size: 'large',
+    className: 'hub-rail',
+  });
 }
 
 function footerColumn(title: string, items: [string, string][]): HTMLElement {
