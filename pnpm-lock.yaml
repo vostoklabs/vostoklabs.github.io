@@ -266,6 +266,9 @@ importers:
       '@vostok/export':
         specifier: workspace:*
         version: link:../../packages/export
+      '@vostok/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
       '@vostok/laser':
         specifier: workspace:*
         version: link:../../packages/laser
@@ -281,6 +284,9 @@ importers:
       '@vostok/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
+      '@vostok/viewer':
+        specifier: workspace:*
+        version: link:../../packages/viewer
       d3-contour:
         specifier: ^4.0.2
         version: 4.0.2

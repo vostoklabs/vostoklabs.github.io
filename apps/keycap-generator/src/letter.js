@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TTFLoader } from 'three/examples/jsm/loaders/TTFLoader.js';
+import opentype from 'three/examples/jsm/libs/opentype.module.js';
 // The app's own files rather than imports from `three/examples/fonts/`, which three stopped
 // shipping after 0.171. Roboto, Libertinus Sans and Droid are converted from their font files by
 // scripts/typefaces.mjs; Gentilis is three's. See typefaces/README.md.
@@ -80,7 +81,7 @@ function registerCssFace(family, source) {
 // Open-source TTFs bundled in public/fonts/ (SIL OFL 1.1 — see public/fonts/CREDITS.md).
 // Loaded lazily at startup via loadBundledFonts() so the dropdown grows as each parses;
 // a font that fails is skipped rather than blocking the rest. Ordered keycap-friendly first.
-const BUNDLED_TTF = [
+export const BUNDLED_TTF = [
   ['bebas-neue', 'Bebas Neue'],
   ['anton', 'Anton'],
   ['oswald', 'Oswald'],
@@ -105,28 +106,110 @@ let bundledLoaded = false;
 export async function loadBundledFonts(onLoaded) {
   if (bundledLoaded) return;
   bundledLoaded = true;
-  for (const [slug, name] of BUNDLED_TTF) {
-    try {
-      const buf = await fetch(assetUrl(`fonts/${slug}.ttf`)).then((r) => {
+  for (const [slug] of BUNDLED_TTF) {
+    const option = await loadBundledFont(`bundled-${slug}`);
+    if (option) onLoaded?.(option);
+  }
+}
+
+/** One bundled TTF by its id, through `loadTtfFont`, so the startup load and anything else that
+ *  asks for it share one fetch. Null for an id that is not one of them. */
+export function loadBundledFont(id) {
+  const entry = BUNDLED_TTF.find(([slug]) => `bundled-${slug}` === id);
+  if (!entry) return null;
+  const [slug, name] = entry;
+  const family = `KC-${slug}`;
+  // The same bytes drive both the 3D outlines and the dropdown preview, so
+  // what you see in the list is exactly what gets extruded.
+  return loadTtfFont(id, name, assetUrl(`fonts/${slug}.ttf`), { css: family, cssFamily: `'${family}', sans-serif` });
+}
+
+const ttfLoads = new Map();
+
+/**
+ * Fetch a TTF and list it in FONT_OPTIONS, parsed the one way every TTF here is (TTFLoader, then
+ * FontLoader), so a face fetched from anywhere draws as the bundled ones always have. Once per
+ * id: a second call gets the first one's answer. Resolves to the option, or null when the file
+ * cannot be had (logged, never thrown, so one bad face does not stop the rest; a later call
+ * tries again). `css` registers the same bytes under that CSS family, for a preview in the face
+ * itself; `extra` is copied onto the option.
+ */
+/**
+ * A TTF as three's typeface data, its glyphs converted when they are first asked for.
+ *
+ * `TTFLoader` converts every glyph of the file up front, which is nothing for a Latin face and
+ * seconds of a frozen page for a Korean, Japanese or Chinese one (thousands of glyphs, when a
+ * legend needs two). This is the same conversion, glyph for glyph (the same scale, the same
+ * rounding, the same commands), done for a character the first time `generateShapes` or a
+ * coverage check looks it up. Used for the shelf's library faces only: the keycap's own TTFs
+ * keep `TTFLoader`, so their outlines cannot move.
+ */
+function lazyTypeface(buf) {
+  const font = opentype.parse(buf);
+  const round = Math.round;
+  const scale = 100000 / ((font.unitsPerEm || 2048) * 72);
+  const cmap = font.encoding.cmap.glyphIndexMap;
+  const tokens = new Map();
+  const tokenOf = (ch) => {
+    if (tokens.has(ch)) return tokens.get(ch);
+    const cp = ch.codePointAt(0);
+    const index = Array.from(ch).length === 1 ? cmap[cp] : undefined;
+    let token;
+    if (index !== undefined) {
+      const glyph = font.glyphs.get(index);
+      token = { ha: round(glyph.advanceWidth * scale), x_min: round(glyph.xMin * scale), x_max: round(glyph.xMax * scale), o: '' };
+      for (const c of glyph.path.commands) {
+        const type = c.type.toLowerCase();
+        token.o += `${type === 'c' ? 'b' : type} `;
+        if (c.x !== undefined && c.y !== undefined) token.o += `${round(c.x * scale)} ${round(c.y * scale)} `;
+        if (c.x1 !== undefined && c.y1 !== undefined) token.o += `${round(c.x1 * scale)} ${round(c.y1 * scale)} `;
+        if (c.x2 !== undefined && c.y2 !== undefined) token.o += `${round(c.x2 * scale)} ${round(c.y2 * scale)} `;
+      }
+    }
+    tokens.set(ch, token);
+    return token;
+  };
+  const glyphs = new Proxy({}, {
+    get: (_, key) => (typeof key === 'string' ? tokenOf(key) : undefined),
+    has: (_, key) => typeof key === 'string' && tokenOf(key) !== undefined,
+  });
+  return {
+    glyphs,
+    familyName: font.getEnglishName('fullName'),
+    ascender: round(font.ascender * scale),
+    descender: round(font.descender * scale),
+    underlinePosition: font.tables.post.underlinePosition,
+    underlineThickness: font.tables.post.underlineThickness,
+    boundingBox: { xMin: font.tables.head.xMin, xMax: font.tables.head.xMax, yMin: font.tables.head.yMin, yMax: font.tables.head.yMax },
+    resolution: 1000,
+    original_font_information: font.tables.name,
+  };
+}
+
+export function loadTtfFont(id, name, url, { css, cssFamily = 'sans-serif', ...extra } = {}) {
+  let load = ttfLoads.get(id);
+  if (!load) {
+    load = Promise.resolve()
+      .then(() => fetch(url))
+      .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.arrayBuffer();
+      })
+      .then((buf) => {
+        if (css) registerCssFace(css, buf.slice(0));
+        const data = extra.shelf ? lazyTypeface(buf) : ttfLoader.parse(buf);
+        const option = { id, name, font: fontLoader.parse(data), cssFamily, ...extra };
+        FONT_OPTIONS.push(option);
+        return option;
+      })
+      .catch((e) => {
+        console.warn(`Could not load font "${name}":`, e.message);
+        ttfLoads.delete(id);
+        return null;
       });
-      const family = `KC-${slug}`;
-      // The same bytes drive both the 3D outlines and the dropdown preview, so
-      // what you see in the list is exactly what gets extruded.
-      registerCssFace(family, buf.slice(0));
-      const option = {
-        id: `bundled-${slug}`,
-        name,
-        font: fontLoader.parse(ttfLoader.parse(buf)),
-        cssFamily: `'${family}', sans-serif`,
-      };
-      FONT_OPTIONS.push(option);
-      onLoaded?.(option);
-    } catch (e) {
-      console.warn(`Could not load font "${name}":`, e.message);
-    }
+    ttfLoads.set(id, load);
   }
+  return load;
 }
 
 function uniqueFontId(base) {
@@ -246,7 +329,14 @@ export async function importFontFile(file) {
   return option;
 }
 
-export function parseLetter(text, fontId, maxLen = 4) {
+/**
+ * The most characters a typed legend may have. Not a design rule: a long word shrinks to fit the
+ * cap (legendSize.js) and small letters earn a warning (rebuild.js), never a refusal. This only
+ * stops a pasted paragraph from becoming a carve of thousands of outlines.
+ */
+export const LEGEND_MAX_CHARS = 32;
+
+export function parseLetter(text, fontId, maxLen = LEGEND_MAX_CHARS) {
   // Newlines are stripped rather than honoured: three breaks lines using a line height derived
   // from data.boundingBox, which is wrong for every bundled TTF (see probeTop). Stacked
   // legends are worth doing deliberately, not by accident.

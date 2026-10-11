@@ -1,5 +1,6 @@
 import { el, uid } from '../dom';
 import { ICONS, svgEl } from '../icons';
+import { badgePill } from './button';
 
 /* Small parameter controls shared by every generator sidebar: the toggle, the
    labelled slider, the segmented control, the select field, and the "?" help
@@ -27,6 +28,67 @@ function caption(
   return { label, text: textEl, textId };
 }
 
+/**
+ * The caption over a group (a segmented control, a nudge pad): a `<span>` rather than a
+ * `<label>`, because a group has no one control to point a label at. The group takes its name
+ * from the text span, not from the tip beside it.
+ */
+export function groupCaption(text: string | undefined, help: string | undefined): { line: HTMLElement; textId: string } {
+  const textEl = el('span', { text: text ?? '', attrs: { id: uid('vl-cap') } });
+  const line = el('span', { className: 'vl-control-label' }, [textEl]);
+  if (help) line.append(helpTip(help));
+  return { line, textId: textEl.id };
+}
+
+/** A control that can carry a small tag at the end of its caption line (see `setTag`). */
+export interface Taggable {
+  /**
+   * Put a node at the end of the control's caption line, or take it off with `null`: a
+   * `sourceTag()` saying which level the value comes from, typically. A second call replaces
+   * the first node. Never called, the control's markup is what it always was.
+   */
+  setTag(node: HTMLElement | null): void;
+}
+
+/** A `ValueRow` that takes a tag on its caption line. */
+export type TaggedRow<T> = ValueRow<T> & Taggable;
+
+/**
+ * `setTag` for one control: a slot made on the first call and placed by `place`, holding the
+ * node. `line`, when given, is a caption that has to become a flex line while it holds the
+ * slot (a caption over its control); a caption that already is one (a slider's head) passes
+ * none. `null` takes the slot and the class away again, so the markup returns to what it was.
+ */
+export function tagSetter(place: (slot: HTMLElement) => void, line?: HTMLElement): (node: HTMLElement | null) => void {
+  let slot: HTMLElement | null = null;
+  return (node) => {
+    if (!node) {
+      if (!slot) return;
+      slot.remove();
+      slot = null;
+      if (line) {
+        line.classList.remove('vl-caption--tagged');
+        if (!line.className) line.removeAttribute('class');
+      }
+      return;
+    }
+    if (!slot) {
+      slot = el('span', { className: 'vl-tag-slot' });
+      place(slot);
+      line?.classList.add('vl-caption--tagged');
+    }
+    slot.replaceChildren(node);
+  };
+}
+
+/** `setTag` for a control with no caption line to put a tag on. Loud, because silence would
+ *  leave an app wondering where its tag went. */
+export function noCaption(control: string): (node: HTMLElement | null) => void {
+  return (node) => {
+    if (node) throw new Error(`${control}: setTag needs a caption line; build it with a label`);
+  };
+}
+
 /* ---------------- Toggle switch ---------------- */
 
 export interface ToggleOptions {
@@ -35,6 +97,11 @@ export interface ToggleOptions {
   onChange?: (checked: boolean) => void;
   /** Optional "?" tooltip shown next to the label. */
   help?: string;
+  /**
+   * The checkbox's id, for an app whose other code finds the switch by id (keycap's paid modes
+   * listen to its cap switches that way). The caption follows it. Default: a fresh id.
+   */
+  id?: string;
   /**
    * A smaller label close to its switch, and a row that does not shrink: for switches set side by
    * side or stacked on the stage or under a preview (Fold-Up Box's dieline switches), where the
@@ -137,9 +204,10 @@ export function isSyncing(): boolean {
   return syncing > 0;
 }
 
-/** A labelled iOS-style switch (green when on). Returns the whole row. */
-export function toggleSwitch(opts: ToggleOptions): ValueRow<boolean> {
-  const id = uid('vl-switch');
+/** A labelled iOS-style switch (green when on). Returns the whole row. `setTag` puts a node
+ *  between the caption and the switch, beside the switch. */
+export function toggleSwitch(opts: ToggleOptions): TaggedRow<boolean> {
+  const id = opts.id ?? uid('vl-switch');
   const cap = caption(opts.label, opts.help, id, 'vl-switch-label');
   const input = el('input', {
     attrs: { type: 'checkbox', role: 'switch', id, 'aria-labelledby': cap.textId },
@@ -147,15 +215,17 @@ export function toggleSwitch(opts: ToggleOptions): ValueRow<boolean> {
   input.checked = opts.checked ?? false;
   input.addEventListener('change', () => opts.onChange?.(input.checked));
 
+  const toggle = el('label', { className: 'vl-toggle' }, [input, el('span', { className: 'vl-knob' })]);
   const row = el('div', { className: opts.compact ? 'vl-switch-row vl-switch-row--compact' : 'vl-switch-row' }, [
     cap.label,
-    el('label', { className: 'vl-toggle' }, [input, el('span', { className: 'vl-knob' })]),
-  ]) as unknown as ValueRow<boolean>;
+    toggle,
+  ]) as unknown as TaggedRow<boolean>;
   row.setValue = (value, notify = false) => {
     input.checked = value;
     if (notify) opts.onChange?.(value);
   };
   withAccess(row, () => input.checked, [input]);
+  row.setTag = tagSetter((slot) => row.insertBefore(slot, toggle));
   return row;
 }
 
@@ -371,7 +441,7 @@ function valueField(labelledBy: string, id = uid('vl-val')): {
 
 /** Label + editable value box + range, kept in sync both directions. */
 /** A slider whose range and caption can be re-pointed after construction. */
-export type SliderRowHandle = ValueRow<number> & {
+export type SliderRowHandle = TaggedRow<number> & {
   /**
    * Re-point the slider at a different range, and optionally rename it.
    *
@@ -503,6 +573,8 @@ export function sliderRow(opts: SliderOptions): SliderRowHandle {
     // its own track cannot reach is the "control that does nothing" bug in miniature.
     commit(current, true, false);
   };
+  // The tag sits just before the value box, at the far end of the head from the caption.
+  handle.setTag = tagSetter((slot) => head.insertBefore(slot, valFit));
   paintFill();
   mark.sync(current);
   return handle;
@@ -552,7 +624,7 @@ export interface StepperRowOptions {
  * the call site, and nothing downstream (a sync pass, Load-project) can tell the
  * difference.
  */
-export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
+export function stepperRow(opts: StepperRowOptions): TaggedRow<number> {
   const step = opts.step ?? 1;
   const fmt = opts.format ?? ((v: number) => (opts.unit ? `${v} ${opts.unit}` : String(v)));
 
@@ -614,7 +686,9 @@ export function stepperRow(opts: StepperRowOptions): ValueRow<number> {
   const row = el('div', { className: 'vl-slider-row' }, [
     head,
     el('div', { className: 'vl-stepper-bar' }, [minus, valFit, plus]),
-  ]) as unknown as ValueRow<number>;
+  ]) as unknown as TaggedRow<number>;
+  // The head holds only the caption here (the box is in the bar below), so the tag ends it.
+  row.setTag = tagSetter((slot) => head.append(slot));
 
   /* The +/- buttons already carry a bounds-driven disabled state, so an outer disable cannot
      simply write `.disabled` as well — the next `setValue` would undo it. It sets a flag both
@@ -672,6 +746,14 @@ export interface SegmentedOption<T extends string = string> {
   /** Only with `variant: 'pictures'` or `'tiles'`: one line under the label, saying what the
    *  option gets you. */
   description?: string;
+  /**
+   * A small pill after the label marking the option as paid ('Pro'): the sparkle and word
+   * `button({ badge })` draws, the same element. Every variant takes it. On a tab the label
+   * gives way first (it ellipsises, the pill keeps its size); on a card the pill sits at the
+   * trailing edge, as on a button; on a picture card it follows the name. Default: none, and
+   * the option is built exactly as before.
+   */
+  badge?: string;
 }
 
 export interface SegmentedOptions<T extends string = string> {
@@ -718,7 +800,9 @@ export interface SegmentedOptions<T extends string = string> {
   fit?: 'fill' | 'content';
   /**
    * `'compact'`: smaller labels and padding, a step smaller again on a phone: for a switch in a
-   * bar over a picture rather than in a settings panel. Default: the panel size. Tabs only.
+   * bar over a picture rather than in a settings panel. With `variant: 'tiles'`, a smaller name
+   * under each picture, for tiles three or more to a row in a side panel (keycap's profiles),
+   * where a one-word name at the panel size is clipped. Default: the panel size.
    */
   size?: 'compact';
   /**
@@ -730,7 +814,7 @@ export interface SegmentedOptions<T extends string = string> {
 }
 
 /** What `segmentedControl` returns: a `ValueRow` plus per-option visibility. */
-export type SegmentedRow<T extends string = string> = ValueRow<T> & {
+export type SegmentedRow<T extends string = string> = TaggedRow<T> & {
   /**
    * Show or hide one option.
    *
@@ -743,6 +827,12 @@ export type SegmentedRow<T extends string = string> = ValueRow<T> & {
   /** `variant: 'pictures'` and `'tiles'` only: swap one option's picture, or pass null to show
    *  it is being made again. */
   setOptionImage(value: T, src: string | null): void;
+  /**
+   * Put a badge on one option, or take it off with null: the tab is drawn as it would have been
+   * built with that badge, or without one. For a badge that stops being true while the control
+   * is on screen, a Pro mark once the pack is owned.
+   */
+  setBadge(value: T, badge: string | null): void;
 };
 
 /** A segmented (tab-style) picker. Exactly one option is active.
@@ -770,7 +860,8 @@ export function segmentedControl<T extends string = string>(
   const root = el('div', {
     className:
       `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : pictures ? ' vl-tabs--pictures' : ''}${tiles ? ' vl-tabs--tiles' : ''}${opts.variant === 'cards' && opts.stacked ? ' vl-tabs--stacked' : ''}` +
-      `${opts.fit === 'content' ? ' vl-tabs--fit-content' : ''}${plainTabs && opts.size === 'compact' ? ' vl-tabs--compact' : ''}`,
+      `${opts.fit === 'content' ? ' vl-tabs--fit-content' : ''}${plainTabs && opts.size === 'compact' ? ' vl-tabs--compact' : ''}` +
+      `${tiles && opts.size === 'compact' ? ' vl-tabs--tiles-compact' : ''}`,
     attrs: { role: 'radiogroup', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr))` },
   });
 
@@ -901,6 +992,18 @@ export function segmentedControl<T extends string = string>(
     buttons.get(next)?.focus();
   });
 
+  /** A tab without a picture: its icon, its label, and the badge's pill after it. */
+  const fillPlain = (btn: HTMLElement, opt: SegmentedOption<T>, badge: string | null | undefined) => {
+    if (badge) {
+      // A label longer than a number gives the pill's word up sooner, so it keeps more of itself
+      // (see the `vl-tab` container rules in components.css).
+      if ([...opt.label].length > 3) btn.classList.add('vl-tab--badged-long');
+      if (opt.icon) btn.append(svgEl(opt.icon));
+      btn.append(el('span', { className: 'vl-tab__name', text: opt.label }), badgePill(badge));
+    } else if (opt.icon) btn.append(svgEl(opt.icon), el('span', { text: opt.label }));
+    else btn.textContent = opt.label;
+  };
+
   for (const opt of opts.options) {
     const btn = el('button', {
       className: `vl-tab${opt.wide ? ' vl-tab--wide' : ''}${opt.value === active ? ' active' : ''}`,
@@ -910,15 +1013,19 @@ export function segmentedControl<T extends string = string>(
     // Two render paths rather than always building children: `text` (the default `el()` path)
     // trims/collapses nothing extra, so a plain tab with no icon stays byte-identical to before
     // this option existed.
+    // A badge is the one addition, and only when asked for: the label moves into a span of its
+    // own (so it can ellipsise while the pill keeps its size) and the pill follows it.
+    if (opt.badge) btn.classList.add('vl-tab--badged');
     if (pictures) {
       const slot = el('span', { className: 'vl-tab__picture' });
       showPicture(slot, opt.image ?? null);
       picturesByValue.set(opt.value, slot);
-      const text = el('span', { className: 'vl-tab__text' }, [el('span', { className: 'vl-tab__label', text: opt.label })]);
+      const name = el('span', { className: 'vl-tab__label', text: opt.label });
+      if (opt.badge) name.append(badgePill(opt.badge));
+      const text = el('span', { className: 'vl-tab__text' }, [name]);
       if (opt.description) text.append(el('span', { className: 'vl-tab__desc', text: opt.description }));
       btn.append(slot, text);
-    } else if (opt.icon) btn.append(svgEl(opt.icon), el('span', { text: opt.label }));
-    else btn.textContent = opt.label;
+    } else fillPlain(btn, opt, opt.badge);
     buttons.set(opt.value, btn);
     root.append(btn);
   }
@@ -929,17 +1036,19 @@ export function segmentedControl<T extends string = string>(
   place(false);
 
   let outer = root;
+  let lab: HTMLElement | null = null;
   if (opts.label || opts.help) {
     // The group is named from the caption's own text, not the help tip beside it.
-    const text = el('span', { text: opts.label ?? '', attrs: { id: uid('vl-cap') } });
-    const lab = el('span', { className: 'vl-control-label' }, [text]);
-    if (opts.help) lab.append(helpTip(opts.help));
-    if (opts.label) root.setAttribute('aria-labelledby', text.id);
+    const cap = groupCaption(opts.label, opts.help);
+    lab = cap.line;
+    if (opts.label) root.setAttribute('aria-labelledby', cap.textId);
     outer = el('div', { className: 'vl-control' }, [lab, root]);
   }
   if (opts.ariaLabel && !opts.label) root.setAttribute('aria-label', opts.ariaLabel);
 
   const row = outer as unknown as SegmentedRow<T>;
+  const line = lab;
+  row.setTag = line ? tagSetter((slot) => line.append(slot), line) : noCaption('segmentedControl');
   // An unknown value is ignored rather than clearing the selection: a loaded
   // project can carry an option this build no longer has, and a picker with
   // nothing active is worse than one showing a stale-but-valid choice.
@@ -969,6 +1078,22 @@ export function segmentedControl<T extends string = string>(
     const slot = picturesByValue.get(value);
     if (slot) showPicture(slot, src);
   };
+  row.setBadge = (value: T, badge: string | null) => {
+    const btn = buttons.get(value);
+    const opt = opts.options.find((o) => o.value === value);
+    if (!btn || !opt) return;
+    btn.classList.remove('vl-tab--badged', 'vl-tab--badged-long');
+    if (badge) btn.classList.add('vl-tab--badged');
+    if (pictures) {
+      const name = btn.querySelector('.vl-tab__label');
+      name?.querySelector('.vl-btn__badge')?.remove();
+      if (badge) name?.append(badgePill(badge));
+    } else {
+      btn.textContent = '';
+      fillPlain(btn, opt, badge);
+    }
+    place(false);
+  };
 
   return row;
 }
@@ -977,12 +1102,17 @@ export function segmentedControl<T extends string = string>(
 
 export interface SelectFieldOptions<T extends string = string> {
   label: string;
-  /** `group` puts the option under a native `<optgroup>` of that name. */
-  options: { value: T; label: string; group?: string }[];
+  /** `group` puts the option under a native `<optgroup>` of that name. `disabled` shows it
+   *  greyed and unpickable: a choice that exists but not here (a board this profile cannot
+   *  build), which a list that silently omits it would hide. */
+  options: { value: T; label: string; group?: string; disabled?: boolean }[];
   value?: T;
   onChange?: (value: T) => void;
   /** Optional "?" tooltip shown next to the label. */
   help?: string;
+  /** The `<select>`'s id, for an app whose other code finds it by id; the caption follows it.
+   *  Default: a fresh id. */
+  id?: string;
 }
 
 /**
@@ -993,8 +1123,8 @@ export interface SelectFieldOptions<T extends string = string> {
  * plain strings stays a `ValueRow<string>`. `setFieldOptions` can swap in values the type
  * does not know, so a field whose list changes is typed by the whole set it can show.
  */
-export function selectField<T extends string = string>(opts: SelectFieldOptions<T>): ValueRow<T> {
-  const id = uid('vl-select');
+export function selectField<T extends string = string>(opts: SelectFieldOptions<T>): TaggedRow<T> {
+  const id = opts.id ?? uid('vl-select');
   const cap = caption(opts.label, opts.help, id);
   const select = el('select', { attrs: { id, 'aria-labelledby': cap.textId } });
   /* A `group` on an option puts it under a native `<optgroup>`. Consecutive options sharing a
@@ -1003,8 +1133,9 @@ export function selectField<T extends string = string>(opts: SelectFieldOptions<
      exactly as it did before. */
   const groups = new Map<string, HTMLElement>();
   for (const o of opts.options) {
-    const option = el('option', { text: o.label, attrs: { value: o.value } });
+    const option = el('option', { text: o.label, attrs: { value: o.value } }) as HTMLOptionElement;
     if (o.value === opts.value) option.selected = true;
+    if (o.disabled) option.disabled = true;
     if (o.group) {
       let g = groups.get(o.group);
       if (!g) {
@@ -1019,7 +1150,8 @@ export function selectField<T extends string = string>(opts: SelectFieldOptions<
   const current = () => select.value as T;
   select.addEventListener('change', () => opts.onChange?.(current()));
 
-  const row = el('div', { className: 'vl-field' }, [cap.label, select]) as unknown as ValueRow<T>;
+  const row = el('div', { className: 'vl-field' }, [cap.label, select]) as unknown as TaggedRow<T>;
+  row.setTag = tagSetter((slot) => cap.label.append(slot), cap.label);
   // The other three controls in this file have had `setValue` since Load-project
   // needed it; the dropdown was the one that did not, so every generator that has to
   // move a dropdown from code reaches through the DOM for its `<select>` instead —
@@ -1050,7 +1182,7 @@ export function selectField<T extends string = string>(opts: SelectFieldOptions<
  *  is not the one it had, so a plain relabel is silent. */
 export function setFieldOptions(
   field: HTMLElement,
-  options: { value: string; label: string }[],
+  options: { value: string; label: string; disabled?: boolean }[],
   value?: string,
 ): void {
   const select = field.querySelector('select');
@@ -1058,7 +1190,11 @@ export function setFieldOptions(
   const want = value ?? select.value;
   const had = select.value;
   select.replaceChildren(
-    ...options.map((o) => el('option', { text: o.label, attrs: { value: o.value } })),
+    ...options.map((o) => {
+      const option = el('option', { text: o.label, attrs: { value: o.value } }) as HTMLOptionElement;
+      if (o.disabled) option.disabled = true;
+      return option;
+    }),
   );
   select.value = options.some((o) => o.value === want) ? want : (options[0] as { value: string }).value;
   if (select.value !== had) select.dispatchEvent(new Event('change'));

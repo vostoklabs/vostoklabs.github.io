@@ -49,6 +49,8 @@
 .vl-chip:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
 /* `chip({ centered: true })`: a chip stretched to fill a grid cell keeps its label in the middle. */
 .vl-chip--centered { justify-content: center; }
+/* `chip({ count })`: how many things the chip stands for, after the label and quieter than it. */
+.vl-chip__count { opacity: 0.65; font-variant-numeric: tabular-nums; }
 
 /* ---------- Empty state ---------- */
 .vl-empty {

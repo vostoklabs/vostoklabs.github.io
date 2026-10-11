@@ -79,10 +79,11 @@ check(
 
 /** A project as collectState() writes one: every field it always writes, plus the legend. */
 const state = {
-  size: 8.4, depth: 0.55, rot: -15, offx: 0.5, offy: -1, stemTol: 0.06,
+  size: 8.4, depth: 0.55, rot: -15, offx: 0.5, offy: -1, stemTol: 0.06, capLower: 1.5, stemRecess: 0.4, wallHeight: null, stem: 'mx', shapeSize: null,
   capColor: '#161616', logoColor: '#f7f7f5',
-  mirror: false, homingBump: true, through: false, single: false,
+  mirror: false, homingBump: true, through: false, single: false, raised: 0,
   profile: 'standard-profile', unit: '1u', wallGenerator: 'classic',
+  fontId: 'helvetiker-regular', legendSource: { type: 'letter', text: 'A', fontId: 'helvetiker-regular' },
   legend: { contours: [[[0, 0], [10, 0], [10, 10]]], strokeGeoms: [], box: { min: { x: 0, y: 0 }, max: { x: 10, y: 10 } }, name: 'A-Roboto' },
 };
 check(

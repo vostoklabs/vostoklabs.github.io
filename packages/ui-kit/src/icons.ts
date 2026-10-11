@@ -138,6 +138,8 @@ export const ICONS = {
   box: stroke('<path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3z"/><path d="m3 7.5 9 4.5 9-4.5"/><path d="M12 12v9"/>', 18),
   // A ruler — a sheet's thickness, a material.
   ruler: stroke('<rect x="2" y="8" width="20" height="8" rx="1.5"/><path d="M6 8v3"/><path d="M10 8v4"/><path d="M14 8v3"/><path d="M18 8v4"/>', 18),
+  // A dimension line over a ruler — an object's own size and height.
+  dimensions: stroke('<path d="M20 6H4"/><path d="M20 8V4"/><path d="M4 8V4"/><rect x="3" y="12" width="18" height="7" rx="1"/><path d="M8 15v-3"/><path d="M12 15v-3"/><path d="M16 15v-3"/>', 18),
   // Fingers meeting a straight edge — joints.
   joint: stroke('<path d="M2 11h4V7h4v4h4V7h4v4h4"/><path d="M2 15h20"/>', 18),
   // Three cells of a honeycomb — a repeating pattern.

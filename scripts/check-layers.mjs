@@ -86,6 +86,11 @@ const KNOWN = new Set([
   'packages/fonts/tests/import.test.mts -> ../src/index',
   'packages/fonts/tests/import.test.mts -> ../src/import',
   'packages/fonts/tests/faces.test.mts -> ../src/index',
+  'packages/fonts/tests/fallback.test.mts -> ../src/index',
+  // Meant: keycap's letter faces are the shelf's library read through the keycap's own text
+  // engine, so the test reads the registry as letterFonts.js does; it puts its own glob
+  // stand-in in place.
+  'apps/keycap-generator/tests/letter-fonts.test.mjs -> @vostok/fonts',
   // Meant too: tests/suites.mjs runs it with the glob stand-in in place. The command in its own
   // header leaves the stand-in out; font-fallback's header shows the command with it.
   'apps/clicker-generator/tests/text-sizing.test.ts -> ../src/image/letter.ts',

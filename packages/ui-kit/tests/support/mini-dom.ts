@@ -83,6 +83,14 @@ export class MiniText extends MiniNode {
   override set textContent(v: string) {
     this.data = String(v);
   }
+  /** A label's bare text node handing its place to a wrapper, as `button({ badge })` does. */
+  replaceWith(...nodes: (MiniNode | string)[]) {
+    const parent = this.parentNode;
+    if (!parent) return;
+    const after = parent.childNodes[parent.childNodes.indexOf(this) + 1] ?? null;
+    parent.removeChild(this);
+    for (const n of nodes) parent.insertBefore(typeof n === 'string' ? new MiniText(n) : n, after);
+  }
 }
 
 /** Markup kept as written: what `<template>.innerHTML = …` holds, an SVG icon. */

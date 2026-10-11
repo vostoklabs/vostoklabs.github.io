@@ -11,7 +11,7 @@
  */
 import { el } from '../dom';
 import { dialog } from './dialog';
-import { button } from './button';
+import { button, type ButtonHandle } from './button';
 import { toast } from './toast';
 
 /** One thing the licence also unlocks: a bold name, and optionally what it does. */
@@ -159,4 +159,81 @@ export function openLicenceCertificate(opts: LicenceCertificateOptions): void {
     content: body,
     actions: [{ label: opts.closeLabel ?? 'Close', primary: true }],
   });
+}
+
+export interface LicenceButtonOptions {
+  /** Whether the licence is held: the host's `isUnlocked`, presentation only. It picks the label
+   *  and which window opens, read on every click and every `refresh()`. */
+  owned: () => boolean;
+  /** The offer, built when the button is pressed, so the price is the host's latest. Its
+   *  `onBuy` is the purchase itself (the host's access gate). */
+  offer: () => Omit<LicenceOfferOptions, 'onPurchased' | 'onDismissed'>;
+  /** The owner's certificate, opened instead of the offer once the licence is held. */
+  certificate: LicenceCertificateOptions;
+  /** After a completed purchase; the button has already turned into the certificate's. */
+  onPurchased?: () => void;
+  /** Default 'Unlock lifetime commercial licence'. */
+  label?: string;
+  /** Default 'Show licence terms'. */
+  ownedLabel?: string;
+  /** Native tooltip while it sells. */
+  title?: string;
+}
+
+/** The licence button, with `refresh()` for when ownership may have changed outside it. */
+export type LicenceButtonHandle = ButtonHandle & { refresh(): void };
+
+/**
+ * The licence's call to action: the kit's `cta` rung, full width, opening the offer and nothing
+ * else. It is not a gate, and ignoring it changes nothing. Once the licence is held it stops
+ * selling and becomes a plain secondary that opens the certificate: same place, same job, no
+ * urgency.
+ *
+ * One offer at a time, from the click until the purchase settles either way: a second click
+ * while the first window is mounting, or while the host's payment flow is open, does nothing.
+ */
+export function lifetimeLicenceButton(opts: LicenceButtonOptions): LicenceButtonHandle {
+  const label = opts.label ?? 'Unlock lifetime commercial licence';
+  const ownedLabel = opts.ownedLabel ?? 'Show licence terms';
+  let open = false;
+
+  const btn = button({
+    label,
+    title: opts.title,
+    emphasis: 'cta',
+    block: true,
+    onClick: () => {
+      if (opts.owned()) {
+        openLicenceCertificate(opts.certificate);
+        return;
+      }
+      if (open) return;
+      open = true;
+      const offer = opts.offer();
+      openLicenceOffer({
+        ...offer,
+        // A purchase that throws is one that did not happen, and must not leave the button dead.
+        onBuy: () => offer.onBuy().catch(() => false),
+        onPurchased: () => {
+          open = false;
+          refresh();
+          opts.onPurchased?.();
+        },
+        onDismissed: () => { open = false; },
+      });
+    },
+  }) as LicenceButtonHandle;
+
+  function refresh() {
+    const held = opts.owned();
+    btn.setLabel(held ? ownedLabel : label);
+    if (opts.title && !held) btn.setAttribute('title', opts.title);
+    else btn.removeAttribute('title');
+    btn.classList.toggle('vl-btn--cta', !held);
+    btn.classList.toggle('vl-btn--primary', !held);
+    btn.classList.toggle('vl-btn--secondary', held);
+  }
+  btn.refresh = refresh;
+  refresh();
+  return btn;
 }

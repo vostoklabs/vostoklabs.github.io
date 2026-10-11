@@ -101,9 +101,10 @@ async function loadApp(which) {
       contents: [
         "export { loadKeycap } from './src/keycap.js';",
         "export { parseLogo } from './src/logo.js';",
-        "export { parseLetter, loadBundledFonts } from './src/letter.js';",
+        "export { parseLetter, loadBundledFonts, LEGEND_MAX_CHARS } from './src/letter.js';",
         "export { LUCIDE_ICONS, buildSvg } from './src/lucideIcons.js';",
         "export { buildBodies } from './src/geometry.js';",
+        "export { trimCap } from './src/capHeight.js';",
         "export { initManifold, getManifoldApi, geomToManifold, manifoldToGeom } from './src/manifold.js';",
         "export { applyStemClearance } from './src/stemClearance.js';",
         "export { buildFitTestRow, computeFitTestLadder, FIT_TEST_STEP_MM, FIT_TEST_FONT_ID } from './src/fitTest.js';",
@@ -111,7 +112,8 @@ async function loadApp(which) {
         "export { keycapObjMtl, keycapObjWriter } from './src/exportObj.js';",
         "export { objMaterials, buildMtl } from '@vostok/export';",
         "export { BoxGeometry } from 'three';",
-        "export { capParts, orientForPrint, blankParts, fitTestParts, profileTag, capFileName, blankFileName, fitTestFileName, ALPHABET, ALPHABET_MTL } from './src/exportParts.js';",
+        "export { capParts, orientForPrint, blankParts, fitTestParts, profileTag, capFileName, blankFileName, fitTestFileName, ALPHABET } from './src/exportParts.js';",
+        "export { setTypeSizes } from './src/alphabetSet.js';",
         "export { carveCap } from './src/rebuild.js';",
       ].join('\n'),
       resolveDir: APP,
@@ -226,9 +228,10 @@ const CASES = [
   { id: 'C-1u-fit-test', profile: C, size: '1u', fitTest: true },
 ];
 
-/* The full alphabet set: what "Get full alphabet set (A–Z)" carves, a Standard 1u in the panel's
-   settings, each letter read one character long. Every letter's 3MF is what the set's zip holds
-   (stored as it is), and its OBJ is one of the plates the MakerLab export hands over. */
+/* The full alphabet set: what "Get full alphabet set" carves, a Standard 1u in the panel's
+   settings, each letter read one character long and set at the set's one type size. The set's one
+   3MF holds these caps, each moved to its place on the plate (alphabet-set.test.mjs compares them
+   part by part); each letter's own files here pin the carve. */
 for (const ch of app.ALPHABET) {
   CASES.push({ id: `AZ-S-1u-roboto-${ch}`, profile: S, size: '1u', legend: { kind: 'alphabet', text: ch, font: 'roboto' } });
 }
@@ -240,6 +243,24 @@ const secondLegend = (color) => ({ legend: letter('A', 'roboto'), color, placeme
 CASES.push(
   { id: 'S-1u-copy+A-legend-colour', profile: S, size: '1u', legend: lucide('copy'), mm: 5, offx: -3, offy: 3, extra: secondLegend('#f7f7f5') },
   { id: 'S-1u-copy+A-third-colour', profile: S, size: '1u', legend: lucide('copy'), mm: 5, offx: -3, offy: 3, extra: secondLegend('#e53e3e') },
+);
+
+/* Raised legends: the legend stands on the top and the cap is not carved. The last one is two
+   copies of the same icon, the second moved 2 mm right onto the first, in a colour of its own. */
+CASES.push(
+  { id: 'S-1u-copy-raised-0.6', profile: S, size: '1u', legend: lucide('copy'), raised: 0.6 },
+  { id: 'S-2.25u-Enter-raised-1', profile: S, size: '2_25u', legend: letter('Enter', 'roboto'), mm: 20, raised: 1 },
+  { id: 'T-1u-A-raised-0.4', profile: T, size: '1u', legend: letter('A', 'roboto'), raised: 0.4 },
+  { id: 'S-1u-copy+copy-raised-overlap', profile: S, size: '1u', legend: lucide('copy'), mm: 7, raised: 0.6,
+    extra: { legend: lucide('copy'), color: '#e53e3e', placement: { sizeMM: 7, depth: 0.5, rotationDeg: 0, offsetX: 2, offsetY: 0 } } },
+);
+
+/* Cap height and stem recess (capHeight.js), cut from the cap as loaded, as mount.js does. */
+CASES.push(
+  { id: 'S-1u-copy-lower-2', profile: S, size: '1u', legend: lucide('copy'), lower: 2 },
+  { id: 'S-1u-copy-recess-1', profile: S, size: '1u', legend: lucide('copy'), recess: 1 },
+  { id: 'S-2u-3stem-arrow-left-lower-3-recess-0.5-stem+0.1', profile: S, size: '2u-3stem', legend: lucide('arrow-left'), lower: 3, recess: 0.5, stemTol: 0.1 },
+  { id: 'S-1u-blank-lower-2', profile: S, size: '1u', blank: true, lower: 2 },
 );
 
 // ------------------------------------------------------------------ the app's state, per case
@@ -259,9 +280,13 @@ async function harnessFor(app) {
   /** One cap as mount.js's setKeycap() leaves it: the shell, and the stem run through Manifold
    *  once so it is a clean indexed solid. Cached: the app keeps the loaded cap too. */
   const caps = new Map();
-  async function capFor(file) {
-    if (caps.has(file)) return caps.get(file);
-    const kc = await app.loadKeycap(file);
+  /** The cap as mount.js puts it on screen: loaded, cut to the cap height settings when there are
+   *  any (showLoadedCap), then its stem welded (setKeycap). */
+  async function capFor(file, trim = null) {
+    const key = trim ? `${file}|${trim.lowerMM}|${trim.recessMM}` : file;
+    if (caps.has(key)) return caps.get(key);
+    let kc = await app.loadKeycap(file);
+    if (trim) kc = app.trimCap(api, kc, trim);
     let baseStem = null;
     if (kc.stemGeometry) {
       const m = app.geomToManifold(kc.stemGeometry);
@@ -269,7 +294,7 @@ async function harnessFor(app) {
       m.delete();
     }
     const cap = { shell: kc.shellGeometry, meta: kc.meta, baseStem };
-    caps.set(file, cap);
+    caps.set(key, cap);
     return cap;
   }
 
@@ -289,8 +314,20 @@ async function harnessFor(app) {
     if (spec.kind === 'svg') return { ...app.parseLogo(SVGS[spec.name]), name: spec.name };
     // The alphabet set reads each letter one character long.
     if (spec.kind === 'alphabet') return app.parseLetter(spec.text, FONTS[spec.font], 1);
-    // mount.js letterMaxLen(): 4 characters on a 1u, more on a longer cap.
-    return app.parseLetter(spec.text, FONTS[spec.font], Math.max(4, Math.round((unit || 1) * 4)));
+    // mount.js letterMaxLen(): the same cap on every size (a long word shrinks to fit instead).
+    return app.parseLetter(spec.text, FONTS[spec.font], app.LEGEND_MAX_CHARS);
+  }
+
+  /** The alphabet set's capitals' type size on a cap in a font, as exports.js takes it. */
+  const setTypes = new Map();
+  function setTypeOf(meta, fontId, capHeightMM, rot) {
+    const key = `${meta.topExtent.join('x')}|${fontId}|${capHeightMM}|${rot}`;
+    if (!setTypes.has(key)) {
+      const lettersOf = (s) => [...s].map((ch) => [ch, app.parseLetter(ch, fontId, 1)]);
+      const types = app.setTypeSizes({ upper: lettersOf(app.ALPHABET), lower: lettersOf(app.ALPHABET.toLowerCase()) }, meta, capHeightMM, rot);
+      setTypes.set(key, types.upper);
+    }
+    return setTypes.get(key);
   }
 
   /** The parts one case exports, and the MTL its OBJ names: built by src/exportParts.js, the
@@ -298,7 +335,8 @@ async function harnessFor(app) {
   async function exportParts(c) {
     const profile = index.profiles.find((p) => p.id === c.profile);
     const entry = profile.keycaps.find((k) => k.id === c.size);
-    const { shell, meta, baseStem } = await capFor(entry.file);
+    const trim = c.lower || c.recess ? { lowerMM: c.lower ?? 0, recessMM: c.recess ?? 0 } : null;
+    const { shell, meta, baseStem } = await capFor(entry.file, trim);
     const o = { ...DEFAULTS, ...c };
     const stem = stemAt(baseStem, o.stemTol);
     const tag = app.profileTag(profile, index.profiles.length);
@@ -331,7 +369,15 @@ async function harnessFor(app) {
       singleColor: !!o.single,
       homingBump: homing,
       homingBumpGeom: homingBumpGeom,
+      raisedMM: o.raised ?? 0,
     };
+    // A letter of the alphabet set is set at the set's one type size (alphabetSet.js
+    // setTypeSizes): capitals as tall as the Size, on one baseline. The cap carries an icon here,
+    // so the Size is the capitals' height, as it is in the app.
+    if (c.legend.kind === 'alphabet') {
+      const place = setTypeOf(meta, FONTS[c.legend.font], widthMM, o.rot).places.get(c.legend.text);
+      Object.assign(opts, { widthMM: place.widthMM, centerX: opts.centerX + place.dx, centerY: opts.centerY + place.dy });
+    }
     // A second legend (the paid Double legends) is carved on the cap the first left, with its
     // placement as mount.js's placementOpts() gives it, through the rebuild's own carveCap.
     const extras = c.extra
@@ -359,7 +405,9 @@ async function harnessFor(app) {
       profile,
       meta,
     );
-    const mtlFileName = c.legend.kind === 'alphabet' ? app.ALPHABET_MTL : `${app.capFileName(legend.name, tag)}.mtl`;
+    // The MTL name the letters' OBJs were recorded with, when the set handed MakerLab a plate per
+    // letter; kept so the golden still pins the same files.
+    const mtlFileName = c.legend.kind === 'alphabet' ? 'keycap-alphabet.mtl' : `${app.capFileName(legend.name, tag)}.mtl`;
     return { parts, mtlFileName, walls: o.walls };
   }
 
@@ -557,6 +605,31 @@ if (differs.length) fail(`the app's manifold build writes different files from n
 else {
   pass++;
   console.log(`the app's manifold build and npm's manifold-3d write the same files for ${PARITY.length} cases (${paritySeconds} s)`);
+}
+
+// ------------------------------------------------------------------ raised legends, measured
+// Beyond the bytes: a raised legend stands on the top, from the top up by the raise, and nowhere
+// else; the cap under it is the uncarved cap; a second raised legend loses what the first holds.
+{
+  const part = (id, name) => results[id]?.parts.find((p) => p.name === name);
+  const topZ = 11.8322514; // Standard's top (meta.topZ), as exported: modelled face up
+  const raisedOk = [];
+  const legend = part('S-1u-copy-raised-0.6', 'Legend');
+  raisedOk.push(['the 1u raised legend stands from the top to 0.6 above it',
+    legend && Math.abs(legend.box[2] - topZ) < 0.02 && Math.abs(legend.box[5] - (topZ + 0.6)) < 0.02, legend?.box]);
+  const cap = part('S-1u-copy-raised-0.6', 'Keycap'), blank = part('S-1u-blank', 'Keycap');
+  raisedOk.push(['…and the cap under it is the uncarved cap', cap && blank && Math.abs(cap.volume - blank.volume) < 0.05, [cap?.volume, blank?.volume]]);
+  const wide = part('S-2.25u-Enter-raised-1', 'Legend');
+  raisedOk.push(['the 2.25u raised legend stands 1 mm', wide && Math.abs(wide.box[5] - wide.box[2] - 1) < 0.02, wide?.box]);
+  const first = part('S-1u-copy+copy-raised-overlap', 'Legend'), second = part('S-1u-copy+copy-raised-overlap', 'Legend 2');
+  raisedOk.push(['two raised legends on one spot: the second loses what the first holds', first && second && second.volume < first.volume - 1, [first?.volume, second?.volume]]);
+  const lowered = part('S-1u-copy-lower-2', 'Keycap');
+  raisedOk.push(['cap height -2: the cap stands 2 mm lower, rim still on the plate', lowered && Math.abs(lowered.box[5] - (topZ - 2)) < 0.02 && Math.abs(lowered.box[2]) < 0.02, lowered?.box]);
+  const recessStem = part('S-1u-copy-recess-1', 'Stem');
+  raisedOk.push(['stem recess 1: the stem ends 1 mm above the rim', recessStem && Math.abs(recessStem.box[2] - 1) < 0.02, recessStem?.box]);
+  for (const [name, ok, detail] of raisedOk) {
+    if (ok) { pass++; console.log(`${name}`); } else fail(`${name}: ${JSON.stringify(detail)}`);
+  }
 }
 
 // ------------------------------------------------------------------ the keyboard set's writer

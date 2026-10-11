@@ -23,9 +23,12 @@ import {
   topbarLinks, generatorHeader, qualityCallout, sidebarFooter, dialog, isDesktop, closeAllDialogs,
   promptDialog, hostAssetUrl, rememberFile, bindExternalLinks, chooseFile,
   button, dropZone, toast, themeColorHex, captureCover, stageStatus,
-  nudgePad, busyChip, panelCredit, paletteRow, segmentedControl, readProjectFile, appShell,
+  nudgePad, busyChip, panelCredit, paletteRow, segmentedControl, readProjectFile, appShell, sliderRow,
+  toggleSwitch, settingsRail, stageTools, stageRow, previewBar, stepperRow, selectField, iconButton, el,
+  fontChooser, historyControls,
 } from '@vostok/ui-kit';
 import { mountPlatePicker, loadPlateChoice, getPlate } from '@vostok/plates';
+import { createViewer } from '@vostok/viewer';
 import { createBuildPlate } from '@vostok/plates/three';
 import { downloadFile } from '@vostok/export';
 import * as THREE from 'three';
@@ -33,9 +36,14 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadKeycap } from './keycap.js';
 import { parseLogo } from './logo.js';
 import { openSvgPreview } from './svgPreview.js';
-import { FONT_OPTIONS, importFontFile, parseLetter, loadBundledFonts } from './letter.js';
+import { FONT_OPTIONS, importFontFile, parseLetter, loadBundledFonts, LEGEND_MAX_CHARS } from './letter.js';
+import { letterFontList, installLetterFontPreviews, ensureLetterFont, fontWritesText, facesThatWrite, alphabetOf } from './letterFonts.js';
 import { initManifold, geomToManifold, manifoldToGeom, creaseNormals, getManifoldApi } from './manifold.js';
 import { applyStemClearance } from './stemClearance.js';
+import { legendSizeMax, textHeightOf, sizeForTextHeight } from './legendSize.js';
+import { trimCap, capTrimLimits, clampCapTrim } from './capHeight.js';
+import { extraProfiles, capFile, withCapSettings, isShapeProfile } from './shapes/profiles.js';
+import { SIZE_RANGE_MM, DEFAULT_SIZE_MM, sizeRangeMM } from './shapes/index.js';
 import {
   FIT_TEST_STEP_MM, FIT_TEST_STEP_OPTIONS, FIT_TEST_FONT_ID, computeFitTestLadder, buildFitTestRow,
 } from './fitTest.js';
@@ -104,6 +112,111 @@ export function mount(container, host) {
   /** Everything the teardown has to undo, in the order it was set up. */
   const cleanups = [];
   cleanups.push(() => container.classList.remove('kc-root'));
+
+  /* The left panel is the kit's settings rail, one category open at a time, as in the clicker and
+     Laser Studio. Each `data-rail` holder in the template is a category: its rows move into the
+     rail here, ids and all, so everything below still finds them, and the holders go. The rail
+     takes a category off while every row in it is hidden (Font, until the legend is text). */
+  const RAIL_ITEMS = [
+    { id: 'keycap', label: 'Keycap', icon: ICONS.box },
+    // A paid mode's board settings; off the rail while its host is hidden (One cap).
+    { id: 'layout', label: 'Layout', icon: ICONS.grid },
+    { id: 'dimensions', label: 'Dimensions', icon: ICONS.dimensions },
+    { id: 'legend', label: 'Legend', icon: ICONS.sliders, title: 'Legend placement' },
+    { id: 'style', label: 'Style', icon: ICONS.layers },
+    { id: 'font', label: 'Font', icon: ICONS.text },
+    { id: 'colors', label: 'Colors', icon: ICONS.droplet },
+    { id: 'fit', label: 'Fit', icon: ICONS.ruler, title: 'Fit & print' },
+  ];
+  const railHolders = RAIL_ITEMS.map((it) => container.querySelector(`[data-rail="${it.id}"]`));
+  const settings = settingsRail({
+    label: 'Keycap settings',
+    items: RAIL_ITEMS.map((it, i) => ({ ...it, body: [...railHolders[i].children] })),
+  });
+  railHolders[0].before(settings);
+  for (const h of railHolders) h.remove();
+
+  // The size dropdown: the kit's, with the id the app and the paid modes find it by.
+  const unitField = selectField({ id: 'unitSelect', label: 'Size', options: [] });
+  unitField.id = 'kcUnitField';
+  $('unitFieldMount').replaceWith(unitField);
+
+  // What the legend is made from: a picture card each, the clicker's import cards.
+  const legendSource = segmentedControl({
+    variant: 'cards',
+    columns: 3,
+    stacked: true,
+    options: [
+      { value: 'icon', label: 'Icon', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>' },
+      { value: 'upload', label: 'SVG', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' },
+      { value: 'letter', label: 'Text', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>' },
+    ],
+    value: 'icon',
+    onChange: (v) => setLegendMode(v),
+  });
+  $('legendSourceMount').replaceWith(legendSource);
+  /* The font: the kit's chooser over the keycap's own faces and the shelf's library
+     (letterFonts.js). Typing letters the face lacks moves the text to the plainest face that
+     writes them, as the clicker does (selectLetter). The paid modes read the face through
+     `legendUI.fontId` and listen for 'fontSelect' changes through `onShellEvent`. */
+  let currentFontId = FONT_OPTIONS[0]?.id ?? 'helvetiker-regular';
+  const fontSubs = new Set();
+  /** The cards: a handful of faces that suit a keycap, or, for text in another alphabet, the
+   *  faces that write it. */
+  const CURATED_FONTS = [
+    'helvetiker-regular', 'helvetiker-bold', 'droid-sans-mono-regular', 'bundled-bebas-neue',
+    'bundled-orbitron', 'bundled-chakra-petch', 'bundled-press-start-2p', 'bundled-pacifico',
+  ];
+  const fontCardsFor = (text) => {
+    const needs = alphabetOf(text);
+    return needs && needs !== 'accented' ? facesThatWrite(text).slice(0, 8) : CURATED_FONTS;
+  };
+  let fontCardsNeed = null;
+  const fontName = (id) => FONT_OPTIONS.find((f) => f.id === id)?.name ?? letterFontList().find((f) => f.id === id)?.label ?? id;
+  const fontField = fontChooser({
+    fonts: letterFontList(),
+    curated: CURATED_FONTS,
+    value: currentFontId,
+    sample: 'A',
+    fill: true,
+    supports: (f, text) => fontWritesText(f.id, text),
+    onChange: (id) => { void chooseFont(id); },
+    onImport: async (file) => {
+      void rememberFile(host, 'font', file); // kept for next time; a no-op without a host
+      const font = await importFontFile(file);
+      return [{ id: font.id, label: font.name, family: font.cssFamily ?? 'sans-serif', category: 'Custom' }];
+    },
+    importAccept: '.ttf,.otf,.json',
+    host,
+  });
+  $('fontChooserMount').replaceWith(fontField);
+  cleanups.push(installLetterFontPreviews());
+  // The keycap's own TTFs arrive one by one after boot: each joins the list as it parses.
+  loadBundledFonts(() => fontField.setFonts(letterFontList(), fontCardsFor($('letterText').value)));
+  // The Font category is for typed text: off the rail until the legend is text.
+  fontField.hidden = true;
+  settings.refresh();
+  /** The latest face asked for, so a slow load (a Chinese face is megabytes) cannot overwrite a
+   *  newer choice. */
+  let fontPick = 0;
+  async function chooseFont(id) {
+    const pick = ++fontPick;
+    const loaded = FONT_OPTIONS.some((f) => f.id === id);
+    if (!loaded) setBusyState('loading font…');
+    const ok = await ensureLetterFont(id);
+    if (!loaded && !singleCapSuspended) setBusyState(null);
+    if (pick !== fontPick) return;
+    if (!ok) {
+      setStatus('Could not load this font.', 'err');
+      fontField.setValue(currentFontId);
+      return;
+    }
+    currentFontId = id;
+    fontField.setValue(id);
+    for (const fn of fontSubs) fn({ target: { value: id } });
+    legendSink.font();
+  }
+
 
 
 
@@ -235,6 +348,23 @@ export function mount(container, host) {
   const status = stageStatus('Loading…');
   $('status').replaceWith(status.root);
   $('viewport').append(busyEl);
+
+  /* The stage's top-left: the paid modes' switch (One cap · Full set; the public build has none),
+     how the preview looks at the cap (Top or 3D), and the cap's size line under them. They take
+     the stage label's slot. */
+  let stageView = '3d';
+  const viewBar = previewBar({
+    label: 'View',
+    modes: {
+      label: 'View',
+      options: [{ value: 'top', label: 'Top' }, { value: '3d', label: '3D' }],
+      value: stageView,
+      onChange: (v) => { stageView = v; aimCamera(); },
+    },
+  });
+  // The cap's size line under the stage bar, hidden whenever a mode owns the stage (setStageOwner).
+  $('viewport').append(stageTools([stageRow([$('kcModeTabs'), viewBar.root]), stageRow([$('meta')])]));
+  $('viewport').querySelector('.vl-stage__label')?.setAttribute('hidden', '');
 
   /**
    * The one way the busy chip is shown or hidden.
@@ -469,6 +599,14 @@ export function mount(container, host) {
    */
   let extraLegends = [];
   let lastIconSelection = null;
+  /** What the legend on the cap is made from, as a project saves it: a lucide icon by name, an
+   *  uploaded SVG by its markup, typed text with its face. The parsed legend itself holds three.js
+   *  objects, which a saved file cannot bring back. */
+  let legendSourceState = null;
+  /** Counts legend picks, so only the latest one lands (selectIcon). A bundled SVG's markup is
+   *  fetched, so a pick made before it (the type card re-picking the last tile on the way to an
+   *  upload) could resolve after a later one and put the old legend back on the cap. */
+  let iconPick = 0;
   let currentMode = 'icon';
   let currentUnit = 1;        // size of the active keycap (drives the letter limit)
 
@@ -485,6 +623,11 @@ export function mount(container, host) {
     get lastBodies() { return loop.latest?.bodies ?? null; },
     get shellGeometry() { return shellGeometry; },
     get stemGeometry() { flushStemApply(); return stemGeometry; },
+    /** The project as Save writes it, and Load: the embedded build has neither button. */
+    get project() { return collectState(); },
+    applyProject: (data) => applyLoadedState(data),
+    /** Undo steps behind and ahead of the one on screen. */
+    get historyDepth() { return [historyPast.length, historyFuture.length]; },
   };
 
   // paired range + number input -> single value with onChange
@@ -509,6 +652,7 @@ export function mount(container, host) {
   /* The nudge pad, before the C block below: it BUILDS #offxNum / #offyNum, and `link()`
      binds them by id. */
   const nudge = nudgePad({
+    label: 'Nudge',
     step: NUDGE_STEP,
     x: { id: 'offxNum', label: 'X' },
     y: { id: 'offyNum', label: 'Y' },
@@ -535,25 +679,77 @@ export function mount(container, host) {
   exportBlankBtn.disabled = true;
   $('exportBlankMount').replaceWith(exportBlankBtn);
 
-  const alphabetSetBtn = button({ label: 'Get full alphabet set (A–Z)', emphasis: 'secondary', block: true });
+  const alphabetSetBtn = button({ label: 'Get full alphabet set', emphasis: 'secondary', block: true });
   alphabetSetBtn.id = 'alphabetSet';
   $('alphabetSetMount').replaceWith(alphabetSetBtn);
 
+  /* Size, Depth and Rotation are the kit's sliders. The paid modes listen to them by the ids the
+     hand-built rows had ('size' and 'sizeNum', …): `onShellEvent` hands such a listener to the
+     row's own subscribers, which get an input-shaped event with the new value, as they did. */
+  const sliderSubs = new Map();
+  const SLIDER_IDS = { size: 'size', sizeNum: 'size', depth: 'depth', depthNum: 'depth', rot: 'rot', rotNum: 'rot' };
+  function kitSlider(key, mountId, opts, onChange) {
+    const subs = new Set();
+    sliderSubs.set(key, subs);
+    const row = sliderRow({
+      ...opts,
+      onInput: (v) => {
+        onChange();
+        for (const fn of subs) fn({ target: { value: String(v) } });
+      },
+    });
+    $(mountId).replaceWith(row);
+    return {
+      row,
+      get: () => row.getValue(),
+      set: (v) => row.setValue(Number(v)),
+      setMax: (v) => row.setBounds(opts.min, Number(v)),
+    };
+  }
   const C = {
-    size: link('size', 'sizeNum', scheduleRegen),
-    depth: link('depth', 'depthNum', scheduleRegen),
-    rot: link('rot', 'rotNum', scheduleRegen),
+    size: kitSlider('size', 'sizeRowMount',
+      { label: 'Size', min: 3, max: 16, step: 0.1, value: 8, unit: 'mm', help: 'The legend’s longer side.' },
+      () => { rememberTextHeight(); scheduleRegen(); }),
+    depth: kitSlider('depth', 'depthRowMount',
+      { label: 'Depth', min: 0.2, max: 1.5, step: 0.05, value: 0.5, unit: 'mm', help: 'How deep the legend goes into the top.' },
+      scheduleRegen),
+    rot: kitSlider('rot', 'rotRowMount', { label: 'Rotation', min: -180, max: 180, step: 1, value: 0, unit: '°' }, scheduleRegen),
     offx: link('offx', 'offxNum', scheduleRegen),
     offy: link('offy', 'offyNum', scheduleRegen),
   };
+
+  // Text keeps the letter height that was asked for (legendSize.js): the Size slider sets it,
+  // and a new word, font or cap keeps it, shrinking only when the word would not fit. Null until
+  // the first text legend, which takes the size on screen as its height.
+  let textHeightMM = null;
+  /** Is the Size slider pointed at the single cap's own text legend? Not while a paid mode has
+   *  it pointed at a second legend (`placementOverride`) or at a board. */
+  const sizingText = () => currentMode === 'letter' && !!currentLegend?.box && !placementOverride && !singleCapSuspended;
+  function rememberTextHeight() {
+    if (sizingText()) textHeightMM = textHeightOf(currentLegend.box, C.size.get());
+  }
+  /** Draw the text at the remembered height, or as tall as fits this cap. Says whether it did. */
+  function fitTextSize() {
+    if (!sizingText() || !meta) return false;
+    if (textHeightMM == null) textHeightMM = C.size.get();
+    C.size.set(sizeForTextHeight(currentLegend.box, textHeightMM, legendSizeMax(currentLegend.box, meta.topExtent)));
+    return true;
+  }
 
   // Stem fit stepper (− / +): a signed mm offset that rescales only the stem body (no cap CSG
   // rebuild), so it lives outside `C` and drives applyStemTolerance directly.
   let stemTolValue = 0;
   const STEM_TOL_MIN = -0.4, STEM_TOL_MAX = 0.4, STEM_TOL_STEP = 0.02;
+  const stemTolRow = stepperRow({
+    label: 'Stem fit tolerance',
+    min: STEM_TOL_MIN, max: STEM_TOL_MAX, step: STEM_TOL_STEP, value: 0,
+    help: 'How tightly the stem grips the switch: + if the keycap is too hard to push on, − if it feels loose. 0 is as designed.',
+    format: (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)} mm`,
+    onInput: (v) => { setStemTol(v); scheduleStemApply(); },
+  });
+  $('stemTolMount').replaceWith(stemTolRow);
   function renderStemTol() {
-    const v = stemTolValue;
-    $('stemTolVal').textContent = `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)} mm`;
+    stemTolRow.setValue(stemTolValue);
   }
   function setStemTol(v) {
     stemTolValue = Math.round(Math.min(STEM_TOL_MAX, Math.max(STEM_TOL_MIN, v)) * 100) / 100;
@@ -585,12 +781,6 @@ export function mount(container, host) {
     });
   }
   cleanups.push(() => { if (stemApplyRaf != null) cancelAnimationFrame(stemApplyRaf); });
-  $('stemTolMinus').addEventListener('click', () => {
-    setStemTol(stemTolValue - STEM_TOL_STEP); scheduleStemApply();
-  });
-  $('stemTolPlus').addEventListener('click', () => {
-    setStemTol(stemTolValue + STEM_TOL_STEP); scheduleStemApply();
-  });
   renderStemTol();
 
   // ---------------------------------------------------------------- fit test (free)
@@ -743,10 +933,11 @@ export function mount(container, host) {
    * the colours and Print settings, which all apply to the test pieces too.
    */
   function setFitTestLock(on) {
-    const placement = $('stemTolVal')?.closest('.section');
     const locked = [
       container.querySelector('.legend-section'),
-      ...(placement ? [...placement.children].filter((node) => !node.classList.contains('fit-block')) : []),
+      settings.panel('legend'),
+      settings.panel('style'),
+      settings.panel('font'),
       $('exportBlank'),
     ];
     for (const node of locked) {
@@ -811,6 +1002,154 @@ export function mount(container, host) {
   });
   $('fitTestMount').append(fitTestControl);
 
+  // Stem: the MX stem the caps are drawn with, or the low-profile one (shapes/lowProfile.js) for
+  // low-profile MX-cross switches, which also cuts the cap down to suit them. Every MX cap takes
+  // either, so it is a choice beside the profile, not a profile; Choc's stubs are another switch
+  // and hide it.
+  let stemType = 'mx';
+  /** The stem the current cap is made with: always MX on a profile with stubs. */
+  const capStem = () => (currentProfile?.stems === 'stubs' ? 'mx' : stemType);
+  /** What a size's file is loaded with: the stem, and a shape's size (null: the shape's own
+   *  default). */
+  const shapeCap = { sizeMM: null };
+  const capSettings = () => ({
+    stem: capStem(),
+    ...(isShapeProfile(currentProfile) ? { sizeMM: shapeCap.sizeMM ?? undefined } : {}),
+  });
+  /* A generated shape's width (shapes/). Its walls always come down flush with the stem; how tall
+     it stands is Cap height, the same setting the modelled caps have. */
+  const capSizeRow = sliderRow({
+    label: 'Cap size', min: SIZE_RANGE_MM.min, max: SIZE_RANGE_MM.max, step: 0.1, value: DEFAULT_SIZE_MM.square, unit: 'mm',
+    help: 'How wide the cap is. 18.1 mm fills the space of a standard MX cap.',
+    onCommit: (v) => {
+      shapeCap.sizeMM = v;
+      reloadCap();
+    },
+  });
+  capSizeRow.hidden = true;
+  $('shapeCapMount').replaceWith(capSizeRow);
+  /** Show the row on a shape, at the value the cap was built with. */
+  function syncShapeRows() {
+    const on = isShapeProfile(currentProfile) && meta?.sizeMM != null;
+    capSizeRow.hidden = !on;
+    if (!on) return;
+    // A narrow tapered cap would put a wide key's outer stems through its wall: those sizes
+    // start wider (shapes/dimensions.js).
+    const range = sizeRangeMM(currentProfile.shape, unitSelect.value);
+    capSizeRow.setBounds(range.min, range.max);
+    capSizeRow.setValue(meta.sizeMM);
+  }
+
+  /** Load the size on screen again, as the cap's settings now say. */
+  function reloadCap() {
+    const entry = keycapManifest.find((k) => k.id === unitSelect.value);
+    if (entry) switchKeycap(capFile(entry.file, capSettings()), entry.label);
+    proPanel?.refresh(); // a board's caps are made the same way
+  }
+  const stemTypeControl = selectField({
+    label: 'Stem',
+    help: 'Low-profile MX is for low-profile switches with an MX cross (Gateron LP 2.0, Kailh Choc v2). The cap is cut down to suit them.',
+    options: [
+      { value: 'mx', label: 'MX' },
+      { value: 'mx-lp', label: 'Low-profile MX' },
+    ],
+    value: 'mx',
+    onChange: (v) => {
+      stemType = v;
+      reloadCap();
+    },
+  });
+  $('stemTypeMount').replaceWith(stemTypeControl);
+
+  // ---------------------------------------------------------------- cap height (capHeight.js)
+  //
+  // Two heights, shown as what they are in millimetres. Cap height is how tall the cap stands:
+  // lowering it shortens the stem and the walls together, so the cap sits lower and its rim keeps
+  // its place. Stem height is how far the stem reaches down: shorter than the walls, it ends
+  // inside the cap and the cap sits lower still. Underneath they are the two trims capHeight.js
+  // makes (`lowerMM`, `recessMM`). The cap as loaded is kept, and every change trims a fresh copy
+  // of it, so the full heights give the loaded cap back exactly. Applied when the value is let go
+  // of or typed, not on every step of a drag: a trim rebuilds the cap, and doing it then means
+  // there is never a trim still waiting when an export reads the cap. Hidden on caps that already
+  // rest on the switch's cross.
+  let loadedCap = null;                 // the cap as loaded, never changed
+  let trimLimits = { maxLower: 0, maxRecess: 0, safeRecess: 0, minWall: 0 };
+  /** `wallMM`: how far the walls come down from the top, null for all the way (capHeight.js). */
+  const capTrim = { lowerMM: 0, recessMM: 0, wallMM: null };
+  /** Who hears a Dimension change: a paid board cuts its caps the same way (onShellEvent 'capTrim'). */
+  const capTrimSubs = new Set();
+  /** The loaded cap's own heights: its top above the rim, and its stem from the rim to the
+   *  ceiling (the socket's depth). */
+  const trimBase = { top: 0, stem: 0 };
+  const r1 = (v) => Math.round(v * 10) / 10;
+  const trimKind = () => ({ stubs: currentProfile?.stems === 'stubs' });
+  const copyCap = (kc) => ({
+    shellGeometry: kc.shellGeometry.clone(),
+    stemGeometry: kc.stemGeometry ? kc.stemGeometry.clone() : null,
+    meta: kc.meta,
+  });
+  const capLowerRow = sliderRow({
+    label: 'Cap height', min: 0, max: 12, step: 0.1, value: 12, unit: 'mm',
+    help: 'How tall the cap stands. Lower sits closer to the switch, and the stem shortens with it.',
+    onCommit: (v) => { capTrim.lowerMM = r1(trimBase.top - v); applyCapTrim(); },
+  });
+  const stemRecessRow = sliderRow({
+    label: 'Stem height', min: 0, max: 12, step: 0.1, value: 12, unit: 'mm',
+    help: 'How far the stem reaches down. Shorter than the walls, it ends inside the cap and the cap sits lower.',
+    onCommit: (v) => { capTrim.recessMM = r1(trimBase.stem - capTrim.lowerMM - v); applyCapTrim(); },
+  });
+  /* The walls alone, cut short from below: the top part of a cap on a full stem. All the way down
+     is no cut (null), so the cap as loaded comes back exactly. */
+  const wallRow = sliderRow({
+    label: 'Wall height', min: 0, max: 12, step: 0.1, value: 12, unit: 'mm',
+    help: 'How far the walls come down from the top. Shorter than the stem, the stem shows below them; the shortest is the top alone.',
+    onCommit: (v) => { capTrim.wallMM = v; applyCapTrim(); },
+  });
+  $('capTrimMount').append(capLowerRow, wallRow, stemRecessRow);
+
+  /** Show the rows this cap can use, with its own limits, and the values clamped to them. */
+  function syncCapTrimRows() {
+    Object.assign(capTrim, clampCapTrim(capTrim, trimLimits, trimBase.top));
+    capLowerRow.hidden = !trimLimits.maxLower;
+    stemRecessRow.hidden = !trimLimits.maxRecess;
+    wallRow.hidden = !trimLimits.minWall;
+    const full = r1(trimBase.top - capTrim.lowerMM);
+    if (trimLimits.minWall) wallRow.setBounds(trimLimits.minWall, full);
+    wallRow.setValue(capTrim.wallMM ?? full);
+    if (trimLimits.maxLower) capLowerRow.setBounds(r1(trimBase.top - trimLimits.maxLower), r1(trimBase.top));
+    // The stem can be as long as the walls, and as short as the socket that is left allows.
+    const stemTop = trimBase.stem - capTrim.lowerMM;
+    const recessRoom = Math.min(trimLimits.maxRecess, Math.max(0, trimLimits.maxLower - capTrim.lowerMM));
+    if (trimLimits.maxRecess) stemRecessRow.setBounds(r1(stemTop - recessRoom), r1(stemTop));
+    capLowerRow.setValue(r1(trimBase.top - capTrim.lowerMM));
+    stemRecessRow.setValue(r1(stemTop - capTrim.recessMM));
+  }
+
+  /** A freshly loaded cap: kept as loaded (the two settings trim copies of it), its limits shown,
+   *  and put on screen at the current settings. Every cap load goes through here. */
+  function showLoadedCap(kc) {
+    if (loadedCap) {
+      loadedCap.shellGeometry.dispose();
+      loadedCap.stemGeometry?.dispose();
+    }
+    loadedCap = kc;
+    trimLimits = capTrimLimits(kc.meta, trimKind());
+    const sb = kc.meta.stemBbox;
+    trimBase.top = kc.meta.topZ;
+    trimBase.stem = kc.meta.socketDepthMM ?? (sb ? sb.max[2] - sb.min[2] : 0);
+    syncCapTrimRows();
+    setKeycap(trimCap(getManifoldApi(), copyCap(kc), capTrim, trimKind()));
+  }
+
+  /** The loaded cap, trimmed to the current settings, on screen. */
+  function applyCapTrim() {
+    if (!loadedCap) return;
+    syncCapTrimRows();
+    setKeycap(trimCap(getManifoldApi(), copyCap(loadedCap), capTrim, trimKind()), { retrim: true });
+    if (canRegen()) scheduleRegen();
+    for (const fn of capTrimSubs) fn({ target: { value: { ...capTrim } } });
+  }
+
   // ---------------------------------------------------------------- nudge d-pad
   //
   // The pad does not replace the nudge values, it DRIVES them: it clamps against whatever range
@@ -836,16 +1175,106 @@ export function mount(container, host) {
      new place for them to live. Arrow presses come back through `onMove` and go out through
      `nudgeBy`, which is what clamps against the hidden per-cap ranges. */
 
+  // The cap's switches, from the kit. Their checkboxes keep the ids the rest of this file and the
+  // paid modes read and listen to (`$('through')` and the like), and a kit switch draws its state
+  // from its checkbox, so a value set from code shows on screen too.
+  const capSwitch = (id, label, help) => toggleSwitch({ id, label, ...(help ? { help } : {}) });
+  const homingRow = capSwitch('homingBump', 'Homing bump');
+  homingRow.id = 'homingBumpRow';
+  // Shine-through, single colour and raised are the Style picker's state: their switches stay,
+  // hidden, because the app and the paid modes read and listen to them by id.
+  const throughRow = capSwitch('through', 'Shine through');
+  const singleRow = capSwitch('single', 'Single color, recessed legend');
+  const raisedSwitchRow = capSwitch('raised', 'Raised legend');
+  for (const r of [throughRow, singleRow, raisedSwitchRow]) r.hidden = true;
+  /* A cap cut in half, drawn small: what each style does to the top. The legend in the accent
+     blue, light in amber, the cap a grey that reads on both themes. */
+  const styleDrawing = (legend, { notch = false, light = false } = {}) => `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 84"><path fill="#6b7587" d="M16 74L28 30${notch ? 'H48V36H72V30' : ''}H92L104 74H94L84 38H36L26 74Z"/>${legend}${light ? '<path d="M60 6v11M45 10l5 8M75 10l-5 8" stroke="#f5b942" stroke-width="3" stroke-linecap="round" fill="none"/>' : ''}</svg>`,
+  )}`;
+  const stylePicker = segmentedControl({
+    variant: 'tiles',
+    columns: 2,
+    label: 'Style',
+    help: 'How the legend is made: flush in a second colour, standing on the top, carved in one colour, or carved through to light up.',
+    options: [
+      { value: 'flush', label: 'Flush', image: styleDrawing('<rect x="48" y="30" width="24" height="5" fill="#5b9dff"/>') },
+      { value: 'raised', label: 'Raised', image: styleDrawing('<rect x="48" y="22" width="24" height="8" fill="#5b9dff"/>') },
+      { value: 'engraved', label: 'Engraved', image: styleDrawing('', { notch: true }) },
+      { value: 'through', label: 'Shine-through', image: styleDrawing('<rect x="48" y="30" width="24" height="8" fill="#cfe2ff"/>', { light: true }) },
+    ],
+    value: 'flush',
+    onChange: (v) => setStyle(v),
+  });
+  /* How to print shine-through: three pictures drawn from this app's own cap (scripts/guide), one
+     line each. Offered under the tiles while Shine-through is the style, because what makes it
+     work happens in the slicer and on the spool, not here. */
+  const shineGuideBtn = button({ label: 'How to print shine-through', emphasis: 'secondary', block: true, icon: ICONS.help });
+  shineGuideBtn.hidden = true;
+  shineGuideBtn.addEventListener('click', () => {
+    const steps = [
+      ['cutaway', 'Print the legend and the stem in clear filament (transparent PLA or PETG). The cap can be any opaque colour.'],
+      ['parts', 'The file already puts the legend and the stem on filament 2. In the slicer, load the clear filament as filament 2.'],
+      ['lit', 'On a keyboard with lights under the keys, the light comes up the stem and out through the legend.'],
+    ];
+    dialog({
+      title: 'How to print shine-through',
+      content: el('div', { className: 'kc-guide' }, steps.map(([pic, text], i) => el('figure', { className: 'kc-guide__step' }, [
+        el('img', { attrs: { src: assetUrl(`guides/shine-${pic}.png`), alt: '', width: '640', height: '440' } }),
+        el('figcaption', { text: `${i + 1}. ${text}` }),
+      ]))),
+      actions: [{ label: 'Got it', primary: true }],
+    });
+  });
+
+  /** Turn the hidden state to a style, telling whoever listens, as the switches did. */
+  function setStyle(v) {
+    const want = { through: v === 'through', single: v === 'engraved', raised: v === 'raised' };
+    for (const id of ['through', 'single', 'raised']) {
+      if ($(id).checked !== want[id]) {
+        $(id).checked = want[id];
+        announce([id], 'change');
+      }
+    }
+    applyModeFlags();
+    scheduleRegen();
+  }
+  // Raised legend: the legend stands on the top instead of sitting in it (geometry.js). It is the
+  // third way to print a legend, beside shine-through and single colour, and like them one at a
+  // time; the depth gives way to how far it stands.
+  const raiseRow = sliderRow({
+    label: 'Raise by', min: 0.2, max: 1.5, step: 0.1, value: 0.6, unit: 'mm',
+    help: 'How far the legend stands above the top.',
+    // Announced as the switch's change: a paid mode listens to that, and a new height is the
+    // same news to it (it reads the height back through `raisedMM`).
+    onInput: () => { scheduleRegen(); announce(['raised'], 'change'); },
+  });
+  raiseRow.hidden = true; // shown while Raised legend is on (applyModeFlags)
+  $('styleMount').replaceWith(stylePicker, shineGuideBtn);
+  $('capSwitchesMount').replaceWith(raiseRow, capSwitch('mirror', 'Mirror horizontally'), throughRow, singleRow, raisedSwitchRow);
+  $('homingBumpMount').replaceWith(homingRow);
+  /** How far the legend stands above the top, or 0 when it is carved in. */
+  const raisedMM = () => ($('raised').checked ? raiseRow.getValue() : 0);
+
   $('mirror').addEventListener('change', scheduleRegen);
   $('homingBump').addEventListener('change', scheduleRegen);
-  // Shine-through and single-colour are mutually exclusive: one prints the legend in a second
-  // (transparent) filament, the other engraves it in the single cap filament.
+  // Shine-through, single-colour and raised are mutually exclusive: one prints the legend in a
+  // second (transparent) filament, one engraves it in the single cap filament, one stands it up.
   $('through').addEventListener('change', () => {
-    if ($('through').checked) $('single').checked = false;
+    if ($('through').checked) { $('single').checked = false; $('raised').checked = false; }
     applyModeFlags(); scheduleRegen();
   });
   $('single').addEventListener('change', () => {
-    if ($('single').checked) $('through').checked = false;
+    if ($('single').checked) { $('through').checked = false; $('raised').checked = false; }
+    applyModeFlags(); scheduleRegen();
+  });
+  $('raised').addEventListener('change', () => {
+    if ($('raised').checked) {
+      // Announced, unlike the two above: a paid mode listens to these two and not to this one.
+      for (const id of ['through', 'single']) {
+        if ($(id).checked) { $(id).checked = false; announce([id], 'change'); }
+      }
+    }
     applyModeFlags(); scheduleRegen();
   });
   $('capColor').addEventListener('input', () => { capMat.color.set($('capColor').value); });
@@ -914,8 +1343,13 @@ export function mount(container, host) {
   // Shine-through prints the legend through the wall, so depth no longer applies.
   // Single-colour engraves the legend in the cap filament, so the legend colour is moot.
   function applyModeFlags() {
-    $('depth').disabled = $('through').checked;
-    $('depthNum').disabled = $('through').checked;
+    // Shine-through carves right through and a raised legend has a height instead: neither
+    // has a depth to set, so the row goes (hidden, never greyed).
+    const raised = $('raised').checked;
+    raiseRow.hidden = !raised;
+    C.depth.row.hidden = raised || $('through').checked;
+    shineGuideBtn.hidden = !$('through').checked;
+    stylePicker.setValue(raised ? 'raised' : $('through').checked ? 'through' : $('single').checked ? 'engraved' : 'flush');
     // Both: the hidden input is what a paid mode reads, the row is what the user sees. Only
     // disabling the input left the swatches live in single-colour mode, offering a choice
     // that no longer prints.
@@ -933,21 +1367,36 @@ export function mount(container, host) {
    * placement silently moved the sliders and left the board drawn at the old numbers.
    */
   function announce(ids, type = 'input') {
-    for (const id of ids) $(id)?.dispatchEvent(new Event(type, { bubbles: true }));
+    for (const id of ids) {
+      const key = type === 'input' ? SLIDER_IDS[id] : null;
+      if (key) {
+        const value = String(C[key].get());
+        for (const fn of sliderSubs.get(key)) fn({ target: { value } });
+      } else $(id)?.dispatchEvent(new Event(type, { bubbles: true }));
+    }
   }
 
   function resetPlacement() {
     C.size.set(DEFAULTS.size);
+    textHeightMM = null; // text starts again from the default, as tall as it fits
+    fitTextSize();
     C.depth.set(DEFAULTS.depth);
     C.rot.set(DEFAULTS.rot);
     C.offx.set(DEFAULTS.offx);
     C.offy.set(DEFAULTS.offy);
     setStemTol(DEFAULTS.stemTol);
     applyStemTolerance();
+    if (capTrim.lowerMM || capTrim.recessMM) {
+      capTrim.lowerMM = 0;
+      capTrim.recessMM = 0;
+      applyCapTrim(); // re-renders the fit test itself, through setKeycap
+    }
     if (fitTestActive) renderFitTest();
     $('mirror').checked = DEFAULTS.mirror;
     $('through').checked = DEFAULTS.through;
     $('single').checked = DEFAULTS.single;
+    $('raised').checked = false;
+    raiseRow.setValue(0.6);
     $('homingBump').checked = DEFAULTS.homingBump;
     applyModeFlags();
     announce(['size', 'depth', 'rot', 'offx', 'offy']);
@@ -971,9 +1420,16 @@ export function mount(container, host) {
     if (first) selectIcon(first.el || galleryEl.firstElementChild, first.getText, first.name);
   }
 
-  $('resetPlacement').addEventListener('click', resetPlacement);
-  $('resetColors').addEventListener('click', resetColors);
-  $('resetLegend').addEventListener('click', () => legendSink.reset());
+  // One reset per place: the Legend category's placement, the Colors category, the legend picked.
+  const resetPlacementBtn = button({ label: 'Reset placement', emphasis: 'secondary', block: true, icon: ICONS.rotateLeft });
+  resetPlacementBtn.addEventListener('click', resetPlacement);
+  $('resetPlacementMount').replaceWith(resetPlacementBtn);
+  const resetColorsBtn = button({ label: 'Reset colors', emphasis: 'secondary', block: true, icon: ICONS.rotateLeft });
+  resetColorsBtn.addEventListener('click', resetColors);
+  $('resetColorsMount').replaceWith(resetColorsBtn);
+  const resetLegendBtn = iconButton({ label: 'Reset legend', icon: ICONS.rotateLeft });
+  resetLegendBtn.addEventListener('click', () => legendSink.reset());
+  $('resetLegendMount').replaceWith(resetLegendBtn);
 
   // ---------------------------------------------------------------- geometry
   /**
@@ -1001,6 +1457,7 @@ export function mount(container, host) {
       singleColor: $('single').checked,
       homingBump: $('homingBump').checked,
       homingBumpGeom: homingBumpGeometry,
+      raisedMM: raisedMM(),
     };
   }
 
@@ -1026,6 +1483,7 @@ export function mount(container, host) {
       singleColor: $('single').checked,
       homingBump: false,
       homingBumpGeom: null,
+      raisedMM: raisedMM(),
     };
   }
 
@@ -1057,6 +1515,13 @@ export function mount(container, host) {
       legend: currentLegend,
       opts: currentOpts(),
       extras: extraLegends.map((layer) => ({ legend: layer.legend, opts: placementOpts(layer.placement) })),
+      // A stem recessed past the safe depth: the rim may touch the switch when pressed (rebuild.js).
+      // A made shape knows how far the key travels before its sides meet the switch, which says
+      // the same thing better: its trimmed meta already counts the recess (capHeight.js).
+      rimRecess: meta.travelMM == null && capTrim.recessMM > trimLimits.safeRecess + 1e-6 ? capTrim.recessMM : 0,
+      travel: meta.travelMM ?? null,
+      // Typed text, whose letters earn a warning when they come out small (rebuild.js).
+      text: currentMode === 'letter',
     };
   }
 
@@ -1078,6 +1543,7 @@ export function mount(container, host) {
       setStatus('Could not generate this legend (try a simpler icon/letter or smaller size).', 'err');
     },
     onIdle: () => {
+      scheduleNote(); // the cap on screen is settled: one step of undo, once the chain stops
       if (!chipIsRebuilds) return;
       chipIsRebuilds = false;
       setBusyState(null);
@@ -1156,11 +1622,11 @@ export function mount(container, host) {
    * that types into a legend, which wrote the letter box's contents onto every selected key.
    */
   const singleCapSink = {
-    icon: (name, getText, el) => { void selectIcon(el, getText, name); },
+    icon: (name, getText, el) => { void selectIcon(el, getText, name, 'icon'); },
     /** An uploaded or bundled SVG. On ONE cap it is the same act as picking a lucide icon —
      *  parse the markup, carve it — and only the keyboard set needs the two kept apart, because
      *  it stores a lucide icon by name and an upload by content. */
-    svg: (name, getText, el) => { void selectIcon(el, getText, name); },
+    svg: (name, getText, el) => { void selectIcon(el, getText, name, 'svg'); },
     /** The user typed in the letter box. */
     letter: () => selectLetter(),
     /** The user picked a different font — same legend, different shapes. */
@@ -1169,7 +1635,7 @@ export function mount(container, host) {
     typeChanged: (mode) => {
       if (mode === 'letter') selectLetter();
       else if (lastIconSelection) {
-        void selectIcon(lastIconSelection.el, lastIconSelection.getText, lastIconSelection.name);
+        void selectIcon(lastIconSelection.el, lastIconSelection.getText, lastIconSelection.name, lastIconSelection.kind);
       }
     },
     reset: () => resetLegend(),
@@ -1177,13 +1643,17 @@ export function mount(container, host) {
   let legendSink = singleCapSink;
 
   // ---------------------------------------------------------------- icons
-  async function selectIcon(el, getText, name) {
+  async function selectIcon(el, getText, name, kind = 'icon') {
+    const pick = ++iconPick;
     container.querySelectorAll('.icon.active').forEach((n) => n.classList.remove('active'));
-    el.classList.add('active');
+    el?.classList.add('active'); // null: a restored icon whose tile is not drawn yet
     setStatus('Loading icon…');
     try {
-      currentLegend = { ...parseLogo(await getText()), name };
-      lastIconSelection = { el, getText, name };
+      const text = await getText();
+      if (pick !== iconPick) return;
+      currentLegend = { ...parseLogo(text), name };
+      lastIconSelection = { el, getText, name, kind };
+      legendSourceState = kind === 'svg' ? { type: 'svg', name, svg: text } : { type: 'icon', name };
       updateSizeMax();
       regenNow();
     } catch (e) {
@@ -1227,11 +1697,9 @@ export function mount(container, host) {
     currentMode = mode;
     // `.active` is a class, which the accessibility tree cannot see. The row calls itself a
     // tablist, so its tabs have to carry their own selected state as well.
-    for (const [id, key] of [['iconMode', 'icon'], ['uploadMode', 'upload'], ['letterMode', 'letter']]) {
-      const tab = $(id);
-      tab.classList.toggle('active', mode === key);
-      tab.setAttribute('aria-selected', mode === key ? 'true' : 'false');
-    }
+    legendSource.setValue(mode);
+    fontField.hidden = mode !== 'letter';
+    settings.refresh();
     $('iconPanel').hidden = mode !== 'icon';
     $('uploadPanel').hidden = mode !== 'upload';
     $('letterPanel').hidden = mode !== 'letter';
@@ -1242,12 +1710,14 @@ export function mount(container, host) {
     legendSink.typeChanged(mode);
   }
 
-  // Bigger caps fit longer legends; 1u stays at 4 characters, scaling up with the unit.
-  function letterMaxLen(unit) {
-    return Math.max(4, Math.round((unit || 1) * 4));
+  // Any cap takes a long word: it shrinks to fit (fitTextSize), and small letters are warned
+  // about rather than refused (rebuild.js). The cap per legend is only a guard against a pasted
+  // paragraph (letter.js). Takes the unit still, for the paid modes that ask per cap.
+  function letterMaxLen(_unit) {
+    return LEGEND_MAX_CHARS;
   }
 
-  // Push the current unit's character cap onto the letter input, trimming any overflow.
+  // Push the character cap onto the letter input, trimming any overflow.
   function applyLetterLimit() {
     const input = $('letterText');
     const max = letterMaxLen(currentUnit);
@@ -1255,16 +1725,36 @@ export function mount(container, host) {
     if (input.value.length > max) {
       input.value = input.value.slice(0, max);
       // Characters vanishing from a text box with nothing said reads as the app losing work.
-      toast(`Legend trimmed to ${max} characters for this cap`, { kind: 'warn' });
+      toast(`Legend trimmed to ${max} characters`, { kind: 'warn' });
       if (currentMode === 'letter') selectLetter();
     }
   }
 
   function selectLetter() {
+    iconPick++; // an icon still loading must not land on top of the text
     container.querySelectorAll('.icon.active').forEach((n) => n.classList.remove('active'));
+    const text = $('letterText').value;
+    fontField.setSample(Array.from(text.trim() || 'A').slice(0, 6).join(''), text);
+    const need = alphabetOf(text);
+    if (need !== fontCardsNeed) {
+      fontCardsNeed = need;
+      fontField.setFonts(letterFontList(), fontCardsFor(text));
+    }
+    // Letters the face cannot draw would print as "?": typing them moves the text to the
+    // plainest face that can, and says so. A face picked by hand keeps its mark and stays.
+    if (text.trim() && !fontWritesText(currentFontId, text)) {
+      const next = facesThatWrite(text)[0];
+      if (next && next !== currentFontId) {
+        toast(`${fontName(currentFontId)} has no ${need ? `${need} letters` : 'letters for that'}, so the text is set in ${fontName(next)}.`);
+        void chooseFont(next); // carves again once the face has loaded
+        return;
+      }
+    }
     try {
-      currentLegend = parseLetter($('letterText').value, $('fontSelect').value, letterMaxLen(currentUnit));
+      currentLegend = parseLetter(text, currentFontId, letterMaxLen(currentUnit));
+      legendSourceState = { type: 'letter', text, fontId: currentFontId };
       updateSizeMax();
+      fitTextSize();
       // Fit test declines the rebuild (canRegen), so nothing would ever replace this line and it
       // would sit over the fit-test status for good. The letter still applies on the way out.
       if (!fitTestActive) setStatus('Generating letter…');
@@ -1279,68 +1769,7 @@ export function mount(container, host) {
     }
   }
 
-  /** Each entry renders in its own typeface — scanning 30 font names set in the
-   *  same UI font tells you nothing about which one you actually want. */
-  function addFontOption(font) {
-    const option = document.createElement('option');
-    option.value = font.id;
-    option.textContent = font.name;
-    if (font.cssFamily) option.style.fontFamily = font.cssFamily;
-    if (font.cssWeight) option.style.fontWeight = font.cssWeight;
-    // Display faces vary wildly in x-height; a common size keeps the list scannable.
-    option.style.fontSize = '15px';
-    $('fontSelect').appendChild(option);
-  }
-
-  for (const font of FONT_OPTIONS) addFontOption(font);
-  loadBundledFonts(addFontOption); // append the bundled open-source fonts as they parse
-
-  $('iconMode').addEventListener('click', () => setLegendMode('icon'));
-  $('uploadMode').addEventListener('click', () => setLegendMode('upload'));
-  $('letterMode').addEventListener('click', () => setLegendMode('letter'));
   $('letterText').addEventListener('input', () => legendSink.letter());
-  // NOT legendSink.letter(): a font change must never be mistaken for typing a legend.
-  $('fontSelect').addEventListener('change', () => legendSink.font());
-
-  // The host's own picker first, when there is one. The input lives inside its own label, so
-  // the click has to be pre-empted rather than replaced or both would open.
-  $('fontUpload').parentElement?.addEventListener('click', (e) => {
-    if (!host?.pickMedia) return;
-    e.preventDefault();
-    void chooseFile(host, { kind: 'font', extensions: ['ttf', 'otf', 'json'] }, () => {}).then(async (file) => {
-      if (!file) return;
-      try {
-        const font = await importFontFile(file);
-        addFontOption(font);
-        $('fontSelect').value = font.id;
-        setLegendMode('letter');
-        setStatus(`Imported font: ${font.name}`);
-      } catch (error) {
-        console.error(error);
-        setStatus('Could not import this font. Try a TTF, OTF, or typeface JSON file.', 'err');
-      }
-    });
-  });
-
-  $('fontUpload').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      // Kept the moment it arrives rather than when a project is saved. No-op without a
-      // host, so a browser tab still forgets it exactly as it always has.
-      void rememberFile(host, 'font', file);
-      const font = await importFontFile(file);
-      addFontOption(font);
-      $('fontSelect').value = font.id;
-      setLegendMode('letter');
-      setStatus(`Imported font: ${font.name}`);
-    } catch (error) {
-      console.error(error);
-      setStatus('Could not import this font. Try a TTF, OTF, or typeface JSON file.', 'err');
-    } finally {
-      e.target.value = '';
-    }
-  });
 
   // Curated set shown first when no search is active — picked for keycap legends:
   // clipboard/edit ops, media keys, navigation, and common app-launcher symbols.
@@ -1568,7 +1997,7 @@ export function mount(container, host) {
       profileTag: profileSlug(),
       unit: currentUnit,
       unitId: $('unitSelect').value,
-      fontId: $('fontSelect').value,
+      fontId: currentFontId,
       opts: meta ? currentOpts() : null,
       fitTestActive,
       fitTestPieces,
@@ -1590,6 +2019,7 @@ export function mount(container, host) {
     settled: () => loop.settled(),
     flushStem: flushStemApply,
     state: exportState,
+    fontWrites: fontWritesText,
   });
   const { runPrimaryExport, updateAlphabetAvailability, nudgeLicense, printConfig } = exportsApi;
   $('exportBlank').addEventListener('click', () => exportsApi.exportBlank());
@@ -1603,17 +2033,7 @@ export function mount(container, host) {
   // legend's aspect ratio so long words on wide caps/spacebars can use the room available.
   function updateSizeMax() {
     if (!meta) return;
-    const capLong = Math.max(meta.topExtent[0], meta.topExtent[1]);
-    const capShort = Math.min(meta.topExtent[0], meta.topExtent[1]);
-    let maxW = capShort; // square / no legend yet
-    const b = currentLegend?.box;
-    if (b) {
-      const lng = Math.max(b.max.x - b.min.x, b.max.y - b.min.y);
-      const sht = Math.min(b.max.x - b.min.x, b.max.y - b.min.y);
-      const aspect = sht > 1e-6 ? lng / sht : 1;
-      maxW = Math.min(capLong, capShort * aspect);
-    }
-    C.size.setMax((maxW * 0.95).toFixed(1));
+    C.size.setMax(legendSizeMax(currentLegend?.box ?? null, meta.topExtent).toFixed(1));
   }
 
   // Symmetric ± range for a nudge slider + its number box.
@@ -1624,7 +2044,42 @@ export function mount(container, host) {
     nudge.setRange(numId === 'offxNum' ? 'x' : 'y', m);
   }
 
-  function setKeycap(kc) {
+  /** Where the camera frames the cap (setKeycap), and the stage's view of it: Top looks straight
+   *  down at the top, 3D from the front and above. Orbiting stays free in both. */
+  let camFrame = null;
+  function aimCamera() {
+    if (!camFrame) return;
+    const { target, dist } = camFrame;
+    controls.target.copy(target);
+    if (stageView === 'top') camera.position.set(target.x, target.y + dist, target.z + dist * 0.001);
+    else camera.position.copy(target).add(new THREE.Vector3(0.5, 0.45, 0.75).multiplyScalar(dist));
+    controls.update();
+  }
+
+  /**
+   * Frame a new cap without throwing the view away. The first cap is framed from scratch; after
+   * that the angle and zoom someone chose are theirs, so a cap of about the same size (another
+   * profile, a new cap size, a different stem) leaves the camera exactly where it is. Only a cap
+   * that would no longer fit, or would look lost, is re-framed, and then from the same angle at
+   * the same relative zoom.
+   */
+  function frameCap(target, dist) {
+    const prev = camFrame;
+    camFrame = { target, dist };
+    if (!prev) { aimCamera(); return; }
+    const ratio = dist / prev.dist;
+    if (ratio > 0.8 && ratio < 1.25) return;
+    const offset = camera.position.clone().sub(controls.target).multiplyScalar(ratio);
+    controls.target.copy(target);
+    camera.position.copy(target).add(offset);
+    controls.update();
+  }
+
+  /**
+   * Put a cap on screen. `retrim`: the same cap, cut to a new height (applyCapTrim), so the camera
+   * and the legend's size stay where they are.
+   */
+  function setKeycap(kc, { retrim = false } = {}) {
     // A carve of the previous cap no longer describes what is on screen: dropped when it lands,
     // and never handed to an export.
     loop.invalidate();
@@ -1673,36 +2128,42 @@ export function mount(container, host) {
     // depth of the cap once it's tipped onto its rib.
     const standHeight = rotDeg ? meta.bbox.max[1] - meta.bbox.min[1] : meta.topZ;
 
-    // Frame the camera on the (now origin-centred) cap; pull the distance back proportionally
-    // so wide caps (spacebars) still fit the viewport.
-    const spanX = meta.bbox.max[0] - meta.bbox.min[0];
-    const spanY = meta.bbox.max[1] - meta.bbox.min[1];
-    // Aspect has to be current BEFORE the distance is computed: the framing below reads
-    // camera.aspect, and on the first cap the camera is still at its placeholder 1:1.
-    resize();
-    // Framing: the cap's bounding sphere sits at a fixed fraction of whichever field of view
-    // is narrower — vertical on a wide viewport, horizontal on a tall one — so the cap covers
-    // the same share of the stage whatever the viewport's shape. A width multiplier cannot do
-    // that: it says nothing about how much of the VIEW the cap covers. Orbit/zoom untouched,
-    // and the same framing in every build.
-    const dist = framedDistance(Math.hypot(spanX, spanY, meta.topZ) / 2);
-    const target = new THREE.Vector3(0, standHeight / 2, 0);
-    controls.target.copy(target);
-    camera.position.copy(target).add(new THREE.Vector3(0.5, 0.45, 0.75).multiplyScalar(dist));
-    resize();
+    // A re-trim is the same cap, a little shorter: the view and the legend's size stay put.
+    if (!retrim) {
+      // Frame the camera on the (now origin-centred) cap; pull the distance back proportionally
+      // so wide caps (spacebars) still fit the viewport.
+      const spanX = meta.bbox.max[0] - meta.bbox.min[0];
+      const spanY = meta.bbox.max[1] - meta.bbox.min[1];
+      // Aspect has to be current BEFORE the distance is computed: the framing below reads
+      // camera.aspect, and on the first cap the camera is still at its placeholder 1:1.
+      resize();
+      // Framing: the cap's bounding sphere sits at a fixed fraction of whichever field of view
+      // is narrower — vertical on a wide viewport, horizontal on a tall one — so the cap covers
+      // the same share of the stage whatever the viewport's shape. A width multiplier cannot do
+      // that: it says nothing about how much of the VIEW the cap covers. Orbit/zoom untouched,
+      // and the same framing in every build.
+      const dist = framedDistance(Math.hypot(spanX, spanY, meta.topZ) / 2);
+      frameCap(new THREE.Vector3(0, standHeight / 2, 0), dist);
+      resize();
 
-    // sensible default size for this cap (also the value the placement reset restores)
-    const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
-    const previousSize = C.size.get();
-    DEFAULTS.size = Math.round(room * 0.5 * 10) / 10;
-    C.size.set(DEFAULTS.size);
-    // Rotation and the offsets survive a cap swap; the size does not, because a legend sized
-    // in mm for one cap may not fit the next. That is a decision, but it used to be a silent
-    // one — the slider simply jumped.
-    if (previousSize && Math.abs(previousSize - DEFAULTS.size) > 0.05) {
-      toast(`Legend size reset to ${DEFAULTS.size} mm for this cap`);
+      // sensible default size for this cap (also the value the placement reset restores)
+      const room = Math.min(meta.topExtent[0], meta.topExtent[1]);
+      DEFAULTS.size = Math.round(room * 0.5 * 10) / 10;
+      updateSizeMax(); // legend-aspect-aware ceiling (wide text can use the cap's length)
+      // Text keeps its letter height and grows on a wider cap (fitTextSize). Anything else keeps
+      // its size while it still fits the new cap; one that does not starts from this cap's own
+      // size, and says so, rather than the slider simply jumping.
+      if (!fitTextSize()) {
+        const previousSize = C.size.get();
+        const max = legendSizeMax(currentLegend?.box ?? null, meta.topExtent);
+        if (!previousSize || previousSize > max + 1e-6) {
+          C.size.set(DEFAULTS.size);
+          if (previousSize && Math.abs(previousSize - DEFAULTS.size) > 0.05) {
+            toast(`Legend size reset to ${DEFAULTS.size} mm for this cap`);
+          }
+        }
+      }
     }
-    updateSizeMax(); // legend-aspect-aware ceiling (wide text can use the cap's length)
 
     // Nudge range follows the cap so the legend can reach the edges of wide caps/spacebars.
     setNudgeRange('offx', 'offxNum', Math.max(5, Math.ceil((meta.bbox.max[0] - meta.bbox.min[0]) / 2)));
@@ -1711,6 +2172,8 @@ export function mount(container, host) {
     applyLetterLimit(); // longer legends on bigger caps
     $('exportBlank').disabled = false; // blank export needs only the shell, ready now
 
+    syncShapeRows();
+    settings.refresh(); // Dimensions has nothing to show on a cap that sits on the cross
     $('meta').textContent = `Cap ${(meta.bbox.max[0] - meta.bbox.min[0]).toFixed(1)}×${(meta.bbox.max[1] - meta.bbox.min[1]).toFixed(1)}×${meta.topZ.toFixed(1)} mm · ${meta.triangles} tris · from ${meta.generatedFrom}`;
 
     // A cap with no stem has nothing for Fit test to show.
@@ -1728,15 +2191,17 @@ export function mount(container, host) {
   let keycapManifest = [];     // the active profile's size list (keycaps[])
 
   // Load a different keycap (profile/size) and rebuild the current legend on it.
+  /** Cap loads in flight: an undo's settle waits for them (settleApply). */
+  let capLoads = 0;
   async function switchKeycap(file, label) {
+    capLoads++;
     // The chip is ours only while the single cap is what's on screen. Behind a Pro mode's board
     // this load is invisible, and that mode may have progress of its own up there.
     if (!singleCapSuspended) setBusyState('generating…');
     unitSelect.disabled = true;
     profileSelect.disabled = true;
     try {
-      const kc = await loadKeycap(file);
-      setKeycap(kc);
+      showLoadedCap(await loadKeycap(file));
       // Hand the chip to the rebuild only when one is actually going to run — see canRegen().
       if (canRegen()) scheduleRegen();
       else if (!singleCapSuspended) setBusyState(null);
@@ -1745,6 +2210,7 @@ export function mount(container, host) {
       if (!singleCapSuspended) setBusyState(null);
       setStatus(`Could not load ${label || 'this keycap'}.`, 'err');
     } finally {
+      capLoads--;
       unitSelect.disabled = false;
       profileSelect.disabled = false;
     }
@@ -1787,6 +2253,8 @@ export function mount(container, host) {
    * the board, competing with it for the same Manifold instance.
    */
   let singleCapSuspended = false;
+  /** The undo row (built with the credit strip, below); hidden while a board owns the stage. */
+  let historyRow = null;
   function setStageOwner(owner) {
     const pro = owner === 'pro';
     // Full set taking the stage always force-exits Fit test cleanly first — a stage-owning
@@ -1797,6 +2265,8 @@ export function mount(container, host) {
     renderer.domElement.style.display = pro ? 'none' : '';
     const metaEl = $('meta');
     if (metaEl) metaEl.hidden = pro; // describes one cap; meaningless for a board
+    viewBar.root.hidden = pro; // aims the single cap's camera; a board has its own
+    if (historyRow) historyRow.hidden = pro; // undo is the single cap's
     if (pro) {
       // Any rebuild still queued will now decline, so the chip it was going to clear has to be
       // put away here — before the mode starts using it for progress of its own.
@@ -1827,6 +2297,7 @@ export function mount(container, host) {
     const bumpRow = $('homingBumpRow');
     // Two independent reasons to hide it; the profile's is not the mode's to overwrite.
     if (bumpRow) bumpRow.hidden = !show || currentProfile?.homingBump === false;
+    settings.refresh(); // a mode shows or hides a whole category (Layout) when it switches
   }
 
   // ------------------------------------------------- per-profile capabilities
@@ -1836,6 +2307,8 @@ export function mount(container, host) {
   // and the rules about it stay in one place. A profile that says nothing gets everything,
   // which is why the three original profiles are unaffected.
   function applyProfileCaps(profile) {
+    // Choc's stubs go into another switch: there is no MX stem to choose.
+    stemTypeControl.hidden = profile?.stems === 'stubs';
     // Homing bump: one shared mesh, positioned by constants hardcoded to the Standard 1u cap
     // and shaped for its dish. It has no business on a flat 3.5 mm Choc top.
     // Visibility is shared with the mode rules (set mode picks the bump per key), so it is
@@ -1852,10 +2325,9 @@ export function mount(container, host) {
     // Shine-through subtracts a prism through the FULL height of the shell. On a Cherry cap
     // the cavity below is empty so that's safe. The two Choc stubs attach only ±2.85 mm from
     // the cap centre — directly under the legend — so it would cut the stems off the cap.
-    const shineRow = $('shineThroughRow');
-    if (shineRow) {
+    {
       const allowed = profile?.shineThrough !== false;
-      shineRow.hidden = !allowed;
+      stylePicker.setOptionVisible('through', allowed);
       if (!allowed && $('through').checked) {
         $('through').checked = false;
         applyModeFlags();
@@ -1867,8 +2339,7 @@ export function mount(container, host) {
     // over the void). The Choc top plate is exactly 1.50 mm, so the stock maximum would carve
     // straight through it — a hole, in single-colour recessed mode.
     const maxDepth = profile?.maxDepth ?? 1.5;
-    $('depth').max = maxDepth;
-    $('depthNum').max = maxDepth;
+    C.depth.setMax(maxDepth);
     if (C.depth.get() > maxDepth) C.depth.set(maxDepth);
 
     // Print note: how this profile has to be oriented on the plate, if it's not the usual way.
@@ -1879,9 +2350,67 @@ export function mount(container, host) {
     }
   }
 
+  /** The profile picker: a picture of each profile's 1u cap (drawn once the app is up) over its
+   *  name. It drives the hidden `profileSelect`, which is what everything else reads. */
+  let profilePicker = null;
+  let picturesStopped = false;
+  cleanups.push(() => { picturesStopped = true; });
+  function buildProfilePicker(value) {
+    profilePicker = segmentedControl({
+      variant: 'tiles',
+      size: 'compact',
+      label: 'Profile',
+      columns: 3,
+      // "Standard profile" is the file's name for it; on a tile under the heading Profile, the
+      // word is said once already.
+      options: keycapProfiles.map((p) => ({ value: p.id, label: p.label.replace(/ profile$/i, '') })),
+      value,
+      onChange: (v) => {
+        if (profileSelect.value === v) return;
+        profileSelect.value = v;
+        profileSelect.dispatchEvent(new Event('change'));
+      },
+    });
+    $('profilePickerMount').replaceWith(profilePicker);
+    setTimeout(() => { void drawProfilePictures(); }, 400);
+  }
+  /** Each profile's 1u, drawn from its own mesh by the shelf's 3D viewer (`renderThumbnail`, the
+   *  picture grab for cards), one at a time in a viewer of its own that is never shown, so the
+   *  stage's renderer and its frame are not touched. A picture that fails is left pulsing. */
+  async function drawProfilePictures() {
+    let viewer = null;
+    try {
+      viewer = createViewer(document.createElement('div'), { alpha: true, observeTheme: false });
+      for (const p of keycapProfiles) {
+        if (picturesStopped) break;
+        const entry = p.keycaps.find((k) => k.id === '1u') ?? p.keycaps[0];
+        let kc = null;
+        try {
+          kc = await loadKeycap(entry.file);
+        } catch { continue; }
+        if (picturesStopped) break;
+        const parts = [kc.shellGeometry, kc.stemGeometry].filter(Boolean).map((g, i) => ({
+          name: i ? 'stem' : 'cap',
+          positions: g.getAttribute('position').array,
+          indices: Uint32Array.from(g.getIndex().array),
+          color: [104, 112, 126],
+        }));
+        const url = viewer.renderThumbnail(240, parts);
+        if (url) profilePicker?.setOptionImage(p.id, url);
+        kc.shellGeometry.dispose();
+        kc.stemGeometry?.dispose();
+      }
+    } catch (e) {
+      console.warn('Profile pictures could not be drawn:', e);
+    } finally {
+      viewer?.dispose();
+    }
+  }
+
   profileSelect.addEventListener('change', () => {
     const profile = keycapProfiles.find((p) => p.id === profileSelect.value);
     if (!profile) return;
+    profilePicker?.setValue(profile.id);
     currentProfile = profile;
     applyProfileCaps(profile);
     const entry = populateSizes(profile, unitSelect.value); // keep the current size if it exists
@@ -1889,7 +2418,7 @@ export function mount(container, host) {
     updateAlphabetAvailability();
     proPanel?.refresh(); // not every profile ships the sizes a keyboard layout needs
     syncFitTestExportLabel(); // refresh() can repaint the footer label; Fit test owns it for now
-    switchKeycap(entry.file, `${profile.label} ${entry.label}`);
+    switchKeycap(capFile(entry.file, capSettings()), `${profile.label} ${entry.label}`);
   });
 
   unitSelect.addEventListener('change', () => {
@@ -1897,7 +2426,7 @@ export function mount(container, host) {
     if (entry) {
       currentUnit = entry.unit || 1;
       updateAlphabetAvailability();
-      switchKeycap(entry.file, entry.label);
+      switchKeycap(capFile(entry.file, capSettings()), entry.label);
     }
   });
 
@@ -1921,13 +2450,21 @@ export function mount(container, host) {
         // The shell's own anchors. The Pro modes render INTO these rather than into an
         // overlay of their own, which is the whole point: one set of panels, one look.
         hosts: {
+          /** On the stage bar: the switch between one cap and a board. */
           tabs: $('kcModeTabs'),
+          /** Top of the left panel, over the rail: the lifetime licence offer. */
+          licence: $('kcLicenceMount'),
           profileExtra: $('kcProfileExtra'),
+          /** The Layout category: a board's settings. Hidden (and the category with it) until a
+           *  mode shows it; `applyModeVisibility` re-reads the rail. */
+          layout: $('kcLayoutExtra'),
           /** Above the Size/Depth/Rotation/Nudge sliders — for a control that decides what
            *  those sliders are pointed at, and so has to be read before them. */
           placementLead: $('kcPlacementLead'),
           placementExtra: $('kcPlacementExtra'),
           legendExtra: $('kcLegendExtra'),
+          /** In the Colors category, under the legend colour: an extra legend's own colour. */
+          colorsExtra: $('kcColorsExtra'),
           /** The footer's export block. A purchase prompt goes HERE rather than in the panel
            *  that configures the paid feature, because the thing being refused is the export. */
           exportPanel: exportPanelEl,
@@ -1960,8 +2497,8 @@ export function mount(container, host) {
             markActiveIcon,
             get letterText() { return $('letterText').value; },
             set letterText(v) { $('letterText').value = v; },
-            get fontId() { return $('fontSelect').value; },
-            set fontId(v) { $('fontSelect').value = v; },
+            get fontId() { return currentFontId; },
+            set fontId(v) { currentFontId = v; fontField.setValue(v); },
             setLetterMaxLength: (n) => { $('letterText').maxLength = n; },
             /** What the limit should be for the cap that is loaded. A mode handing the picker
              *  back needs this: the number is a property of the cap, not of the mode. */
@@ -1986,9 +2523,27 @@ export function mount(container, host) {
           setExportLabel: (text) => { if (exportBtn) exportBtn.textContent = text; },
           /** Subscribe to shell inputs by id. Returns an unsubscribe. */
           onShellEvent: (ids, type, fn) => {
-            const nodes = ids.map((id) => $(id)).filter(Boolean);
-            for (const n of nodes) n.addEventListener(type, fn);
-            return () => { for (const n of nodes) n.removeEventListener(type, fn); };
+            // The kit's sliders and the font chooser are not the DOM inputs these ids once named:
+            // their listeners go to the controls' own subscribers, with an input-shaped event.
+            const offs = [];
+            const seen = new Set();
+            for (const id of ids) {
+              const subs = type === 'input' && SLIDER_IDS[id] ? sliderSubs.get(SLIDER_IDS[id])
+                : type === 'change' && id === 'fontSelect' ? fontSubs
+                  : type === 'change' && id === 'capTrim' ? capTrimSubs : null;
+              if (subs) {
+                if (seen.has(subs)) continue;
+                seen.add(subs);
+                subs.add(fn);
+                offs.push(() => subs.delete(fn));
+                continue;
+              }
+              const n = $(id);
+              if (!n) continue;
+              n.addEventListener(type, fn);
+              offs.push(() => n.removeEventListener(type, fn));
+            }
+            return () => { for (const off of offs) off(); };
           },
           /**
            * Show these values on the shell's own placement controls WITHOUT announcing them.
@@ -2010,6 +2565,20 @@ export function mount(container, host) {
            * cap changes, so nothing else was ever going to restore it.
            */
           setSizeRange: (max) => { if (max == null) updateSizeMax(); else C.size.setMax(max); },
+
+          /**
+           * Put a tag at the end of the Size, Depth, Rotation and Nudge captions (the kit's
+           * `setTag`), saying where the values come from while a mode points the controls at
+           * something layered. Null takes them all off again.
+           */
+          setPlacementTags: (tags) => {
+            C.size.row.setTag(tags?.size ?? null);
+            C.depth.row.setTag(tags?.depth ?? null);
+            C.rot.row.setTag(tags?.rot ?? null);
+            nudge.setTag(tags?.nudge ?? null);
+          },
+          /** Which settings category is open on the left (Keycap, Legend, Colors…). */
+          railCategory: () => settings.getValue(),
 
           /**
            * Carve these legends into the cap as well as the one the picker owns.
@@ -2051,11 +2620,11 @@ export function mount(container, host) {
         // that reads it back — when it is next opened, not on load, so opening a project cannot
         // put you inside a paid mode you did not ask for.
         getSavedDual: () => dualLegend,
-        onDualChanged: (v) => { dualLegend = v; },
+        onDualChanged: (v) => { dualLegend = v; scheduleNote(); },
         getState: () => ({
-          profile: currentProfile,
+          profile: withCapSettings(currentProfile, capSettings()),
           profileSlug: profileSlug(),
-          fontId: $('fontSelect').value,
+          fontId: currentFontId,
           opts: {
             depth: C.depth.get(),
             rotationDeg: C.rot.get(),
@@ -2064,6 +2633,9 @@ export function mount(container, host) {
             mirror: $('mirror').checked,
             through: $('through').checked,
             singleColor: $('single').checked,
+            // How far a raised legend stands, 0 when it is carved in: the board carves the same
+            // four styles the single cap does (geometry.js), so it reads all of them.
+            raisedMM: raisedMM(),
             // The bump is a Cherry-shaped mesh positioned against the Standard dish; a profile
             // that says it has none keeps its F and J plain.
             homingBumpAllowed: currentProfile?.homingBump !== false && !!homingBumpGeometry,
@@ -2084,6 +2656,8 @@ export function mount(container, host) {
             }
             : null,
           stemTolMM: stemTolValue,
+          // The Dimensions: how much lower the cap sits, how short its walls and stem are.
+          capTrim: { ...capTrim },
           capColor: $('capColor').value,
           logoColor: $('logoColor').value,
           homingBumpGeom: homingBumpGeometry,
@@ -2151,6 +2725,112 @@ export function mount(container, host) {
     return [...byDate.values()];
   }
 
+  // ------------------------------------------------------- undo / redo
+  //
+  // Each step is the project as Save writes it (collectState), taken when the cap on screen has
+  // settled (the rebuild loop's onIdle) or a colour changed, and put back through the one path a
+  // loaded project takes (applyLoadedState). The parsed legend is left out of a step: it is what
+  // the source rebuilds, and it is large. Undo is the single cap's; a board has its own state.
+  const HISTORY_MAX = 60;
+  const historyPast = [];
+  const historyFuture = [];
+  let historyNow = null;   // the step on screen
+  let historyStart = null; // the session's first step, which the middle button goes back to
+  let historyApplying = false;
+  let historyApplyTimer = null;
+  let historyNoteTimer = null;
+  const historyStep = () => { const s = collectState(); delete s.legend; return JSON.stringify(s); };
+  historyRow = historyControls({
+    onUndo: () => historyGo(-1),
+    onRedo: () => historyGo(1),
+    onRefresh: () => historyGo(0),
+    labels: { refresh: 'Back to how this session started' },
+  });
+  historyRow.classList.add('kc-history');
+  function paintHistory() {
+    historyRow.setState({
+      canUndo: historyPast.length > 0,
+      canRedo: historyFuture.length > 0,
+      canRefresh: historyStart != null && historyNow !== historyStart,
+    });
+  }
+  /** Record the settled state as one step, unless it is the step already on screen. */
+  function noteChange() {
+    if (singleCapSuspended || !currentLegend) return;
+    if (historyApplying) { settleApply(); return; }
+    const now = historyStep();
+    if (historyNow == null) { historyNow = historyStart = now; paintHistory(); return; }
+    if (now === historyNow) return;
+    historyPast.push(historyNow);
+    if (historyPast.length > HISTORY_MAX) historyPast.shift();
+    historyFuture.length = 0;
+    historyNow = now;
+    paintHistory();
+  }
+  /** A step once changes stop. One action can rebuild the cap several times over (an extra legend
+   *  is seeded, laid out, then carved), and that is still one step; a colour rebuilds nothing. */
+  function scheduleNote() {
+    clearTimeout(historyNoteTimer);
+    historyNoteTimer = setTimeout(noteChange, 500);
+  }
+  /** An undo's own rebuilds are not new steps: wait for them to stop, then take what settled as
+   *  the step on screen (a load can clamp a value to the cap it lands on). */
+  function settleApply() {
+    clearTimeout(historyApplyTimer);
+    historyApplyTimer = setTimeout(() => {
+      if (capLoads > 0) { settleApply(); return; }
+      historyApplying = false;
+      historyNow = historyStep();
+      paintHistory();
+    }, 400);
+  }
+  /** -1 undo, 1 redo, 0 back to the start (itself a step, so it can be undone). */
+  function historyGo(dir) {
+    if (historyNow == null) return;
+    let target;
+    if (dir < 0) {
+      if (!historyPast.length) return;
+      target = historyPast.pop();
+      historyFuture.push(historyNow);
+    } else if (dir > 0) {
+      if (!historyFuture.length) return;
+      target = historyFuture.pop();
+      historyPast.push(historyNow);
+    } else {
+      if (historyStart == null || historyNow === historyStart) return;
+      target = historyStart;
+      historyPast.push(historyNow);
+      historyFuture.length = 0;
+    }
+    historyApplying = true;
+    historyNow = target;
+    try {
+      applyLoadedState(JSON.parse(target));
+    } catch (e) {
+      console.error(e);
+      setStatus('Could not go back to that step.', 'err');
+    }
+    settleApply();
+    paintHistory();
+  }
+  // Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y), except while typing: a text box has its own undo.
+  const onHistoryKey = (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || singleCapSuspended) return;
+    const t = e.target;
+    if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); historyGo(-1); }
+    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); historyGo(1); }
+  };
+  document.addEventListener('keydown', onHistoryKey);
+  cleanups.push(() => {
+    document.removeEventListener('keydown', onHistoryKey);
+    clearTimeout(historyApplyTimer);
+    clearTimeout(historyNoteTimer);
+  });
+  for (const id of ['capColor', 'logoColor']) $(id).addEventListener('input', scheduleNote);
+  $('keycapCredit')?.append(historyRow);
+
   $('keycapCredit')?.append(panelCredit({
     // The name goes in both builds. Two lines is the shape of this strip — it is what fills
     // its left half and leaves the right half for the button.
@@ -2183,21 +2863,29 @@ export function mount(container, host) {
 
   function collectState() {
     const projectState = {
-      size: parseFloat($('size').value),
-      depth: parseFloat($('depth').value),
-      rot: parseFloat($('rot').value),
+      size: C.size.get(),
+      depth: C.depth.get(),
+      rot: C.rot.get(),
       offx: parseFloat($('offx').value),
       offy: parseFloat($('offy').value),
       stemTol: stemTolValue,
+      capLower: capTrim.lowerMM,
+      stemRecess: capTrim.recessMM,
+      wallHeight: capTrim.wallMM,
+      stem: stemType,
+      shapeSize: shapeCap.sizeMM,
       capColor: $('capColor').value,
       logoColor: $('logoColor').value,
       mirror: $('mirror').checked,
       homingBump: $('homingBump').checked,
       through: $('through').checked,
       single: $('single').checked,
+      raised: raisedMM(),
       profile: $('profileSelect').value,
       unit: $('unitSelect').value,
       wallGenerator,
+      fontId: currentFontId,
+      legendSource: legendSourceState,
     };
     if (currentLegend) projectState.legend = currentLegend;
     // An edited keyboard set is hours of work; it belongs in the project file next to
@@ -2334,12 +3022,28 @@ export function mount(container, host) {
     // Fit test is never part of a saved project — opening one always lands on the normal cap
     // view, cleanly, rather than leaving a stale row from whatever was on screen before.
     if (fitTestActive) exitFitTest();
-    if (loaded.size != null) { $('size').value = loaded.size; $('sizeNum').value = loaded.size; }
-    if (loaded.depth != null) { $('depth').value = loaded.depth; $('depthNum').value = loaded.depth; }
-    if (loaded.rot != null) { $('rot').value = loaded.rot; $('rotNum').value = loaded.rot; }
+    // The project's extra legends, read before anything below is set: setting a value makes the
+    // paid legends mode save its legends as they are now, over the ones being loaded.
+    const savedDual = loaded.dualLegend ?? null;
+    // What is on screen now, so only what changed is rebuilt: undo calls this for every step,
+    // and reloading the cap for a slider would make each one take a second.
+    const before = {
+      profile: $('profileSelect').value, unit: $('unitSelect').value, stem: stemType,
+      shape: shapeCap.sizeMM, lower: capTrim.lowerMM, recess: capTrim.recessMM, wall: capTrim.wallMM,
+    };
+    if (loaded.size != null) C.size.set(loaded.size);
+    if (loaded.depth != null) C.depth.set(loaded.depth);
+    if (loaded.rot != null) C.rot.set(loaded.rot);
     if (loaded.offx != null) { $('offx').value = loaded.offx; $('offxNum').value = loaded.offx; }
     if (loaded.offy != null) { $('offy').value = loaded.offy; $('offyNum').value = loaded.offy; }
     if (loaded.stemTol != null) { setStemTol(loaded.stemTol); applyStemTolerance(); }
+    // Applied by the cap load the profile change below starts, clamped to that cap's limits.
+    capTrim.lowerMM = Number(loaded.capLower) || 0;
+    capTrim.recessMM = Number(loaded.stemRecess) || 0;
+    capTrim.wallMM = loaded.wallHeight != null && Number.isFinite(Number(loaded.wallHeight)) ? Number(loaded.wallHeight) : null;
+    stemType = loaded.stem === 'mx-lp' ? 'mx-lp' : 'mx';
+    stemTypeControl.setValue(stemType);
+    shapeCap.sizeMM = Number.isFinite(Number(loaded.shapeSize)) && loaded.shapeSize != null ? Number(loaded.shapeSize) : null;
     // `.value = ` fires nothing, and the swatch rows follow the inputs by listening for
     // `input` — so a loaded project used to leave both palettes showing the old colour while
     // the preview showed the new one.
@@ -2349,6 +3053,8 @@ export function mount(container, host) {
     if (loaded.homingBump != null) $('homingBump').checked = loaded.homingBump;
     if (loaded.through != null) $('through').checked = loaded.through;
     if (loaded.single != null) $('single').checked = loaded.single;
+    $('raised').checked = Number(loaded.raised) > 0;
+    if (Number(loaded.raised) > 0) raiseRow.setValue(Number(loaded.raised));
     if (loaded.profile) $('profileSelect').value = loaded.profile;
     if (loaded.unit) $('unitSelect').value = loaded.unit;
     if (loaded.wallGenerator === 'arachne' || loaded.wallGenerator === 'classic') {
@@ -2356,11 +3062,61 @@ export function mount(container, host) {
       wallsRow.setValue(loaded.wallGenerator);
     }
     if (loaded.keyboardSet) keyboardSet = loaded.keyboardSet;
-    if (loaded.dualLegend) dualLegend = loaded.dualLegend;
-    // Trigger UI sync
-    $('size').dispatchEvent(new Event('input'));
-    $('profileSelect').dispatchEvent(new Event('change'));
+    // The legend itself, from what it was made of. A project from before sources were saved
+    // keeps the legend on screen, as loading always did.
+    restoreLegend(loaded.legendSource, loaded.fontId);
+    // Trigger UI sync: the size is the text's remembered height now, and the paid modes hear it.
+    rememberTextHeight();
+    announce(['size']);
+    const capChanged = $('profileSelect').value !== before.profile || $('unitSelect').value !== before.unit
+      || stemType !== before.stem || shapeCap.sizeMM !== before.shape;
+    if (capChanged || !loadedCap) $('profileSelect').dispatchEvent(new Event('change'));
+    else if (capTrim.lowerMM !== before.lower || capTrim.recessMM !== before.recess || capTrim.wallMM !== before.wall) applyCapTrim();
+    else scheduleRegen();
     applyModeFlags();
+    // Absent means one legend: a project saved with one must not keep the legends on screen.
+    dualLegend = savedDual;
+    proPanel?.applySavedLegends?.(savedDual);
+  }
+
+  /** Put a saved legend source back on the cap (applyLoadedState). False when there is none. */
+  function restoreLegend(src, fontId) {
+    if (!src || typeof src !== 'object') return false;
+    if (JSON.stringify(src) === JSON.stringify(legendSourceState)) return true; // already on the cap
+    if (src.type === 'letter') {
+      $('letterText').value = String(src.text ?? '');
+      const face = src.fontId ?? fontId;
+      void (async () => {
+        // The face first: text carved in the old one could be refused by it ("no letters for
+        // that") and moved to another face before the saved one arrived.
+        if (face && face !== currentFontId) await chooseFont(face);
+        setLegendMode('letter');
+        if (legendSink !== singleCapSink) selectLetter(); // the single cap's sink already did
+      })();
+      return true;
+    }
+    if (src.type === 'icon') {
+      const ic = LUCIDE_ICONS.find((x) => x.name === src.name);
+      if (!ic) return false;
+      const text = buildSvg(ic.node);
+      setLegendMode('icon');
+      const tile = [...galleryEl.querySelectorAll('.icon')].find((t) => t.title === src.name);
+      void selectIcon(tile ?? null, async () => text, src.name, 'icon');
+      return true;
+    }
+    if (src.type === 'svg' && typeof src.svg === 'string') {
+      const text = src.svg;
+      let tile = [...uploadGalleryEl.querySelectorAll('.icon')].find((t) => t.title === src.name);
+      if (!tile) {
+        tile = makeIconEl(URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' })), async () => text, src.name, 'svg');
+        uploadGalleryEl.appendChild(tile);
+        refreshUploadEmptyState();
+      }
+      setLegendMode('upload');
+      void selectIcon(tile, async () => text, src.name, 'svg');
+      return true;
+    }
+    return false;
   }
 
   // ------------------------------------------------------- MakerLab handshake
@@ -2403,8 +3159,9 @@ export function mount(container, host) {
 
       let defaultFile = 'keycap.json';
       if (profiles) {
-        keycapProfiles = profiles;
-        for (const p of profiles) {
+        // The owner's profiles, then the round and square shapes the app makes (shapes/profiles.js).
+        keycapProfiles = [...profiles, ...extraProfiles()];
+        for (const p of keycapProfiles) {
           const opt = document.createElement('option');
           opt.value = p.id;
           opt.textContent = p.label;
@@ -2418,9 +3175,10 @@ export function mount(container, host) {
         defaultFile = entry.file;
         currentUnit = entry.unit || 1;
         // A single profile needs no picker — keep the size dropdown, hide the profile one.
-        if (profiles.length < 2) profileSelect.closest('.field').style.display = 'none';
+        buildProfilePicker(defProfile.id);
+        if (keycapProfiles.length < 2) profilePicker.hidden = true;
       } else {
-        unitSelect.closest('.section').style.display = 'none'; // no manifest — hide the picker
+        $('kcUnitField').hidden = true; // no manifest — hide the picker
       }
 
       try {
@@ -2429,7 +3187,7 @@ export function mount(container, host) {
       } catch (e) {
         console.error('Failed to load homing bump geometry:', e);
       }
-      setKeycap(await loadKeycap(defaultFile));
+      showLoadedCap(await loadKeycap(defaultFile));
       updateAlphabetAvailability();
       proPanel?.refresh(); // the profile is only known now
       syncFitTestExportLabel();

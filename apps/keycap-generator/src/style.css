@@ -45,7 +45,11 @@
       }
       #viewport { position: relative; min-width: 0; overflow: hidden; background: var(--bg); }
       #viewport canvas { display: block; width: 100%; height: 100%; }
-      .legend-section { display: flex; flex-direction: column; }
+      /* One gap between everything in the right panel's legend column: the source cards, the
+         search under them, a paid mode's own block. An empty host takes no gap. */
+      .legend-section { display: flex; flex-direction: column; gap: var(--space-3); }
+      .legend-section > .section-head { margin-bottom: 0; }
+      .legend-section > :empty { display: none; }
       #iconPanel:not([hidden]) { display: flex; flex-direction: column; }
       .section { border-top: 1px solid var(--line); padding: 14px 0; }
       .section:first-of-type { border-top: none; padding-top: 0; }
@@ -340,13 +344,15 @@
 
 
       /* The cap readout, under the stage label: the bottom-left corner is the kit's status line. */
-      .meta { position: absolute; left: 16px; top: 32px; font-size: 11px; color: var(--muted); margin: 0; pointer-events: none; user-select: none; }
+      .meta { font-size: 11px; color: var(--muted); margin: 0; pointer-events: none; user-select: none; }
       code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
 
 
       /* The credit strip is the kit's panelCredit(), pinned outside the left panel's
          scroll area so it stays in the bottom corner. Empty only if a host removed it. */
       #keycapCredit:empty { display: none; }
+      /* Undo, back to the start, redo: over the credit strip, the width of the panel. */
+      #keycapCredit > .kc-history { padding: var(--space-3) var(--space-4) 0; }
 
 
       /* Open-a-project list — desktop host only, where saved projects are real stored
@@ -375,3 +381,8 @@
          style, and is unaffected.) */
       #exportBlank { margin-top: 16px; }
       #alphabetSet { margin-top: 8px; }
+
+      /* The shine-through guide: three pictures, a line under each. */
+      .kc-guide { display: grid; gap: 12px; max-width: 520px; }
+      .kc-guide__step { margin: 0; display: grid; grid-template-columns: 44% 1fr; align-items: center; gap: 12px; }
+      .kc-guide__step img { width: 100%; height: auto; border-radius: 6px; background: var(--panel-2); }

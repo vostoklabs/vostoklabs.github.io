@@ -14,8 +14,8 @@ import { html, miniDocument, type MiniElement } from './support/mini-dom';
 import { el } from '../src/dom';
 import { ICONS } from '../src/icons';
 import { sourceCards } from '../src/components/sources';
-import { stagePanel, stageStatus } from '../src/components/stage';
-import { segmentedControl, toggleSwitch } from '../src/components/controls';
+import { stagePanel, stageStatus, stageRow } from '../src/components/stage';
+import { segmentedControl, toggleSwitch, selectField, setFieldOptions } from '../src/components/controls';
 import { appShell } from '../src/components/app-shell';
 import { settingsRail } from '../src/components/settings-rail';
 import { studioView } from '../src/components/editor-shell';
@@ -88,6 +88,10 @@ option('stagePanel titleHidden', 'vl-stage-panel--title-hidden', (on) =>
   check('stagePanel titleHidden: setOpen still hides it', bare.root.hidden && has(bare.root, 'vl-stage-panel--title-hidden'));
 }
 
+option('stageRow wide', 'vl-stage__row--wide', (on) =>
+  stageRow([el('div', { text: 'chips' })], on === undefined ? undefined : { wide: on }),
+);
+
 option('stageStatus position', 'vl-stage-status--top', (on) =>
   stageStatus('Building…', on === undefined ? undefined : { position: on ? 'top' : 'bottom' }).root,
 );
@@ -104,6 +108,9 @@ option('stageStatus position', 'vl-stage-status--top', (on) =>
   check('stageStatus default: set() writes the classes it always wrote', bottom.root.className === 'vl-stage-status vl-stage-status--busy');
 }
 
+option('segmentedControl tiles compact', 'vl-tabs--tiles-compact', (on) =>
+  segmentedControl({ variant: 'tiles', options: SOURCES, value: 'tuck', ...(on === undefined ? {} : on ? { size: 'compact' } : {}) }),
+);
 option('toggleSwitch compact', 'vl-switch-row--compact', (on) =>
   toggleSwitch({ label: 'Panel names', checked: true, help: 'A tip.', ...(on === undefined ? {} : { compact: on }) }),
 );
@@ -115,6 +122,34 @@ option('toggleSwitch compact', 'vl-switch-row--compact', (on) =>
   input.dispatchEvent({ type: 'change' });
   sw.setValue(false);
   check('toggleSwitch compact: still a switch (change, setValue, getValue)', seen === true && sw.getValue() === false);
+}
+{
+  // `id`: the checkbox takes it and the caption points at it; without it, a fresh id as before.
+  const named = toggleSwitch({ label: 'Mirror', id: 'mirror' }) as unknown as MiniElement;
+  const plain = toggleSwitch({ label: 'Mirror' }) as unknown as MiniElement;
+  const namedInput = named.querySelector('input')!, plainInput = plain.querySelector('input')!;
+  check('toggleSwitch id: the checkbox has it and the caption is for it',
+    namedInput.id === 'mirror' && named.querySelector('label')!.getAttribute('for') === 'mirror', namedInput.id);
+  const field = selectField({ label: 'Size', id: 'unitSelect', options: [{ value: '1u', label: '1u' }] }) as unknown as MiniElement;
+  const plainField = selectField({ label: 'Size', options: [{ value: '1u', label: '1u' }] }) as unknown as MiniElement;
+  check('selectField id: the select has it and the caption is for it',
+    field.querySelector('select')!.id === 'unitSelect' && field.querySelector('label')!.getAttribute('for') === 'unitSelect');
+  check('selectField without id: a fresh vl-select id, as before', /^vl-select-\d+$/.test(plainField.querySelector('select')!.id));
+  check('toggleSwitch without id: a fresh vl-switch id, as before',
+    /^vl-switch-\d+$/.test(plainInput.id) && plain.querySelector('label')!.getAttribute('for') === plainInput.id, plainInput.id);
+
+  // A disabled option: shown, greyed, unpickable; an option without the flag is built as before.
+  const opts = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }];
+  const off = selectField({ label: 'Board', options: [opts[0]!, { ...opts[1]!, disabled: true }], value: 'a' }) as unknown as MiniElement;
+  const on = selectField({ label: 'Board', options: opts, value: 'a' }) as unknown as MiniElement;
+  const offOpts = off.querySelectorAll('option'), onOpts = on.querySelectorAll('option');
+  check('selectField disabled: the option is there and disabled', offOpts.length === 2 && !!(offOpts[1] as unknown as HTMLOptionElement).disabled);
+  check('selectField disabled: the others are not', !(offOpts[0] as unknown as HTMLOptionElement).disabled);
+  check('selectField without disabled: no option is', onOpts.every((o) => !(o as unknown as HTMLOptionElement).disabled));
+  on.querySelector('select')!.value = 'a'; // the stand-in select keeps no value of its own
+  setFieldOptions(on as unknown as HTMLElement, [opts[0]!, { ...opts[1]!, disabled: true }, { value: 'c', label: 'C' }], 'a');
+  const swapped = on.querySelectorAll('option');
+  check('setFieldOptions disabled: carried into the new list', swapped.length === 3 && !!(swapped[1] as unknown as HTMLOptionElement).disabled && !(swapped[2] as unknown as HTMLOptionElement).disabled);
 }
 
 /* ------------------------- a rail panel's chrome, compact tabs, a centred chip, a compact header */

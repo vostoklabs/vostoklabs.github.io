@@ -1,6 +1,6 @@
 import { el } from '../dom';
 import { dpad, type DpadHandle } from './dpad';
-import { withAccess, type ValueRow } from './controls';
+import { groupCaption, noCaption, tagSetter, withAccess, type Taggable, type ValueRow } from './controls';
 
 /**
  * A d-pad and the two numbers it drives, side by side.
@@ -52,9 +52,17 @@ export interface NudgePadOptions {
   onNudge?: (dx: number, dy: number) => void;
   /** The centre button. Defaults to setting both axes to zero. */
   onReset?: () => void;
+  /**
+   * A caption over the pad ("Nudge"), the line a segmented control's caption is, so it can carry
+   * a "?" tip and a `setTag()` tag at its end. The pad and its numbers become a group named by
+   * it. Default: no caption, and the pad is exactly what it was.
+   */
+  label?: string;
+  /** Optional "?" tooltip next to the caption. Implies the caption line. */
+  help?: string;
 }
 
-export type NudgePadHandle = ValueRow<{ x: number; y: number }> & {
+export type NudgePadHandle = ValueRow<{ x: number; y: number }> & Taggable & {
   /** Move the pad's limits when the thing being nudged changes size. */
   setRange(axis: 'x' | 'y', max: number): void;
   /**
@@ -153,10 +161,22 @@ export function nudgePad(opts: NudgePadOptions): NudgePadHandle {
     },
   });
 
-  const root = el('div', { className: 'vl-nudge' }, [
+  const body = el('div', { className: 'vl-nudge' }, [
     pad.root,
     el('div', { className: 'vl-nudge__vals' }, [x.row, y.row]),
-  ]) as unknown as NudgePadHandle;
+  ]);
+  let root = body as unknown as NudgePadHandle;
+  if (opts.label || opts.help) {
+    const cap = groupCaption(opts.label, opts.help);
+    if (opts.label) {
+      body.setAttribute('role', 'group');
+      body.setAttribute('aria-labelledby', cap.textId);
+    }
+    root = el('div', { className: 'vl-control' }, [cap.line, body]) as unknown as NudgePadHandle;
+    root.setTag = tagSetter((slot) => cap.line.append(slot), cap.line);
+  } else {
+    root.setTag = noCaption('nudgePad');
+  }
 
   root.setValue = (value, notify) => {
     x.input.value = String(show(round1(clamp(value.x, limits.x)) * scale));

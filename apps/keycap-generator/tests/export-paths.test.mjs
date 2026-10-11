@@ -6,14 +6,15 @@
 
   The golden builds its files from the part builders (src/exportParts.js) with arguments of its
   own. This runs the functions the buttons call instead (Export, Export blank keycap, the fit
-  test's Export, Get full alphabet set) on the rebuild loop and the lock the app uses, with the
-  panel stood in, and compares every file they write with the golden's hashes for the same
-  settings, and the names they are saved under. So what exports.js hands the part builders (the
-  stem, shine-through, the profile a cap is laid out for, the names, the zip) is pinned too.
+  test's Export) on the rebuild loop and the lock the app uses, with the panel stood in, and
+  compares every file they write with the golden's hashes for the same settings, and the names
+  they are saved under. So what exports.js hands the part builders (the stem, shine-through, the
+  profile a cap is laid out for, the names) is pinned too. Get full alphabet set, one 3MF of 26
+  caps whose every cap is the golden's letter, is alphabet-set.test.mjs's.
 
-  Both deliveries are run: the browser's download (a 3MF, the alphabet set as a zip of them), and
-  the MakerLab export (the OBJ, its MTL and the cover handed to the host). Only the browser's and
-  the host's edges are stood in for (support/app-bundle.mjs).
+  Both deliveries are run: the browser's download (a 3MF), and the MakerLab export (the OBJ, its
+  MTL and the cover handed to the host). Only the browser's and the host's edges are stood in for
+  (support/app-bundle.mjs).
 */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -70,21 +71,6 @@ const movedFrom = (files, id) => {
   const want = golden[id].files;
   return [...new Set([...Object.keys(want), ...Object.keys(files)])].filter((n) => want[n] !== files[n]);
 };
-/** Each entry of a zip as stored: its name and its compression method (0 = stored). */
-function zipDirectory(bytes) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const out = [];
-  for (let i = 0; i + 30 <= bytes.length && view.getUint32(i, true) === 0x04034b50;) {
-    const method = view.getUint16(i + 8, true);
-    const size = view.getUint32(i + 18, true);
-    const nameLength = view.getUint16(i + 26, true);
-    const extraLength = view.getUint16(i + 28, true);
-    out.push({ name: app.strFromU8(bytes.subarray(i + 30, i + 30 + nameLength)), method });
-    i += 30 + nameLength + extraLength + size;
-  }
-  return out;
-}
-
 // ------------------------------------------------------------------ the caps, as mount.js's setKeycap() leaves them
 await app.initManifold();
 await app.loadBundledFonts();
@@ -124,7 +110,7 @@ const loop = app.rebuildLoop({
 });
 const lock = app.createRebuildLock(loop, () => loop.request());
 const alphabetButton = { disabled: false, listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } };
-const elements = { alphabetSet: alphabetButton, alphabetHelp: { textContent: '' } };
+const elements = { alphabetSet: alphabetButton };
 const statuses = [];
 const COVER = `data:image/png;base64,${'C'.repeat(200)}`;
 const exportsApi = app.createExports({
@@ -207,26 +193,6 @@ panel.fitTest = app.buildFitTestRow(
 );
 await bothWays('Fit test, a Standard 1u', () => exportsApi.runPrimaryExport(), 'S-1u-fit-test', 'keycap-fit-test-standard-profile');
 panel.fitTest = null;
-
-// ------------------------------------------------------------------ Get full alphabet set (A–Z)
-// Twenty-six letters, each its golden case, in one zip of stored 3MFs named for their letters.
-loop.request();
-await loop.settled();
-const downloadsBefore = globalThis.__downloads.length;
-await alphabetButton.listeners.click();
-const zip = globalThis.__downloads.length > downloadsBefore ? globalThis.__downloads.at(-1) : null;
-check('the alphabet set is saved as keycap-alphabet-roboto-standard-profile.zip',
-  zip?.name === 'keycap-alphabet-roboto-standard-profile.zip' && zip?.mime === 'application/zip', `${zip?.name} (${zip?.mime})`);
-const zipBytes = zip ? await bytesOf(zip.data) : new Uint8Array();
-const directory = zipDirectory(zipBytes);
-const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-check('…holds 26 3MFs named for their letters, A to Z',
-  directory.map((e) => e.name).join(',') === [...LETTERS].map((ch) => `keycap-${ch}.3mf`).join(','), `${directory.length} entries: ${directory.slice(0, 2).map((e) => e.name).join(', ')} …`);
-check('…stored as they are, not deflated again', directory.length === 26 && directory.every((e) => e.method === 0), directory.map((e) => e.method).join(''));
-const letters = zipBytes.length ? app.unzipSync(zipBytes) : {};
-const off = [...LETTERS].filter((ch) => !letters[`keycap-${ch}.3mf`] || movedFrom(entriesOf(letters[`keycap-${ch}.3mf`]), `AZ-S-1u-roboto-${ch}`).length);
-check('…and every letter\'s 3MF is the golden\'s, entry by entry', !off.length, off.length ? `moved: ${off.join(' ')}` : '26 of 26');
-check('the set gave the loop back', !lock.held() && alphabetButton.disabled === false);
 
 loop.dispose();
 console.log(failures ? `\n${failures} FAILED, ${passes} passed` : `\nall ${passes} export path checks pass: every button writes the golden's files, under their names`);

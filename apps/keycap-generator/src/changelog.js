@@ -13,6 +13,36 @@
 */
 export const CHANGELOG = [
   {
+    date: '2026-10-08',
+    changes: [
+      { kind: 'added', text: 'Round, round tapered and square caps.' },
+      { kind: 'added', text: 'Set how wide a round or square cap is.' },
+      { kind: 'added', text: 'Set how tall the cap stands.' },
+      { kind: 'added', text: 'Set how far the stem reaches down.' },
+      { kind: 'added', text: 'Short walls, or just the top on a full stem.' },
+      { kind: 'added', text: 'A low-profile MX stem for low-profile switches.' },
+      { kind: 'added', text: 'Raised legends that stand on the top.' },
+      { kind: 'added', text: 'A guide to printing shine-through legends.' },
+      { kind: 'added', text: 'Korean, Japanese, Chinese and other alphabets.' },
+      { kind: 'added', text: 'Hundreds of fonts to choose from.' },
+      { kind: 'added', text: 'Undo and redo your changes.' },
+      { kind: 'added', text: 'Go back to where you started.' },
+      { kind: 'added', text: 'A picture of every profile in the picker.' },
+      { kind: 'added', text: 'Preview the alphabet set before you make it.' },
+      { kind: 'added', text: 'Capitals or small letters for the alphabet set.' },
+      { kind: 'changed', text: 'Settings sit in categories down the left.' },
+      { kind: 'changed', text: 'Size and height have a section of their own.' },
+      { kind: 'changed', text: 'Top and 3D views on the stage.' },
+      { kind: 'changed', text: 'The alphabet set is one 3MF on one plate.' },
+      { kind: 'changed', text: 'Long text shrinks to fit instead of being cut.' },
+      { kind: 'changed', text: 'Words like Shift and Ctrl fill a wide cap.' },
+      { kind: 'fixed', text: 'The view stays put when the cap changes.' },
+      { kind: 'fixed', text: 'An uploaded SVG goes straight onto the cap.' },
+      { kind: 'fixed', text: 'Projects remember the legend and its font.' },
+      { kind: 'fixed', text: 'No false size warning on wide caps.' },
+    ],
+  },
+  {
     date: '2026-09-15',
     changes: [
       { kind: 'added', text: 'A stem fit test you can print.' },

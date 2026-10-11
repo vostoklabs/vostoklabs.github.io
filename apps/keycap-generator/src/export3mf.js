@@ -1,6 +1,7 @@
 // The keycap's 3MF, written by the shelf's writer (@vostok/export, "3MF export"). This file only
 // says what the keycap is to it: one slicer object, "keycap", with a part per body on the
-// filament slot each one asks for, centred on the plate the customer picked.
+// filament slot each one asks for, centred on the plate the customer picked. A part that names
+// its own `group` is in that object instead: the alphabet set's caps, one object a letter.
 import { buildThreeMF as writeThreeMF } from '@vostok/export';
 import { plateSize, loadPlateChoice } from '@vostok/plates';
 import { keycapMark, shelfPart } from './exportParts.js';
@@ -8,9 +9,10 @@ import { keycapMark, shelfPart } from './exportParts.js';
 /**
  * Build the keycap's 3MF.
  *
- * @param {Array<{name:string, color:string, extruder:number, geom:THREE.BufferGeometry}>} parts
+ * @param {Array<{name:string, color:string, extruder:number, geom:THREE.BufferGeometry, group?:string}>} parts
  *        One entry per body. Order is preserved. `extruder` is the 1-based filament slot
  *        (1 = keycap colour, 2 = legend colour); the stem rides on slot 2 in shine-through.
+ *        `group`, when given, is the slicer object the part belongs to; "keycap" otherwise.
  * @param {{ process?: Record<string, string | string[]> }} [opts] `process`: slicer settings
  *        applied over the system process (the Print settings wall choice), written into
  *        project_settings.config.
@@ -18,7 +20,7 @@ import { keycapMark, shelfPart } from './exportParts.js';
  */
 export function keycapThreeMF(parts, { process } = {}) {
   const bytes = writeThreeMF(
-    parts.map((p) => ({ ...shelfPart(p), group: 'keycap' })),
+    parts.map((p) => ({ ...shelfPart(p), group: p.group ?? 'keycap' })),
     {
       ...keycapMark(),
       plateSize: plateSize(loadPlateChoice()),

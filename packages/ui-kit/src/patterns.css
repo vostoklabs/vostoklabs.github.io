@@ -589,6 +589,10 @@ details.vl-section--collapsible[open] > summary {
 .vl-stage__tools .vl-mode-bar { position: static; transform: none; }
 /* stageRow(): stacked rows in the top-left slot, each starting at the left edge. */
 .vl-stage__row { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* stageRow({ wide }): the tools span the stage, and every other row keeps clear of the picker
+   as the whole block did (300px of the stage = 268px of tools inset 16px a side). */
+.vl-stage__tools:has(> .vl-stage__row--wide) { max-width: calc(100% - 32px); }
+.vl-stage__tools:has(> .vl-stage__row--wide) > .vl-stage__row:not(.vl-stage__row--wide) { max-width: calc(100% - 268px); }
 
 /* ---------------------------------------------------- stage overlay: preview bar */
 /* previewBar(): how the preview is shown. A squarer, flatter face than the mode bar on purpose:

@@ -46,6 +46,7 @@ const outDir = join(root, 'public', 'keycaps');
 //   print            print guidance, passed through index.json to the UI.
 //   homingBump       false — the shared bump is modelled against the Cherry dish.
 //   shineThrough     false — see below.
+//   stems            'stubs' — male stems (Choc), which cap height cannot shorten.
 //
 // Choc shineThrough is OFF for a load-bearing reason, not a cosmetic one: shine-through
 // subtracts a full-height prism through the shell, and the two Choc stubs attach at only
@@ -61,6 +62,9 @@ const PROFILE_TUNING = {
     // the PREVIEW and the EXPORT only — model space stays Z-up so the legend pipeline, the
     // dish metadata and the size ceiling all keep working unchanged.
     printRotateX: 90,
+    // Male stubs go INTO the switch: there is no socket to shorten, so no cap height or stem
+    // recess (src/capHeight.js).
+    stems: 'stubs',
     flatTop: true,
     homingBump: false,
     shineThrough: false,
@@ -375,6 +379,7 @@ const index = {
     ...(p.tune?.shineThrough === false ? { shineThrough: false } : {}),
     ...(p.tune?.maxDepth ? { maxDepth: p.tune.maxDepth } : {}),
     ...(p.tune?.printRotateX ? { printRotateX: p.tune.printRotateX } : {}),
+    ...(p.tune?.stems ? { stems: p.tune.stems } : {}),
     keycaps: p.sizes.map(({ id, label, file, unit }) => ({ id, label, file, unit })),
   })),
 };

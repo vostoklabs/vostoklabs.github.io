@@ -1,7 +1,7 @@
 /*
  * The keycap's exports: the single cap, the blank cap, the fit-test row and the full alphabet
  * set. Each goes to MakerLab as an OBJ, to an embedding host as a 3MF for its library, or to the
- * browser's downloads as a 3MF (the alphabet set as a zip of them).
+ * browser's downloads as a 3MF (the alphabet set as one 3MF of 26 caps on one plate).
  *
  * mount.js owns the screen and the state, and hands this module what an export reads through
  * `ctx`, at the moment the export runs:
@@ -17,11 +17,14 @@
  *   ctx.settled()              the carve that matches the panel, once it is made (rebuild.js)
  *   ctx.flushStem()            apply a stem-fit step still waiting for its frame
  *   ctx.state()                what the controls say now (see `exportState` in mount.js)
+ *   ctx.fontWrites(id, text)   can this face write every letter of `text` (letterFonts.js); kept
+ *                              out of this module, whose node tests have no font library
  */
 import { BRAND } from '@vostok/brand';
-import { buildZip, downloadFile, textToArrayBuffer } from '@vostok/export';
+import { downloadFile, textToArrayBuffer } from '@vostok/export';
 import { BLANK_COVER } from '@vostok/export/makerlab';
 import { captureCover, ExportBlockedError, licenseAfterExport, toast } from '@vostok/ui-kit';
+import { plateSize, loadPlateChoice } from '@vostok/plates';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
 import { MAKERLAB, isReady as mlReady, can as mlCan, sdkExport, sdkToast } from 'virtual:makerlab';
@@ -31,8 +34,12 @@ import { keycapThreeMF } from './export3mf.js';
 import { keycapObjMtl } from './exportObj.js';
 import {
   capParts, orientForPrint, blankParts, fitTestParts, capFileName, blankFileName, fitTestFileName,
-  alphabetFileName, ALPHABET, ALPHABET_MTL, alphabetEntryName,
+  alphabetFileName, alphabetLetters, shelfPart,
 } from './exportParts.js';
+import { createSetCarver, footprintOf, placeCap, setLayout, setTypeSizes } from './alphabetSet.js';
+import { textHeightOf } from './legendSize.js';
+import { printMatrix } from './meshUtils.js';
+import { openAlphabetDialog } from './alphabetDialog.js';
 import { CarveDeclined } from './rebuild.js';
 
 /* The licence, on the one export path a file-level mark cannot reach: a comment in an OBJ
@@ -100,8 +107,11 @@ export function createExports(ctx) {
    *
    * @param {() => Array} makeParts  Deferred so the standalone path doesn't pay for OBJ work
    *                                 and the host path doesn't pay for 3MF zipping.
+   * @param {{ cover?: string, what?: string }} [more]  `cover`: MakerLab's cover picture, the
+   *        stage's when left out; `what`: what MakerLab's toast says was exported
+   * @returns {Promise<boolean>} whether the file went out
    */
-  async function deliverModel(makeParts, baseName, downloadMsg, description) {
+  async function deliverModel(makeParts, baseName, downloadMsg, description, { cover, what = 'Keycap' } = {}) {
     if (MAKERLAB && mlReady() && mlCan('export')) {
       setStatus('Sending to MakerLab…');
       try {
@@ -113,7 +123,7 @@ export function createExports(ctx) {
               format: 'obj',
               buffer: textToArrayBuffer(obj),
               mtl,
-              coverImage: ctx.cover(),
+              coverImage: cover ?? ctx.cover(),
               description: `${description} ${LICENSE_NOTE}`,
               printConfig: printConfig(),
             },
@@ -121,17 +131,17 @@ export function createExports(ctx) {
         });
         if (result.success) {
           setStatus('Exported to MakerLab ✓');
-          sdkToast({ message: 'Keycap exported to MakerLab', type: 'success' });
+          sdkToast({ message: `${what} exported to MakerLab`, type: 'success' });
           nudgeLicense();
-        } else {
-          setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
-          sdkToast({ message: 'Export failed', type: 'error' });
+          return true;
         }
+        setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
+        sdkToast({ message: 'Export failed', type: 'error' });
       } catch (err) {
         console.error(err);
         setStatus(`Export failed: ${err.message || err}`, 'err');
       }
-      return;
+      return false;
     }
 
     const blob = keycapThreeMF(makeParts(), { process: projectProcess() });
@@ -148,11 +158,12 @@ export function createExports(ctx) {
         setStatus(indexed ? 'Exported to your library ✓' : `Exported as ${baseName}.3mf ✓`);
         toast(indexed ? 'Exported to your library' : `Exported as ${baseName}.3mf`, { kind: 'success' });
         nudgeLicense();
+        return true;
       } catch (err) {
         console.error(err);
         setStatus(`Export failed: ${err.message || err}`, 'err');
       }
-      return;
+      return false;
     }
 
     downloadFile(blob, `${baseName}.3mf`, 'model/3mf');
@@ -162,6 +173,7 @@ export function createExports(ctx) {
     // the toast is the part you cannot miss.
     toast(downloadMsg.split('  ')[0], { kind: 'success' });
     nudgeLicense();
+    return true;
   }
 
   /** Export whatever fit-test row is currently on screen, through the one export function
@@ -252,157 +264,246 @@ export function createExports(ctx) {
   }
 
   // -------------------------------------------------------- full alphabet set
-  // Batch-generate A–Z keycaps in the current font + placement/colour settings and
-  // download them as a single ZIP of 3MFs. 1u-only for now (button is disabled on
-  // other sizes). Each letter is carved with the same buildBodies path as the live
-  // preview, so what you set up for one letter is what every cap in the pack gets.
+  // 26 keycaps, one per letter, in the current font and placement/colour settings, laid out on one
+  // plate in one file. The button opens a window first (alphabetDialog.js): what the set is, the
+  // plate as it will be exported, capitals or small letters. The letters are carved while it is
+  // open, with the same buildBodies path as the live preview, so what you set up for one letter
+  // is what every cap in the set gets, and Generate writes the caps the picture shows.
   const alphabetBtn = $('alphabetSet');
-  const alphabetHelp = $('alphabetHelp');
 
-  // The set only makes sense for a 1u cap right now; reflect that on the button.
+  /** The A–Z set is made of 1u caps: on any other size the button is not there (hidden, never
+   *  greyed), and what it does is its tooltip rather than a paragraph under it. */
   function updateAlphabetAvailability() {
     const ok = ctx.state().unit === 1;
-    alphabetBtn.disabled = !ok || ctx.busy();
-    alphabetHelp.textContent = ok
-      ? 'Generates 26 keycaps (A–Z) in the current font & settings, zipped as 3MF files.'
-      : 'Full alphabet set is available for the 1u keycap only. Switch size to 1u to enable.';
+    alphabetBtn.hidden = !ok;
+    alphabetBtn.disabled = ctx.busy();
+    alphabetBtn.title = `26 keycaps, A–Z or a–z, in your font and settings, on one plate ${MAKERLAB ? 'sent to MakerLab' : 'in one 3MF'}. Shows the plate first.`;
   }
 
-  async function generateAlphabetSet() {
-    if (ctx.state().unit !== 1 || !ctx.state().meta || !ctx.state().shell) return;
+  /**
+   * Start a set: the cap and the settings as they are now, the plate laid out for them, and a
+   * carver that fills it a letter at a time. The set holds the rebuild loop from here until
+   * `close()`, so no preview carve runs Manifold beside it; a change made meanwhile is carved for
+   * the preview once the set lets go. Null when there is nothing to carve or the loop is not free.
+   */
+  async function startAlphabetSet() {
+    if (ctx.state().unit !== 1 || !ctx.state().meta || !ctx.state().shell) return null;
     // A carve in progress finishes first (a press during one used to be dropped). Never awaited
-    // once the batch holds the loop: it would wait for the batch's own release.
-    await ctx.settled().catch(() => {});
+    // once the set holds the loop: it would wait for the set's own release.
+    const carved = await ctx.settled().catch(() => null);
+    ctx.flushStem();
+    const { fontId, opts, capColor, logoColor, through, profileTag, unit, meta, shell, profile, stem } = ctx.state();
+    if (unit !== 1 || !meta || !shell) return null;
+    if (!ctx.begin()) {
+      setStatus('The preview is still rebuilding. Try again in a moment.', 'warn');
+      return null;
+    }
+    // The loop's `busy` says nothing of a hold, so the button is the set's to disable.
+    alphabetBtn.disabled = true;
 
-    // The cap and the settings as they are now, for every letter: a change made during the
-    // batch is carved for the preview once the batch lets go, not half way through the set.
-    const { fontId, opts, capColor, logoColor, through, profileTag, unit, meta, shell, profile } = ctx.state();
-    if (unit !== 1 || !meta || !shell) return;
-    const fontName = FONT_OPTIONS.find((f) => f.id === fontId)?.name || 'font';
-    // Host path: one OBJ per letter, handed over as a multi-plate export. Every letter
-    // shares the same two colours, so one MTL covers the whole set. Standalone path still
-    // zips 26 of our own .3mf files.
-    const toHost = MAKERLAB && mlReady() && mlCan('export');
-    const files = {};
-    const plates = [];
-    let plateMtl = '';
-    let cancelled = false;
-
-    // The batch holds the loop, so no preview rebuild runs Manifold beside it, and lets go in the
-    // `finally` whatever happens: a hold has no timeout, and one never released would leave every
-    // later export waiting for good. The loop's `busy` says nothing of a hold, so the button is
-    // this function's to disable.
-    if (!ctx.begin()) return;
     try {
-      alphabetBtn.disabled = true;
-      // Twenty-six carves. Same trap the paid keyboard set had: without this the only way out
-      // of a slow font was closing the tab.
-      ctx.setBusy('generating…', () => { cancelled = true; });
-      for (let i = 0; i < ALPHABET.length; i++) {
-        if (cancelled) break;
-        const ch = ALPHABET[i];
-        setStatus(`Generating alphabet set… ${ch} (${i + 1}/26)`);
-        // Text only: rebuilding the chip here would throw away the Cancel button's own
-        // "Cancelling…" state twenty-six times.
-        ctx.busyText(`generating ${ch} (${i + 1}/26)…`);
-        await new Promise((r) => setTimeout(r, 0)); // let the spinner/status paint
+      const fontName = FONT_OPTIONS.find((f) => f.id === fontId)?.name || 'font';
+      // Every cap is the same 1u, so the blank cap gives the plate its grid, and each carved cap
+      // is moved by the blank's amount: the caps line up whatever their legends.
+      const blank = orientForPrint(blankParts(shell, stem, capColor), profile, meta);
+      const footprint = footprintOf(blank);
+      const layout = setLayout(26, footprint, plateSize(loadPlateChoice()));
+      // 26 1u caps fit on every plate the picker offers (tests/alphabet-set.test.mjs).
+      if (layout.plates > 1) throw new Error(`the set needs ${layout.plates} plates`);
 
-        const legend = parseLetter(ch, fontId, 1);
-        const bodies = await buildBodies(shell, meta, legend, opts);
-        const parts = buildExportParts({ bodies, profile, meta, opts: { through } }, { capColor, logoColor });
-        if (toHost) {
-          const { obj, mtl } = keycapObjMtl(parts, { mtlFileName: ALPHABET_MTL });
-          plates.push(textToArrayBuffer(obj));
-          plateMtl = mtl;
-        } else {
-          files[alphabetEntryName(ch)] = new Uint8Array(await keycapThreeMF(parts, { process: projectProcess() }).arrayBuffer());
-        }
-        bodies.keycapGeometry.dispose();
-        bodies.logoGeometry?.dispose();
-      }
+      // Which cases the font can write: one it cannot would carve placeholder glyphs.
+      const writes = {
+        upper: ctx.fontWrites?.(fontId, alphabetLetters('upper')) ?? true,
+        lower: ctx.fontWrites?.(fontId, alphabetLetters('lower')) ?? true,
+      };
+      // One type size for the set (alphabetSet.js `setTypeSizes`): every capital as tall as the
+      // next, the small letters at the capitals' scale. The capitals' height is read off the Size
+      // slider the way the single cap reads its text height: the height of the text on the cap
+      // now, or the slider itself when the cap carries an icon.
+      const legends = new Map();
+      const lettersOf = (c) => (writes[c] ? [...alphabetLetters(c)].map((ch) => [ch, parseLetter(ch, fontId, 1)]) : null);
+      const byCase = { upper: lettersOf('upper'), lower: lettersOf('lower') };
+      for (const list of Object.values(byCase)) for (const [ch, legend] of list ?? []) legends.set(ch, legend);
+      const asked = carved?.legend?.metrics ? textHeightOf(carved.legend.box, carved.opts.widthMM) : opts.widthMM;
+      const types = setTypeSizes(byCase, meta, asked, opts.rotationDeg);
+      const placeOf = (letter) => types[letter === letter.toLowerCase() ? 'lower' : 'upper']?.places.get(letter);
 
-      if (cancelled) {
-        setStatus('Alphabet set cancelled. Nothing was exported.', 'warn');
-        // Toast as well as status: the `finally` hands the preview back, and the rebuild's own
-        // "Ready ·  …" lands on this line a moment later and wipes the only notice there was.
-        toast('Alphabet set cancelled', { kind: 'warn' });
-        return; // the finally below still runs: lock released, chip cleared, preview restored
-      }
+      const viewParts = (parts) => parts.map((p) => {
+        const s = shelfPart(p);
+        return { name: s.name, positions: s.positions, indices: s.indices, color: s.color };
+      });
+      const blanks = layout.slots.map((slot) => viewParts(placeCap(blank, '', slot, footprint)));
+      const views = new WeakMap();
 
-      const baseName = alphabetFileName(fontName, profileTag);
+      let current = null;
+      let ending = false;
+      let chip = false;
+      let exported = false;
+      let closing = null;
 
-      if (toHost) {
-        setStatus('Sending alphabet set to MakerLab…');
-        const result = await sdkExport({
-          artifacts: [
-            {
-              fileName: `${baseName}.obj`,
-              format: 'obj',
-              buffer: plates, // ArrayBuffer[] — one print plate per letter
-              mtl: plateMtl,
-              coverImage: ctx.cover(),
-              description: `Full A–Z keycap alphabet set (26 print plates). ${LICENSE_NOTE}`,
-              printConfig: printConfig(),
-            },
-          ],
-        });
-        if (result.success) {
-          setStatus('Exported alphabet set to MakerLab ✓  26 keycaps (A–Z).');
-          sdkToast({ message: 'Alphabet set exported', type: 'success' });
-          nudgeLicense();
-        } else {
-          setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
-          sdkToast({ message: 'Export failed', type: 'error' });
-        }
-      } else {
-        // 3MFs are already deflated zips — store (level 0) rather than re-compress.
-        const zipped = buildZip(files, { level: 0 });
-
-        if (host) {
-          /*
-           * An embedding host takes the set through its own export path, the same way the
-           * single-cap path does. `toHost` above is MakerWorld's host, a different one, so
-           * without this branch the set would fall through to the browser download below.
-           *
-           * One zip rather than twenty-six exports: the set is one thing the user asked for.
-           */
-          try {
-            const { indexed } = await host.exportToLibrary(
-              { name: `${baseName}.zip`, bytes: new Uint8Array(zipped) },
-              { designer: 'Keycap Legend Generator' },
-            );
-            setStatus(
-              indexed
-                ? 'Exported the full alphabet set to your library ✓  26 keycaps (A–Z).'
-                : `Exported the full alphabet set ✓  26 keycaps (A–Z), as ${baseName}.zip.`,
-            );
-            toast('Alphabet set exported', { kind: 'success' });
-            nudgeLicense();
-          } catch (err) {
-            console.error(err);
-            setStatus(`Export failed: ${err.message || err}`, 'err');
-          }
+      /** The status line and the busy chip, for the case being carved. */
+      const report = () => {
+        if (ending || current === null) return;
+        const { done, total, error, next } = carver.progress(current);
+        if (!error && done < total) {
+          setStatus(`Generating alphabet set… ${next} (${done + 1}/${total})`);
+          // The chip once, then its text: rebuilding it would throw away its own "Cancelling…".
+          if (!chip) ctx.setBusy('generating…', () => session.requestClose?.());
+          chip = true;
+          ctx.busyText(`generating ${next} (${done + 1}/${total})…`);
           return;
         }
+        if (error) setStatus('Could not generate the alphabet set (try a simpler font or smaller size).', 'err');
+        else setStatus(`Alphabet set ready ✓  ${total} keycaps on one plate.`);
+        if (chip) ctx.setBusy(null);
+        chip = false;
+      };
 
-        downloadFile(zipped, `${baseName}.zip`, 'application/zip');
-        setStatus('Exported full alphabet set ✓  26 keycaps (A–Z) zipped. Open each 3MF in your slicer.');
-        toast('Alphabet set exported ✓', { kind: 'success' });
-        nudgeLicense();
-      }
-    } catch (e) {
-      console.error(e);
-      setStatus('Could not generate the alphabet set (try a simpler font or smaller size).', 'err');
-    } finally {
-      // The lock back first, and the live preview rebuilt for the current inputs: nothing after
-      // it in this block can then keep the loop held, and with it every later Export.
+      const carver = createSetCarver({
+        letters: alphabetLetters,
+        carve: async (letter, i) => {
+          try {
+            // At the set's type size: its size, and the nudge that puts its band on the middle.
+            const place = placeOf(letter);
+            const bodies = await buildBodies(shell, meta, legends.get(letter) ?? parseLetter(letter, fontId, 1), place
+              ? { ...opts, widthMM: place.widthMM, centerX: opts.centerX + place.dx, centerY: opts.centerY + place.dy }
+              : opts);
+            try {
+              const parts = buildExportParts({ bodies, profile, meta, opts: { through } }, { capColor, logoColor });
+              return placeCap(parts, letter, layout.slots[i], footprint);
+            } finally {
+              bodies.keycapGeometry.dispose();
+              bodies.logoGeometry?.dispose();
+            }
+          } catch (err) {
+            console.error(err); // the carver keeps it, and the window names the letter
+            throw err;
+          }
+        },
+        onChange: () => {
+          report();
+          session.onChange?.();
+        },
+      });
+
+      const session = {
+        fontName,
+        layout,
+        /** The caps print standing on their side (the profile turns them), legends to the front. */
+        standing: !!printMatrix(profile, meta),
+        writes,
+        /** One case's type size: how tall a capital is at its scale, and the letter that held it
+         *  below the asked size so it would fit its cap (null when nothing did). */
+        typeSize(letterCase) {
+          const t = types[letterCase];
+          if (!t) return null;
+          const by = t.fit < 1 ? t.limit : letterCase === 'lower' && types.upper?.fit < 1 ? types.upper.limit : null;
+          return { capHeightMM: t.capHeightMM, shrunkFor: by };
+        },
+        /** Set by the window: called after every change, and to close it from the busy chip. */
+        onChange: null,
+        requestClose: null,
+        want(letterCase) {
+          current = letterCase;
+          carver.want(letterCase);
+        },
+        progress: (letterCase) => carver.progress(letterCase),
+        whenReady: (letterCase) => carver.whenReady(letterCase),
+        /** One case's plate for the picture: the caps carved so far, then blank ones. */
+        previewParts(letterCase) {
+          const { caps } = carver.progress(letterCase);
+          return layout.slots.flatMap((_, i) => {
+            const cap = caps[i];
+            if (!cap) return blanks[i];
+            if (!views.has(cap)) views.set(cap, viewParts(cap.parts));
+            return views.get(cap);
+          });
+        },
+        /**
+         * Write one case's set through the app's one export path: one 3MF of 26 caps (each its own
+         * slicer object, on the single cap's filament slots), or one plate to MakerLab with
+         * `cover` as its picture. Waits for the last letter. Resolves whether it went out.
+         */
+        async deliver(letterCase, { cover } = {}) {
+          const caps = await carver.whenReady(letterCase);
+          if (!caps) return false;
+          const parts = caps.flatMap((cap) => cap.parts);
+          const range = letterCase === 'lower' ? 'a–z' : 'A–Z';
+          const filaments = new Set(parts.map((p) => p.extruder)).size;
+          const count = ['no', 'one', 'two', 'three', 'four'][filaments] ?? String(filaments);
+          try {
+            const ok = await deliverModel(
+              () => parts,
+              alphabetFileName(fontName, profileTag, letterCase),
+              `Exported full alphabet set ✓  26 keycaps (${range}) on one plate. Open it in your slicer and assign ${count} filament${filaments === 1 ? '' : 's'}.`,
+              `Full alphabet set (${range}): 26 keycaps on one print plate, made with the Keycap Legend Generator.`,
+              { cover, what: 'Alphabet set' },
+            );
+            exported ||= ok;
+            return ok;
+          } catch (err) {
+            console.error(err);
+            setStatus(`Could not write the alphabet set: ${err.message || err}`, 'err');
+            return false;
+          }
+        },
+        /** Stop carving, free every cap, and give the loop back. Once, however often it is called. */
+        close() {
+          closing ??= (async () => {
+            ending = true;
+            const wasCarving = carver.busy;
+            try {
+              const caps = await carver.stop();
+              for (const cap of caps) for (const p of cap.parts) p.geom.dispose();
+            } finally {
+              // The lock back first, and the live preview rebuilt for the current inputs: nothing
+              // after it here can then keep the loop held, and with it every later Export.
+              ctx.end();
+              try {
+                ctx.setBusy(null);
+              } finally {
+                updateAlphabetAvailability();
+              }
+            }
+            if (wasCarving && !exported) {
+              setStatus('Alphabet set cancelled. Nothing was exported.', 'warn');
+              // Toast as well as status: the rebuild's own "Ready ·  …" lands on this line a
+              // moment later and wipes the only notice there was.
+              toast('Alphabet set cancelled', { kind: 'warn' });
+            }
+          })();
+          return closing;
+        },
+      };
+      return session;
+    } catch (err) {
       ctx.end();
       ctx.setBusy(null);
       updateAlphabetAvailability();
+      throw err;
     }
   }
 
-  alphabetBtn.addEventListener('click', generateAlphabetSet);
+  /** "Get full alphabet set": the window first, and the export from its Generate. */
+  async function openAlphabetSet() {
+    let session = null;
+    try {
+      session = await startAlphabetSet();
+      if (!session) return;
+      openAlphabetDialog({
+        session,
+        fontName: session.fontName,
+        writes: session.writes,
+        toHost: !!(MAKERLAB && mlReady() && mlCan('export')),
+      });
+    } catch (err) {
+      console.error(err);
+      session?.close().catch(() => {});
+      setStatus('Could not generate the alphabet set (try a simpler font or smaller size).', 'err');
+    }
+  }
 
-  return { runPrimaryExport, exportBlank, updateAlphabetAvailability, nudgeLicense, printConfig, buildExportParts };
+  alphabetBtn.addEventListener('click', () => void openAlphabetSet());
+
+  return { runPrimaryExport, exportBlank, updateAlphabetAvailability, nudgeLicense, printConfig, buildExportParts, startAlphabetSet };
 }

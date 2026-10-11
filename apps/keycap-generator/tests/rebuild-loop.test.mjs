@@ -159,10 +159,57 @@ const back = await loop.settled();
 check('…and the next change carves again', back.legend.name === 'copy' && digest(back.bodies) === copy0, back.legend.name);
 
 // ------------------------------------------------------------------ what the status line says
-const okReport = app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }], room: 15.2, surfaceVariation: 0.1, through: false, single: false, depth: 0.5 });
+const TOP_1U = [15.2, 15.2], TOP_225U = [39.12, 15.2];
+const okReport = app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5 });
 check('a carve that fits says Ready, with no warning', okReport.diagnostics.length === 0 && okReport.ok === 'Ready · legend 7.6×7.6 mm · 0.5 mm deep.', okReport.ok);
-const both = app.carveReport({ footprints: [{ w: 16, h: 8 }], room: 15.2, surfaceVariation: 0.6, through: false, single: false, depth: 0.5 });
+const both = app.carveReport({ footprints: [{ w: 16, h: 8 }], top: TOP_1U, surfaceVariation: 0.6, through: false, single: false, depth: 0.5 });
 check('a legend too big for the top and a curved top are both warnings, the size first', both.diagnostics.map((d) => `${d.level}:${d.code}`).join(' ') === 'warning:legend-too-big warning:curved-top', both.diagnostics.map((d) => d.code).join(', '));
+check('…and the size warning names the top in one number when it is square', /larger than the top \(~15\.2 mm\)/.test(both.diagnostics[0].message), both.diagnostics[0].message);
+const wide = app.carveReport({ footprints: [{ w: 16.7, h: 7.6 }], top: TOP_225U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5 });
+check('"Shift" 16.7 mm wide on a 2.25u fits: no warning (it used to be measured against the short side)', wide.diagnostics.length === 0, wide.diagnostics.map((d) => d.message).join(' | '));
+const turned = app.carveReport({ footprints: [{ w: 16.7, h: 7.6, rot: 90 }], top: TOP_225U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5 });
+check('…turned 90°, the same word stands 16.7 mm tall on a 15.2 mm deep top: a warning naming both sides', turned.diagnostics.length === 1 && /~39\.1×15\.2 mm/.test(turned.diagnostics[0].message), turned.diagnostics.map((d) => d.message).join(' | '));
+const recessed = app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5, rimRecess: 2 });
+const raisedFlat = app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5, raised: 0.6 });
+const raisedRound = app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5, raised: 0.6, rimLifted: true });
+check('a raised legend says to print it as exported, open side down, and not to flip it',
+  /raised 0\.6 mm\. Print as exported, open side down; do not flip it\./.test(raisedFlat.ok) && /with supports under the edge/.test(raisedRound.ok), `${raisedFlat.ok} | ${raisedRound.ok}`);
+// Walls cut short above the stem (Wall height): the cap stands on its stem, so it needs supports.
+const shortWalls = app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5, rimLifted: true });
+const fullWalls = app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5 });
+check('walls ending above the stem say to print with supports under them; full walls do not',
+  /The walls end above the stem: print with supports under them\./.test(shortWalls.ok) && !/supports/.test(fullWalls.ok)
+  && shortWalls.diagnostics.length === 0, shortWalls.ok);
+const small = app.carveReport({ footprints: [{ w: 14.4, h: 2.4 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5, textHeight: 2.4 });
+const bigText = app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5, textHeight: 7.6 });
+check('a long word shrunk to small letters is warned about, not refused; normal text is not',
+  small.diagnostics.map((d) => d.code).join(',') === 'small-text' && /2\.4 mm tall/.test(small.diagnostics[0].message) && bigText.diagnostics.length === 0,
+  small.diagnostics.map((d) => d.message).join(' | '));
+const tiny = app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }, { w: 3.1, h: 2.2 }, { w: 5, h: 5 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5 });
+check('a second legend under 3.5 mm earns the nozzle warning, naming it; the first legend never does',
+  tiny.diagnostics.map((d) => d.code).join(',') === 'small-legend' && /Legend 2 is 3\.1 mm/.test(tiny.diagnostics[0].message)
+  && app.carveReport({ footprints: [{ w: 3, h: 3 }], top: TOP_1U, surfaceVariation: 0.1, through: false, single: false, depth: 0.5 }).diagnostics.length === 0,
+  tiny.diagnostics.map((d) => d.message).join(' | '));
+check('a stem recessed past the safe depth warns that the rim may touch the switch', recessed.diagnostics.map((d) => d.code).join(',') === 'rim-may-touch', recessed.diagnostics.map((d) => d.message).join(' | '));
+
+// A made shape knows how far it presses before its sides meet the switch (meta.travelMM, a recess
+// included), and short of the switch's full 4 mm the status says so, as a fact, in one line.
+const roundCap = await app.loadKeycap('shape:round/1u');
+const reportFor = (travel) => app.carveReport({ footprints: [{ w: 7.6, h: 7.6 }], top: roundCap.meta.topExtent, surfaceVariation: 0.1, through: false, single: false, depth: 0.5, travel });
+const presses = reportFor(roundCap.meta.travelMM);
+check('a round 1u, as it loads, says how far it presses',
+  presses.diagnostics.length === 1 && presses.diagnostics[0].code === 'travel-short' && presses.diagnostics[0].message === 'Presses 2.7 mm of 4 before the sides meet the switch (it registers at 2).',
+  presses.diagnostics.map((d) => d.message).join(' | '));
+const notEnough = reportFor(1.5);
+check('…and one that presses less than the switch needs says so, and what to do',
+  notEnough.diagnostics.map((d) => d.code).join(',') === 'travel-too-short' && /^Presses only 1\.5 mm of 4 before the sides meet the switch: not enough to register \(2\)\. /.test(notEnough.diagnostics[0].message),
+  notEnough.diagnostics.map((d) => d.message).join(' | '));
+const squareCap = await app.loadKeycap('shape:square/1u');
+check('a square 1u goes all the way down: nothing said', reportFor(squareCap.meta.travelMM).diagnostics.length === 0, `${squareCap.meta.travelMM}`);
+const oldLink = await app.loadKeycap('shape:round/1u?size=18.136&skirt=4');
+check('a link that still carries a side height loads, flush with its stem like any other',
+  oldLink.meta.bbox.min[2] === 0 && oldLink.meta.stemBbox.min[2] === 0 && Math.abs(oldLink.meta.travelMM - roundCap.meta.travelMM) < 1e-9,
+  `rim ${oldLink.meta.bbox.min[2]}, stem ${oldLink.meta.stemBbox.min[2]}`);
 
 // ------------------------------------------------------------------ the rebuild lock
 // mount.js's own lock (rebuild.js), the one it hands exports.js and a paid set. Its `afterRelease`
@@ -200,7 +247,8 @@ const elements = { alphabetSet: button, alphabetHelp: { textContent: '' } };
 const statuses = [];
 let chip = null;
 let chipTexts = 0;
-let breakChipAt = 0; // the chip's Nth relabel throws, for a batch that fails half way
+let flushes = 0;
+let breakFlushAt = 0; // the Nth stem flush throws, for a set whose letter cannot be carved
 let breakChipClear = false; // clearing the chip throws once, for a batch whose clean-up fails
 const exportCtx = {
   $: (id) => elements[id],
@@ -210,14 +258,14 @@ const exportCtx = {
     if (text == null && breakChipClear) { breakChipClear = false; throw new Error('the chip would not clear'); }
     chip = text == null ? null : { text, cancel };
   },
-  busyText: () => { chipTexts++; if (chipTexts === breakChipAt) throw new Error('the chip broke'); },
+  busyText: () => { chipTexts++; },
   cover: () => '',
   pro: () => null,
   begin: lock.begin,
   end: lock.end,
   busy: lock.held,
   settled: () => loop.settled(),
-  flushStem: () => {},
+  flushStem: () => { flushes++; if (flushes === breakFlushAt) throw new Error('the stem would not apply'); },
   state: () => ({
     capColor: '#161616', logoColor: '#f7f7f5', through: false, extraColors: [], stem: null,
     shell: kc.shellGeometry, meta, profile, profileTag: 'standard-profile', unit: 1, unitId: '1u',
@@ -243,12 +291,23 @@ const until = async (cond, what) => {
   throw new Error(`timed out waiting for ${what}`);
 };
 
-// ------------------------------------------------------------------ Export during the A-Z batch
+// ------------------------------------------------------------------ Export during the alphabet set
+// The set holds the loop from the moment its window opens until the window closes (exports.js
+// startAlphabetSet). The window itself is stood in for: it asks for a case, and its close is
+// what the busy chip's Cancel does.
+const openSet = async () => {
+  const set = await exportsApi.startAlphabetSet();
+  if (set) {
+    set.requestClose = () => { set.close().catch(() => {}); };
+    set.want('upper');
+  }
+  return set;
+};
 panel.legend = icon('copy');
 panel.rot = 0;
 loop.request();
 await loop.settled();
-const az = button.listeners.click(); // "Get full alphabet set (A–Z)"
+const az = await openSet();
 await until(() => lock.held() && chipTexts >= 1, 'the set to hold the loop');
 check('the alphabet set holds the loop, and its own button is disabled while it runs', lock.held() && button.disabled === true);
 // A new legend picked during the set, and Export pressed at once.
@@ -259,8 +318,8 @@ let batchDone = 0;
 const exported = exportsApi.runPrimaryExport().then(() => { exportDone = Date.now(); });
 await until(() => chipTexts >= 3, 'three letters');
 check('an Export pressed during the set waits for it', exportDone === 0 && globalThis.__downloads.length === 0, `${chipTexts} letters carved, nothing exported yet`);
-chip.cancel(); // the set's own Cancel, to keep this short
-await az.then(() => { batchDone = Date.now(); });
+chip.cancel(); // the busy chip's Cancel closes the set, to keep this short
+await az.close().then(() => { batchDone = Date.now(); });
 await exported;
 const sent = globalThis.__downloads.at(-1);
 const heartAt0 = await expected3mf(icon('heart'), 0);
@@ -270,14 +329,17 @@ check('the cancelled set said so, exported nothing, and gave its button back', s
 
 // ------------------------------------------------------------------ a set that throws
 statuses.length = 0;
-breakChipAt = chipTexts + 2; // the second letter's relabel throws
+breakFlushAt = flushes + 3; // the set's own flush, A's, then B's throws
 const logError = console.error;
 console.error = () => {}; // the set logs the error it catches; expected here
-const broken = button.listeners.click();
-await broken;
+const broken = await openSet();
+const brokenError = await broken.whenReady('upper').then(() => null, (e) => e);
+const brokenSent = await broken.deliver('upper').then((ok) => ok, () => false);
 console.error = logError;
-check('a set that throws half way says so', statuses.some((s) => s.startsWith('err:Could not generate the alphabet set')), statuses.at(-1));
-check('…and still lets go of the loop', !lock.held());
+check('a set that throws half way says so', brokenError instanceof Error && statuses.some((s) => s.startsWith('err:Could not generate the alphabet set')), statuses.at(-1));
+check('…and Generate on it exports nothing', brokenSent === false && globalThis.__downloads.length === 1);
+await broken.close();
+check('…and its close still lets go of the loop', !lock.held());
 const again = loop.hold();
 check('…so the next batch can hold it', typeof again === 'function');
 again?.();
@@ -287,14 +349,13 @@ await exportsApi.runPrimaryExport();
 check('…and the next Export is sent', globalThis.__downloads.at(-1)?.name === 'keycap-copy-standard-profile.3mf');
 
 // ------------------------------------------------------------------ a set whose clean-up throws
-// The set gives the loop back before anything else in its `finally`, so even a chip that will not
+// The set gives the loop back before anything else in its close, so even a chip that will not
 // clear cannot keep every later Export waiting.
 const chipsBeforeClean = chipTexts;
-const cleanupThrows = button.listeners.click();
-await until(() => chipTexts > chipsBeforeClean, 'the set to start');
+const cleanup = await openSet();
+await until(() => chipTexts > chipsBeforeClean + 1, 'the set to start');
 breakChipClear = true;
-chip.cancel();
-const cleanupError = await Promise.race([cleanupThrows.then(() => null, (e) => e), sleep(15000).then(() => 'still waiting')]);
+const cleanupError = await Promise.race([cleanup.close().then(() => null, (e) => e), sleep(15000).then(() => 'still waiting')]);
 const holdAfterCleanup = loop.hold();
 check('a set whose chip will not clear still gives the loop back', cleanupError instanceof Error && typeof holdAfterCleanup === 'function', `${cleanupError?.message ?? cleanupError}, the loop ${holdAfterCleanup ? 'is free' : 'is still held'}`);
 holdAfterCleanup?.();
@@ -309,11 +370,10 @@ loop.request();
 loop.flush();
 await until(() => starts > startsBeforeSet, 'the carve to start');
 const chipsBefore = chipTexts;
-const late = button.listeners.click();
+const late = openSet();
 await until(() => chipTexts > chipsBefore, 'the set to start after the carve');
 check('the set pressed during a carve runs once the carve is done', lock.held());
-chip.cancel();
-await late;
+await (await late).close();
 
 // ------------------------------------------------------------------ an export refused
 // Each refusal is said, and thrown, so the export panel says it too (a toast).

@@ -180,7 +180,7 @@ const BUDGET = {
   'bubble-pop-generator': { button: 1, html: 2, restyle: 17 },
   'clicker-generator': { button: 4, input: 2, html: 9, restyle: 6 },
   'house-number': { restyle: 5 },
-  'keycap-generator': { button: 14, select: 3, input: 12, range: 5, html: 2 },
+  'keycap-generator': { button: 4, select: 1, input: 4, range: 2, html: 2 },
   'keychain-carabiner': { restyle: 1 },
   'kit-demo': { licence: 4 },
   'laser-box': { restyle: 3 },

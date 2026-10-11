@@ -34,8 +34,11 @@ export {
 export {
   openLicenceOffer,
   openLicenceCertificate,
+  lifetimeLicenceButton,
   type LicenceOfferOptions,
   type LicenceCertificateOptions,
+  type LicenceButtonOptions,
+  type LicenceButtonHandle,
 } from './components/lifetime-licence';
 export { topbarLinks, type TopbarLinksOptions, type TopbarLifetimeLicence } from './components/topbar-links';
 export { THEME_KEY, resolveTheme, applyTheme, themeToggleButton, type ThemeToggleOptions } from './components/theme';
@@ -113,7 +116,11 @@ export {
   type SegmentedOptions,
   type SegmentedRow,
   type SelectFieldOptions,
+  type Taggable,
+  type TaggedRow,
 } from './components/controls';
+// The level a value comes from, on a control's caption line (`setTag`).
+export { sourceTag, type SourceTagOptions, type SourceTagHandle } from './components/source-tag';
 export {
   button,
   linkButton,
@@ -194,8 +201,10 @@ export {
   stageStatus,
   stageTools,
   stageRow,
+  type StageRowOptions,
   previewBar,
   type PreviewBar,
+  type PreviewBarMode,
   type PreviewBarOptions,
   type PreviewBarToggle,
   stageHandle,
@@ -325,6 +334,8 @@ export {
 } from './components/settings-rail';
 // A grid of keys as they will sit; a tap adds or removes one (the clicker's block layouts).
 export { keyMap, type KeyMapOptions, type KeyMapHandle } from './components/key-map';
+// A keycap's top with a numbered spot per legend; a tap picks one, "All" picks every one.
+export { capMap, type CapMapOptions, type CapMapSpot, type CapMapHandle } from './components/cap-map';
 // Symbols in text, the way Laser Studio puts them there: a field whose symbols sit inline as
 // tokens, the inspector a token opens, the Symbols & icons library, and its MIT artwork.
 export { symbolTextField, type SymbolTextFieldOptions, type SymbolTextFieldHandle } from './components/symbol-text-field';

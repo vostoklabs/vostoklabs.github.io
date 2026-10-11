@@ -17,6 +17,7 @@
 import { el } from '../dom';
 import { svgEl } from '../icons';
 import type { Diagnostic } from '../diagnostics';
+import { badgePill } from './button';
 
 // --------------------------------------------------------------- mode bar --
 
@@ -119,9 +120,19 @@ export function stageTools(nodes: HTMLElement[]): HTMLElement {
   return el('div', { className: 'vl-stage__tools' }, nodes);
 }
 
+export interface StageRowOptions {
+  /**
+   * Use the stage's whole width. The top-right corner belongs to the plate picker, so the tools
+   * keep clear of it; a row below the first is under the picker, not beside it, and a long row
+   * there (a chip per group) would otherwise wrap into three. The other rows keep clear as
+   * before. Default false.
+   */
+  wide?: boolean;
+}
+
 /** One line of `stageTools()`: several rows stack, each starting at the left edge. */
-export function stageRow(nodes: HTMLElement[]): HTMLElement {
-  return el('div', { className: 'vl-stage__row' }, nodes);
+export function stageRow(nodes: HTMLElement[], opts: StageRowOptions = {}): HTMLElement {
+  return el('div', { className: opts.wide ? 'vl-stage__row vl-stage__row--wide' : 'vl-stage__row' }, nodes);
 }
 
 // ------------------------------------------------------------- preview bar --
@@ -135,9 +146,19 @@ export interface PreviewBarToggle {
   onToggle(on: boolean): void;
 }
 
+/** One mode of a `previewBar()`. */
+export interface PreviewBarMode<T extends string = string> extends ModeOption<T> {
+  /**
+   * A small pill after the label marking the mode as paid ('Pro'): the sparkle and word
+   * `button({ badge })` draws, the same element. Default: none, and the mode is built exactly
+   * as before.
+   */
+  badge?: string;
+}
+
 export interface PreviewBarOptions<T extends string = string> {
   /** A choice of how the preview is arranged — Assembled / Exploded — drawn as a filled pill. */
-  modes?: { options: ModeOption<T>[]; value: T; onChange(value: T): void; label?: string };
+  modes?: { options: PreviewBarMode<T>[]; value: T; onChange(value: T): void; label?: string };
   /** On/off switches after a divider, each a dot and its name; the dot fills when on. */
   toggles?: PreviewBarToggle[];
   /** Anything else after a divider, such as a bare slider. */
@@ -152,6 +173,9 @@ export interface PreviewBar<T extends string = string> {
   setValue(value: T): void;
   /** Reflect a switch set elsewhere. Fires nothing. */
   setPressed(id: string, on: boolean): void;
+  /** Give a mode a badge, change its word, or take it away with `null`: a paid mode the user
+   *  has since bought. Fires nothing. */
+  setBadge(value: T, badge: string | null): void;
 }
 
 /**
@@ -187,6 +211,7 @@ export function previewBar<T extends string = string>(opts: PreviewBarOptions<T>
       }) as HTMLButtonElement;
       if (m.icon) b.append(svgEl(m.icon));
       b.append(document.createTextNode(m.label));
+      if (m.badge) b.append(badgePill(m.badge));
       modeButtons.set(m.value, b);
       group.append(b);
     }
@@ -218,6 +243,12 @@ export function previewBar<T extends string = string>(opts: PreviewBarOptions<T>
     root,
     setValue,
     setPressed: (id, on) => toggleButtons.get(id)?.setAttribute('aria-pressed', String(on)),
+    setBadge: (value, badge) => {
+      const b = modeButtons.get(value);
+      if (!b) return;
+      b.querySelector('.vl-btn__badge')?.remove();
+      if (badge) b.append(badgePill(badge));
+    },
   };
 }
 

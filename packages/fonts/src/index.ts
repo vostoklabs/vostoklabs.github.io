@@ -18,7 +18,7 @@ export { ICONS, ICON_CATEGORIES, searchIcons, iconById, iconByChar, type IconCho
 export { POPULAR_IDS, POPULAR, QUICK_PICKS, SYMBOL_GROUPS, searchGroup, type SymbolGroup } from './symbolGroups';
 
 import { FONTS, type FontChoice } from './registry';
-import { requirementOf, runsHold, LATIN_EXT_B, SCRIPTS } from './coverage';
+import { coverageOf, requirementOf, runsHold, LATIN_EXT_B, SCRIPTS } from './coverage';
 import { addedFontUrls, parsedFonts as fontCache } from './cache';
 // What a face covers and what a string needs, measured on the same character sets.
 export { UNCOVERED } from './coverage';
@@ -191,7 +191,17 @@ export function fontScripts(font: FontChoice): string[] {
   return SCRIPTS.filter(([, names]) => names.some((name) => font.subsets?.includes(name))).map(([script]) => script);
 }
 
+/** The alphabets a face this package did not ship writes (a typeface an app parses itself), given
+ *  a lookup into its characters: measured on the sets the registry's faces were measured on, and
+ *  named as `fontScripts` names them, so a picker's Alphabet filter treats it like the rest. */
+export function scriptsFromCmap(has: (codePoint: number) => boolean): string[] {
+  return fontScripts({ subsets: coverageOf(has) } as FontChoice);
+}
+
 export { FALLBACK_FONT_ID } from './cache';
 
 // A font the user brings: one import path for every generator (see import.ts).
 export { importFontBuffer, importFontFiles, toPickerFont, fontSupportsText, type ImportedFonts } from './import';
+
+// Which face a text moves to when the chosen one cannot write it (see fallback.ts).
+export { alphabetOf, fallbackFaces, lettersOnly, plainFacesFor } from './fallback';

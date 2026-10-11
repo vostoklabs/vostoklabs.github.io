@@ -168,6 +168,10 @@ export interface HostReport {
 /** How long to wait for the host before the UI admits it does not know. */
 export const EXPORT_TIMEOUT_MS = 60_000;
 
+/** How long the first handshake with the host may take (the glue's `init({ timeout })`). A large
+ *  package (fonts, a font library) is slow to load, and the handshake waits on it. */
+export const HANDSHAKE_TIMEOUT_MS = 30_000;
+
 /** Send one export to MakerLab and say what happened. Resolves true when the host took it, and
  *  never rejects.
  *

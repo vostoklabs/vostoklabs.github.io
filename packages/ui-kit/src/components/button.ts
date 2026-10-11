@@ -77,6 +77,24 @@ export interface ButtonOptions {
   onClick?: (e: MouseEvent) => void;
 }
 
+/**
+ * The paid marker on its own: the sparkle and the word, as `button({ badge })` draws it.
+ *
+ * One definition for every control that carries one: the button, an option of
+ * `segmentedControl()` and a mode of `previewBar()`. Not exported from the package on purpose:
+ * a control takes a `badge` option, so an app never appends a pill it has to remember.
+ */
+export function badgePill(text: string): HTMLElement {
+  const pill = el('span', { className: 'vl-btn__badge' });
+  const spark = el('span', { className: 'vl-btn__badge-icon' });
+  spark.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+    + '<path d="M12 2l2.2 6.4a2 2 0 0 0 1.4 1.4L22 12l-6.4 2.2a2 2 0 0 0-1.4 1.4L12 22l-2.2-6.4'
+    + 'a2 2 0 0 0-1.4-1.4L2 12l6.4-2.2a2 2 0 0 0 1.4-1.4z"/></svg>';
+  pill.append(spark, el('span', { text }));
+  return pill;
+}
+
 /** A button that can be relabelled, disabled and put into its working state. */
 export type ButtonHandle = HTMLButtonElement & {
   setLabel(text: string): void;
@@ -140,13 +158,7 @@ export function button(opts: ButtonOptions): ButtonHandle {
        is what the keycap generator's card label does, and for the same reason. */
     node.classList.add('vl-btn--badged');
     ensureStack();
-    badgeNode = el('span', { className: 'vl-btn__badge' });
-    const spark = el('span', { className: 'vl-btn__badge-icon' });
-    spark.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
-      + '<path d="M12 2l2.2 6.4a2 2 0 0 0 1.4 1.4L22 12l-6.4 2.2a2 2 0 0 0-1.4 1.4L12 22l-2.2-6.4'
-      + 'a2 2 0 0 0-1.4-1.4L2 12l6.4-2.2a2 2 0 0 0 1.4-1.4z"/></svg>';
-    badgeNode.append(spark, el('span', { text: opts.badge }));
+    badgeNode = badgePill(opts.badge);
     node.append(badgeNode);
   }
   if (opts.disabled) node.disabled = true;

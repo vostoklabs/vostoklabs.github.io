@@ -26,9 +26,18 @@ export interface ChipOptions {
    * which is the same thing for a chip only as wide as its label.
    */
   centered?: boolean;
+  /**
+   * A number after the label, in a quieter weight: how many things the chip stands for ("Numbers
+   * 10"). Default: none, and the chip is built exactly as before.
+   */
+  count?: number | string;
 }
 
-export type ChipHandle = HTMLButtonElement & { setPressed(pressed: boolean): void };
+export type ChipHandle = HTMLButtonElement & {
+  setPressed(pressed: boolean): void;
+  /** Change the number after the label, add one, or take it away with `null`. */
+  setCount(count: number | string | null): void;
+};
 
 /** A small filter/tag toggle. Reports state through `aria-pressed`, which is also what the
  *  stylesheet keys the filled look off — so the two cannot disagree. */
@@ -41,6 +50,21 @@ export function chip(opts: ChipOptions): ChipHandle {
   if (opts.icon) node.append(svgEl(opts.icon));
   node.append(document.createTextNode(opts.label));
   if (opts.disabled) node.disabled = true;
+
+  let countNode: HTMLElement | null = null;
+  node.setCount = (count) => {
+    if (count == null || count === '') {
+      countNode?.remove();
+      countNode = null;
+      return;
+    }
+    if (!countNode) {
+      countNode = el('span', { className: 'vl-chip__count' });
+      node.append(countNode);
+    }
+    countNode.textContent = String(count);
+  };
+  if (opts.count != null) node.setCount(opts.count);
 
   node.setPressed = (pressed) => node.setAttribute('aria-pressed', String(pressed));
   if (opts.onToggle) {

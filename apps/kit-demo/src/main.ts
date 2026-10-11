@@ -12,6 +12,7 @@ import {
   openLicenseModal,
   licenseReminderToast,
   topbarLinks,
+  lifetimeLicenceButton,
   showWhatsNew,
   changelogButton,
   nudgePad,
@@ -57,6 +58,8 @@ import {
   colorPopover,
   historyControls,
   keyMap,
+  capMap,
+  sourceTag,
   listRow,
   drawer,
   popover,
@@ -214,6 +217,27 @@ app.append(
   group('Chrome'),
   fullWidth(entry('topbarLinks()', 'Topbar', 'The standard generator header: all generators and commercial license on the left, donate actions on the right.', topbarLinks())),
   fullWidth(entry('topbarLinks({ lifetimeLicence })', 'Topbar with lifetime licence', 'The same header with a lifetime commercial licence offer in the middle. Opens the offer; buying happens on the store.', topbarLinks({ lifetimeLicence: { product: 'Demo Generator', href: BRAND.urls.buyMeACoffee, terms: ['Sell physical prints', 'Pay once, get a lifetime license', 'No subscription'] } }))),
+  entry(
+    'lifetimeLicenceButton()',
+    'Lifetime licence button',
+    'Inside MakerLab, where there is no top bar: the offer from the left panel. It opens the ' +
+      'offer until the licence is held, then the certificate. This one buys after a short wait ' +
+      'and forgets on reload.',
+    el('div', { className: 'kit-sidebar-frame' }, [(() => {
+      let held = false;
+      return lifetimeLicenceButton({
+        owned: () => held,
+        offer: () => ({
+          title: 'Lifetime commercial licence',
+          terms: ['Sell digital files', 'Pay once, get a lifetime licence', 'Sell physical prints', 'No subscription'],
+          buyLabel: 'Unlock the commercial licence',
+          onBuy: () => new Promise<boolean>((done) => setTimeout(() => { held = true; done(true); }, 600)),
+        }),
+        certificate: { title: 'Your commercial licence', lede: 'Your lifetime commercial licence is active.', bodyText: 'DEMO GENERATOR COMMERCIAL LICENCE\n\nThe full licence text goes here.' },
+        title: 'Lifetime commercial licence: sell what you make, forever',
+      });
+    })()]),
+  ),
   fullWidth(entry('supportLinks()', 'Support links', 'Buy me a coffee, MakerWorld, and GitHub as one styled row. Placeholder URLs are hidden automatically.', supportLinks())),
   entry(
     'panelCredit()',
@@ -445,6 +469,128 @@ const keyLayout = keyMap({
 });
 paintKeyCount();
 
+/* A paid badge on options: tabs, cards and a view bar's modes, at a sidebar's width so the
+   label is seen giving way before the pill does. */
+const badgeDemo = el('div', { className: 'kit-sidebar-frame' }, [
+  segmentedControl({
+    label: 'Legends',
+    options: [
+      { value: '1', label: '1' },
+      { value: '2', label: '2', badge: 'Pro' },
+      { value: '3', label: '3', badge: 'Pro' },
+    ],
+    value: '1',
+    onChange: (v) => toast(`${v} legends`),
+  }),
+  segmentedControl({
+    options: [
+      { value: 'flush', label: 'Flush' },
+      { value: 'shine', label: 'Shine-through legends', badge: 'Pro' },
+    ],
+    value: 'flush',
+  }),
+  segmentedControl({
+    variant: 'cards',
+    columns: 1,
+    options: [
+      { value: 'text', label: 'Text', icon: ICONS.text },
+      { value: 'svg', label: 'Your own SVG', icon: ICONS.svg, badge: 'Pro' },
+    ],
+    value: 'text',
+  }),
+  previewBar({
+    label: 'View',
+    modes: {
+      options: [
+        { value: 'cap', label: 'One cap' },
+        { value: 'set', label: 'Full set', badge: 'Pro' },
+      ],
+      value: 'cap',
+      onChange: (v) => toast(`View: ${v}`),
+    },
+  }).root,
+]);
+
+/* The cap map: three legends on a 1u top, and All. The size switch redraws the top; the count
+   switch swaps the spots, and a choice that is gone falls back to the first. */
+const LEGEND_SPOTS = [
+  { value: 'l1', label: 'Legend 1', x: 0.22, y: 0.28 },
+  { value: 'l2', label: 'Legend 2', x: 0.78, y: 0.28 },
+  { value: 'l3', label: 'Legend 3', x: 0.5, y: 0.74 },
+];
+const capEditing = el('p', { className: 'vl-hint' });
+const showEditing = (v: string) => {
+  capEditing.textContent = v === 'all' ? 'Editing all legends' : `Editing ${LEGEND_SPOTS.find((s) => s.value === v)?.label ?? v}`;
+};
+const legendMap = capMap({
+  label: 'Legend',
+  help: 'Tap a legend to edit it.',
+  width: 14,
+  height: 14,
+  spots: LEGEND_SPOTS,
+  value: 'l3',
+  all: { value: 'all', label: 'All legends' },
+  onChange: showEditing,
+});
+showEditing('l3');
+const capDemo = el('div', { className: 'kit-sidebar-frame' }, [
+  legendMap,
+  capEditing,
+  segmentedControl({
+    label: 'Key size',
+    options: [{ value: '1', label: '1u' }, { value: '2', label: '2u' }],
+    value: '1',
+    onChange: (v) => legendMap.setShape(v === '2' ? 32.5 : 14, 14),
+  }),
+  segmentedControl({
+    label: 'Legends',
+    options: [{ value: '2', label: '2' }, { value: '3', label: '3' }],
+    value: '3',
+    onChange: (v) => legendMap.setSpots(v === '2' ? [LEGEND_SPOTS[0]!, { ...LEGEND_SPOTS[1]!, x: 0.5, y: 0.7 }] : LEGEND_SPOTS),
+  }),
+]);
+
+/* Where each value comes from: a tag on each control's caption line. A reset hands the value
+   back to the board. */
+const boardTag = () => sourceTag({ label: 'Board' });
+const ownTag = (level: string) => {
+  const tag = sourceTag({
+    label: level,
+    local: true,
+    onReset: () => {
+      tag.set({ label: 'Board' });
+      toast(`Back to the board's value`);
+    },
+  });
+  return tag;
+};
+const tagLegends = segmentedControl({ label: 'Legends', options: [{ value: '1', label: '1' }, { value: '2', label: '2' }], value: '2' });
+tagLegends.setTag(boardTag());
+const tagSize = sliderRow({ label: 'Size', help: 'The tallest side of the legend.', min: 2, max: 8, step: 0.1, value: 3.3, unit: 'mm' });
+tagSize.setTag(ownTag('Numbers'));
+const tagDepth = sliderRow({ label: 'Depth', min: 0.2, max: 1.2, step: 0.1, value: 0.5, unit: 'mm' });
+tagDepth.setTag(boardTag());
+const tagHoming = toggleSwitch({ label: 'Homing bump' });
+tagHoming.setTag(ownTag('Key'));
+const tagFont = selectField({ label: 'Font', options: [{ value: 'chakra', label: 'Chakra Petch' }, { value: 'mono', label: 'Mono' }], value: 'chakra' });
+tagFont.setTag(boardTag());
+const tagCount = stepperRow({ label: 'Copies', min: 1, max: 10, value: 1 });
+tagCount.setTag(boardTag());
+const tagNudge = nudgePad({ label: 'Nudge', x: { label: 'X', max: 5 }, y: { label: 'Y', max: 5 } });
+tagNudge.setTag(boardTag());
+const tagDemo = el('div', { className: 'kit-sidebar-frame' }, [tagLegends, tagSize, tagDepth, tagHoming, tagFont, tagCount, tagNudge]);
+
+const badgeEntry = entry(
+  "segmentedControl({ options: [{ badge }] }) · previewBar({ modes })",
+  'Pro badge on an option',
+  'Any option of the tabs, cards or picture tiles, and any mode of a view bar, can carry the ' +
+    'paid pill button({ badge }) draws: the same element, not a lookalike. On a tab the label ' +
+    'gives way first and the pill keeps its size.',
+  badgeDemo,
+);
+// The anchor kit-demo can be opened at to look at the three parts together.
+badgeEntry.id = 'legend-parts';
+
 app.append(
   group('Controls'),
   entry(
@@ -646,6 +792,23 @@ app.append(
       'dashed square with a plus, and a tap on either switches it. The tap goes to the app, which ' +
       'decides and redraws with set(). It is how the clicker draws a custom block, one key at a time.',
     panel(keyLayout, keyCount),
+  ),
+  badgeEntry,
+  entry(
+    'capMap()',
+    'Cap map',
+    'A keycap’s top seen from above, a numbered spot where each legend sits: tap one to edit ' +
+      'that legend, or All to edit every legend at once. One radio group, so the arrow keys move ' +
+      'the choice. setShape() redraws it for another key size; setSpots() for another layout.',
+    capDemo,
+  ),
+  entry(
+    'sourceTag() · setTag()',
+    'Value source tag',
+    'Where a value comes from, on the control’s caption line: the board, a group of keys, or ' +
+      'this key. Set at the level being edited it turns accent, with a reset that hands the value ' +
+      'back. setTag() on a slider, stepper, switch, tabs, dropdown or captioned nudge pad places it.',
+    tagDemo,
   ),
 );
 

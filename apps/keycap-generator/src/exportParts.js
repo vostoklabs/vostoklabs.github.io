@@ -168,12 +168,11 @@ export const blankFileName = (tag, sizeId) => tagged('keycap-blank', [tag, slug(
 /** `keycap-fit-test[-<profile>]`, the fit-test row. */
 export const fitTestFileName = (tag) => tagged('keycap-fit-test', [tag]);
 
-/** `keycap-alphabet-<font>[-<profile>]`, the full alphabet set. */
-export const alphabetFileName = (fontName, tag) => tagged(`keycap-alphabet-${slug(fontName)}`, [tag]);
+/** `keycap-alphabet[-lowercase]-<font>[-<profile>]`, the full alphabet set: the capitals keep the
+ *  name the set always had, the small letters say so. */
+export const alphabetFileName = (fontName, tag, letterCase = 'upper') =>
+  tagged(`keycap-alphabet-${letterCase === 'lower' ? 'lowercase-' : ''}${slug(fontName)}`, [tag]);
 
-/** One MTL names the materials of every plate of the alphabet set. */
-export const ALPHABET_MTL = 'keycap-alphabet.mtl';
-
-/** The alphabet set's letters, and what each letter's 3MF is called in its zip. */
+/** The alphabet set's letters: the capitals, or the small letters. */
 export const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-export const alphabetEntryName = (ch) => `keycap-${ch}.3mf`;
+export const alphabetLetters = (letterCase) => (letterCase === 'lower' ? ALPHABET.toLowerCase() : ALPHABET);

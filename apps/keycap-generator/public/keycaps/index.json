@@ -83,6 +83,7 @@
       "shineThrough": false,
       "maxDepth": 1,
       "printRotateX": 90,
+      "stems": "stubs",
       "keycaps": [
         {
           "id": "1u",

@@ -7,6 +7,10 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
+/** How far below the top a raised legend's outline reaches before it is cut to the cap: enough to
+ *  meet the top everywhere under it, too little to reach down a wall. */
+const RAISED_FOOT_MM = 0.5;
+
 // Centre the SVG, scale the longer side to widthMM, flip SVG-Y, rotate, then position.
 function transformContours(contours, box, { widthMM, centerX, centerY, rotationDeg, mirror }) {
   const cx = (box.min.x + box.max.x) / 2;
@@ -111,9 +115,14 @@ export async function buildBodies(capGeom, meta, icon, opts) {
   // Shine-through mode: extrude the prism the full height of the (now hollow, stem-removed)
   // shell so the legend punches clean through the top wall into the cavity — a light pipe in
   // transparent filament. With the stem gone there's no central material to leave ribbons on.
+  //
+  // A raised legend stands ON the top instead (see below). Its prism only has to reach a little
+  // below the top: deeper, it would also take in the lifted walls where the outline overhangs
+  // the edge, which a tapered wall puts just outside the real one.
+  const raised = opts.raisedMM > 0 ? opts.raisedMM : 0;
   const capBottomZ = meta.bbox.min[2];
-  const bottomZ = opts.through ? capBottomZ - 1 : lo - opts.depth;
-  const height  = meta.topZ + 3 - bottomZ;
+  const bottomZ = raised ? lo - RAISED_FOOT_MM : opts.through ? capBottomZ - 1 : lo - opts.depth;
+  const height  = meta.topZ + 3 + raised - bottomZ;
 
   // Every manifold object the carve makes is kept, and freed when it ends even when a step
   // throws: the WASM heap only grows, and a legend that failed half way used to leave the cap
@@ -160,6 +169,26 @@ export async function buildBodies(capGeom, meta, icon, opts) {
     }
 
     if (!prism) throw new Error('No geometry to extrude for this icon.');
+
+    // Raised: the legend's body is the cap's own top lifted by `raised`, inside the outline, less
+    // the cap. So it is exactly `raised` thick above whatever the top does (a dish, the bump, the
+    // round-over at the edge), and the cap itself is not carved. Legends already on the cap
+    // (`opts.avoid`, the earlier passes of carveCap) are taken out of it, so two raised legends
+    // that touch never claim the same space.
+    if (raised) {
+      const lifted = keep(cap.translate([0, 0, raised]));
+      const inside = keep(lifted.intersect(prism));
+      let logo = keep(inside.subtract(cap));
+      for (const g of opts.avoid ?? []) {
+        if (!g) continue;
+        const other = keep(geomToManifold(g));
+        const less = keep(logo.subtract(other));
+        logo.delete();
+        other.delete();
+        logo = less;
+      }
+      return { keycapGeometry: manifoldToGeom(cap), logoGeometry: manifoldToGeom(logo), surfaceVariation: hi - lo };
+    }
 
     // Single-colour mode: only carve the recess (cap − prism) and skip the separate legend
     // body, so the whole cap prints in one filament with the icon engraved into the top.
