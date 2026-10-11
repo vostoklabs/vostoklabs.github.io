@@ -194,7 +194,7 @@ function blocks(state: { blockLayout: 'row' | 'wasd'; blockLines: string[]; bloc
   const set = parseBlockChain(arr.slots, 'helvetiker-regular', tracedSymbols(s.blockSymbols));
   return {
     regions: regionsOf(set, set.regions.map(() => BLACK)),
-    params: { ...DEFAULTS, ...LETTERING, baseShape: 'square' as const, baseFilamentRgb: WHITE, ...blockBuildParams({ ...s, ...look }) },
+    params: { ...DEFAULTS, ...LETTERING, baseShape: 'square' as const, baseFilamentRgb: WHITE, ...blockBuildParams({ blockRimRaiseMm: 0, ...s, ...look }) },
   };
 }
 

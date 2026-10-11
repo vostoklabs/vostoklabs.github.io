@@ -67,6 +67,10 @@ function ringArea(ring: Ring): number {
   return Math.abs(a / 2);
 }
 
+/** The keycap always stands at least this far above the rim at rest: the 2 mm an MX switch
+ *  travels before it clicks, so a key clicks without the finger going into the well. */
+export const MIN_CAP_PROUD_MM = 2;
+
 /** The switch opening the CAD shells had, mm square. The socket asset's is 13.86 × 13.84. */
 export const BLOCK_POCKET_MM = 13.93;
 
@@ -199,7 +203,21 @@ export function buildBlocks(
     const N = filled.length;
 
     // ---------- The body ----------
-    const dims: KeyBodyDims = { ...BODY_DIMS, cap: capFootprint(keycap) };
+    // Seat the cap AT REST on the switch stem: one full switch travel above the well floor.
+    // The cap is carried by the stem, so if it rested on the floor the switch could never be
+    // pressed. That leaves the cross fully engaged in the cap's stem tube, stopping `travel`
+    // short of bottoming out on the tube's ceiling — which is exactly how far a keycap is
+    // pushed onto a real MX switch.
+    const capLift = BODY_DIMS.floorZ + Math.max(0, params.travel ?? 4);
+    // The rim, raised by Body rim height to hide more of each keycap, but never past the
+    // point where the cap stops standing MIN_CAP_PROUD_MM above it.
+    const raise = Math.max(0, params.blockRimRaiseMm ?? 0);
+    const rimMax = Math.max(BODY_DIMS.rimZ, keycap.meta.topZ + capLift - MIN_CAP_PROUD_MM);
+    if (BODY_DIMS.rimZ + raise > rimMax + 0.01) {
+      warnings.push(`The rim stops ${MIN_CAP_PROUD_MM} mm below the top of the keycaps, so they can still be pressed.`);
+    }
+    const rimZ = Math.min(BODY_DIMS.rimZ + raise, rimMax);
+    const dims: KeyBodyDims = { ...BODY_DIMS, cap: capFootprint(keycap), rimZ };
     const pocket = blockPocket(wasm, socket, params.socketFitPct ?? 0, dims.floorZ, track);
     const body = buildKeyBody(wasm, filled.map((c): KeyCell => ({ row: c.row, col: c.col })), {
       style: params.blockStyle ?? 'walls',
@@ -412,13 +430,6 @@ export function buildBlocks(
 
     // ---------- Keycaps + debossed letters ----------
     const capBlank = track(buildCapBlank(wasm, keycap, params.stemFitMm ?? 0, warnings));
-
-    // Seat the cap AT REST on the switch stem: one full switch travel above the well floor.
-    // The cap is carried by the stem, so if it rested on the floor the switch could never be
-    // pressed. That leaves the cross fully engaged in the cap's stem tube, stopping `travel`
-    // short of bottoming out on the tube's ceiling — which is exactly how far a keycap is
-    // pushed onto a real MX switch.
-    const capLift = dims.floorZ + Math.max(0, params.travel ?? 4);
     const cap = capLift > 0.001 ? track(capBlank.translate([0, 0, capLift])) : capBlank;
 
     const topZ = keycap.meta.topZ + capLift;

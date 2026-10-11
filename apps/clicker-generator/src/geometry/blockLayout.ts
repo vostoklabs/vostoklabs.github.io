@@ -13,6 +13,9 @@ export type BlockLayout = 'row' | 'column' | 'grid' | 'wasd' | 'arrows' | 'custo
 /** The largest grid the Rows and Columns steppers offer. */
 export const GRID_MAX = 6;
 
+/** How far Body rim height can raise the rim above the standard block body, mm. */
+export const RIM_RAISE_MAX_MM = 6;
+
 /* A symbol stands in the text as one private-use character (plane 15/16), the way the rest of
    the house's symbol fields carry them, so a row of keys is still just a string. Which character
    is one is the kit's rule, from the subpath that loads no DOM; handed on for the page. */
@@ -323,7 +326,7 @@ export function toggleKey(s: BlockState, index: number): Partial<BlockState> {
 }
 
 /** The build's view of the blocks: where the keys are and how the body looks. */
-export function blockBuildParams(s: BlockState & { blockStyle: BlockStyle; blockTexture: BlockTexture }) {
+export function blockBuildParams(s: BlockState & { blockStyle: BlockStyle; blockTexture: BlockTexture; blockRimRaiseMm: number }) {
   const a = arrangementOf(s);
   return {
     blockOrientation: a.orientation,
@@ -331,6 +334,7 @@ export function blockBuildParams(s: BlockState & { blockStyle: BlockStyle; block
     blockKeys: a.keys,
     blockStyle: s.blockStyle,
     blockTexture: s.blockTexture,
+    blockRimRaiseMm: s.blockRimRaiseMm,
   };
 }
 
@@ -399,6 +403,7 @@ const TEXTURES: readonly BlockTexture[] = ['smooth', 'knurl', 'ribs', 'flutes', 
 export type LoadedBlocks = Partial<BlockState & {
   blockStyle: BlockStyle;
   blockTexture: BlockTexture;
+  blockRimRaiseMm: number;
   legendScale: number;
   legendBold: number;
 }>;
@@ -423,6 +428,8 @@ export function loadedBlocks(set: Record<string, unknown>): LoadedBlocks {
   if (syms) out.blockSymbols = syms;
   if (STYLES.includes(set.blockStyle as BlockStyle)) out.blockStyle = set.blockStyle as BlockStyle;
   if (TEXTURES.includes(set.blockTexture as BlockTexture)) out.blockTexture = set.blockTexture as BlockTexture;
+  const rim = num(set.blockRimRaiseMm);
+  if (rim !== undefined) out.blockRimRaiseMm = Math.max(0, Math.min(RIM_RAISE_MAX_MM, rim));
   const scale = num(set.legendScale);
   const bold = num(set.legendBold);
   if (scale !== undefined) out.legendScale = Math.max(0.4, Math.min(1.6, scale));

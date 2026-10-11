@@ -210,6 +210,9 @@ export interface BuildParams {
   blockStyle?: BlockStyle;
   /** The outside of the block body. Absent = 'smooth'. */
   blockTexture?: BlockTexture;
+  /** How far the block body's rim is raised above the standard body, mm, hiding more of each
+   *  keycap. Absent = 0, the standard body. */
+  blockRimRaiseMm?: number;
   /** Columns per row when the layout is 'grid'. */
   blockColumns?: number;
   /** Which cells hold a key, one per region in reading order. A key can have nothing printed

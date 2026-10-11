@@ -18,7 +18,7 @@
 import {
   arrangeBlocks, arrangementOf, blockBuildParams, changeLayout, gridFor, keysPerRow, lineSymbols, loadedBlocks,
   loadedSymbols, pruneSymbols,
-  presetText, resizeCells, toggleKey, type BlockState,
+  presetText, resizeCells, RIM_RAISE_MAX_MM, toggleKey, type BlockState,
 } from '../src/geometry/blockLayout.ts';
 
 let failures = 0;
@@ -113,10 +113,11 @@ const state = (over: Partial<BlockState>): BlockState => ({
 
 // --- the build's view ---------------------------------------------------------------------------
 {
-  const s = { ...state({ blockLayout: 'wasd', blockLines: ['W', 'ASD'] }), blockStyle: 'open' as const, blockTexture: 'knurl' as const };
+  const s = { ...state({ blockLayout: 'wasd', blockLines: ['W', 'ASD'] }), blockStyle: 'open' as const, blockTexture: 'knurl' as const, blockRimRaiseMm: 2.4 };
   const p = blockBuildParams(s);
   check('the build gets the grid, its width and where the keys are',
-    p.blockOrientation === 'grid' && p.blockColumns === 3 && p.blockKeys.length === 6 && p.blockStyle === 'open' && p.blockTexture === 'knurl',
+    p.blockOrientation === 'grid' && p.blockColumns === 3 && p.blockKeys.length === 6 && p.blockStyle === 'open' && p.blockTexture === 'knurl'
+      && p.blockRimRaiseMm === 2.4,
     JSON.stringify(p));
   const a = arrangeBlocks('grid', 2, 2, null, ['AB', 'CD'], {});
   check('slots, keys and characters stay the same length', a.slots.length === 4 && a.keys.length === 4 && a.chars.length === 4, `${a.slots.length}/${a.keys.length}/${a.chars.length}`);
@@ -128,21 +129,25 @@ const state = (over: Partial<BlockState>): BlockState => ({
   const good = loadedBlocks({
     blockLayout: 'custom', blockGridRows: 2, blockGridCols: 3, blockCells: [true, false, true, true, true, true],
     blockLines: ['A' + sym, 'BCD'], blockSymbols: { [sym]: { kind: 'rings', label: 'Heart', rings: [[[0, 0], [1, 0], [0, 1]]] } },
-    blockStyle: 'open', blockTexture: 'ribs', legendScale: 1.2, legendBold: 0.2,
+    blockStyle: 'open', blockTexture: 'ribs', blockRimRaiseMm: 2.4, legendScale: 1.2, legendBold: 0.2,
   });
   check('a saved block design reads back field for field',
     good.blockLayout === 'custom' && good.blockGridCols === 3 && good.blockCells?.length === 6 && good.blockLines?.[0] === 'A' + sym
-      && good.blockSymbols?.[sym]?.kind === 'rings' && good.blockStyle === 'open' && good.blockTexture === 'ribs' && good.legendScale === 1.2,
+      && good.blockSymbols?.[sym]?.kind === 'rings' && good.blockStyle === 'open' && good.blockTexture === 'ribs'
+      && good.blockRimRaiseMm === 2.4 && good.legendScale === 1.2,
     JSON.stringify(Object.keys(good)));
   const bad = loadedBlocks({
     blockLayout: 'hexagon', blockGridRows: 99, blockCells: ['x'], blockLines: [3], blockStyle: 'glass',
     blockSymbols: { a: { kind: 'rings', label: 'x', rings: [] }, [sym]: { kind: 'rings', label: 'x', rings: [[[0, 'y']]] } },
-    legendScale: 'big',
+    blockRimRaiseMm: 'tall', legendScale: 'big',
   });
   check('a malformed one changes nothing it cannot back up',
     !('blockLayout' in bad) && bad.blockGridRows === 6 && !('blockCells' in bad) && !('blockLines' in bad)
-      && !('blockStyle' in bad) && !('legendScale' in bad) && Object.keys(bad.blockSymbols ?? {}).length === 0,
+      && !('blockStyle' in bad) && !('blockRimRaiseMm' in bad) && !('legendScale' in bad) && Object.keys(bad.blockSymbols ?? {}).length === 0,
     JSON.stringify(bad));
+  check('a rim saved higher than the slider goes loads at the slider\'s top',
+    loadedBlocks({ blockRimRaiseMm: 40 }).blockRimRaiseMm === RIM_RAISE_MAX_MM && loadedBlocks({ blockRimRaiseMm: -3 }).blockRimRaiseMm === 0,
+    `${loadedBlocks({ blockRimRaiseMm: 40 }).blockRimRaiseMm}`);
   check('a project from before blocks were saved sets nothing', Object.keys(loadedBlocks({ importMode: 'image' })).length === 0, '{}');
 }
 

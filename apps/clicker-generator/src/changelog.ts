@@ -30,6 +30,12 @@ import type { ChangelogEntry } from '@vostok/ui-kit';
 */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-11',
+    changes: [
+      { kind: 'added', text: 'Blocks: Body rim height, to hide more of each keycap.' },
+    ],
+  },
+  {
     date: '2026-10-04',
     changes: [
       { kind: 'fixed', text: 'Switch stem fit now changes the print, in millimetres.' },

@@ -60,7 +60,8 @@ import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from '../geometry/
 import { FIT_TEST_STEP_OPTIONS } from '../geometry/fitStrip';
 import type { ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
 import { modelFormatOf } from '@vostok/export/read';
-import { arrangeBlocks, GRID_MAX, isLineLayout, keysPerRow, type BlockArrangement, type BlockLayout, type BlockSymbol } from '../geometry/blockLayout';
+import { arrangeBlocks, GRID_MAX, isLineLayout, keysPerRow, RIM_RAISE_MAX_MM, type BlockArrangement, type BlockLayout, type BlockSymbol } from '../geometry/blockLayout';
+import { BODY_HEIGHT_MM } from '../geometry/keyBody';
 import { assetUrl } from '../assets';
 import { lookOf, lookRings } from '../image/symbolRings';
 import { lucideImg, ringsSvg } from './symbols';
@@ -262,6 +263,8 @@ export interface UiState {
   blockStyle: BlockStyle;
   /** The outside of the block body. */
   blockTexture: BlockTexture;
+  /** How far the block body's rim is raised above the standard body, mm. */
+  blockRimRaiseMm: number;
   /** Legend size multiplier on the keycap (1 = default fit). */
   legendScale: number;
   /** Legend outline offset in mm — "boldness". */
@@ -438,6 +441,7 @@ export interface UiCallbacks {
   onTextSymbols(next: Record<string, BlockSymbol>): void;
   onBlockStyle(style: BlockStyle): void;
   onBlockTexture(texture: BlockTexture): void;
+  onBlockRimRaise(mm: number): void;
   onLegendScale(v: number): void;
   onLegendBold(mm: number): void;
   /** Keycap colour (shared by every cap in the chain). */
@@ -653,6 +657,7 @@ export function createUi(
     </div>
     <div data-rail="body">
       <div id="blockTextureMount"></div>
+      <div class="prow-stacked" id="blockRimRow"><div id="blockRimMount"></div></div>
       <div class="prow-stacked"><div id="topthickMount"></div></div>
       <div class="prow-stacked"><div id="imgdepthMount"></div></div>
       <div class="prow-stacked"><div id="capProudMount"></div></div>
@@ -1472,6 +1477,19 @@ export function createUi(
     onChange: (v) => cb.onBlockTexture(v),
   });
   $('blockTextureMount').append(blockTextureCtl);
+
+  /* Image mode's Body rim height, for blocks: the same direction (higher hides more of the
+     key), but the number is the body's real height, underside to rim, the one calipers read.
+     The store keeps how far the rim is raised, 0 = the standard body. */
+  const blockRimRow = sliderRow({
+    label: 'Body rim height',
+    help: 'How tall the body is around the keycaps. Higher hides more of each keycap; they always stand proud enough to click.',
+    min: 0, max: RIM_RAISE_MAX_MM, step: 0.2, value: initial.blockRimRaiseMm,
+    format: (v) => `${(BODY_HEIGHT_MM + v).toFixed(1)} mm`,
+    parse: (typed) => typed - BODY_HEIGHT_MM,
+    onInput: (v) => cb.onBlockRimRaise(v),
+  });
+  $('blockRimMount').append(blockRimRow);
 
   /* The right panel: what is printed on the keys. A row or a column is one line of up to 24
      keys; a grid has a line per row of keys, as long as the row. Rebuilt only when the rows
@@ -2647,6 +2665,7 @@ export function createUi(
     const keycapLink = document.getElementById('blocksKeycapLink');
     if (keycapLink) keycapLink.hidden = !isBlockMode;
     $('blockTextureMount').hidden = !isBlockMode;
+    $('blockRimRow').hidden = !isBlockMode;
     // The font list draws what will be printed: the blocks' keys, or Text mode's words.
     if (isBlockMode) setFontSample(state.blockLines.join(' '));
     else if (state.importMode === 'text') setFontSample(textLines.join(' '));
@@ -2663,6 +2682,7 @@ export function createUi(
       }
       blockBordersToggle.setValue(state.blockStyle !== 'open');
       blockTextureCtl.setValue(state.blockTexture);
+      blockRimRow.setValue(state.blockRimRaiseMm);
       renderBlockLines(state, arr);
       legendSizeRow.setValue(state.legendScale);
       legendBoldRow.setValue(state.legendBold);

@@ -11,7 +11,9 @@
    - a WASD cluster keeps its empty corners empty, and a ring of keys gets a solid middle, not a
      hole through the body;
    - 'open' really has no wall between keys, and 'walls' really has one;
-   - a texture only ever ADDS material: the wall is never thinner than the plain one.
+   - a texture only ever ADDS material: the wall is never thinner than the plain one;
+   - Body rim height only raises the rim: the caps, switches and underside stay put, the caps
+     stay free in their wells, and the rim always stops 2 mm below the cap tops.
 
   Run from the repo root:
 
@@ -24,7 +26,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Module from 'manifold-3d';
 import { readModel } from '@vostok/export/read';
-import { buildBlocks, BLOCK_POCKET_MM } from '../src/geometry/buildBlocks.ts';
+import { buildBlocks, BLOCK_POCKET_MM, MIN_CAP_PROUD_MM } from '../src/geometry/buildBlocks.ts';
+import { RIM_RAISE_MAX_MM } from '../src/geometry/blockLayout.ts';
 import { BODY_DIMS, buildKeyBody, keyPitch, wellSize, type KeyCell } from '../src/geometry/keyBody.ts';
 import type { BlockStyle, BlockTexture, BuildParams, BuildRegion, ClickerPart } from '../src/types.ts';
 
@@ -247,6 +250,66 @@ check('even a textured 3x3 builds quickly', slowest < 3000, `slowest ${slowest.t
       : offBB.min[1] - bb.min[1];
     check(`keyring on the ${side}: the body reaches out that way`, grew > 5 && closed(bodyOf(out.parts)[0]), `+${grew.toFixed(1)} mm`);
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Body rim height: the rim rises, nothing else moves, and the keycaps always stand proud of it.
+// ---------------------------------------------------------------------------------------------
+{
+  const topOf = (parts: ClickerPart[], prefix: string) => {
+    let top = -Infinity;
+    for (const p of parts) {
+      if (!p.name.startsWith(prefix)) continue;
+      for (let i = 2; i < p.vertProperties.length; i += p.numProp) top = Math.max(top, p.vertProperties[i]);
+    }
+    return top;
+  };
+  const sameParts = (a: ClickerPart[], b: ClickerPart[]) => a.length === b.length && a.every((p, i) =>
+    p.name === b[i].name && p.vertProperties.length === b[i].vertProperties.length
+      && p.vertProperties.every((v, k) => v === b[i].vertProperties[k]));
+
+  const std = run(R(2), {});
+  check('a rim raised by 0 is the standard block, vertex for vertex', sameParts(std.parts, run(R(2), { blockRimRaiseMm: 0 }).parts),
+    `${std.parts.length} parts`);
+
+  const raised = run(R(2), { blockRimRaiseMm: 3 });
+  const body = solidOfPart(bodyOf(raised.parts)[0]);
+  const bb = body.boundingBox();
+  check('raising the rim 3 mm adds 3 mm at the top and nothing at the underside',
+    Math.abs(bb.max[2] - (BODY_DIMS.rimZ + 3)) < 1e-3 && Math.abs(bb.min[2] - BODY_DIMS.bottomZ) < 1e-3 && closed(bodyOf(raised.parts)[0]),
+    `Z ${bb.min[2].toFixed(3)} .. ${bb.max[2].toFixed(3)}`);
+  check('the keycaps and switches stay where they were',
+    topOf(raised.parts, 'cap-') === topOf(std.parts, 'cap-')
+      && raised.switchPlacements.every((s, i) => s.z === std.switchPlacements[i].z && s.x === std.switchPlacements[i].x),
+    `cap top ${topOf(raised.parts, 'cap-').toFixed(3)} mm`);
+  // The wells rise with the rim, so a keycap still moves freely: it touches the body nowhere.
+  let touching = 0;
+  for (const p of raised.parts.filter((q) => q.name.startsWith('cap-'))) {
+    const cap = solidOfPart(p);
+    const hit = cap.intersect(body);
+    touching += hit.volume();
+    hit.delete();
+    cap.delete();
+  }
+  check('the keycaps sit free in the taller wells', touching < 1e-3, `${touching.toFixed(4)} mm³ of cap inside the body`);
+  body.delete();
+
+  // The app's travel, the slider's top end: no clamp, no warning.
+  const top = run(R(2), { blockRimRaiseMm: RIM_RAISE_MAX_MM, travel: 4 });
+  check('the slider\'s highest rim builds as asked, with no warning',
+    Math.abs(topOf(top.parts, 'block-') - (BODY_DIMS.rimZ + RIM_RAISE_MAX_MM)) < 1e-3 && !top.warnings.length,
+    `rim ${topOf(top.parts, 'block-').toFixed(3)} mm, warnings: ${top.warnings.join(' | ') || 'none'}`);
+
+  const tooHigh = run(R(2), { blockRimRaiseMm: 20 });
+  const capTop = topOf(tooHigh.parts, 'cap-');
+  const rim = topOf(tooHigh.parts, 'block-');
+  check('a rim asked to rise past the keycaps stops 2 mm below their top, and says so',
+    Math.abs(capTop - rim - MIN_CAP_PROUD_MM) < 1e-3 && tooHigh.warnings.some((w) => w.includes('rim stops')),
+    `cap ${(capTop - rim).toFixed(3)} mm proud; ${tooHigh.warnings.join(' | ')}`);
+
+  const textured = run(R(9), { blockOrientation: 'grid', blockColumns: 3, blockTexture: 'knurl', blockRimRaiseMm: RIM_RAISE_MAX_MM });
+  check('a knurled 3x3 with the rim all the way up is still one closed body',
+    bodyOf(textured.parts).length === 1 && closed(bodyOf(textured.parts)[0]), `${(bodyOf(textured.parts)[0].triVerts.length / 3)} tris`);
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nthe generated block body holds');

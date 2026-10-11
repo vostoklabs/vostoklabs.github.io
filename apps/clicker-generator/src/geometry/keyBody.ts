@@ -83,6 +83,10 @@ export const BODY_DIMS: KeyBodyDims = {
   concaveR: 2.0,
 };
 
+/** The standard body's height, underside to rim, mm: what the Body rim height control reads
+ *  before it raises the rim. */
+export const BODY_HEIGHT_MM = BODY_DIMS.rimZ - BODY_DIMS.bottomZ;
+
 /** Width of one key's well. */
 export function wellSize(d: KeyBodyDims): number {
   return d.cap + 2 * d.clearance;

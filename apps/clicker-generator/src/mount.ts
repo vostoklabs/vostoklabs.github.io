@@ -256,6 +256,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     textSymbols: {},
     blockStyle: 'walls',
     blockTexture: 'smooth',
+    blockRimRaiseMm: 0,
     legendScale: 1,
     legendBold: 0,
     keychainEnd: 'left',
@@ -1174,6 +1175,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ blockTexture: texture });
       debouncedRebuild();
     },
+    onBlockRimRaise: (mm) => {
+      store.set({ blockRimRaiseMm: mm });
+      debouncedRebuild();
+    },
     onLegendScale: (v) => {
       store.set({ legendScale: v });
       debouncedQuietRebuild();
@@ -1380,7 +1385,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     'modelCut',
     // Blocks: the look. What is ON the keys (layout, lines) re-traces, which starts a new
     // baseline the way typing does in Text mode, so it is not in here.
-    'blockStyle', 'blockTexture', 'legendScale', 'legendBold',
+    'blockStyle', 'blockTexture', 'blockRimRaiseMm', 'legendScale', 'legendBold',
   ] as const;
   let history: string[] = [];
   let histIndex = -1;
@@ -2718,6 +2723,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         blockSymbols: s.blockSymbols,
         blockStyle: s.blockStyle,
         blockTexture: s.blockTexture,
+        blockRimRaiseMm: s.blockRimRaiseMm,
         legendScale: s.legendScale,
         legendBold: s.legendBold,
         keychainEnd: s.keychainEnd,
@@ -2946,6 +2952,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         componentHeights: set.componentHeights ?? {},
         keychainEnd: set.keychainEnd ?? 'left',
         keychainSlideMm: set.keychainSlideMm ?? 0,
+        // A project from before the rim could be raised has the standard body.
+        blockRimRaiseMm: 0,
         // Blocks: a project from before blocks were saved opens on the defaults.
         ...loadedBlocks(set),
         // Text mode's symbols; a project from before them has none.
