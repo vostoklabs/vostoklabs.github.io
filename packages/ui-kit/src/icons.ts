@@ -150,6 +150,9 @@ export const ICONS = {
   droplet: stroke('<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>', 18),
   // A price tag: selling, the commercial licence. Lucide's `tag`.
   tag: stroke('<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>', 18),
+  // A large A and a small one: lettering, the size, height and spacing of the letters (the font
+  // has `text`). Lucide's `a-large-small`.
+  lettering: stroke('<path d="m15 16 2.536-7.328a1.02 1.02 1 0 1 1.928 0L22 16"/><path d="M15.697 14h5.606"/><path d="m2 16 4.039-9.69a.5.5 0 0 1 .923 0L11 16"/><path d="M3.304 13h6.392"/>', 18),
 } as const;
 
 /** Parse a raw SVG string into an element. */
