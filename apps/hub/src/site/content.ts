@@ -2,7 +2,7 @@
 
 import { BRAND } from '@vostok/brand';
 import registryData from '../../../../generators.json';
-import type { Generator, Registry, SellerTool } from '../registry';
+import type { Generator, MakeProcess, Registry, SellerTool } from '../registry';
 import { TOPICS, type Topic } from './topics';
 
 export const registry = registryData as unknown as Registry;
@@ -12,6 +12,8 @@ export const sellerTools: SellerTool[] = registry.sellerTools;
 
 export const isApp = (g: Generator) => g.route === 'app' || g.route === 'both';
 export const isMw = (g: Generator) => g.route === 'mw' || g.route === 'both';
+/** Its processes as a list, however the registry wrote them. */
+export const processesOf = (g: Generator): MakeProcess[] => (Array.isArray(g.process) ? g.process : [g.process]);
 
 /** Web apps (including the ones also on MakerWorld), then the MakerWorld-only listings. */
 export const webApps = live.filter(isApp);

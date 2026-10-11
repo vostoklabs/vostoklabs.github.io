@@ -5,7 +5,7 @@ import { BRAND } from '@vostok/brand';
 import { el, linkButton, supportLinks } from '@vostok/ui-kit';
 import type { Generator, Media, SellerTool } from '../registry';
 import {
-  appHref, featured, fmtPrice, inTopic, isApp, live, mwHref, productPath, thumbPath, topicById, topicPath, TOPICS,
+  appHref, featured, fmtPrice, inTopic, isApp, live, mwHref, processesOf, productPath, thumbPath, topicById, topicPath, TOPICS,
 } from './content';
 import type { Topic } from './topics';
 import type { FaqGroup } from './faq';
@@ -45,9 +45,11 @@ export function panel(title: string, content: Child[], opts: { id?: string; clas
   }, kids([el('h2', { className: 'vl-label', text: title }), ...content]));
 }
 
+const PROCESS_NAME = { laser: 'Laser', '3d-print': '3D print' } as const;
+
 /** "3D print · Web app": what it makes and where it runs, in one quiet line. */
 export function metaLine(g: Generator): string {
-  return `${g.process === 'laser' ? 'Laser' : '3D print'} · ${isApp(g) ? 'Web app' : 'MakerWorld'}`;
+  return `${processesOf(g).map((p) => PROCESS_NAME[p]).join(' or ')} · ${isApp(g) ? 'Web app' : 'MakerWorld'}`;
 }
 
 function thumb(g: Generator, alt: string): HTMLElement {
@@ -65,8 +67,8 @@ export function productCard(g: Generator): HTMLElement {
     attrs: {
       'data-card': '',
       'data-topics': g.topics.join(' '),
-      'data-process': g.process,
-      'data-search': `${g.name} ${g.blurb} ${g.process === 'laser' ? 'laser' : '3d print'}`.toLowerCase(),
+      'data-process': processesOf(g).join(' '),
+      'data-search': `${g.name} ${g.blurb} ${processesOf(g).map((p) => PROCESS_NAME[p]).join(' ')}`.toLowerCase(),
     },
   }, [
     el('a', { className: 'hub-card__media', attrs: { href, tabindex: '-1', 'aria-hidden': 'true' } }, [thumb(g, '')]),
@@ -232,7 +234,7 @@ export function productTitle(g: Generator): HTMLElement {
 export function buyBox(g: Generator): HTMLElement {
   const app = appHref(g);
   const mw = mwHref(g);
-  const formats = g.process === 'laser' ? 'SVG cut file' : '3MF';
+  const formats = processesOf(g).map((p) => (p === 'laser' ? 'SVG cut file' : '3MF')).join(' or ');
   const lifetimeUrl = g.lifetimeLicence ? BRAND.urls[g.lifetimeLicence] : null;
   const tile = (name: string, price: string, per: string, what: string, go: string, href: string) =>
     el('a', { className: 'hub-plan-tile', attrs: { href } }, [

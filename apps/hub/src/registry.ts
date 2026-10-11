@@ -5,6 +5,8 @@ import type { BRAND } from '@vostok/brand';
 /** A key of `BRAND.urls`, so the registry names a link and never holds the address itself. */
 export type BrandUrlKey = keyof typeof BRAND.urls;
 
+export type MakeProcess = '3d-print' | 'laser';
+
 export interface Generator {
   id: string;
   name: string;
@@ -18,7 +20,9 @@ export interface Generator {
   thumb?: string;
   /** What it makes, as topic ids from `src/site/topics.ts`. The first is its home topic. */
   topics: string[];
-  process: '3d-print' | 'laser';
+  /** How what it makes is made. A list when the app does both; the card names the first
+   *  first. */
+  process: MakeProcess | MakeProcess[];
   /** Position on the home page's featured shelf; absent = not featured. */
   featured?: number;
   /** The product page's opening paragraph. Falls back to the blurb. */

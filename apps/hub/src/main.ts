@@ -32,7 +32,7 @@ function catalogueFilter(): void {
       const okText = !query || (card.dataset.search ?? '').includes(query);
       // A coming-soon tool has no topic or process: it only shows under "All".
       const okTopic = topic === 'all' || (card.dataset.topics ?? '').split(' ').includes(topic);
-      const okProcess = process === 'all' || card.dataset.process === process;
+      const okProcess = process === 'all' || (card.dataset.process ?? '').split(' ').includes(process);
       card.hidden = !(okText && okTopic && okProcess);
     }
     let any = false;
