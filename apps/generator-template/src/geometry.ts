@@ -1,27 +1,48 @@
-// The demo generator's geometry: a rounded tag with a hanging hole and a raised
-// rim, built with plain three.js extrusion so the template runs with no wasm.
+// The demo generator's geometry: a rounded tag with a keyring hole, and the customer's text
+// standing on it in a second colour. Built with plain three.js extrusion so the template runs
+// with no wasm.
 //
 // A real generator usually swaps this file for a manifold-3d worker (see the
 // magnet or clicker generator). What matters is the shape of the output: an
 // array of `{ name, positions, indices, color }` parts, which is exactly what
 // both @vostok/viewer and @vostok/export take.
+//
+// The text comes off the shelf: "Text to outlines" lays it out in the chosen face, and "Shape
+// maths" groups the outlines into letters with their holes. Only the fitting is this app's own.
+// The face arrives parsed: main.ts loads it with `getFont()`, so this file never loads the font
+// library, and a worker or a node test can run it as it is.
 import * as THREE from 'three';
 import type { ExportPart } from '@vostok/export';
+import { getHorizontalContours } from '@vostok/fonts/textLayout';
+import { islandsFromContours } from '@vostok/shapes';
 import type { TagSettings } from './state';
 
-/** Segments per curve. The rim's inner loop is pre-sampled at the same rate as
- *  the outer one, so both loops share a vertex cadence. */
+/** A parsed face, as `getFont()` in @vostok/fonts hands it over. */
+export type Face = Parameters<typeof getHorizontalContours>[0];
+
+/** Segments per curve of the tag's corners and hole. */
 const CURVE_SEGMENTS = 24;
 
 /** Shortest edge an outline is allowed to carry, mm. Anything below this is a
  *  duplicate point as far as the extruder is concerned. */
 const WELD = 1e-3;
 
+/** Tag left round the keyring hole, mm. */
+const HOLE_WALL = 2.5;
+/** Clear tag between the letters and the tag's edge, mm. */
+const EDGE = 3;
+/** Clear tag between the hole and the first letter, mm. */
+const GAP = 3;
+
+type RGB = [number, number, number];
+type Pt = [number, number];
+
 /** Drop points that repeat their neighbour, including around the wrap.
  *
  *  Loops are closed implicitly by the extruder, so a repeated point is not
  *  harmless: it becomes a zero-area sliver in the wall, and enough of them
- *  make the cap triangulation disagree with the walls and tear the mesh open. */
+ *  make the cap triangulation disagree with the walls and tear the mesh open.
+ *  A font's outlines repeat their first point at the end, so the letters need this too. */
 function weldLoop(points: THREE.Vector2[]): THREE.Vector2[] {
   const out: THREE.Vector2[] = [];
   for (const p of points) {
@@ -73,10 +94,6 @@ function roundedRectPoints(width: number, height: number, radius: number): THREE
   return weldLoop(pts);
 }
 
-function roundedRect(width: number, height: number, radius: number): THREE.Shape {
-  return new THREE.Shape(roundedRectPoints(width, height, radius));
-}
-
 /** Circle as an explicit loop, with no repeated closing point. */
 function circleLoop(cx: number, cy: number, radius: number, segments: number): THREE.Path {
   const pts: THREE.Vector2[] = [];
@@ -87,19 +104,8 @@ function circleLoop(cx: number, cy: number, radius: number, segments: number): T
   return new THREE.Path(weldLoop(pts));
 }
 
-/** Centre of the hanging hole.
- *
- *  It is pushed far enough down that the hole always clears the rim band. A
- *  hole that merely *touches* the rim's inner edge makes the extruder's cap
- *  triangulation disagree with its walls, and the part comes out with open
- *  edges — so keep them strictly apart rather than relying on a CSG cleanup. */
-function holeCentreY(height: number, hole: number, rim: number): number {
-  const clearance = Math.max(hole, rim + hole / 2 + 1);
-  return height / 2 - clearance;
-}
-
 /** Extruded shape -> a welded, indexed part. */
-function toPart(shape: THREE.Shape | THREE.Shape[], depth: number, z: number, name: string, color: [number, number, number]): ExportPart {
+function toPart(shape: THREE.Shape | THREE.Shape[], depth: number, z: number, name: string, color: RGB): ExportPart {
   const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: CURVE_SEGMENTS });
   geo.translate(0, 0, z);
   const src = geo.getAttribute('position');
@@ -134,70 +140,116 @@ function toPart(shape: THREE.Shape | THREE.Shape[], depth: number, z: number, na
   };
 }
 
-/** Wall left between any two features, mm. */
-const MARGIN = 1;
-
-/** Clamp the settings to a shape that can actually be built.
- *
- *  A generator has to do this somewhere: sliders let people ask for a 10 mm
- *  hole in a 15 mm tag, and the honest answer is to shrink the hole, not to
- *  emit a torn mesh. Doing it here means the geometry is always sound, whatever
- *  the UI sends — and `buildTag` can report back what it had to change. */
-export function fitSettings(s: TagSettings): TagSettings {
-  const width = Math.max(5, s.width);
-  const height = Math.max(5, s.height);
-  const shortSide = Math.min(width, height);
-
-  const radius = clamp(s.radius, 0, shortSide / 2);
-  // The rim has to leave an inside.
-  const rim = clamp(s.rim, 0, shortSide / 2 - MARGIN);
-
-  // The hole must fit under the top edge with its clearance, and between the
-  // rim bands left and right.
-  const hole = clamp(
-    s.hole,
-    0,
-    Math.min(
-      (height - MARGIN) / 1.5, // clearance == hole
-      height - rim - 1 - MARGIN, // clearance == rim + hole/2 + 1
-      width - 2 * rim - 2 * MARGIN,
-    ),
-  );
-
-  return {
-    ...s,
-    width,
-    height,
-    radius,
-    rim: rim < MARGIN ? 0 : rim,
-    hole: hole < 0.4 ? 0 : hole,
-    thickness: Math.max(0.4, s.thickness),
-    rimHeight: Math.max(0.2, s.rimHeight),
-  };
-}
+const rgb = (hex: string): RGB => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as RGB;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(Math.max(v, lo), Math.max(lo, hi));
 }
 
-/** Build every part of the tag, sitting on z = 0. Settings are fitted first. */
-export function buildTag(raw: TagSettings): ExportPart[] {
+/** Clamp the settings to a shape that can actually be built.
+ *
+ *  A generator has to do this somewhere: sliders let people ask for a 10 mm
+ *  hole in a 12 mm tag, and the honest answer is to shrink the hole, not to
+ *  emit a torn mesh. Doing it here means the geometry is always sound, whatever
+ *  the UI sends. */
+export function fitSettings(s: TagSettings): TagSettings {
+  // The sliders' own minimums. With them, and the hole held to half the tag below, there is
+  // always room for the text beside the hole.
+  const width = Math.max(20, s.width);
+  const height = Math.max(10, s.height);
+  // The hole keeps its wall above and below it, and leaves at least half the tag for the text.
+  const holeSize = clamp(s.holeSize, 0, Math.min(height - 2 * HOLE_WALL, width / 2 - HOLE_WALL));
+  return {
+    ...s,
+    width,
+    height,
+    radius: clamp(s.radius, 0, Math.min(width, height) / 2),
+    thickness: Math.max(0.4, s.thickness),
+    raise: Math.max(0.2, s.raise),
+    textSize: Math.max(1, s.textSize),
+    hole: s.hole && holeSize >= 1,
+    holeSize,
+  };
+}
+
+/** The keyring hole's centre: on the middle line, one wall in from the left end. Against a
+ *  rounded end the wall is at least as thick, because the hole sits on the arc's own axis. */
+const holeCentreX = (s: TagSettings) => -s.width / 2 + HOLE_WALL + s.holeSize / 2;
+
+/** How far the letters may reach to the right, at a given half-height, while staying `EDGE`
+ *  inside the tag's rounded outline: a tall line of text has less room in a round-ended tag. */
+function rightLimit(s: TagSettings, halfHeight: number): number {
+  const a = s.width / 2 - EDGE;
+  const b = s.height / 2 - EDGE;
+  const r = clamp(s.radius - EDGE, 0, Math.min(a, b));
+  const intoCorner = halfHeight - (b - r);
+  if (intoCorner <= 0) return a;
+  return a - r + Math.sqrt(Math.max(0, r * r - intoCorner * intoCorner));
+}
+
+/** Where the text may go at a given half-height: right of the hole, inside the outline. */
+function room(s: TagSettings, halfHeight: number): { left: number; right: number } {
+  const right = rightLimit(s, halfHeight);
+  const left = s.hole ? Math.max(-right, holeCentreX(s) + s.holeSize / 2 + GAP) : -right;
+  return { left, right };
+}
+
+export interface TagBuild {
+  parts: ExportPart[];
+  /** The letter size the text was drawn at, mm: smaller than asked when it had to fit. */
+  textSize: number;
+  /** The text was made smaller to fit the tag. */
+  shrunk: boolean;
+}
+
+/** The text as islands (each letter's outline first, then its holes), fitted to the tag. */
+function placeText(s: TagSettings, font: Face): { islands: Pt[][][]; scale: number } | null {
+  const layout = getHorizontalContours(font, null, s.text, '', s.textSize, 0, 0, 'center', 0, s.letterSpacing / 100);
+  const { box } = layout;
+  const w = box.maxX - box.minX;
+  const h = box.maxY - box.minY;
+  if (!(w > 0 && h > 0)) return null;
+
+  // As big as asked, or smaller when the text is too long or too tall for the tag. The room
+  // narrows as the text grows taller, so the scale settles over a few rounds; it only ever falls.
+  let scale = Math.min(1, (s.height - 2 * EDGE) / h);
+  for (let i = 0; i < 4; i++) {
+    const { left, right } = room(s, (h * scale) / 2);
+    scale = Math.min(scale, (right - left) / w);
+  }
+
+  const { left, right } = room(s, (h * scale) / 2);
+  const cx = (box.minX + box.maxX) / 2;
+  const cy = (box.minY + box.maxY) / 2;
+  const mid = (left + right) / 2;
+  const placed = layout.contours.map((ring) => ring.map(([x, y]) => [mid + (x! - cx) * scale, (y! - cy) * scale]));
+  return { islands: islandsFromContours(placed), scale };
+}
+
+/** One letter outline (with its holes) -> a three.js shape. */
+function islandShape(island: Pt[][]): THREE.Shape | null {
+  const [outer, ...holes] = island.map((ring) => weldLoop(ring.map(([x, y]) => new THREE.Vector2(x, y))));
+  if (!outer || outer.length < 3) return null;
+  const shape = new THREE.Shape(outer);
+  for (const hole of holes) if (hole.length >= 3) shape.holes.push(new THREE.Path(hole));
+  return shape;
+}
+
+/** Build every part of the tag, sitting on z = 0, with its text in `font`. Settings are fitted first. */
+export function buildTag(raw: TagSettings, font: Face): TagBuild {
   const s = fitSettings(raw);
-  const body = roundedRect(s.width, s.height, s.radius);
-  if (s.hole > 0) {
-    body.holes.push(circleLoop(0, holeCentreY(s.height, s.hole, s.rim), s.hole / 2, CURVE_SEGMENTS * 2));
-  }
-  const parts: ExportPart[] = [toPart(body, s.thickness, 0, 'Tag', s.bodyColor)];
+  const body = new THREE.Shape(roundedRectPoints(s.width, s.height, s.radius));
+  if (s.hole) body.holes.push(circleLoop(holeCentreX(s), 0, s.holeSize / 2, CURVE_SEGMENTS * 2));
+  const parts: ExportPart[] = [toPart(body, s.thickness, 0, 'Tag', rgb(s.tagColor))];
 
-  if (s.rim > 0) {
-    // The rim is the outline minus an inset copy of itself — a raised ring that
-    // prints on its own filament slot, which is what makes this a two-part model.
-    // The hanging hole is not cut from it: `holeCentreY` already keeps the hole
-    // clear of the band, so the ring stays a clean two-loop shape.
-    const outer = roundedRect(s.width, s.height, s.radius);
-    outer.holes.push(new THREE.Path(roundedRectPoints(s.width - s.rim * 2, s.height - s.rim * 2, Math.max(0, s.radius - s.rim))));
-    parts.push(toPart(outer, s.rimHeight, s.thickness, 'Rim', s.rimColor));
-  }
+  const result: TagBuild = { parts, textSize: s.textSize, shrunk: false };
+  if (!s.text.trim()) return result;
 
-  return parts;
+  const text = placeText(s, font);
+  if (!text) return result;
+  const letters = text.islands.map(islandShape).filter((x): x is THREE.Shape => !!x);
+  // The letters stand on the tag's top face as a part of their own, which is what puts them on
+  // a second filament in the 3MF.
+  if (letters.length) parts.push(toPart(letters, s.raise, s.thickness, 'Letters', rgb(s.textColor)));
+  return { ...result, textSize: s.textSize * text.scale, shrunk: text.scale < 0.999 };
 }

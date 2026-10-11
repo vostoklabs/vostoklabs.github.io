@@ -89,6 +89,8 @@ apps/foldbox/README.internal.md
 !apps/keycap-generator/tests/**
 !apps/pen-topper/tests/
 !apps/pen-topper/tests/**
+!apps/generator-template/tests/
+!apps/generator-template/tests/**
 !apps/foldbox/tests/
 apps/foldbox/tests/*
 !apps/foldbox/tests/corners.mts

@@ -7,12 +7,15 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "esbuild tests/geometry.test.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/geometry.test.mjs --log-level=error && node node_modules/.cache/geometry.test.mjs"
   },
   "dependencies": {
     "@vostok/brand": "workspace:*",
     "@vostok/export": "workspace:*",
+    "@vostok/fonts": "workspace:*",
     "@vostok/plates": "workspace:*",
+    "@vostok/shapes": "workspace:*",
     "@vostok/ui-kit": "workspace:*",
     "@vostok/viewer": "workspace:*",
     "three": "^0.171.0"

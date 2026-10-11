@@ -3,9 +3,9 @@
   pnpm new:generator <id> ["Display Name"] ["one-line description"]
 
   Copies apps/generator-template into apps/<id> and performs the whole rename
-  checklist from the template's README — the eight strings that are *wrong*
-  rather than merely generic, three of which silently collide with the template
-  if they are missed (the callout key, the theme key, the export provenance id).
+  checklist from the template's README — the strings that are *wrong* rather
+  than merely generic, three of which silently collide with the template if they
+  are missed (the theme key, the export provenance id, the project file's id).
 
   It exists because the checklist was a manual ritual, and a manual ritual is one
   that gets half-followed: the shipped generators drifted apart on exactly the
@@ -77,8 +77,7 @@ edit(
   'src/main.ts',
   (s) =>
     s
-      // These three collide with the template (and with each other across apps) if missed.
-      .replace("storageKey: 'template-quality-callout'", `storageKey: '${id}-quality-callout'`)
+      // These collide with the template (and with each other across apps) if missed.
       .replace("themeStorageKey: 'template-theme'", `themeStorageKey: '${id}-theme'`)
       .replace("generator: 'generator-template'", `generator: '${id}'`)
       // The id written into every saved project. Missed, the app and the template open each
@@ -91,14 +90,10 @@ edit(
       .replace("'tag-project.json'", `'${id}-project.json'`)
       .replace("title: 'Generator Template help'", `title: '${title} help'`)
       // Both of them: the header and the credit strip pinned at the panel's foot carry the name.
+      // The header is the name alone; the description goes in index.html and package.json.
       .replaceAll("title: 'My Generator',", `title: '${title}',`)
-      .replace(
-        "description: 'One line on what it makes and who it is for.',",
-        `description: ${JSON.stringify(description)},`,
-      )
       .replaceAll('tpl-', `${prefix}-`),
   [
-    "'template-quality-callout'",
     "'template-theme'",
     // The template's id, anywhere: the provenance id and the project file's both carry it.
     "'generator-template'",
@@ -108,7 +103,6 @@ edit(
     "'tag-project.json'",
     "'Generator Template help'",
     "'My Generator'",
-    "'One line on what it makes and who it is for.'",
   ],
 );
 
@@ -160,10 +154,12 @@ Created apps/${id} from the generator template.
 Next:
   1. pnpm install                       (links the workspace deps)
   2. pnpm --filter ${id} dev
-  3. Replace src/geometry.ts and the settings in src/state.ts — everything else
-     (shell, viewer, plate, export, licence nudge) already works.
-  4. Read apps/generator-template/README.md: the numbered main.ts walkthrough and
-     the chrome measurements your app has to match.
+  3. Decide the rail's categories before the first slider: one thing the customer
+     would name per category, an icon that pictures it, every setting in the
+     category it changes ("Categories and settings that make sense" in
+     apps/generator-template/README.md).
+  4. Replace src/geometry.ts, the settings in src/state.ts and tests/geometry.test.mts —
+     everything else (shell, rail, viewer, plate, export, licence nudge) already works.
   5. Ship: add the entry to generators.json and a build+copy step to
      .github/workflows/deploy.yml, or the hub card is a 404.
 
@@ -236,14 +232,17 @@ pnpm --filter ${id} dev
 \`\`\`
 
 Scaffolded from \`apps/generator-template\` with \`pnpm new:generator\`. That template's
-[README](../generator-template/README.md) is still the reference for the layout, the
-numbered \`main.ts\` walkthrough, the export rules and the "nothing may jump" bar — read it
-there rather than copying it here, so it stays true when the kit moves.
+[README](../generator-template/README.md) is still the reference for the layout, the rules
+for the rail's categories and the settings in them, the numbered \`main.ts\` walkthrough, the
+export rules and the "nothing may jump" bar — read it there rather than copying it here, so
+it stays true when the kit moves.
 
 ## What is app-specific here
 
 - \`src/geometry.ts\` — the builder. Emits \`{ name, positions, indices, color }\` parts.
 - \`src/state.ts\` — the settings object; Save/Load serialise exactly this.
+- \`src/main.ts\` — the controls, the rail's categories and what goes on the right.
+- \`tests/geometry.test.mts\` — what the geometry promises, checked without a browser.
 - \`src/style.css\` — only what is unique to this app. Anything a second generator could
   want belongs in \`@vostok/ui-kit\`.
 `;

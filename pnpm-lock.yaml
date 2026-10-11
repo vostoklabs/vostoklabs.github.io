@@ -173,9 +173,15 @@ importers:
       '@vostok/export':
         specifier: workspace:*
         version: link:../../packages/export
+      '@vostok/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
       '@vostok/plates':
         specifier: workspace:*
         version: link:../../packages/plates
+      '@vostok/shapes':
+        specifier: workspace:*
+        version: link:../../packages/shapes
       '@vostok/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit

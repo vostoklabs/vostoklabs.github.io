@@ -1,12 +1,15 @@
 /* App-specific styles only.
 
    Everything structural already comes from @vostok/ui-kit/styles.css:
-     tokens.css      colours, spacing, radii, fonts   (var(--accent), …)
-     base.css        .vl-section .vl-label .vl-hint .vl-btn .vl-row
-     components.css  sliders, toggles, dialogs, toasts, footer, topbar
-     patterns.css    sources / dropzone / samples / mode bar / stage panel
-     app-shell.css   the three-column layout and its panels
-   plus @vostok/plates/plates.css for the build-plate picker.
+     tokens.css       colours, spacing, radii, fonts   (var(--accent), …)
+     base.css         .vl-section .vl-label .vl-hint .vl-btn .vl-row
+     components.css   sliders, toggles, colour rows, dialogs, toasts, footer, topbar
+     font-picker.css  the font cards and the font library
+     patterns.css     stage overlays, status line, preview bar
+     editor-shell.css the settings rail
+     app-shell.css    the three-column layout and its panels
+   plus @vostok/plates/plates.css for the build-plate picker, and @vostok/fonts/fonts.css
+   for the font cards' previews.
 
    If you find yourself restyling one of those, fix it in the ui-kit instead —
    that is what keeps every generator looking like the same product. */
@@ -27,26 +30,4 @@ body {
 
 .tpl-stage-canvas canvas {
   display: block;
-}
-
-/* Thumbnail of whatever was uploaded or picked from the samples. */
-.tpl-preview-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-m);
-  background: var(--panel-2);
-}
-
-.tpl-preview {
-  max-width: 100%;
-  max-height: 160px;
-  object-fit: contain;
-  border-radius: var(--radius-s);
-  background: #fff;
-}
-
-.hidden {
-  display: none !important;
 }
