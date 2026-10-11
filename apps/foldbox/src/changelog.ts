@@ -21,6 +21,14 @@ import type { ChangelogEntry } from '@vostok/ui-kit';
 */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-11',
+    changes: [
+      { kind: 'added', text: 'Cut it from card: SVG, DXF and a Bambu Suite project, as well as printing it flat' },
+      { kind: 'added', text: 'Custom size for the sheet of card and the build plate' },
+      { kind: 'changed', text: 'A box too big for the sheet or plate still exports, with a warning' },
+    ],
+  },
+  {
     date: '2026-09-18',
     changes: [
       { kind: 'changed', text: 'The machine list is Bambu H2D plus the two generic profiles — pick those if your cutter is not here' },

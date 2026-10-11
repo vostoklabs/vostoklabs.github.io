@@ -43,7 +43,7 @@
     "build:offline": "node scripts/offline.mjs",
     "dev:penTopper": "pnpm --filter pen-topper dev",
     "build:penTopper": "pnpm --filter pen-topper build",
-    "dev:foldbox": "pnpm --filter foldbox dev:print",
+    "dev:foldbox": "pnpm --filter foldbox dev",
     "build:foldbox": "pnpm --filter foldbox build",
     "render:topper": "node scripts/render-topper.mjs",
     "dev:keychainCarabiner": "pnpm --filter keychain-carabiner dev",

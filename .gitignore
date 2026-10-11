@@ -74,9 +74,6 @@ apps/*/src/pro/
 apps/*/store/
 packages/laser/src/photo/
 packages/manifold-noeval/README.md
-apps/foldbox/src/export/cutFiles.ts
-apps/foldbox/src/export/cutPack.ts
-apps/foldbox/src/export/lac.ts
 apps/foldbox/demo/
 apps/foldbox/srcfit/
 apps/foldbox/testfit/
@@ -101,6 +98,7 @@ apps/foldbox/tests/*
 !apps/foldbox/tests/net.mts
 !apps/foldbox/tests/poly.mts
 !apps/foldbox/tests/print.mts
+!apps/foldbox/tests/sheet.mts
 !apps/foldbox/tests/sink.mts
 !apps/foldbox/tests/svg.mts
 !apps/foldbox/tests/thin.mts

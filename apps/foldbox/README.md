@@ -1,16 +1,18 @@
 # Fold-Up Box Generator (`foldbox`)
 
-Parametric folding-carton nets, printed **flat as one thin grooved sheet** you fold up by
-hand — with a live 3D fold animation driven by the same geometry the file carries.
+Parametric folding-carton nets, **cut from card** on a laser or a cutting machine, or printed
+**flat as one thin grooved sheet** you fold up by hand — with a live 3D fold animation driven by
+the same geometry the file carries.
 
 ```bash
 pnpm dev:foldbox                 # http://localhost:5180
 pnpm build:foldbox               # what deploy.yml ships
 ```
 
-> `pnpm --filter foldbox dev` / `build:full` / `build:offline` run `--mode full`, which needs
-> sources a clone does not have. Use `dev:print` — which is what `pnpm dev:foldbox` runs — in
-> a clone; there `virtual:cut-pack` resolves to a stub and every `if (CUT)` branch is folded out.
+> `dev`, `build` and `build:offline` run `--mode full`: cutting and printing, the app the site
+> serves. `dev:print` runs the print-only app, where `virtual:cut-pack` resolves to a stub and
+> every `if (CUT)` branch is folded out. `build:mw` is the MakerLab embed, and needs sources a
+> clone does not have.
 
 ## The styles
 

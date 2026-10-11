@@ -3,23 +3,21 @@ import { resolve } from 'node:path';
 import { keepOnlyFonts } from '@vostok/fonts/vite';
 import { LOGO_FONTS } from './src/logoFonts';
 
-// `virtual:cut-pack` — the build-mode seam. The DEFAULT build is print-only, and the
-// cut exporter is absent from it rather than hidden.
+// `virtual:cut-pack` — the build-mode seam. The site builds `--mode full`, cutting and
+// printing; a build with no mode (`dev:print`) is the print-only app, with the cut
+// exporter absent from it rather than hidden.
 //
-// In `--mode full` this resolves to src/export/cutPack.ts (`CUT = true`, the real
-// exporter). In every other build it resolves to the stub below: `CUT` is the literal
-// `false`, so every `if (CUT)` branch in main.ts is dead code the bundler drops, and
+// In `--mode full` (and `makerworld`) this resolves to src/export/cutPack.ts (`CUT = true`,
+// the real exporter). In every other build it resolves to the stub below: `CUT` is the
+// literal `false`, so every `if (CUT)` branch in main.ts is dead code the bundler drops, and
 // with it the last reference to `cutFiles.ts` — which therefore never enters the
 // bundle. Same shape both ways, so no call site needs a null check.
 //
-// WHAT THIS DOES NOT DO, measured rather than assumed: the `MACHINES` and `STOCKS` tables
-// live in `types.ts` next to `SHEETS` and `DEFAULT_PARAMS`, which the print-only build
-// needs — so their names and notes are in the print-only bundle as data, Cricut and
-// Glowforge and Laser Line and all. None of it is ever rendered: every control that would
-// show it is built inside `buildCutUI()`, and the diagnostics that mention a `.lac` are
-// gated on `makeMode === 'cut'`. So no cut copy is on SCREEN, which is what matters for
-// the launch — but "not in the bundle to be found" would be too strong a claim, and the
-// fix is to move the two tables behind this door rather than to keep saying it.
+// WHAT THIS DOES NOT DO: the `MACHINES` and `STOCKS` tables live in `types.ts` next to
+// `SHEETS` and `DEFAULT_PARAMS`, which the print-only build needs, so their names and notes
+// are in the print-only bundle as data. None of it is rendered there: every control that
+// would show it is built inside `buildCutUI()`, and the diagnostics that mention a `.lac`
+// are gated on `makeMode === 'cut'`.
 //
 // The shared half — `collectPaths` and `OP_COLOR` in src/export/paths.ts — is
 // deliberately NOT behind this door: the flat dieline view on the stage draws from it

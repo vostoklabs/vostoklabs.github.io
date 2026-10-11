@@ -8,7 +8,7 @@
 
 import type { Diagnostic } from '@vostok/ui-kit';
 import type { Artwork, BoxParams, Machine, Net, Poly, Sheet, SolveResult, Stock } from '../types';
-import { MACHINES, SHEETS, STOCKS } from '../types';
+import { CUSTOM_PLATE_ID, CUSTOM_SHEET_ID, MACHINES, SHEETS, STOCKS } from '../types';
 import { buildNet, placeNet } from './net';
 import { TRADE_INSET, buildStyle, insideDims, styleMeta } from './styles';
 import { slotFit } from './fit';
@@ -28,6 +28,22 @@ export function machineById(id: string): Machine {
 }
 export function sheetById(id: string): Sheet {
   return SHEETS.find((s) => s.id === id) ?? (SHEETS[0] as Sheet);
+}
+/** The sheet or plate these params lay the blank out on. The one to read it through:
+ *  a "Custom size" row has its size in the params, not in `SHEETS`. */
+export function sheetFor(
+  p: Pick<BoxParams, 'sheetId' | 'customSheetWMm' | 'customSheetHMm' | 'customPlateWMm' | 'customPlateHMm'>,
+): Sheet {
+  const sheet = sheetById(p.sheetId);
+  const size =
+    sheet.id === CUSTOM_SHEET_ID ? [p.customSheetWMm, p.customSheetHMm]
+    : sheet.id === CUSTOM_PLATE_ID ? [p.customPlateWMm, p.customPlateHMm]
+    : null;
+  if (!size) return sheet;
+  const [w, h] = size.map((v, i) => (Number.isFinite(v) && v > 0 ? v : i ? sheet.heightMm : sheet.widthMm)) as [number, number];
+  // The size in brackets, like every preset, so the places that strip it to a short name
+  // ("fits Custom size") and the ones that quote it whole both read right.
+  return { ...sheet, name: `${sheet.name} (${+w.toFixed(1)} × ${+h.toFixed(1)})`, widthMm: w, heightMm: h };
 }
 /** Shortest dash this machine can actually make. The H2D's drag knife swivels through
  *  a 0.36 mm arc at every direction change, so anything near 1 mm is mostly turn. */
@@ -132,7 +148,7 @@ function largestCube(p: BoxParams, sheet: Sheet, margin: number): number {
  *  afterwards, and a flat box that fitted came back too big for the plate. */
 export function fitToSheet(input: BoxParams, limits?: SizeLimits): Pick<BoxParams, 'lengthMm' | 'widthMm' | 'heightMm'> {
   const p: BoxParams = { ...input, caliperMm: effectiveCaliper(input) };
-  const sheet = sheetById(p.sheetId);
+  const sheet = sheetFor(p);
   const availW = sheet.widthMm - 2 * SHEET_MARGIN_MM;
   const availH = sheet.heightMm - 2 * SHEET_MARGIN_MM;
   const [minL, minW, minH] = limits?.min ?? [8, 8, 4];
@@ -232,7 +248,7 @@ function withMarks(net: Net, p: BoxParams, artwork: Artwork | null): { net: Net;
 export function solve(input: BoxParams, artwork: Artwork | null = null): SolveResult {
   const p: BoxParams = { ...input, caliperMm: effectiveCaliper(input) };
   const machine = machineById(p.machineId);
-  const sheet = sheetById(p.sheetId);
+  const sheet = sheetFor(p);
   const stock = stockById(p.stockId);
   const { H } = insideDims(p);
   const meta = styleMeta(p.style);
@@ -255,7 +271,10 @@ export function solve(input: BoxParams, artwork: Artwork | null = null): SolveRe
   if (overflow) {
     const cube = largestCube(p, sheet, SHEET_MARGIN_MM);
     diagnostics.push({
-      level: 'error',
+      // A warning, not an error: it is said everywhere, and the export goes ahead with a
+      // toast saying so (Ian, 2026-10-11). Whether the blank fits is the user's call to make
+      // about the sheet or bed in front of them, not ours.
+      level: 'warning',
       code: 'sheet',
       message: `The blank is ${netW.toFixed(0)} × ${netH.toFixed(0)} mm and ${sheet.name} gives you ${availW.toFixed(0)} × ${availH.toFixed(0)} mm.`,
       // Naming the button matters more than naming the arithmetic. Boxes eat far more

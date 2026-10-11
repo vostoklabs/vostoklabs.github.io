@@ -466,6 +466,9 @@ export const SHEETS: Sheet[] = [
   { id: 'mat24', name: 'Cutting mat 12 × 24 in (292 × 597)', widthMm: 292.1, heightMm: 596.9 , kind: 'sheet' },
   { id: 'a3', name: 'A3 (420 × 297)', widthMm: 420, heightMm: 297 , kind: 'sheet' },
   { id: 'sra3', name: 'SRA3 (450 × 320)', widthMm: 450, heightMm: 320 , kind: 'sheet' },
+  // Whatever the user has. Its size is in the params (`customSheetWMm`/`HMm`), so read it
+  // through `sheetFor`; the numbers here are only what it falls back to.
+  { id: 'custom-sheet', name: 'Custom size', widthMm: 297, heightMm: 210, kind: 'sheet' },
   // Build plates, for the printed sheet. Same mechanism as a sheet of card — the
   // fit check does not care which one you meant, and "will this blank fit" is the
   // same question on a bed as on a mat.
@@ -475,7 +478,18 @@ export const SHEETS: Sheet[] = [
   { id: 'plate-256', name: 'A1 / P1 / X1 (256 × 256)', widthMm: 256, heightMm: 256 , kind: 'plate', plate: 'a1' },
   { id: 'plate-a1mini', name: 'A1 mini (180 × 180)', widthMm: 180, heightMm: 180 , kind: 'plate', plate: 'a1mini' },
   { id: 'plate-h2d', name: 'H2D (350 × 320)', widthMm: 350, heightMm: 320 , kind: 'plate', plate: 'h2d' },
+  // No `plate`: there is no mesh for a bed of any size, so the preview stands on the grid.
+  { id: 'custom-plate', name: 'Custom size', widthMm: 256, heightMm: 256, kind: 'plate' },
 ];
+
+/** The two "Custom size" rows, one per list. */
+export const CUSTOM_SHEET_ID = 'custom-sheet';
+export const CUSTOM_PLATE_ID = 'custom-plate';
+/** What a custom sheet or plate may measure, mm per side. */
+export const CUSTOM_SIZE_LIMITS = {
+  sheet: [100, 1500] as [number, number],
+  plate: [100, 1000] as [number, number],
+};
 
 // ───────────────────────────────── parameters ─────────────────────────────────
 
@@ -659,6 +673,12 @@ export interface BoxParams {
 
   machineId: string;
   sheetId: string;
+  /** The "Custom size" sheet of card, mm. Only read when `sheetId` is `custom-sheet`. */
+  customSheetWMm: number;
+  customSheetHMm: number;
+  /** The "Custom size" build plate, mm. Only read when `sheetId` is `custom-plate`. */
+  customPlateWMm: number;
+  customPlateHMm: number;
   /** Overrides the machine's own default when the user knows better. */
   foldMode: FoldMode;
   kerfMm: number;
@@ -730,6 +750,12 @@ export const DEFAULT_PARAMS: BoxParams = {
   hingeWidthMm: 1.2,
   machineId: 'h2d-blade',
   sheetId: 'a4-land',
+  // Picking Custom size starts from the sheet or plate you were on (mount.ts), so these
+  // are only ever seen by a project that names a custom size and not the size itself.
+  customSheetWMm: 297,
+  customSheetHMm: 210,
+  customPlateWMm: 256,
+  customPlateHMm: 256,
   // Agrees with `h2d-blade` above, which is the default machine — otherwise the dropdown
   // opens on a mode the chosen machine would not have picked. Print mode renders a fold as
   // a plain crease whatever this says, so the shipped print-only dieline is unaffected.

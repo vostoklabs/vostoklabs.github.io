@@ -5,7 +5,7 @@
 import { el, svgNode } from '@vostok/ui-kit';
 import type { Op, Pt, SolveResult } from '../types';
 import { OP_COLOR, collectPaths, explodeDashes } from '../export/paths';
-import { sheetById } from '../geometry/solve';
+import { sheetFor } from '../geometry/solve';
 import { polysBounds } from '../geometry/poly';
 
 export interface FlatView {
@@ -24,7 +24,7 @@ export function createFlatView(): FlatView {
 
   function render(result: SolveResult, opts: { showLabels: boolean; showSheet: boolean }): Set<Op> {
     const { net, params } = result;
-    const sheet = sheetById(params.sheetId);
+    const sheet = sheetFor(params);
     // Dashes become real geometry here for the same reason they do in the file: the
     // preview must BE the file. Not `stroke-dasharray` — the strokes carry
     // `vector-effect="non-scaling-stroke"`, under which a dash pattern resolves in

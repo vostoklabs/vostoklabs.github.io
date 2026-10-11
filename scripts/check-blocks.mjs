@@ -50,6 +50,9 @@ import { ROOT, rel, appSourceFiles, read, blankComments, ignored, uncommitted, p
 const BUDGET = {
   'bubble-pop-generator': { shadow: 14, viewer: 1, fileformat: 2, worker: 1 },
   'clicker-generator': { shadow: 1, viewer: 1, fonts: 3, worker: 1 },
+  // The Bambu Suite project writer (src/export/lac.ts), counted for its package parts. Moved
+  // here from foldbox's private budget on 2026-10-11, when the cut half was published.
+  foldbox: { fileformat: 1 },
   'house-number': { shadow: 2, worker: 1 },
   hub: { shadow: 1 },
   'keycap-generator': { viewer: 1, fonts: 7 },

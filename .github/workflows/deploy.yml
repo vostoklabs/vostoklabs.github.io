@@ -96,8 +96,8 @@ jobs:
       - name: Copy Pen Topper Generator to Hub Dist
         run: cp -r apps/pen-topper/dist apps/hub/dist/pen-topper
 
-      # Default build: the one the hub serves.
-      - name: Build Fold-Up Box Generator (print-only)
+      # The full app, cutting and printing: the one the hub serves.
+      - name: Build Fold-Up Box Generator
         run: pnpm build:foldbox
 
       - name: Copy Fold-Up Box Generator to Hub Dist

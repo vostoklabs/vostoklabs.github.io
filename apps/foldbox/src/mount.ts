@@ -46,6 +46,9 @@ import { createViewer } from '@vostok/viewer';
 import { FONTS, fontFamilyFor, installFontFaces } from '@vostok/fonts';
 import { LOGO_FEATURED, LOGO_FONTS, LOGO_TEXT_FONTS } from './logoFonts';
 import {
+  CUSTOM_PLATE_ID,
+  CUSTOM_SHEET_ID,
+  CUSTOM_SIZE_LIMITS,
   DEFAULT_PARAMS,
   MACHINES,
   SHEETS,
@@ -60,7 +63,7 @@ import {
   type StyleId,
 } from './types';
 import { OP_COLOR } from './export/paths';
-import { solve, fitToSheet, machineById, sheetById, stockById, type SizeLimits } from './geometry/solve';
+import { solve, fitToSheet, machineById, sheetFor, stockById, type SizeLimits } from './geometry/solve';
 import { logoFaces } from './geometry/marks';
 import { readText, textArtwork } from './ui/artwork';
 import { svgArtwork } from './ui/svgLogo';
@@ -165,8 +168,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   */
 
   /** Is the cut half of the app in this build? See `cutPackPlugin` in vite.config.ts:
-   *  the default build is print-only and every `if (CUT)` below is compiled out of it.
-   *  `pnpm dev` and `pnpm build:full` run `--mode full`. */
+   *  `pnpm dev` and `pnpm build` (the site) run `--mode full`; `dev:print` is the
+   *  print-only app, and every `if (CUT)` below is compiled out of it. */
   const CUT = __FOLDBOX_CUT__;
 
   // ---------------------------------------------------------------------------
@@ -935,9 +938,53 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       options: SHEETS.filter((s) => s.kind === kind).map((s) => ({ value: s.id, label: s.name })),
       value: SHEETS.find((s) => s.kind === kind && s.id === params.sheetId)?.id
         ?? (SHEETS.find((s) => s.kind === kind) as { id: string }).id,
-      onChange: (id) => setParam('sheetId', id),
+      onChange: (id) => {
+        if (id === CUSTOM_SHEET_ID || id === CUSTOM_PLATE_ID) seedCustomSize(kind);
+        setParam('sheetId', id);
+      },
     });
+
+  /* "Custom size": its width and height, under its list while it is picked. Each list keeps
+     its own pair, so a custom plate and a custom sheet of card survive switching between
+     printing and cutting. */
+  const CUSTOM_KEYS = {
+    sheet: ['customSheetWMm', 'customSheetHMm'],
+    plate: ['customPlateWMm', 'customPlateHMm'],
+  } as const;
+  function customSizeRows(kind: 'sheet' | 'plate') {
+    const [lo, hi] = CUSTOM_SIZE_LIMITS[kind];
+    const row = (label: string, key: (typeof CUSTOM_KEYS)[typeof kind][number]) =>
+      sliderRow({
+        label,
+        min: lo,
+        max: hi,
+        step: 1,
+        value: params[key],
+        format: lenFormat,
+        parse: lenParse,
+        onInput: (v) => setParam(key, v),
+      });
+    const [w, h] = CUSTOM_KEYS[kind];
+    return kind === 'sheet'
+      ? { w: row('Sheet width', w), h: row('Sheet height', h) }
+      : { w: row('Plate width', w), h: row('Plate depth', h) };
+  }
+  const customRows: Partial<Record<'sheet' | 'plate', ReturnType<typeof customSizeRows>>> = {};
+
+  /** Picking Custom size starts from the size of the sheet or plate it replaces, so the
+   *  pick itself moves nothing on screen and the user edits from a size they know. */
+  function seedCustomSize(kind: 'sheet' | 'plate'): void {
+    const was = sheetFor(params);
+    const [lo, hi] = CUSTOM_SIZE_LIMITS[kind];
+    const size = (v: number) => Math.min(hi, Math.max(lo, Math.round(v)));
+    const [w, h] = CUSTOM_KEYS[kind];
+    params = { ...params, [w]: size(was.widthMm), [h]: size(was.heightMm) };
+    customRows[kind]?.w.setValue(params[w]);
+    customRows[kind]?.h.setValue(params[h]);
+  }
+
   const plateField = sheetOf('plate', 'Build plate');
+  customRows.plate = customSizeRows('plate');
 
   /** "It does not fit", said where the controls that fix it are, with the button that
    *  fixes it directly underneath.
@@ -1036,9 +1083,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // deliberately not a constraint, it would have reset the sheet for no reason at all.
         const fits = (s: { widthMm: number; heightMm: number }) =>
           s.widthMm <= m.areaMm[0] && s.heightMm <= m.areaMm[1];
-        const current = SHEETS.find((s) => s.id === params.sheetId && s.kind === 'sheet');
+        // Through `sheetFor`, so a custom sheet is measured at the size the user gave it.
+        const current = sheetFor(params);
         const sheet =
-          current && fits(current)
+          current.kind === 'sheet' && fits(current)
             ? current
             : SHEETS.find((s) => s.kind === 'sheet' && fits(s));
         params = {
@@ -1060,6 +1108,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     });
 
     const sheetField = sheetOf('sheet', 'Sheet of card');
+    customRows.sheet = customSizeRows('sheet');
     /** The cut half's copy of `plateAlert` — see it for why this exists. */
     const sheetAlert = fitAlert();
     const fitHostCut = el('div', { className: 'fb-fitbtn' });
@@ -1144,7 +1193,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
     const cutSection = section({
       title: '',
-      body: [stockField, controls2.caliper, machineField, sheetField, sheetAlert.root, fitHostCut],
+      body: [stockField, controls2.caliper, machineField, sheetField, customRows.sheet.w, customRows.sheet.h, sheetAlert.root, fitHostCut],
     });
 
     const cutAdvancedSection = section({
@@ -1316,7 +1365,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const alert = cutting ? cutUI?.sheetAlert : plateAlert;
     for (const a of [cutUI?.sheetAlert, plateAlert]) a?.root.classList.toggle('hidden', !tooBig);
     if (alert && tooBig) {
-      const surface = sheetById(r.params.sheetId).name.replace(/\s*\(.*\)$/, '');
+      const surface = sheetFor(r.params).name.replace(/\s*\(.*\)$/, '');
       alert.set(
         cutting ? 'Too big for this sheet' : 'Too big for this plate',
         `Blank ${r.netSizeMm[0].toFixed(0)} × ${r.netSizeMm[1].toFixed(0)} mm
@@ -1397,7 +1446,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     status.setDiagnostics(
       r.diagnostics,
       `${r.netSizeMm[0].toFixed(0)} × ${r.netSizeMm[1].toFixed(0)} mm blank · ` +
-        `${r.rotated ? 'fits turned 90°' : 'fits'} ${sheetById(r.params.sheetId).name.replace(/\s*\(.*\)$/, '')}`,
+        `${r.rotated ? 'fits turned 90°' : 'fits'} ${sheetFor(r.params).name.replace(/\s*\(.*\)$/, '')}`,
     );
     void ms;
   }
@@ -1647,7 +1696,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *  from card gets the plain grid instead: a Bambu plate under a paper box would be a
    *  lie about the process. */
   function syncPlate(): void {
-    const sheet = sheetById(params.sheetId);
+    const sheet = sheetFor(params);
     viewer.setPlate(params.makeMode === 'print' ? (sheet?.plate ?? 'grid') : 'grid');
   }
 
@@ -1695,6 +1744,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
     show(controls.dividerCols, !!uses.divider);
     show(controls.dividerRows, !!uses.divider);
+    for (const [kind, id] of [['sheet', CUSTOM_SHEET_ID], ['plate', CUSTOM_PLATE_ID]] as const) {
+      const rows = customRows[kind];
+      if (!rows) continue;
+      show(rows.w, params.sheetId === id);
+      show(rows.h, params.sheetId === id);
+    }
     show(controls.hangTab as HTMLElement, !!uses.hangTab);
     // Relabelled rather than rebuilt, so the field keeps its place in the section and its
     // listener. `setFieldOptions` keeps the current mode when the new list still has it
@@ -1927,6 +1982,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // A box with an error would not fold: refused in that error's own words, which the
       // export panel shows.
       assertExportable(result.diagnostics);
+      // Too big for the sheet or plate is said, never refused: the user knows what they
+      // will lay it out on (solve.ts, the `sheet` warning).
+      if (result.overflow) {
+        const [w, h] = result.netSizeMm.map((v) => v.toFixed(0));
+        const on = result.params.makeMode === 'cut' ? 'sheet' : 'plate';
+        toast(`The blank is ${w} × ${h} mm, bigger than the ${on}. Exported anyway.`, { kind: 'warn' });
+      }
       const name = `${styleMeta(params.style).name} ${params.lengthMm}x${params.widthMm}x${params.heightMm}`;
 
       if (MAKERLAB) {
@@ -2221,6 +2283,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     title: 'Sheet and printer',
     body: [
       plateField,
+      customRows.plate.w,
+      customRows.plate.h,
       plateAlert.root,
       fitHostPrint,
       // Inside MakerLab the layer height is fixed (see `MAKERLAB_LAYER_HEIGHT_MM`), so it is
@@ -2408,10 +2472,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       hingeLayers: printControls.hingeLayers,
       flapLayers: printControls.flapLayers,
       hingeWidthMm: printControls.hingeWidth,
+      customPlateWMm: customRows.plate!.w,
+      customPlateHMm: customRows.plate!.h,
     });
     if (CUT) {
       const ui = cutUI!;
       syncControls(params, {
+        customSheetWMm: customRows.sheet!.w,
+        customSheetHMm: customRows.sheet!.h,
         glueTabMm: controls.glueTab!,
         filmInsert: controls.filmInsert!,
         filmMarginMm: controls.filmMargin!,

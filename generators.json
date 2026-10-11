@@ -487,12 +487,15 @@
       "route": "app",
       "status": "live",
       "appUrl": "/foldbox/",
-      "blurb": "Set the size, pick a structure, print it flat as one thin grooved sheet, then fold it into a box. Twelve structures, from mailers and trays to a cake box and tuck cartons, with a live fold animation before you commit.",
+      "blurb": "Set the size, pick a structure, then cut it from card on a laser or cutting machine, or print it flat as one thin grooved sheet, and fold it into a box. Twelve structures, from mailers and trays to a cake box and tuck cartons, with a live fold animation before you commit.",
       "topics": [
         "boxes"
       ],
-      "process": "3d-print",
-      "intro": "Folding Box Generator designs boxes that fold up from one flat sheet and lock themselves shut, sized to whatever you want to put in them.\n\nPick one of twelve structures, from a mailer or a cake box to a retail tuck carton, a gable carry box or a set of slot-together dividers. Type the inside or outside size in mm or inches, add a window, a hang tab or your own logo, and watch it fold up and unfold in a live 3D preview.\n\nPrint it flat, with no supports, as a 3MF whose fold lines are grooved in.",
+      "process": [
+        "laser",
+        "3d-print"
+      ],
+      "intro": "Folding Box Generator designs boxes that fold up from one flat sheet and lock themselves shut, sized to whatever you want to put in them.\n\nPick one of twelve structures, from a mailer or a cake box to a retail tuck carton, a gable carry box or a set of slot-together dividers. Type the inside or outside size in mm or inches, add a window, a hang tab or your own logo, and watch it fold up and unfold in a live 3D preview.\n\nCut it from card with an SVG and DXF for your laser or cutting machine, plus a Bambu Suite project for the H2D that keeps every fold a fold. Or print it flat, with no supports, as a 3MF whose fold lines are grooved in. Pick a sheet of card or a build plate, or type in your own size.",
       "features": [
         [
           "Twelve structures",
@@ -513,6 +516,10 @@
         [
           "Live fold preview",
           "Watch the box fold and unfold in 3D, and see the flat dieline beside it."
+        ],
+        [
+          "Cut from card",
+          "An SVG and DXF for a laser or cutting machine, and a Bambu Suite project for the H2D."
         ],
         [
           "Print it flat",
