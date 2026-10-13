@@ -130,6 +130,12 @@ jobs:
       - name: Copy Business Card Generator to Hub Dist
         run: cp -r apps/business-card/dist apps/hub/dist/business-card
 
+      - name: Build Photo Frames Studio
+        run: pnpm build:photoFrame
+
+      - name: Copy Photo Frames Studio to Hub Dist
+        run: cp -r apps/photo-frame/dist apps/hub/dist/photo-frame
+
       # Every generator the hub links to has to exist under the path generators.json gives it,
       # or the card is a 404 — which is exactly what shipped: the app was written, the registry
       # entry was added, and nothing here ever built it. Cheap to assert, and it fails the

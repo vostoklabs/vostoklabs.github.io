@@ -10,7 +10,7 @@
 */
 import * as THREE from 'three';
 import {
-  COVER_DIR, COVER_PAD, FAR, FLOOR_GAP, NEAR, coverDistance, depthResolution, fillDistance, floorGapFor, followOutDistance,
+  COVER_DIR, COVER_PAD, FAR, FLOOR_GAP, NEAR, boxFitDistance, coverDistance, depthResolution, fillDistance, floorGapFor, followOutDistance,
   frameDistance, presetDirection, presetPosition, seatOf, type ViewPreset,
 } from '../src/framing';
 
@@ -115,6 +115,24 @@ check('a cover is shot from where the bounding sphere just fills the frame, plus
   const tall = presetPosition('iso', at, new THREE.Vector3(30, 20, 12), 100).sub(at);
   check('the three-quarter preset: the cover\'s direction for a flat model, lowered by half the height for a tall one',
     flat.clone().normalize().distanceTo(presetDirection('iso')) < 1e-12 && near(flat.z - tall.z, 6), `${vec(flat)} / ${vec(tall)}`);
+}
+
+/* ------------------------------------------------------------------ framing a box */
+
+{
+  // A card 20 x 20 mm standing in the XZ plane, seen straight on from the front.
+  const card = new THREE.Box3(new THREE.Vector3(-10, 0, -10), new THREE.Vector3(10, 0, 10));
+  const front = new THREE.Vector3(0, -1, 0);
+  const flat = boxFitDistance(card, front, 45, 1, 1);
+  check('box: a flat card seen face on fills a square picture edge to edge', near(flat, 10 / Math.tan(Math.PI / 8)), String(flat));
+  check('box: tighter than the bounding sphere for a flat card', flat < coverDistance(Math.SQRT2 * 10, 45, 1));
+  const deep = new THREE.Box3(new THREE.Vector3(-10, -5, -10), new THREE.Vector3(10, 5, 10));
+  check('box: the near face sets the distance, so depth moves the camera back by it', near(boxFitDistance(deep, front, 45, 1, 1), 5 + flat));
+  check('box: a tall picture is framed by its narrower width', near(boxFitDistance(card, front, 45, 0.5, 1), 2 * flat));
+  check('box: pad leaves that much air round it', near(boxFitDistance(card, front, 45, 1, 1.1), 1.1 * flat));
+  const down = boxFitDistance(card, new THREE.Vector3(0, 0, 1), 45, 1, 1);
+  check('box: looking straight down is still a distance', Number.isFinite(down) && down > 0, String(down));
+  check('box: an empty box asks for no distance in particular', boxFitDistance(new THREE.Box3(), front, 45, 1) === 1);
 }
 
 /* ------------------------------------------------------------------ report */

@@ -15,7 +15,7 @@ import { themeColorHex } from '@vostok/ui-kit';
 import { createBuildPlate, type BuildPlate } from '@vostok/plates/three';
 import { loadPlateChoice, type PlateChoice } from '@vostok/plates';
 import {
-  COVER_DIR, FLOOR_GAP, FAR, NEAR, coverDistance, fillDistance, floorGapFor, followOutDistance, frameDistance,
+  COVER_DIR, FLOOR_GAP, FAR, NEAR, boxFitDistance, coverDistance, fillDistance, floorGapFor, followOutDistance, frameDistance,
   presetDirection, presetPosition, seatOf, type ViewPreset,
 } from './framing';
 import { partGeometry } from './mesh';
@@ -49,6 +49,19 @@ export interface ViewerPart {
    * Default 1, opaque.
    */
   opacity?: number;
+  /**
+   * Where the part's picture (`texture`) lies on it: u and v for each vertex, in vertex order,
+   * from 0 to 1 across the picture, with v = 0 along its bottom edge. Default: none.
+   */
+  uv?: Float32Array;
+  /**
+   * A picture the part shows instead of its colour, laid on by `uv`: for a preview of something
+   * the model will carry that is not in the model itself. Ready to draw: an image decoded, a
+   * canvas drawn. It is uploaded once and kept while a part shows it, so hand over the same
+   * element on every rebuild, and a new one for a new picture. An ImageBitmap is drawn as it was
+   * made: make it with `imageOrientation: 'flipY'`. Default: none, the part is its colour.
+   */
+  texture?: HTMLCanvasElement | HTMLImageElement | ImageBitmap;
 }
 
 export interface ViewerOptions {
@@ -106,6 +119,18 @@ export interface CoverOptions {
   angle?: 'iso' | 'view';
 }
 
+/** How a thumbnail is shot (`renderThumbnail`). */
+export interface ThumbnailOptions {
+  /** Where the camera looks from: a direction from the model towards the camera, Z up.
+   *  Default: the cover's three-quarter angle. */
+  direction?: [number, number, number];
+  /** Pixels tall. Default: `edge`, a square picture. */
+  height?: number;
+  /** Frame the model's box as seen from `direction`, edge to edge, rather than its bounding
+   *  sphere, so a flat model seen face on fills the picture. Default false. */
+  tight?: boolean;
+}
+
 export interface Viewer {
   /** Rebuild the meshes. The camera is kept unless `refit` is asked for, or the
    *  model changed size enough that it would leave the frame. */
@@ -125,9 +150,10 @@ export interface Viewer {
   setView(preset: ViewPreset): void;
   /** Recolour one part in place, without rebuilding its geometry. */
   setPartColor(index: number, color: RGB): void;
-  /** Replace one part's shape, without rebuilding the others or moving the camera: its colour,
-   *  its place in the list and any offset or pose it has stay. */
-  setPartGeometry(index: number, part: Pick<ViewerPart, 'positions' | 'indices' | 'stride'>): void;
+  /** Replace one part's shape (and its `uv`, for one showing a picture), without rebuilding the
+   *  others or moving the camera: its colour, its place in the list and any offset or pose it
+   *  has stay. */
+  setPartGeometry(index: number, part: Pick<ViewerPart, 'positions' | 'indices' | 'stride' | 'uv'>): void;
   /** Show or hide one part. A hidden part is not picked, and a cover or a thumbnail is framed
    *  without it; so is a part in a layer the app has hidden. */
   setPartVisible(index: number, on: boolean): void;
@@ -216,7 +242,7 @@ export interface Viewer {
    * transparent background with `alpha`, on the stage's background without. Null if the canvas
    * cannot be read.
    */
-  renderThumbnail(edge: number, parts?: ViewerPart[]): string | null;
+  renderThumbnail(edge: number, parts?: ViewerPart[], how?: ThumbnailOptions): string | null;
   /** Escape hatches for generator-specific overlays. */
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
@@ -243,11 +269,13 @@ function toColor(rgb: RGB): THREE.Color {
 }
 
 /** The material a part is drawn with, on the stage and in a thumbnail alike: both sides of every
- *  face, so a mesh with a face wound the wrong way still reads as solid. */
-function partMaterial(color: RGB, opacity = 1): THREE.MeshStandardMaterial {
+ *  face, so a mesh with a face wound the wrong way still reads as solid. A part showing a picture
+ *  (`map`) is white under it, so the picture keeps its own colours. */
+function partMaterial(color: RGB, map: THREE.Texture | null = null, opacity = 1): THREE.MeshStandardMaterial {
   const seeThrough = opacity < 1;
   return new THREE.MeshStandardMaterial({
-    color: toColor(color), metalness: 0, roughness: 0.5, side: THREE.DoubleSide,
+    ...(map ? { color: 0xffffff, map } : { color: toColor(color) }),
+    metalness: 0, roughness: 0.5, side: THREE.DoubleSide,
     ...(seeThrough ? { transparent: true, opacity, depthWrite: false } : {}),
   });
 }
@@ -321,6 +349,9 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
   const materials: THREE.MeshStandardMaterial[] = [];
   const partMeshes: THREE.Mesh[] = [];
+  /** One texture per picture the parts show (`ViewerPart.texture`), kept while a part on the stage
+   *  shows it, so a rebuild with the same picture does not upload it again. */
+  const pictures = new Map<NonNullable<ViewerPart['texture']>, THREE.Texture>();
   /** The layers asked for, by name: groups inside `root` that `clearParts` empties but keeps. */
   const layers = new Map<string, THREE.Group>();
   const partsSetHooks = new Set<(meshes: THREE.Mesh[], parts: ViewerPart[]) => void>();
@@ -356,6 +387,31 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
   function disposeMesh(mesh: THREE.Mesh) {
     mesh.geometry.dispose();
     (mesh.material as THREE.Material).dispose();
+  }
+
+  /** A part's material: its picture, when it has one and the `uv` to lay it on, else its colour. */
+  function materialOf(p: ViewerPart): THREE.MeshStandardMaterial {
+    if (!p.uv || !p.texture) return partMaterial(p.color, null, p.opacity);
+    let map = pictures.get(p.texture);
+    if (!map) {
+      map = new THREE.Texture(p.texture);
+      map.colorSpace = THREE.SRGBColorSpace;
+      map.needsUpdate = true;
+      pictures.set(p.texture, map);
+    }
+    return partMaterial(p.color, map, p.opacity);
+  }
+
+  /** Let go of every picture no part on the stage shows, and of its copy on the GPU. A material's
+   *  dispose leaves its picture alone, which is what keeps one across rebuilds. */
+  function releasePictures() {
+    if (!pictures.size) return;
+    const shown = new Set(materials.map((m) => m.map));
+    for (const [source, map] of pictures) {
+      if (shown.has(map)) continue;
+      map.dispose();
+      pictures.delete(source);
+    }
   }
 
   function clearParts() {
@@ -484,7 +540,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i]!;
-      const mat = partMaterial(p.color, p.opacity);
+      const mat = materialOf(p);
       materials.push(mat);
       const mesh = new THREE.Mesh(partGeometry(p), mat);
       mesh.userData.partIndex = i;
@@ -492,6 +548,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       partMeshes.push(mesh);
       (p.layer === undefined ? root : layer(p.layer)).add(mesh);
     }
+    releasePictures();
 
     // An empty build is a real state, not an error: a generator whose text field is
     // momentarily blank calls this with no parts. Measuring it is what breaks the view.
@@ -917,7 +974,10 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
   /** A card's picture: see `Viewer.renderThumbnail`. Synchronous, so the frame on the stage is
    *  put back before anything can paint in between. */
-  function renderThumbnail(edge: number, parts?: ViewerPart[]): string | null {
+  function renderThumbnail(edge: number, parts?: ViewerPart[], how: ThumbnailOptions = {}): string | null {
+    const high = Math.max(1, Math.round(how.height ?? edge));
+    const wide = edge / high;
+    const dir = how.direction ? new THREE.Vector3(...how.direction).normalize() : COVER_DIR;
     const prevSize = renderer.getSize(new THREE.Vector2());
     const prevRatio = renderer.getPixelRatio();
     const prevAspect = camera.aspect;
@@ -937,7 +997,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
         const box = new THREE.Box3();
         if (parts) {
           shot = new THREE.Group();
-          for (const p of parts) if ((p.opacity ?? 1) >= 1) shot.add(new THREE.Mesh(partGeometry(p), partMaterial(p.color)));
+          for (const p of parts) if ((p.opacity ?? 1) >= 1) shot.add(new THREE.Mesh(partGeometry(p), materialOf(p)));
           scene.add(shot);
           root.visible = false;
           rig.visible = false;
@@ -951,9 +1011,12 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
         }
         const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
         const radius = box.isEmpty() ? 1 : Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
-        camera.position.copy(centre).addScaledVector(COVER_DIR, coverDistance(radius, camera.fov, 1));
+        // The sphere fits the narrower side; a tight shot fits the box's corners instead.
+        const narrowFov = wide >= 1 ? camera.fov : (2 * Math.atan(Math.tan((camera.fov * Math.PI) / 360) * wide) * 180) / Math.PI;
+        const distance = how.tight && !box.isEmpty() ? boxFitDistance(box, dir, camera.fov, wide, 1.04) : coverDistance(radius, narrowFov, 1);
+        camera.position.copy(centre).addScaledVector(dir, distance);
         camera.lookAt(centre);
-        camera.aspect = 1;
+        camera.aspect = wide;
         camera.updateProjectionMatrix();
 
         if (opts.alpha) {
@@ -961,7 +1024,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
           renderer.setClearColor(0x000000, 0);
         }
         renderer.setPixelRatio(1);
-        renderer.setSize(edge, edge, false);
+        renderer.setSize(edge, high, false);
         renderer.render(scene, camera);
         try {
           url = renderer.domElement.toDataURL('image/png');
@@ -973,6 +1036,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
       if (shot) {
         scene.remove(shot);
         disposeSubtree(shot);
+        releasePictures(); // the ones only the thumbnail showed
       }
       root.visible = rootWasVisible;
       rig.visible = rigWasVisible;
@@ -1014,6 +1078,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
     renderer.domElement.removeEventListener('pointerdown', onPointerDown);
     renderer.domElement.removeEventListener('pointerup', onPointerUp);
     clearParts();
+    releasePictures();
     outlineMaterial?.dispose();
     setFoldRig(null);
     buildPlate.dispose();

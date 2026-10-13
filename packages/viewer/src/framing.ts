@@ -106,6 +106,37 @@ export function fillDistance(radius: number, fovDeg: number, aspect: number, fil
   return radius / (fill * Math.tan(Math.min(vFov, hFov) / 2));
 }
 
+/**
+ * The camera distance at which `box`, seen from `dir` (a direction from the box's centre towards
+ * the camera, Z up) through a vertical field of view of `fovDeg` at `aspect`, just fits the
+ * picture, with `pad` of air round it. Measured on the box's eight corners in perspective, so a
+ * flat model seen face on fills the picture where its bounding sphere would leave it small.
+ */
+export function boxFitDistance(box: THREE.Box3, dir: THREE.Vector3, fovDeg: number, aspect: number, pad = COVER_PAD): number {
+  if (box.isEmpty()) return 1;
+  const back = dir.clone().normalize();
+  const forward = back.clone().negate();
+  const right = forward.clone().cross(new THREE.Vector3(0, 0, 1));
+  if (right.lengthSq() < 1e-12) right.set(1, 0, 0);
+  right.normalize();
+  const up = right.clone().cross(forward).normalize();
+  const tanV = Math.tan((fovDeg * Math.PI) / 360) / pad;
+  const tanH = tanV * (aspect > 0 && Number.isFinite(aspect) ? aspect : 1);
+  const centre = box.getCenter(new THREE.Vector3());
+  let distance = 0;
+  const v = new THREE.Vector3();
+  for (const x of [box.min.x, box.max.x]) {
+    for (const y of [box.min.y, box.max.y]) {
+      for (const z of [box.min.z, box.max.z]) {
+        v.set(x, y, z).sub(centre);
+        const toward = v.dot(back);
+        distance = Math.max(distance, toward + Math.abs(v.dot(right)) / tanH, toward + Math.abs(v.dot(up)) / tanV);
+      }
+    }
+  }
+  return distance;
+}
+
 /** The way each preset looks at the model, as a unit vector from the model to the camera, for
  *  framing by distance alone. A face-on view points where `presetPosition` puts the camera; the
  *  three-quarter view is the cover's direction, which `presetPosition` lowers by half the model's

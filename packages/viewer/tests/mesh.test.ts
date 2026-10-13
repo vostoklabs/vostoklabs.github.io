@@ -1,6 +1,6 @@
 /*
-  A part as the viewer draws it (src/mesh.ts): xyz picked out of wider vertices, and normals
-  creased at hard edges.
+  A part as the viewer draws it (src/mesh.ts): xyz picked out of wider vertices, normals creased
+  at hard edges, and a picture's uv kept with its vertices.
 
     pnpm --filter @vostok/viewer test
 */
@@ -54,6 +54,43 @@ const CUBE = {
   let smooth = true;
   for (let i = 0; i < n.count; i++) if (g.getAttribute('position').getZ(i) === 1 && Math.abs(n.getZ(i) - 1) > 1e-6) smooth = false;
   check('a dome keeps one smooth normal at its top', smooth);
+}
+{
+  // A picture's uv: nothing unless a part has one; given, it is split with the vertices.
+  const plain = partGeometry(CUBE);
+  const names = Object.keys(plain.attributes).sort().join();
+  check('no uv: a position and a normal, and nothing else', names === 'normal,position', names);
+
+  // A uv of its own for each of the cube's 8 corners.
+  const uv = new Float32Array(16);
+  for (let i = 0; i < 8; i++) uv.set([i / 8, 1 - i / 16], i * 2);
+  const corner = (g: ReturnType<typeof partGeometry>, k: number) => {
+    const p = g.getAttribute('position');
+    return [0, 1, 2, 3, 4, 5, 6, 7].find((j) => CUBE.positions[j * 3] === p.getX(k) && CUBE.positions[j * 3 + 1] === p.getY(k) && CUBE.positions[j * 3 + 2] === p.getZ(k))!;
+  };
+  /** Whether every vertex drawn carries the uv of the corner it was made from. */
+  const aligned = (g: ReturnType<typeof partGeometry>) => {
+    const t = g.getAttribute('uv');
+    for (let k = 0; k < t.count; k++) {
+      const j = corner(g, k);
+      if (t.getX(k) !== uv[j * 2] || t.getY(k) !== uv[j * 2 + 1]) return false;
+    }
+    return true;
+  };
+
+  const g = partGeometry({ ...CUBE, uv });
+  const t = g.getAttribute('uv');
+  const count = g.getAttribute('position').count;
+  check('uv: 2 floats for every vertex drawn', !!t && t.itemSize === 2 && t.count === count && t.array.length === count * 2, `${t?.count} uvs for ${count} vertices`);
+  check('uv: each vertex keeps the uv of its own corner', aligned(g));
+  check('uv: the shape and its normals are the same as without it',
+    g.getAttribute('position').array.join() === plain.getAttribute('position').array.join()
+      && g.getAttribute('normal').array.join() === plain.getAttribute('normal').array.join());
+
+  const wide = new Float32Array(CUBE.positions.length / 3 * 4);
+  for (let i = 0; i < 8; i++) wide.set([CUBE.positions[i * 3]!, CUBE.positions[i * 3 + 1]!, CUBE.positions[i * 3 + 2]!, 7], i * 4);
+  const g4 = partGeometry({ positions: wide, indices: CUBE.indices, stride: 4, uv });
+  check('uv: with a fourth float per vertex, the same uvs in the same order', g4.getAttribute('uv').array.join() === t.array.join() && aligned(g4));
 }
 
 console.log(`\nmesh: ${pass} passed, ${fails.length} failed`);

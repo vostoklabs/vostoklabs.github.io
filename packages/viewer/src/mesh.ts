@@ -18,10 +18,13 @@ export function stridedPositions(positions: Float32Array, stride = 3): Float32Ar
 }
 
 /** The geometry for a part's triangles, with crease-split normals: domes and round walls stay
- *  smooth, hard edges (35 degrees and more) stay crisp. */
-export function partGeometry(part: { positions: Float32Array; indices: Uint32Array; stride?: number }): THREE.BufferGeometry {
+ *  smooth, hard edges (35 degrees and more) stay crisp. A part's `uv` (2 floats a vertex, in
+ *  vertex order) stays with its vertices. */
+export function partGeometry(part: { positions: Float32Array; indices: Uint32Array; stride?: number; uv?: Float32Array }): THREE.BufferGeometry {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(stridedPositions(part.positions, part.stride), 3));
+  // Before the normals are creased: that splits every attribute by the same indices.
+  if (part.uv) geo.setAttribute('uv', new THREE.BufferAttribute(part.uv, 2));
   geo.setIndex(new THREE.BufferAttribute(part.indices, 1));
   const creased = toCreasedNormals(geo, (35 * Math.PI) / 180);
   geo.dispose();

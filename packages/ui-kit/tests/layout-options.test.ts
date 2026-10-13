@@ -23,6 +23,7 @@ import { chip } from '../src/components/elements';
 import { generatorHeader } from '../src/components/generator-chrome';
 import { sidebarFooter } from '../src/components/sidebar-footer';
 import { drawer } from '../src/components/drawer';
+import { galleryCard, galleryGrid } from '../src/components/gallery';
 
 let pass = 0;
 const fails: string[] = [];
@@ -312,6 +313,38 @@ option('generatorHeader compact', 'vl-app-header--compact', (on) =>
   check('appShell phone: with no right footer, one is made for the bar alone', !!made && made.children.length === 1 && has(made.firstElementChild, 'vl-app__phone-bar'));
   const twoCol = appShell({ right: { scroll: [] }, phone: true });
   check('appShell phone: needs a left panel; without one it does nothing', !has(twoCol.root, 'vl-app--phone') && !mini(twoCol.root).querySelector('.vl-app__phone-bar'));
+}
+
+
+// appShell phoneKeep: header nodes kept in reach on a narrow screen, and put back on a wide one.
+{
+  const narrowQ = window.matchMedia('(max-width: 900px)') as unknown as { set(m: boolean): void };
+  narrowQ.set(false);
+  const back = el('p', { text: 'All designs' });
+  const name = el('p', { text: 'Snapshot' });
+  const other = el('p', { text: 'other' });
+  const shell = appShell({ phone: true, phoneKeep: [back, name], left: { header: [back, name, other], scroll: [el('p')] }, right: { scroll: [el('p', { text: 'words' })] } });
+  const r = mini(shell.root);
+  const leftHeader = r.querySelector('.vl-panel--left > .vl-panel__header')!;
+  const head = r.querySelector('.vl-panel--right > .vl-app__phone-head');
+  check('appShell phoneKeep: wide, the header is as given and the holder is empty', leftHeader.textContent === 'All designsSnapshotother' && !!head && head.childNodes.length === 0);
+  narrowQ.set(true);
+  check('appShell phoneKeep: narrow, the kept nodes lead the right panel', !!head && head.textContent === 'All designsSnapshot' && head.nextElementSibling === mini(shell.rightScroll), head?.textContent ?? 'no holder');
+  check('appShell phoneKeep: narrow, the rest of the header stays', leftHeader.textContent === 'other');
+  narrowQ.set(false);
+  check('appShell phoneKeep: wide again, they go back in their order', leftHeader.textContent === 'All designsSnapshotother' && head!.childNodes.length === 0, leftHeader.textContent);
+  const plain = norm(appShell({ phone: true, left: { header: [el('p')], scroll: [] }, right: { scroll: [] } }).root);
+  check('appShell phoneKeep: left out, no holder is made', !plain.includes('vl-app__phone-head'));
+}
+
+// galleryGrid aspect: the cards' picture shape, set on the grid; left out, the grid is as it was.
+{
+  const cards = () => [galleryCard({ name: 'One', onClick() {} })];
+  const plain = norm(galleryGrid({ cards: cards() }));
+  check('galleryGrid aspect: left out, no aspect is written', !plain.includes('--vl-gallery-aspect'));
+  const portrait = galleryGrid({ cards: cards(), aspect: '4 / 5' });
+  check('galleryGrid aspect: given, the grid carries it for its cards', mini(portrait).style.getPropertyValue('--vl-gallery-aspect') === '4 / 5');
+  check('galleryGrid aspect: given, nothing else changes', norm(portrait).replace(/ style=\"--vl-gallery-aspect: 4 \/ 5;?\"/, '').replace(/ ?--vl-gallery-aspect: ?4 \/ 5;?/, '') === plain);
 }
 
 console.log(`\nlayout options: ${pass} passed, ${fails.length} failed`);

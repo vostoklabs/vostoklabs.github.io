@@ -791,6 +791,92 @@
       ]
     },
     {
+      "id": "photo-frame",
+      "name": "Photo Frames Studio",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/photo-frame/",
+      "blurb": "Frames, holders and music plaques for your prints, from Instant mini to A5. Pick one of 27 designs, type your words, then stand it on a base, stick it to the fridge with magnets or hang it from your keys.",
+      "topics": [
+        "desk-home"
+      ],
+      "process": "3d-print",
+      "intro": "Photo Frames Studio makes frames, holders and music plaques for your prints, from Instant mini to A5, printed on a Bambu Lab printer.\n\nStart from one of 27 designs, each shown with a sample photo in it: simple and fun frames, love and wedding frames, a song plaque with a player, your photo as a post, little holders and keychains. Not sure? Help me choose asks where it goes and which photo, and shows the six designs that suit it.\n\nPick your print size, standing up or lying down, or type your own. Stand it on a base, a foot or a kickstand, stick it to the fridge with magnets, or hang it from your keys. Add words above or below the photo, with symbols, and a pattern from the library in a second colour.\n\nEvery part prints flat. The photo sits behind the window under a back plate that slides in from the side.",
+      "features": [
+        [
+          "27 designs",
+          "Simple, fun, love, music and social frames, holders and keychains, each shown with a sample photo."
+        ],
+        [
+          "Help me choose",
+          "Two questions, where it goes and which photo, then the six designs that suit them."
+        ],
+        [
+          "Any print size",
+          "Instant mini, square and wide, 4 × 6 in, A6, A5 and more, or your own."
+        ],
+        [
+          "Stand, stick or hang",
+          "A base, a foot, a kickstand, fridge magnets or a keychain loop."
+        ],
+        [
+          "Words and symbols",
+          "Above or below the photo, sized to fill the room they have."
+        ],
+        [
+          "Patterns",
+          "From the library, in a second colour, moved where you want them."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/photo-frame/snapshot-frame-on-its-foot.jpg",
+          "alt": "Snapshot frame with a caption, standing on its foot"
+        },
+        {
+          "type": "image",
+          "src": "/media/photo-frame/song-plaque-in-its-base.jpg",
+          "alt": "Song plaque with a player, in its base"
+        },
+        {
+          "type": "image",
+          "src": "/media/photo-frame/squiggle-fridge-magnet.jpg",
+          "alt": "Squiggle frame for the fridge"
+        },
+        {
+          "type": "image",
+          "src": "/media/photo-frame/deco-patterned-frame-on-a-kickstand.jpg",
+          "alt": "Deco frame with a wave pattern, on a kickstand"
+        },
+        {
+          "type": "image",
+          "src": "/media/photo-frame/ledge-holder-with-a-print.jpg",
+          "alt": "Ledge holder with a date, a print standing in it"
+        },
+        {
+          "type": "image",
+          "src": "/media/photo-frame/charm-keychain-frame.jpg",
+          "alt": "Charm keychain frame with a name"
+        },
+        {
+          "type": "image",
+          "src": "/media/photo-frame/app-1.jpg",
+          "alt": "The gallery of designs, each with a sample photo"
+        },
+        {
+          "type": "image",
+          "src": "/media/photo-frame/app-2.jpg",
+          "alt": "A song plaque with a player, in its base"
+        },
+        {
+          "type": "image",
+          "src": "/media/photo-frame/app-3.jpg",
+          "alt": "Help me choose: where will it go?"
+        }
+      ]
+    },
+    {
       "id": "business-card",
       "name": "Business Card Generator",
       "route": "app",

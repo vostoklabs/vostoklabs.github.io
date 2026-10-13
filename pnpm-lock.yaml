@@ -651,6 +651,61 @@ importers:
         specifier: ^6.0.5
         version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
 
+  apps/photo-frame:
+    dependencies:
+      '@vostok/brand':
+        specifier: workspace:*
+        version: link:../../config
+      '@vostok/export':
+        specifier: workspace:*
+        version: link:../../packages/export
+      '@vostok/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
+      '@vostok/laser':
+        specifier: workspace:*
+        version: link:../../packages/laser
+      '@vostok/manifold':
+        specifier: workspace:*
+        version: link:../../packages/manifold
+      '@vostok/patterns':
+        specifier: workspace:*
+        version: link:../../packages/patterns
+      '@vostok/plates':
+        specifier: workspace:*
+        version: link:../../packages/plates
+      '@vostok/shapes':
+        specifier: workspace:*
+        version: link:../../packages/shapes
+      '@vostok/symbols':
+        specifier: workspace:*
+        version: link:../../packages/symbols
+      '@vostok/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
+      '@vostok/viewer':
+        specifier: workspace:*
+        version: link:../../packages/viewer
+      '@vostok/watermark':
+        specifier: workspace:*
+        version: link:../../packages/watermark
+      manifold-3d:
+        specifier: ^3.0.1
+        version: 3.5.1(@gltf-transform/core@4.4.1)(@gltf-transform/extensions@4.4.1)(@gltf-transform/functions@4.4.1)(esbuild-wasm@0.27.7)
+      three:
+        specifier: ^0.171.0
+        version: 0.171.0
+    devDependencies:
+      '@types/three':
+        specifier: ^0.171.0
+        version: 0.171.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.5
+        version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
+
   config: {}
 
   packages/export:

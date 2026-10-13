@@ -28,6 +28,7 @@ assets.private.json
 apps/*/
 !apps/bubble-pop-generator/
 !apps/business-card/
+!apps/photo-frame/
 !apps/clicker-generator/
 !apps/foldbox/
 !apps/generator-template/
@@ -95,6 +96,8 @@ apps/foldbox/README.internal.md
 !apps/generator-template/tests/**
 !apps/business-card/tests/
 !apps/business-card/tests/**
+!apps/photo-frame/tests/
+!apps/photo-frame/tests/**
 !apps/foldbox/tests/
 apps/foldbox/tests/*
 !apps/foldbox/tests/corners.mts

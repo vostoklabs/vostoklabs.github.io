@@ -15,6 +15,11 @@
   A part is { positions: Float32Array|number[], indices: Uint32Array|number[], color: '#rrggbb' or
   [r,g,b] 0..255 }. The world is Z-up, in millimetres; the floor sits at the lowest Z unless
   `groundZ` says otherwise.
+
+  A part may also carry a picture: `uv` (two numbers per vertex, u left to right, v bottom to top)
+  and `texture: { rgb, width, height }` (sRGB bytes, three per pixel, top row first). Its surface
+  then takes its colour from the picture, sampled bilinearly, instead of from `color`. A part
+  without both is drawn exactly as before.
 */
 import { writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
@@ -166,8 +171,10 @@ export function renderScene(parts, o = {}) {
     const N = cornerNormals(P, I, o.crease ?? 34);
     const alb = hexRgb(p.color).map(toLin);
     const mat = { alb, spec: p.spec ?? 0.35, gloss: p.gloss ?? 60, twoSided: !!p.twoSided };
-    tris.push({ P, I, N, mat });
+    if (p.texture && p.uv) mat.tex = linearTexture(p.texture);
+    tris.push({ P, I, N, mat, UV: p.uv });
   }
+  const textured = tris.some((t) => t.mat.tex);
 
   // ------------------------------------------------------------------ lights
   const lAz = ((o.light?.azimuth ?? -40) * Math.PI) / 180, lEl = ((o.light?.elevation ?? 52) * Math.PI) / 180;
@@ -182,6 +189,8 @@ export function renderScene(parts, o = {}) {
   const nbuf = new Float32Array(W * H * 3);
   const pbuf = new Float32Array(W * H * 3);
   const mbuf = new Int32Array(W * H).fill(-1);
+  // Texture coordinates, kept only when some part carries a picture.
+  const ubuf = textured ? new Float32Array(W * H * 2) : null;
   const mats = tris.map((t) => t.mat);
   const proj = (x, y, z) => {
     const qx = x - fr.eye[0], qy = y - fr.eye[1], qz = z - fr.eye[2];
@@ -190,7 +199,7 @@ export function renderScene(parts, o = {}) {
     const sy = H / 2 - ((qx * fr.u[0] + qy * fr.u[1] + qz * fr.u[2]) / d - fr.cy) * fr.focal;
     return [sx, sy, d];
   };
-  tris.forEach(({ P, I, N, mat: tm }, mi) => {
+  tris.forEach(({ P, I, N, mat: tm, UV }, mi) => {
     for (let t = 0; t < I.length; t += 3) {
       const v = [I[t] * 3, I[t + 1] * 3, I[t + 2] * 3];
       const s = v.map((a) => proj(P[a], P[a + 1], P[a + 2]));
@@ -225,6 +234,11 @@ export function renderScene(parts, o = {}) {
           for (let k = 0; k < 3; k++) {
             nbuf[idx * 3 + k] = a0 * N[nb + k] + a1 * N[nb + 3 + k] + a2 * N[nb + 6 + k];
             pbuf[idx * 3 + k] = a0 * P[v[0] + k] + a1 * P[v[1] + k] + a2 * P[v[2] + k];
+          }
+          if (tm.tex) {
+            const u0 = I[t] * 2, u1 = I[t + 1] * 2, u2 = I[t + 2] * 2;
+            ubuf[idx * 2] = a0 * UV[u0] + a1 * UV[u1] + a2 * UV[u2];
+            ubuf[idx * 2 + 1] = a0 * UV[u0 + 1] + a1 * UV[u1 + 1] + a2 * UV[u2 + 1];
           }
         }
       }
@@ -275,6 +289,7 @@ export function renderScene(parts, o = {}) {
         }
       } else {
         const m = mats[mi];
+        const alb = m.tex ? sampleTexture(m.tex, ubuf[idx * 2], ubuf[idx * 2 + 1]) : m.alb;
         let n = norm([nbuf[idx * 3], nbuf[idx * 3 + 1], nbuf[idx * 3 + 2]]);
         if (m.twoSided && dot3(n, dir) > 0) n = [-n[0], -n[1], -n[2]];
         const p = [pbuf[idx * 3], pbuf[idx * 3 + 1], pbuf[idx * 3 + 2]];
@@ -292,7 +307,7 @@ export function renderScene(parts, o = {}) {
         const fres = 0.04 + 0.96 * (1 - nv) ** 5;
         const R = [2 * dot3(n, V) * n[0] - V[0], 2 * dot3(n, V) * n[1] - V[1], 2 * dot3(n, V) * n[2] - V[2]];
         const env = (0.35 + 0.65 * Math.max(0, R[2])) * fres * (o.env ?? 0.35) * ao;
-        c = [0, 1, 2].map((k) => m.alb[k] * (amb[k] * ambI * ao + keyI * nl * ksh + fillI * nf * [0.85, 0.9, 1.05][k]) + spec + env);
+        c = [0, 1, 2].map((k) => alb[k] * (amb[k] * ambI * ao + keyI * nl * ksh + fillI * nf * [0.85, 0.9, 1.05][k]) + spec + env);
       }
       // A gentle vignette, so the floor falls off toward the corners.
       const vx = (x / W - 0.5) * 2, vy = (y / H - 0.5) * 2;
@@ -315,6 +330,31 @@ export function renderScene(parts, o = {}) {
     }
   }
   return rgb;
+}
+
+/** A part's picture in linear light, for `sampleTexture`. */
+function linearTexture({ rgb, width, height }) {
+  const lut = new Float32Array(256);
+  for (let i = 0; i < 256; i++) lut[i] = toLin(i);
+  const lin = new Float32Array(width * height * 3);
+  for (let i = 0; i < lin.length; i++) lin[i] = lut[rgb[i]];
+  return { lin, width, height };
+}
+
+/** The picture's colour at (u, v), bilinear, clamped at its edges; v = 0 is its bottom row. */
+function sampleTexture({ lin, width, height }, u, v) {
+  const x = Math.min(width - 1, Math.max(0, u * width - 0.5));
+  const y = Math.min(height - 1, Math.max(0, (1 - v) * height - 0.5));
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  const x1 = Math.min(width - 1, x0 + 1), y1 = Math.min(height - 1, y0 + 1);
+  const fx = x - x0, fy = y - y0;
+  const out = [0, 0, 0];
+  for (let k = 0; k < 3; k++) {
+    const a = lin[(y0 * width + x0) * 3 + k], b = lin[(y0 * width + x1) * 3 + k];
+    const c = lin[(y1 * width + x0) * 3 + k], d = lin[(y1 * width + x1) * 3 + k];
+    out[k] = (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+  }
+  return out;
 }
 
 /** An orthographic depth map along light direction `L`, with a soft lookup: blocker search, then

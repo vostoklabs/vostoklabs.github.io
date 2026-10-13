@@ -13,5 +13,5 @@ export const TOPICS: Topic[] = [
   { id: 'fidgets', name: 'Fidgets', line: 'Clickers and sliders, made from your own picture or text.' },
   { id: 'boxes', name: 'Boxes', line: 'Print-in-place, fold-up and laser-cut boxes, sized to what goes in them.' },
   { id: 'signs', name: 'Signs & cards', line: 'House numbers, name plates, signs and business cards.' },
-  { id: 'desk-home', name: 'Desk & home', line: 'Keycaps, hooks, docks and holders that fit your actual desk.' },
+  { id: 'desk-home', name: 'Desk & home', line: 'Keycaps, photo frames, hooks, docks and holders for your desk and home.' },
 ];

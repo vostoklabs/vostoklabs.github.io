@@ -1,0 +1,189 @@
+/* App-specific styles only. Everything structural comes from @vostok/ui-kit/styles.css; the page
+   frame (fonts, colours, margin) is the kit's root.css. If a rule here would suit a second
+   generator, it belongs in the kit. */
+
+/* ------------------------------------------------------------------- editor -- */
+
+/* The editor fills the window; its panels scroll, the page does not. */
+.pf-editor { overflow: hidden; }
+
+/* The viewer mounts its canvas here; it fills the stage behind the overlays. */
+.pf-stage-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.pf-stage-canvas canvas { display: block; }
+
+/* The design's name under All designs. */
+.pf-design-title { padding: 0 var(--space-1); }
+
+/* The words, and Add words in their place. */
+.pf-words { display: grid; gap: var(--space-3); }
+
+/* ------------------------------------------------------------------- gallery -- */
+
+/* The gallery is a page, not an app frame: it scrolls. */
+.pf-gallery {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+}
+.pf-gallery__page {
+  --pf-rail: 200px;
+  --pf-gutter: var(--space-5);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  display: grid;
+  grid-template-columns: var(--pf-rail) minmax(0, 1fr);
+  column-gap: var(--pf-gutter);
+  row-gap: var(--space-4);
+  align-items: start;
+}
+.pf-gallery__header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+.pf-gallery__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.pf-gallery__head-slot:empty { display: none; }
+.pf-gallery__tools { display: flex; flex: 0 0 auto; }
+
+/* The categories stay in reach down the page. */
+.pf-gallery__rail {
+  position: sticky;
+  top: var(--space-4);
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.pf-gallery__rail-foot {
+  display: flex;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.pf-gallery__rail-foot:empty { display: none; }
+
+.pf-gallery__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.pf-gallery__group { display: grid; gap: var(--space-3); }
+.pf-gallery__group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-medium);
+  line-height: 1.2;
+}
+.pf-gallery__group-title::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  margin-left: var(--space-2);
+  background: var(--line);
+}
+.pf-gallery__count {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.pf-gallery__count::before { content: '·'; margin-right: var(--space-2); }
+
+/* The walkthrough's answers over the cards. */
+.pf-gallery__answers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pf-gallery__found {
+  color: var(--muted);
+  font-size: var(--fs-small);
+  margin-left: var(--space-2);
+}
+.pf-gallery__empty {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-m);
+}
+
+@media (max-width: 760px) {
+  .pf-gallery__page {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-3) var(--space-4) var(--space-5);
+    row-gap: var(--space-3);
+  }
+  .pf-gallery__header {
+    flex-direction: column;
+    align-items: stretch;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .pf-gallery__heading { justify-content: space-between; }
+  .pf-gallery__rail {
+    top: 0;
+    z-index: 2;
+    max-height: none;
+    overflow: visible;
+    margin: 0 calc(-1 * var(--space-4));
+    padding: var(--space-2) 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .pf-gallery__main { gap: var(--space-4); }
+}
+
+/* --------------------------------------------------------------- walkthrough -- */
+
+.pf-walk { display: grid; gap: var(--space-4); }
+.pf-walk__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.pf-walk__step {
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.pf-walk__question {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-medium);
+}
+.pf-walk__note {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+.pf-walk__note:empty { display: none; }
+.pf-walk__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}

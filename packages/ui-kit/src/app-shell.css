@@ -271,6 +271,16 @@
 }
 /* The drawer's content: the left panel's settings, then its footer (Reset). */
 .vl-app__phone-sheet { display: flex; flex-direction: column; gap: var(--space-3); }
+/* What the left panel's header keeps in reach on a narrow screen (`phoneKeep`), at the top of the
+   right panel. Empty on a wide screen, and then not there at all. */
+.vl-app__phone-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4) 0;
+}
+.vl-app__phone-head:empty { display: none; }
 /* Save, Load and Help on a narrow screen, after the panel's content and anything added to it
    later. Empty on a wide screen, and then not there at all. */
 .vl-app__phone-tail:empty { display: none; }

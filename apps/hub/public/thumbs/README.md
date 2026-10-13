@@ -24,6 +24,9 @@ Present:
 - `business-card.png` — six of its templates, built with the app's own geometry, two across so
   the names stay readable on the card, at 800×600 (`node scripts/render-business-card.mjs`, which
   also writes the product page's renders).
+- `photo-frame.png` — six of its designs, built with the app's own geometry and a sample photo in
+  each, three across at 800×600 (`node scripts/render-photo-frame.mjs`, which also writes the
+  product page's renders).
 
 Missing:
 

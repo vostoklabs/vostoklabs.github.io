@@ -56,7 +56,9 @@
     "dev:laserBox": "pnpm --filter laser-box dev",
     "build:laserBox": "pnpm --filter laser-box build",
     "dev:businessCard": "pnpm --filter business-card dev",
-    "build:businessCard": "pnpm --filter business-card build"
+    "build:businessCard": "pnpm --filter business-card build",
+    "dev:photoFrame": "pnpm --filter photo-frame dev",
+    "build:photoFrame": "pnpm --filter photo-frame build"
   },
   "devDependencies": {
     "esbuild": "^0.24.2",

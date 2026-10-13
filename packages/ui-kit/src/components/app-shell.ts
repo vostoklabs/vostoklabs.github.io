@@ -60,6 +60,13 @@ export interface AppShellOptions {
    * per page: an app that builds a new shell per screen would leave a watcher per old shell.
    */
   phone?: boolean;
+  /**
+   * With `phone`: nodes of the left panel's header that stay in reach on a narrow screen, where
+   * that header is not shown: a way back ("All designs") and the name of what is open. They move
+   * to the top of the right panel while the screen is narrow and go back where they were when it
+   * widens. Default: none, and the narrow layout is exactly as before.
+   */
+  phoneKeep?: HTMLElement[];
 }
 
 export interface AppShell {
@@ -104,7 +111,7 @@ const NARROW = '(max-width: 900px)';
  * the drawer the left panel's settings move into, and the `sidebarFooter()` split for a narrow
  * screen and put back for a wide one.
  */
-function phoneLayout(left: PanelParts, right: PanelParts): void {
+function phoneLayout(left: PanelParts, right: PanelParts, keep: HTMLElement[] = []): void {
   let footer = right.footer;
   if (!footer) {
     // A footer for the button alone; app-shell.css hides it on a wide screen, where it holds nothing.
@@ -123,6 +130,10 @@ function phoneLayout(left: PanelParts, right: PanelParts): void {
   // its scroll: content an app adds to the scroll later still comes before them.
   const tail = el('div', { className: 'vl-app__phone-tail' });
   right.panel.insertBefore(tail, right.scroll.nextElementSibling);
+  // What stays in reach: found where it sits on a wide screen, so it goes back exactly there.
+  const kept = keep.map((node) => ({ node, home: node.parentElement, next: node.nextElementSibling }));
+  const head = kept.length ? el('div', { className: 'vl-app__phone-head' }) : null;
+  if (head) right.panel.insertBefore(head, right.scroll);
 
   let sheet: DrawerHandle | null = null;
   const openSettings = () => {
@@ -159,10 +170,13 @@ function phoneLayout(left: PanelParts, right: PanelParts): void {
     if (narrowNow) {
       if (exportBlock) bar.prepend(exportBlock);
       if (projectFooter) tail.append(projectFooter);
+      if (head) head.append(...kept.map((k) => k.node));
     } else {
       sheet?.close();
       if (exportBlock && projectFooter) restore(exportBlock, projectFooter, exportNext);
       if (projectFooter) restore(projectFooter, footer!, footerNext);
+      // Last first, so each one's next sibling is home again before the one before it goes back.
+      for (const k of [...kept].reverse()) if (k.home) restore(k.node, k.home, k.next);
     }
   };
   narrow.addEventListener('change', place);
@@ -195,7 +209,7 @@ export function appShell(opts: AppShellOptions): AppShell {
   if (opts.topbar) root.append(opts.topbar);
   if (left) root.append(left.panel);
   root.append(stage, right.panel);
-  if (phone) phoneLayout(left!, right);
+  if (phone) phoneLayout(left!, right, opts.phoneKeep);
 
   return { root, stage, leftScroll: left?.scroll ?? right.scroll, rightScroll: right.scroll };
 }
