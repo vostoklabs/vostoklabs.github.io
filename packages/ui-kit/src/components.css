@@ -389,6 +389,8 @@
    child index: `:nth-child(odd)` here stretched the fourth of four and left the fifth of five
    alone. */
 .vl-tabs--cards .vl-tab:last-child:nth-child(even) { grid-column: 1 / -1; justify-content: center; }
+/* One column has no half-empty row: the last card lines up with the ones above it. */
+.vl-tabs--one-column .vl-tab:last-child:nth-child(even) { justify-content: flex-start; }
 /* A card the caller asked to span the row (`SegmentedOption.wide`): a label too long for half. */
 .vl-tabs--cards .vl-tab--wide { grid-column: 1 / -1; justify-content: center; }
 /* `stacked: true` — the icon over its name, centred, for a grid of short names. Every card

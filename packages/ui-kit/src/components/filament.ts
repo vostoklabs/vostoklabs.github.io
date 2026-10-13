@@ -63,8 +63,15 @@ export interface FilamentRowOptions {
  * silently rewrite the user's colour the moment they touched it. An off-palette value gets
  * its own swatch at the end of the row and stays selected.
  */
-export function filamentRow(opts: FilamentRowOptions): ValueRow<string> {
+/** A filament row, and a way to change the swatches it offers first (`extra`) after it is built:
+ *  colours the customer made themselves, kept for the other rows to offer too. */
+export type FilamentRow = ValueRow<string> & {
+  setExtra(extra: ReadonlyArray<readonly [string, string]>): void;
+};
+
+export function filamentRow(opts: FilamentRowOptions): FilamentRow {
   let value = norm(opts.value);
+  let extra = opts.extra ?? [];
   /** Set by `setDisabled`, and read by `paint()` — which rebuilds every swatch button, so a
    *  one-shot disable would be undone by the next colour change. */
   let rowDisabled = false;
@@ -100,11 +107,12 @@ export function filamentRow(opts: FilamentRowOptions): ValueRow<string> {
    * colour the shelf has not got. Beside the label it costs no row, and next to the name of
    * the thing being coloured it reads as "or pick your own". */
   const head = el('div', { className: 'vl-swatches__head' }, [label, custom]);
-  const row = el('div', { className: 'vl-swatch-row' }, [head, swatches]) as unknown as ValueRow<string>;
+  const row = el('div', { className: 'vl-swatch-row' }, [head, swatches]) as unknown as FilamentRow;
 
   function paint() {
     swatches.replaceChildren();
-    const list = [...(opts.extra ?? []), ...FILAMENTS];
+    const shelf = new Set(extra.map(([, hex]) => norm(hex)));
+    const list = [...extra, ...FILAMENTS.filter(([, hex]) => !shelf.has(norm(hex)))];
     const known = new Set(list.map(([, hex]) => norm(hex)));
 
     for (const [name, hex] of list) {
@@ -148,6 +156,10 @@ export function filamentRow(opts: FilamentRowOptions): ValueRow<string> {
   paint();
 
   row.setValue = (v, notify = false) => set(v, notify);
+  row.setExtra = (next) => {
+    extra = next;
+    paint();
+  };
   /* `ValueRow` gained `getValue` and `setDisabled` as REQUIRED members, and this row reaches
      its type through `as unknown as ValueRow<string>` — a cast, which means the compiler could
      not tell anyone they were missing. Calling either would have thrown "not a function" at

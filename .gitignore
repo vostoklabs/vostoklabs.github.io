@@ -27,6 +27,7 @@ assets.private.json
 # Apps are private by default. A published app is re-included here.
 apps/*/
 !apps/bubble-pop-generator/
+!apps/business-card/
 !apps/clicker-generator/
 !apps/foldbox/
 !apps/generator-template/
@@ -50,6 +51,7 @@ packages/*/
 !packages/manifold-noeval/
 !packages/patterns/
 !packages/plates/
+!packages/qr/
 !packages/shapes/
 !packages/trace/
 !packages/symbols/
@@ -91,6 +93,8 @@ apps/foldbox/README.internal.md
 !apps/pen-topper/tests/**
 !apps/generator-template/tests/
 !apps/generator-template/tests/**
+!apps/business-card/tests/
+!apps/business-card/tests/**
 !apps/foldbox/tests/
 apps/foldbox/tests/*
 !apps/foldbox/tests/corners.mts
@@ -127,6 +131,8 @@ packages/laser/tests/silhouettes.test.mjs
 !packages/symbols/tests/**
 !packages/viewer/tests/
 !packages/viewer/tests/**
+!packages/qr/tests/
+!packages/qr/tests/**
 # What the suites write while they run
 **/tests/.*
 

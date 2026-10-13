@@ -10,6 +10,7 @@ export interface NewsItem {
 }
 
 export const NEWS: NewsItem[] = [
+  { date: '2026-10', kind: 'New', generator: 'business-card', text: 'Business cards in two or three colours, with a QR code and a pocket for an NFC tag.' },
   { date: '2026-10', kind: 'New', generator: 'laser-box', text: 'Laser-cut boxes: lift-off and hinged lids, open trays and chests of drawers.' },
   { date: '2026-10', kind: 'Update', generator: 'laser-studio', text: 'Keychain bases for the keychain templates.' },
   { date: '2026-10', kind: 'Update', generator: 'clicker', text: 'Symbols and more fonts for text caps.' },

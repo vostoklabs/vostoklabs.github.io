@@ -791,6 +791,87 @@
       ]
     },
     {
+      "id": "business-card",
+      "name": "Business Card Generator",
+      "route": "app",
+      "status": "live",
+      "appUrl": "/business-card/",
+      "blurb": "Pick a template, type your details, download a business card that prints in two or three colours. Eighteen templates, a QR code that opens your site or saves your contact, your own logo, and a pocket for an NFC tag.",
+      "topics": [
+        "signs"
+      ],
+      "process": "3d-print",
+      "intro": "Business Card Generator makes business cards you print on a Bambu Lab printer: pick a template, type your details and download a 3MF in two or three colours.\n\nEvery card has a front and a back, printed in the same go. The lettering is laid into the face for the sharpest edges, or stands up from it, and it is never set smaller than a 0.4 mm nozzle prints readably: a card that cannot hold your lines says what to shorten.\n\nAdd a QR code that opens your website, saves your contact card or opens any link, sized so it scans. Bring your own logo as an SVG file, or use your initials. Leave a pocket for an NFC tag: drag it where you want it, and the print pauses so you can drop the tag in.\n\nStart from one of eighteen templates, from a clean minimal card to shaped, patterned and QR-first designs, in four card sizes.",
+      "features": [
+        [
+          "Eighteen templates",
+          "Clean, shaped, patterned and QR-first cards, each with a front and a back."
+        ],
+        [
+          "Text that prints",
+          "Never smaller than a 0.4 mm nozzle prints readably; a card that will not fit says what to shorten."
+        ],
+        [
+          "Flush or raised",
+          "Colour laid into the face for crisp edges, or lettering that stands up from it."
+        ],
+        [
+          "A QR code that scans",
+          "It opens your website, saves your contact card or opens any link."
+        ],
+        [
+          "Your logo",
+          "Your own SVG file or your initials, on the front or the back."
+        ],
+        [
+          "An NFC pocket",
+          "Drag the tag where you want it; the print pauses so you can drop it in."
+        ]
+      ],
+      "media": [
+        {
+          "type": "image",
+          "src": "/media/business-card/minimal-front-and-back.jpg",
+          "alt": "Minimal card, front and back, with a logo and a QR code"
+        },
+        {
+          "type": "image",
+          "src": "/media/business-card/five-templates.jpg",
+          "alt": "Five templates in five colours"
+        },
+        {
+          "type": "image",
+          "src": "/media/business-card/window-card.jpg",
+          "alt": "Window card with a hole through it, and its back with a QR code"
+        },
+        {
+          "type": "image",
+          "src": "/media/business-card/nfc-card.jpg",
+          "alt": "NFC cards with the tap mark, one turned over to its QR code"
+        },
+        {
+          "type": "image",
+          "src": "/media/business-card/raised-lettering.jpg",
+          "alt": "Raised lettering on a cream card, the initials carved through to a second colour"
+        },
+        {
+          "type": "image",
+          "src": "/media/business-card/app-1.jpg",
+          "alt": "The template menu, drawn with your own details"
+        },
+        {
+          "type": "image",
+          "src": "/media/business-card/app-2.jpg",
+          "alt": "The Half card in 3D"
+        },
+        {
+          "type": "image",
+          "src": "/media/business-card/app-3.jpg",
+          "alt": "Front and back of the Scan back card, with its QR code"
+        }
+      ]
+    },
+    {
       "id": "large-box",
       "name": "Large Customizable Box",
       "route": "mw",

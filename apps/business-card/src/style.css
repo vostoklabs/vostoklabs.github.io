@@ -1,0 +1,136 @@
+/* App-specific styles only.
+
+   Everything structural already comes from @vostok/ui-kit/styles.css:
+     tokens.css       colours, spacing, radii, fonts   (var(--accent), …)
+     base.css         .vl-section .vl-label .vl-hint .vl-btn .vl-row
+     components.css   sliders, toggles, colour rows, dialogs, toasts, footer, topbar
+     font-picker.css  the font cards and the font library
+     patterns.css     stage overlays, status line, preview bar
+     editor-shell.css the settings rail
+     app-shell.css    the three-column layout and its panels
+   plus @vostok/plates/plates.css for the build-plate picker, and @vostok/fonts/fonts.css
+   for the font cards' previews.
+
+   If you find yourself restyling one of those, fix it in the ui-kit instead —
+   that is what keeps every generator looking like the same product. */
+
+/* The page frame — background, text colour, fonts, margin — comes from the kit's
+   root.css. A generator only adds this: it fills the viewport, so the page itself
+   never scrolls (the panels do). */
+body {
+  overflow: hidden;
+}
+
+/* The viewer mounts its canvas here; it fills the stage behind the overlays. */
+.bc-stage-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.bc-stage-canvas canvas {
+  display: block;
+}
+
+/* Both faces of the card side by side, flat: the stage's 2D view. It covers the 3D canvas. */
+.bc-flat {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 64px 20px 56px;
+  background: var(--bg);
+}
+
+.bc-flat[hidden] {
+  display: none;
+}
+
+.bc-flat__face {
+  margin: 0;
+  flex: 1 1 0;
+  max-width: 48%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.bc-flat__card {
+  position: relative;
+  width: 100%;
+}
+
+.bc-flat__face img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 6px 18px rgb(0 0 0 / 0.28));
+}
+
+/* The NFC tag's place over the front: a dashed ring in the interface's accent (a guide, not part of
+   the print) and its label beside it. Placed in % of the picture by main.ts. */
+.bc-flat__tag {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px dashed var(--accent);
+  border-radius: 50%;
+}
+
+.bc-flat__tag.is-draggable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.bc-flat__tag-label {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translate(6px, -50%);
+  padding: 2px 8px;
+  border-radius: var(--radius-s);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Over the 3D view's dotted circle: it can be picked up. */
+.bc-stage-canvas.is-over-tag {
+  cursor: grab;
+}
+
+.bc-flat__label {
+  color: var(--muted);
+  font-size: var(--fs-small);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The QR code as it prints, at the top of the QR category. */
+.bc-qr-preview {
+  display: flex;
+  justify-content: center;
+}
+
+.bc-qr-preview img {
+  width: 132px;
+  height: 132px;
+  border-radius: var(--radius-s);
+}
+
+/* The rows of part colours, one under the other. */
+.bc-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The logo's drop zone holds its row's width. */
+.bc-logo {
+  display: block;
+}

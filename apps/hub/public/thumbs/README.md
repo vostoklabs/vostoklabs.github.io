@@ -21,6 +21,9 @@ Present:
   `apps/laser-box/src/assets/templates/`, three across, at 800×600: the card crops to 4:3
   (`--hub-thumb-ratio`), so a 16:10 grid loses its outer columns. Replace it with a photo of a cut box when
   there is one.
+- `business-card.png` — six of its templates, built with the app's own geometry, two across so
+  the names stay readable on the card, at 800×600 (`node scripts/render-business-card.mjs`, which
+  also writes the product page's renders).
 
 Missing:
 

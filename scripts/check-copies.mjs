@@ -35,13 +35,18 @@ const WINDOW = 12;
 */
 const BUDGET = {
   'apps/bubble-pop-generator': 1444,
+  // Business Card adapted Laser Studio's QR engine (now packages/qr) and its Dahlia card, and
+  // went public with both on 2026-10-13; Laser Studio keeps its own, so each copy counts twice.
+  'apps/business-card': 22,
   'apps/clicker-generator': 168,
   'apps/house-number': 37,
   'apps/keycap-generator': 35,
   'apps/keychain-carabiner': 15,
+  'apps/laser-studio': 172,
   'apps/magnet-generator': 1551,
   'apps/name-keychain': 45,
   'apps/pen-topper': 24,
+  'packages/qr': 150,
   // The image tracer moved here from packages/laser; magnet and bubble-pop still hold their own
   // copies of it.
   'packages/trace': 914,

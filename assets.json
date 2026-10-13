@@ -5956,7 +5956,7 @@
       "id": "ui-icons/kit",
       "kind": "ui-icons",
       "files": {
-        "packages/ui-kit/src/icons.ts": "e677e083d92bd02597185a36e7b0f02245f5fbead0e03e7f657b7acabf8cb13f"
+        "packages/ui-kit/src/icons.ts": "cd8ef9708e45ab49622ea4dfb17405196668d692e9d9e7e50161ad88f6a74b14"
       },
       "licence": "ISC AND MIT",
       "copyright": "Lucide Contributors; Cole Bemis (Feather); GitHub, Inc. (the GitHub mark, from Octicons)",

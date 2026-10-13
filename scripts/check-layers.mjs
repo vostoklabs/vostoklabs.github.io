@@ -49,6 +49,7 @@ const LAYERS = [
   ['packages/manifold/', 'core'],
   ['packages/manifold-noeval/', 'core'],
   ['packages/watermark/', 'core'],
+  ['packages/qr/', 'core'], // a QR code as shapes
   ['packages/trace/', 'core'], // a picture or an SVG file into shapes
   ['packages/symbols/', 'core'],
   ['packages/laser/src/ops.ts', 'connector'],

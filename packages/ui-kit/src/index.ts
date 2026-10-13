@@ -83,6 +83,7 @@ export { captureCover, type RendererLike, type CaptureCoverOptions } from './com
 export {
   FILAMENTS,
   filamentRow,
+  type FilamentRow,
   paletteRow,
   type PaletteRowOptions,
   colorChip,
@@ -145,6 +146,7 @@ export { colorPopover, closeColorPopover, type ColorPopoverOptions, type ColorPo
 export { busyChip, type BusyChipOptions, type BusyChipHandle } from './components/busy-chip';
 export { section, collapsibleSection, inlineDisclosure, makeCollapsible, type SectionOptions, type InlineDisclosureOptions } from './components/section';
 export { galleryCard, galleryGrid, type GalleryCardOptions, type GalleryCardHandle, type GalleryGridOptions } from './components/gallery';
+export { galleryPage, type GalleryPageOptions, type GalleryPageGroup, type GalleryPage } from './components/gallery-page';
 export { sideNav, type SideNavItem, type SideNavSection, type SideNavOptions, type SideNavHandle } from './components/side-nav';
 export { drawer, closeAllDrawers, type DrawerOptions, type DrawerHandle } from './components/drawer';
 export { splitDialog, type SplitDialogOptions } from './components/split-dialog';

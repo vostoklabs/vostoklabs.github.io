@@ -43,6 +43,12 @@ export interface ViewerPart {
    * group itself.
    */
   layer?: string;
+  /**
+   * Under 1, the part is drawn see-through at this opacity: something shown on the model that is
+   * not part of it (where a tag sits inside a card). It is left out of covers and thumbnails.
+   * Default 1, opaque.
+   */
+  opacity?: number;
 }
 
 export interface ViewerOptions {
@@ -238,8 +244,12 @@ function toColor(rgb: RGB): THREE.Color {
 
 /** The material a part is drawn with, on the stage and in a thumbnail alike: both sides of every
  *  face, so a mesh with a face wound the wrong way still reads as solid. */
-function partMaterial(color: RGB): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color: toColor(color), metalness: 0, roughness: 0.5, side: THREE.DoubleSide });
+function partMaterial(color: RGB, opacity = 1): THREE.MeshStandardMaterial {
+  const seeThrough = opacity < 1;
+  return new THREE.MeshStandardMaterial({
+    color: toColor(color), metalness: 0, roughness: 0.5, side: THREE.DoubleSide,
+    ...(seeThrough ? { transparent: true, opacity, depthWrite: false } : {}),
+  });
 }
 
 export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): Viewer {
@@ -474,7 +484,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
 
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i]!;
-      const mat = partMaterial(p.color);
+      const mat = partMaterial(p.color, p.opacity);
       materials.push(mat);
       const mesh = new THREE.Mesh(partGeometry(p), mat);
       mesh.userData.partIndex = i;
@@ -927,7 +937,7 @@ export function createViewer(container: HTMLElement, opts: ViewerOptions = {}): 
         const box = new THREE.Box3();
         if (parts) {
           shot = new THREE.Group();
-          for (const p of parts) shot.add(new THREE.Mesh(partGeometry(p), partMaterial(p.color)));
+          for (const p of parts) if ((p.opacity ?? 1) >= 1) shot.add(new THREE.Mesh(partGeometry(p), partMaterial(p.color)));
           scene.add(shot);
           root.visible = false;
           rig.visible = false;

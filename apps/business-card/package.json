@@ -1,0 +1,37 @@
+{
+  "name": "business-card",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "esbuild tests/card.test.mts --bundle --platform=node --format=esm --external:manifold-3d --outfile=node_modules/.cache/card.test.mjs --log-level=error && node node_modules/.cache/card.test.mjs"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/fonts": "workspace:*",
+    "@vostok/laser": "workspace:*",
+    "@vostok/manifold": "workspace:*",
+    "@vostok/patterns": "workspace:*",
+    "@vostok/plates": "workspace:*",
+    "@vostok/qr": "workspace:*",
+    "@vostok/shapes": "workspace:*",
+    "@vostok/symbols": "workspace:*",
+    "@vostok/trace": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
+    "@vostok/viewer": "workspace:*",
+    "@vostok/watermark": "workspace:*",
+    "manifold-3d": "^3.0.1",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.171.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "description": "Pick a template, type your details, print a business card."
+}

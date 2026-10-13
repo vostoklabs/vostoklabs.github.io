@@ -861,7 +861,7 @@ export function segmentedControl<T extends string = string>(
     className:
       `vl-tabs vl-tabs--indicator${opts.variant === 'cards' ? ' vl-tabs--cards' : pictures ? ' vl-tabs--pictures' : ''}${tiles ? ' vl-tabs--tiles' : ''}${opts.variant === 'cards' && opts.stacked ? ' vl-tabs--stacked' : ''}` +
       `${opts.fit === 'content' ? ' vl-tabs--fit-content' : ''}${plainTabs && opts.size === 'compact' ? ' vl-tabs--compact' : ''}` +
-      `${tiles && opts.size === 'compact' ? ' vl-tabs--tiles-compact' : ''}`,
+      `${tiles && opts.size === 'compact' ? ' vl-tabs--tiles-compact' : ''}${opts.variant === 'cards' && cols === 1 ? ' vl-tabs--one-column' : ''}`,
     attrs: { role: 'radiogroup', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr))` },
   });
 

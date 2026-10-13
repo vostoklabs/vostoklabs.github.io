@@ -58,7 +58,9 @@ const BUDGET = {
   'keycap-generator': { viewer: 1, fonts: 7 },
   'keychain-carabiner': { shadow: 2, worker: 1 },
   'laser-box': { viewer: 1 },
-  'laser-studio': { shadow: 1 },
+  // Its QR engine (src/engine/qr.ts) is where @vostok/qr began; the package went public with
+  // Business Card on 2026-10-13, and Laser Studio still draws its codes with its own copy.
+  'laser-studio': { shadow: 6 },
   'magnet-generator': { shadow: 15, viewer: 1 },
   'name-keychain': { shadow: 4, viewer: 1, project: 2 },
   'pen-topper': { shadow: 1, worker: 1 },

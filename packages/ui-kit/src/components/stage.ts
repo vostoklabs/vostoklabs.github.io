@@ -173,6 +173,9 @@ export interface PreviewBar<T extends string = string> {
   setValue(value: T): void;
   /** Reflect a switch set elsewhere. Fires nothing. */
   setPressed(id: string, on: boolean): void;
+  /** Show or hide a switch: one that does not apply to what is on the stage goes away rather than
+   *  greying out, and the divider before the switches goes with the last of them. */
+  setToggleVisible(id: string, on: boolean): void;
   /** Give a mode a badge, change its word, or take it away with `null`: a paid mode the user
    *  has since bought. Fires nothing. */
   setBadge(value: T, badge: string | null): void;
@@ -219,8 +222,9 @@ export function previewBar<T extends string = string>(opts: PreviewBarOptions<T>
     setValue(modes.value);
   }
 
+  let toggleRule: HTMLElement | null = null;
   for (const t of opts.toggles ?? []) {
-    if (root.childNodes.length && !toggleButtons.size) root.append(rule());
+    if (root.childNodes.length && !toggleButtons.size) root.append((toggleRule = rule()));
     const btnAttrs: Record<string, string> = { type: 'button', 'aria-pressed': String(t.pressed) };
     if (t.title) btnAttrs.title = t.title;
     const b = el('button', { className: 'vl-preview-bar__btn vl-preview-bar__toggle', attrs: btnAttrs }) as HTMLButtonElement;
@@ -243,6 +247,12 @@ export function previewBar<T extends string = string>(opts: PreviewBarOptions<T>
     root,
     setValue,
     setPressed: (id, on) => toggleButtons.get(id)?.setAttribute('aria-pressed', String(on)),
+    setToggleVisible: (id, on) => {
+      const b = toggleButtons.get(id);
+      if (!b) return;
+      b.hidden = !on;
+      if (toggleRule) toggleRule.hidden = ![...toggleButtons.values()].some((x) => !x.hidden);
+    },
     setBadge: (value, badge) => {
       const b = modeButtons.get(value);
       if (!b) return;
@@ -259,6 +269,9 @@ export interface StageHandleOptions {
   label: string;
   /** What dragging it does — the tooltip. */
   title: string;
+  /** The grip's picture, an SVG string: `ICONS.move` for something that drags every way. Default:
+   *  the double arrow of a cut that moves up and down. */
+  icon?: string;
   /** Arrow keys while it has focus: +1 for up or right, -1 for down or left. */
   onStep?: (delta: -1 | 1) => void;
 }
@@ -288,7 +301,7 @@ export function stageHandle(opts: StageHandleOptions): StageHandle {
   const node = el('button', {
     className: 'vl-stage-handle',
     attrs: { type: 'button', title: opts.title },
-  }, [svgEl(HANDLE_ICON), text]) as StageHandle;
+  }, [svgEl(opts.icon ?? HANDLE_ICON), text]) as StageHandle;
   node.hidden = true;
   node.setLabel = (t) => { text.textContent = t; };
   node.place = (at) => {

@@ -1,0 +1,6 @@
+{
+  "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
+  "blocks": [
+    { "name": "QR code", "category": "engine", "use": ["qrShapes", "qrPayload", "qrMinSize"], "with": ["qrModules", "roundRing", "MAX_LOGO"], "licence": "MIT (qrcode-generator, the encoder)", "for": "A QR code as shapes in millimetres: what it says (a link, text, Wi-Fi, a contact card) into merged module outlines, square, rounded, dots or round finders, with an optional cleared centre for a symbol, and the smallest code that keeps a module floor." }
+  ]
+}

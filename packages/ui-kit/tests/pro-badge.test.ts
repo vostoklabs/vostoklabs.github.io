@@ -277,5 +277,47 @@ for (const variant of VARIANTS) {
   check('chip count: drawn quieter than the label', cssValue(mini(counted).querySelector('.vl-chip__count')!, 'opacity', rules, 1280) === '0.65');
 }
 
+// previewBar.setToggleVisible: a switch that does not apply goes away, the divider with the last.
+{
+  const bar = previewBar({
+    modes: { options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }], value: 'a', onChange() {} },
+    toggles: [
+      { id: 'one', label: 'One', pressed: true, onToggle() {} },
+      { id: 'two', label: 'Two', pressed: false, onToggle() {} },
+    ],
+  });
+  const root = mini(bar.root);
+  const rule = root.querySelector('.vl-preview-bar__rule')!;
+  const toggles = root.querySelectorAll('.vl-preview-bar__toggle');
+  check('setToggleVisible: everything shows by default', !rule.hidden && toggles.every((t) => !t.hidden));
+  bar.setToggleVisible('one', false);
+  check('setToggleVisible: hides that switch only', toggles[0]!.hidden && !toggles[1]!.hidden && !rule.hidden);
+  bar.setToggleVisible('two', false);
+  check('setToggleVisible: the divider goes with the last switch', rule.hidden);
+  bar.setToggleVisible('two', true);
+  check('setToggleVisible: and comes back with one', !rule.hidden && !toggles[1]!.hidden && toggles[0]!.hidden);
+  bar.setToggleVisible('nope', false);
+  check('setToggleVisible: an unknown id changes nothing', !rule.hidden && !toggles[1]!.hidden);
+  const rules = kitRules();
+  miniDocument.body.replaceChildren(root);
+  check('setToggleVisible: a hidden switch is not drawn', cssValue(toggles[0]!, 'display', rules, 1280) === 'none');
+}
+
+// Cards in one column: the last of an odd count lines up with the others (the centring is for a
+// card alone under a half-empty row, which one column never has).
+{
+  const rules = kitRules();
+  const build = (columns?: number) => segmentedControl({ variant: 'cards', columns, options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }, { value: 'c', label: 'C' }] });
+  const one = mini(build(1));
+  miniDocument.body.replaceChildren(one);
+  const lastOne = one.querySelectorAll('.vl-tab')[2]!;
+  check('cards in one column: the last card is not centred', cssValue(lastOne, 'justify-content', rules, 1280) === 'flex-start', cssValue(lastOne, 'justify-content', rules, 1280));
+  const two = mini(build(2));
+  miniDocument.body.replaceChildren(two);
+  const lastTwo = two.querySelectorAll('.vl-tab')[2]!;
+  check('cards in two columns: the lone last card still spans and centres', cssValue(lastTwo, 'justify-content', rules, 1280) === 'center');
+  check('cards: only one column gets the class', one.classList.contains('vl-tabs--one-column') && !two.classList.contains('vl-tabs--one-column'));
+}
+
 console.log(`\npro badge: ${pass} passed, ${fails.length} failed`);
 if (fails.length) process.exit(1);

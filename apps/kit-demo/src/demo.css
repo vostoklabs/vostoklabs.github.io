@@ -355,6 +355,11 @@ body {
   border-radius: var(--radius-m);
 }
 
+/* The gallery page's search in its tools slot: a search box's width, and the whole row on a
+   phone, where the header stacks. */
+.kit-gallery-search { inline-size: 260px; max-inline-size: 100%; }
+@media (max-width: 760px) { .kit-gallery-search { inline-size: 100%; } }
+
 /* ---------- Footer ---------- */
 .kit-footer {
   margin-top: var(--space-6);

@@ -77,8 +77,13 @@ select optgroup {
 
 /* `appShell({ phone: true })` on a narrow screen: one column longer than the window, read by
    scrolling the page. A generator keeps the page from scrolling (`body { overflow: hidden }`, its
-   panels scroll instead); this is the one layout that needs it to, so the shell asks for it here,
-   where the kit styles the document, and it outranks the app's rule. */
+   panels scroll instead); this layout needs it to, so the shell asks for it here, where the kit
+   styles the document, and it outranks the app's rule. */
 @media (max-width: 900px) {
   body:has(.vl-app--phone) { overflow: visible; }
 }
+
+/* `galleryPage()`: a page of cards longer than the window at any width, read by scrolling it, so
+   it asks the same of `body`. While it is hidden (kept mounted behind an editor) the app's rule
+   holds again. */
+body:has(.vl-gallery-page:not([hidden])) { overflow: visible; }

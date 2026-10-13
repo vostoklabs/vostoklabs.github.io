@@ -1,0 +1,135 @@
+/* galleryPage(): the front door of a generator with many designs. A header, a rail of the groups
+   with their counts, and the groups of cards under their headings. A page, not an app frame: it
+   scrolls with the window, and the page frame (ground, colour, font) is root.css's.
+   See gallery-page.ts. */
+
+/* Two columns the whole way down, the rail and the cards, under a header row across both. The
+   page takes the window's width, capped where a row of cards stops reading as one row. */
+.vl-gallery-page__body {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  column-gap: var(--space-5);
+  row-gap: var(--space-4);
+  align-items: start;
+}
+
+/* The title and its line on the left, the tools on the right, ruled off from the cards. */
+.vl-gallery-page__header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+.vl-gallery-page__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.vl-gallery-page__head-slot,
+.vl-gallery-page__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.vl-gallery-page__tools { flex: 0 0 auto; }
+.vl-gallery-page__head-slot:empty,
+.vl-gallery-page__tools:empty { display: none; }
+
+/* The groups stay in reach down a long page, and the rail scrolls itself on a short window. */
+.vl-gallery-page__rail {
+  position: sticky;
+  top: var(--space-4);
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+/* Its foot: the theme switch under a hairline, as a generator's panel ends in its action row. */
+.vl-gallery-page__rail-foot {
+  display: flex;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.vl-gallery-page__rail-foot:empty { display: none; }
+
+.vl-gallery-page__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* Each group under a small heading ruled off to the right edge, so where one group ends and the
+   next begins is a line, not a guess from the gaps. */
+.vl-gallery-page__group { display: grid; gap: var(--space-3); }
+.vl-gallery-page__group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-medium);
+  line-height: 1.2;
+}
+.vl-gallery-page__group-title::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  margin-left: var(--space-2);
+  background: var(--line);
+}
+.vl-gallery-page__count {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.vl-gallery-page__count::before { content: '·'; margin-right: var(--space-2); }
+
+/* Nothing shows: the kit's empty state, in a dashed box where the cards would be. */
+.vl-gallery-page__empty {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-m);
+}
+
+/* A phone (where the side nav becomes a row of chips): one column. The header stacks, the title
+   row over the tools, and the rail is the chips, pinned under the top of the window on the
+   page's own ground so the cards pass beneath it. */
+@media (max-width: 760px) {
+  .vl-gallery-page__body {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-3) var(--space-4) var(--space-5);
+    row-gap: var(--space-3);
+  }
+  .vl-gallery-page__header {
+    flex-direction: column;
+    align-items: stretch;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .vl-gallery-page__heading { justify-content: space-between; }
+  .vl-gallery-page__rail {
+    top: 0;
+    z-index: 2;
+    max-height: none;
+    overflow: visible;
+    margin: 0 calc(-1 * var(--space-4));
+    padding: var(--space-2) 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  /* The chips scroll edge to edge, the first starting in line with the page. */
+  .vl-gallery-page__rail > .vl-side-nav { margin: -3px 0; padding: 3px var(--space-4); }
+  .vl-gallery-page__main { gap: var(--space-4); }
+}

@@ -17,9 +17,10 @@
 import { createHash } from 'node:crypto';
 import { unzipSync, strFromU8 } from 'fflate';
 import {
-  buildThreeMF, buildStl, buildObj, buildObjMtl, exportPartOf,
+  buildThreeMF, buildStl, buildObj, buildObjMtl, exportPartOf, pauseForPocket,
   type ExportMeta, type ExportPart, type RGB,
 } from '../src/index';
+import { BAMBU_BASE } from '../src/bambuProfile.generated';
 
 let pass = 0;
 const fails: string[] = [];
@@ -249,6 +250,146 @@ check('Float64 positions: the same OBJ + MTL', JSON.stringify(buildObjMtl(as64(T
   check('exportPartOf: past numProp 3 only the xyz are kept', strided.every((q, i) => Buffer.from(q.positions.buffer).equals(Buffer.from(ONE_GROUP[i]!.positions.buffer))));
   check('exportPartOf: a de-strided mesh writes the same 3MF', same(entriesOf(buildThreeMF(strided, META)), GOLDEN['one group']));
 }
+
+/* ------------------------------------------------------------------ print pauses */
+
+const PAUSE_FILE = 'Metadata/custom_gcode_per_layer.xml';
+const bytesEqual = (a: Uint8Array, b: Uint8Array) => Buffer.from(a).equals(Buffer.from(b));
+const pauseXml = (bytes: Uint8Array) => strFromU8(unzipSync(bytes)[PAUSE_FILE] ?? new Uint8Array());
+
+/** Well-formed, for the small XML the pause file is: the prolog, then elements with attributes and
+ *  nothing between them but line breaks, every element closed in order, one root, no attribute
+ *  twice, no `&` that is not one of the five entities. */
+const wellFormed = (xml: string): boolean => {
+  const prolog = '<?xml version="1.0" encoding="utf-8"?>';
+  if (!xml.startsWith(prolog)) return false;
+  const body = xml.slice(prolog.length);
+  const open: string[] = [];
+  let roots = 0;
+  let at = 0;
+  for (const m of body.matchAll(/<(\/?)([A-Za-z_][\w.-]*)((?:\s+[A-Za-z_][\w.:-]*="[^"<]*")*)\s*(\/?)>/g)) {
+    if (body.slice(at, m.index).trim() !== '') return false;
+    at = m.index! + m[0].length;
+    const [, close, name, attrs = '', self] = m;
+    const names = [...attrs.matchAll(/([A-Za-z_][\w.:-]*)=/g)].map((a) => a[1]);
+    if (new Set(names).size !== names.length || /&(?!(amp|lt|gt|quot|apos);)/.test(attrs)) return false;
+    if (close) {
+      if (self || attrs || open.pop() !== name) return false;
+    } else {
+      if (!open.length) roots++;
+      if (!self) open.push(name!);
+    }
+  }
+  return body.slice(at).trim() === '' && open.length === 0 && roots === 1;
+};
+
+// Left out or empty, every case above writes the same bytes as without the option, so the same
+// entries as GOLDEN, and no pause file.
+for (const [name, [parts, meta]] of Object.entries(CASES)) {
+  const plain = buildThreeMF(parts, meta);
+  check(
+    `pauseAt: absent, undefined and [] write the same bytes, ${name}`,
+    bytesEqual(buildThreeMF(parts, { ...meta, pauseAt: undefined }), plain) && bytesEqual(buildThreeMF(parts, { ...meta, pauseAt: [] }), plain),
+  );
+  check(`pauseAt: no pause file unless asked for, ${name}`, !(PAUSE_FILE in unzipSync(plain)));
+}
+
+// Asked for: the file Bambu Studio itself saves for pauses on plate 1, line for line (the shape was
+// checked against one Studio wrote). Sorted, a height the file would write twice written once, and
+// nothing else in the 3MF moves.
+{
+  const STUDIO_TWO_PAUSES =
+    '<?xml version="1.0" encoding="utf-8"?>\n' +
+    '<custom_gcodes_per_layer>\n' +
+    '<plate>\n' +
+    '<plate_info id="1"/>\n' +
+    '<layer top_z="0.6" type="1" extruder="1" color="" extra="" gcode="M400 U1"/>\n' +
+    '<layer top_z="1.2" type="1" extruder="1" color="" extra="" gcode="M400 U1"/>\n' +
+    '<mode value="MultiAsSingle"/>\n' +
+    '</plate>\n' +
+    '</custom_gcodes_per_layer>';
+  const bytes = buildThreeMF(ONE_GROUP, { ...META, pauseAt: [1.2, 0.6000000000000001, 1.2, 1.20004] });
+  const xml = pauseXml(bytes);
+  check('pauseAt: the pause file is written', PAUSE_FILE in unzipSync(bytes));
+  check('pauseAt: well-formed XML', wellFormed(xml));
+  check('pauseAt: the file Studio saves, sorted, each height once', xml === STUDIO_TWO_PAUSES);
+  const without = entriesOf(buildThreeMF(ONE_GROUP, META));
+  const withPauses = entriesOf(bytes);
+  check(
+    'pauseAt: every other entry unchanged, in the same order',
+    JSON.stringify(Object.keys(withPauses).filter((e) => e !== PAUSE_FILE)) === JSON.stringify(Object.keys(without)) &&
+      Object.keys(without).every((e) => without[e] === withPauses[e]),
+  );
+}
+
+// `mode` follows the project's filament count, as Studio writes it.
+{
+  const modeOf = (parts: ExportPart[]) => pauseXml(buildThreeMF(parts, { ...META, pauseAt: [1] })).match(/<mode value="(\w+)"\/>/)?.[1];
+  check('pauseAt: one filament is SingleExtruder', modeOf([ONE_GROUP[0]!]) === 'SingleExtruder');
+  check('pauseAt: one colour on two parts is still one filament', modeOf([ONE_GROUP[0]!, ONE_GROUP[2]!]) === 'SingleExtruder');
+  check('pauseAt: more than one filament is MultiAsSingle', modeOf(ONE_GROUP) === 'MultiAsSingle' && modeOf(TWO_GROUPS) === 'MultiAsSingle');
+}
+
+// The pause command is the profile's, read from it (not typed again) and escaped.
+{
+  const base = BAMBU_BASE as Record<string, unknown>;
+  const real = base.machine_pause_gcode;
+  check("pauseAt: the bundled printer's pause command is M400 U1", real === 'M400 U1');
+  base.machine_pause_gcode = 'M601 ; "wait" & <go>';
+  try {
+    const xml = pauseXml(buildThreeMF(ONE_GROUP, { ...META, pauseAt: [1] }));
+    check("pauseAt: the pause command comes from the profile, escaped", xml.includes('gcode="M601 ; &quot;wait&quot; &amp; &lt;go&gt;"') && wellFormed(xml));
+  } finally {
+    base.machine_pause_gcode = real;
+  }
+}
+
+// A height that is not above the bed is a mistake, refused rather than written.
+for (const bad of [0, -0.2, Number.NaN, Number.POSITIVE_INFINITY]) {
+  let threw = false;
+  try {
+    buildThreeMF(ONE_GROUP, { ...META, pauseAt: [1.2, bad] });
+  } catch (e) {
+    threw = e instanceof RangeError;
+  }
+  check(`pauseAt: ${bad} is refused`, threw);
+}
+
+/* ------------------------------------------------------------------ pauseForPocket */
+
+check(
+  'pauseForPocket: the profile slices a 0.2 mm first layer, then 0.2 mm layers',
+  Number(BAMBU_BASE.initial_layer_print_height) === 0.2 && Number(BAMBU_BASE.layer_height) === 0.2,
+);
+const POCKETS: [what: string, ceiling: number, pause: number, process?: ExportMeta['process']][] = [
+  ['a ceiling on the first layer: the second layer', 0.2, 0.4],
+  ['a ceiling on a boundary: the layer that starts there', 1, 1.2],
+  ['float noise below a boundary is on it', 0.9999999999999999, 1.2],
+  ['float noise above a boundary is on it', 0.6000000000000001, 0.8],
+  ['a ceiling low inside a layer: that layer', 1.05, 1.2],
+  ['a ceiling high inside a layer: that layer', 1.15, 1.2],
+  ['a ten-thousandth below a boundary is on it', 1.19995, 1.4],
+  ["a 0.12 mm first layer from the export's process", 0.12, 0.32, { initial_layer_print_height: '0.12' }],
+  ['a 0.12 mm first layer, higher up', 0.52, 0.72, { initial_layer_print_height: '0.12' }],
+  ["0.16 mm layers from the export's process", 1, 1.16, { layer_height: '0.16' }],
+];
+for (const [what, ceiling, pause, process] of POCKETS) {
+  const got = pauseForPocket(ceiling, process);
+  check(`pauseForPocket: ${what}: ${ceiling} -> ${got}`, got === pause);
+}
+for (const bad of [0.1, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+  let threw = false;
+  try {
+    pauseForPocket(bad);
+  } catch (e) {
+    threw = e instanceof RangeError;
+  }
+  check(`pauseForPocket: a ceiling of ${bad} is refused`, threw);
+}
+check(
+  'pauseForPocket: its height is what the file writes',
+  pauseXml(buildThreeMF(ONE_GROUP, { ...META, pauseAt: [pauseForPocket(1)] })).includes('<layer top_z="1.2" type="1" '),
+);
 
 /* ------------------------------------------------------------------ report */
 

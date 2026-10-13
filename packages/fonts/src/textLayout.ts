@@ -184,6 +184,14 @@ export interface HorizontalOptions {
    *  the cost of more points. Rounded to a whole number of at least 1, and 8 for a value that is
    *  not a number at all. */
   segments?: number;
+  /**
+   * Leave line 1's baseline on y = 0 instead of centring the block on its ink. Off by default:
+   * every existing layout is centred. A caller stacking lines of its own (a business card's
+   * lockup) needs the baseline, because the ink's middle moves with the text: a line with
+   * descenders centres lower than one without, and anything set against the capitals (an icon
+   * in front of a line) would wander with it.
+   */
+  baseline?: boolean;
 }
 
 /**
@@ -309,10 +317,11 @@ export function getHorizontalContours(
   const line1Box = bboxOf(line1Contours);
   const line2Box = line2On ? bboxOf(line2Contours) : null;
 
-  // Vertically centre the whole block around Y=0, and keep it clear of the keyring:
+  // Vertically centre the whole block around Y=0 (unless the baseline is asked for), and keep it
+  // clear of the keyring:
   // a longer/centre/right aligned 2nd line can otherwise reach left past x=gap and
   // collide with the loop tab.
-  const cy = (box0.minY + box0.maxY) / 2;
+  const cy = opts.baseline ? 0 : (box0.minY + box0.maxY) / 2;
   const dx = box0.minX < gap ? gap - box0.minX : 0;
   for (const poly of contours) for (const pt of poly) { pt[0] = pt[0]! + dx; pt[1] = pt[1]! - cy; }
 

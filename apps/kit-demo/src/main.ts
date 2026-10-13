@@ -50,6 +50,8 @@ import {
   navRail,
   galleryCard,
   galleryGrid,
+  galleryPage,
+  themeToggleButton,
   fontCards,
   ICONS,
   UI_KIT_VERSION,
@@ -2411,6 +2413,57 @@ const editorFrame = designShell({
 });
 editorFrame.setBody(design.root);
 
+/* A generator's front door: the demo outlines as designs in their three groups, each card's second
+   picture its two sides, the front filled and the back as a mirrored outline. The search is the
+   page's app filter: it hides cards and calls refresh(). */
+const sidesPicture = (d: string) => {
+  const ink = themeColor('--accent', 'currentColor');
+  return `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 92 40"><path d="${d}" fill="${ink}"/>` +
+      `<path d="${d}" transform="translate(92 0) scale(-1 1)" fill="none" stroke="${ink}" stroke-width="2"/></svg>`,
+  )}`;
+};
+const designCards = DEMO_SHAPES.map((s) => ({
+  shape: s,
+  card: galleryCard({
+    name: s.label,
+    blurb: 'A name on this shape, on both sides.',
+    thumb: shapePicture(s.d),
+    hover: sidesPicture(s.d),
+    compact: true,
+    onClick: () => toast(s.label),
+  }),
+}));
+const designSearch = searchField({
+  label: 'Search designs',
+  placeholder: `Search ${DEMO_SHAPES.length} designs`,
+  className: 'kit-gallery-search',
+  onInput: (q) => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    for (const { shape, card } of designCards) card.hidden = !words.every((w) => shape.label.toLowerCase().includes(w));
+    frontDoor.refresh();
+  },
+});
+const frontDoor = galleryPage({
+  title: 'Name Keychain',
+  description: 'Pick a shape, type a name, download a 3MF.',
+  topbar: topbarLinks({ themeToggle: false }),
+  tools: [designSearch],
+  railFoot: [themeToggleButton({ variant: 'action', applyOnInit: false })],
+  groups: [
+    { id: 'basic', label: 'Basic shapes' },
+    { id: 'polygons', label: 'Polygons' },
+    { id: 'stars', label: 'Stars' },
+  ].map((g) => ({ ...g, cards: designCards.filter((c) => c.shape.cat === g.id).map((c) => c.card) })),
+  grid: { minPx: 150, dense: true, aspect: '6 / 5' },
+  empty: () =>
+    emptyState({
+      title: 'No designs match',
+      body: 'Try a shorter word.',
+      action: button({ label: 'Clear search', emphasis: 'secondary', onClick: () => designSearch.setValue('', true) }),
+    }),
+});
+
 app.append(
   group('Layouts'),
   entry(
@@ -2465,6 +2518,18 @@ app.append(
         'studio is a generator’s three columns without its top bar. Switch the tabs, press a tool, ' +
         'pick an object.',
       inWindow(editorFrame.root),
+    ),
+  ),
+  fullWidth(
+    entry(
+      'galleryPage() · galleryCard({ hover }) · galleryGrid({ aspect })',
+      'Gallery page',
+      'The front door of a generator with many designs: the designs in groups under their headings, ' +
+        'and a rail of the groups with their counts that narrows the page to one. Hover a card, or ' +
+        'tab to it, for its second picture, here its two sides; the pictures are 6:5. Search to see ' +
+        'the counts follow and the empty states. Below 760 px the rail becomes a row of chips and ' +
+        'the theme switch at its foot moves up beside the title.',
+      inWindow(frontDoor.root),
     ),
   ),
 );

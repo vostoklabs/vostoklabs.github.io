@@ -1,0 +1,22 @@
+{
+  "name": "@vostok/qr",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "QR codes as shapes in millimetres: what the code says (a link, text, Wi-Fi, a contact) into merged module outlines, in four drawing styles, with room for a symbol in the middle. No machine, no screen.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node tests/qr.test.mjs"
+  },
+  "dependencies": {
+    "@vostok/shapes": "workspace:*",
+    "qrcode-generator": "^1.4.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -153,6 +153,19 @@ export const ICONS = {
   // A large A and a small one: lettering, the size, height and spacing of the letters (the font
   // has `text`). Lucide's `a-large-small`.
   lettering: stroke('<path d="m15 16 2.536-7.328a1.02 1.02 1 0 1 1.928 0L22 16"/><path d="M15.697 14h5.606"/><path d="m2 16 4.039-9.69a.5.5 0 0 1 .923 0L11 16"/><path d="M3.304 13h6.392"/>', 18),
+  // A page of blocks: a layout to start from, the design a product is laid out by. Lucide's
+  // `layout-template`.
+  layout: stroke('<rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/>', 18),
+  // A card with a portrait and two lines: the card itself, its size and its make. Lucide's `id-card`.
+  card: stroke('<path d="M16 10h2"/><path d="M16 14h2"/><path d="M6.17 15a3 3 0 0 1 5.66 0"/><circle cx="9" cy="11" r="2"/><rect x="2" y="5" width="20" height="14" rx="2"/>', 18),
+  // A telephone handset: contact details, the icons in front of a phone, an email, a website.
+  // Lucide's `phone`.
+  phone: stroke('<path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"/>', 18),
+  // Arrows four ways: something on the stage that drags anywhere (an NFC tag's place). Lucide's
+  // `move`.
+  move: stroke('<path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/>', 18),
+  // The contactless waves: an NFC tag. Lucide's `nfc`.
+  nfc: stroke('<path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/>', 18),
 } as const;
 
 /** Parse a raw SVG string into an element. */

@@ -14,6 +14,8 @@
 //  - Metadata/project_settings.config carries Bambu's own A1 / 0.4 nozzle /
 //    Bambu PLA Basic presets in full, so Studio resolves them by name instead of
 //    inventing project presets named after the file — see projectSettings()
+//  - Metadata/custom_gcode_per_layer.xml carries print pauses, only when asked
+//    for — see ExportMeta.pauseAt and pauseForPocket()
 import { zipSync, strToU8 } from 'fflate';
 import { BRAND } from '@vostok/brand';
 import { BAMBU_BASE, BAMBU_FILAMENT, BAMBU_IDENTITY } from './bambuProfile.generated';
@@ -107,6 +109,19 @@ export interface ExportMeta {
    *
    *  Values are Bambu process keys, exactly as the presets spell them. */
   process?: Record<string, string | string[]>;
+  /**
+   * Heights to pause the print at, in millimetres: for a pocket filled mid-print, before the
+   * layer that closes it. `pauseForPocket` turns a pocket's ceiling into one.
+   *
+   * Each is the TOP of the layer the printer pauses before, measured from the model's lowest
+   * point, which the writer puts on the bed. They are written for plate 1 as the slicer's own
+   * per-layer pauses, the entry Bambu Studio saves when a pause is added in its preview, so the
+   * pause is in place when the file is opened as a project (imported as geometry only, it is left
+   * behind with the presets). Sorted, and a height given twice is written once.
+   *
+   * Left out or empty, the file is byte for byte what it was before this option existed.
+   */
+  pauseAt?: number[];
 }
 
 const VL_NS = 'https://vostoklabs.com/3mf/2026';
@@ -364,6 +379,80 @@ export function projectSettings(palette: RGB[], process: ExportMeta['process'] =
   return JSON.stringify(cfg, null, 2);
 }
 
+/** Where a Bambu project keeps each plate's per-layer pauses and custom G-code. */
+const PAUSE_FILE = 'Metadata/custom_gcode_per_layer.xml';
+
+/**
+ * `ExportMeta.pauseAt` as the per-layer file for plate 1, line for line the one Bambu Studio saves
+ * for pauses added in its preview, except that a height is written to a ten-thousandth where
+ * Studio writes every digit of a float; both read back as the same layer. Studio finds the file by
+ * name, so it needs no relationship or content type, and reads it under the same switch as the
+ * project settings (`BBL_APPLICATION`).
+ *
+ *  - `type="1"` is a pause; `extruder` and `color` only mean something to colour and tool changes.
+ *  - `extra` would hold a pause message, which Studio neither shows nor sends to the printer, so
+ *    it stays empty, as Studio leaves it.
+ *  - `gcode` repeats the profile's pause command, as Studio writes it. Slicing uses the printer
+ *    preset's own, so a different printer still pauses its own way.
+ *  - `mode` is the one Studio writes for the project's filament count: one, or more than one.
+ */
+function pauseFile(pauseAt: number[], filaments: number): string {
+  for (const z of pauseAt) {
+    if (!(Number.isFinite(z) && z > 0)) throw new RangeError(`A pause height is millimetres above the bed; got ${z}`);
+  }
+  // Sorted, then compared as written: two heights the file would write the same are one pause.
+  const heights = [...new Set([...pauseAt].sort((a, b) => a - b).map(f))];
+  const command = esc(String(BAMBU_BASE.machine_pause_gcode ?? ''));
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<custom_gcodes_per_layer>',
+    '<plate>',
+    '<plate_info id="1"/>',
+    ...heights.map((z) => `<layer top_z="${z}" type="1" extruder="1" color="" extra="" gcode="${command}"/>`),
+    `<mode value="${filaments > 1 ? 'MultiAsSingle' : 'SingleExtruder'}"/>`,
+    '</plate>',
+    '</custom_gcodes_per_layer>',
+  ].join('\n');
+}
+
+/** Closer than this to a layer boundary is on it: heights arrive with float noise (0.2 * 3 is
+ *  0.6000000000000001), and a ten-thousandth of a millimetre is as fine as the file writes. */
+const LAYER_EPS = 1e-4;
+
+/**
+ * Where to pause (`ExportMeta.pauseAt`) so a pocket can be filled before it is closed over, given
+ * its ceiling in millimetres above the bed. The answer is the top of the first layer that reaches
+ * above the ceiling, in the layers the file is sliced with: the profile's first layer and layer
+ * height, or the ones `process` sets, so pass the export's own `process`.
+ *
+ * A ceiling on a layer boundary, the case to design for, pauses before the layer that starts at
+ * it: the first layer whose bottom is at or above the ceiling. A ceiling inside a layer pauses
+ * before THAT layer, not the next one. A slicer cuts each layer at its mid-height, so a layer
+ * that straddles the ceiling can come out solid over the pocket, and a pause after it would come
+ * too late. Before it, the pause is at worst one layer early, and the nozzle still passes above
+ * anything that fits under the ceiling.
+ *
+ * Re-sliced at another layer height, the pause does not follow the pocket: Bambu Studio puts it
+ * on the layer whose top is nearest this height. Finer layers can then close the pocket first
+ * (at 0.08 or 0.12 mm it can land a layer or two late), and coarser ones can move it a layer
+ * early. It lands as intended only at the layer heights the file carries; whoever changes them
+ * has to move the pause in the slicer's preview.
+ *
+ * Throws for a ceiling inside the first layer, which has no layer before it to pause at.
+ */
+export function pauseForPocket(ceiling: number, process: ExportMeta['process'] = {}): number {
+  const setting = (key: string) => Number(process[key] ?? BAMBU_BASE[key]);
+  const first = setting('initial_layer_print_height');
+  const layer = setting('layer_height');
+  if (!(Number.isFinite(ceiling) && ceiling >= first - LAYER_EPS)) {
+    throw new RangeError(`A pocket's ceiling has to be at or above the first layer (${first} mm); got ${ceiling}`);
+  }
+  // Whole layers above the first one that end at or below the ceiling; the pause goes before the
+  // one after them.
+  const below = Math.floor((ceiling - first + LAYER_EPS) / layer);
+  return Math.round((first + (below + 1) * layer) * 1e4) / 1e4;
+}
+
 /** Stable 1-based filament slot per unique colour, in first-seen order. */
 function assignExtruders(parts: ExportPart<ArrayLike<number>>[]): number[] {
   const slotByColor = new Map<string, number>();
@@ -519,6 +608,8 @@ export function buildThreeMF(parts: ExportPart<ArrayLike<number>>[], meta: Expor
   const mark = provenance(meta);
   const metadata = mark.metadata;
 
+  const pauses = meta.pauseAt?.length ? pauseFile(meta.pauseAt, palette.length) : undefined;
+
   const model =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<model unit="millimeter" xml:lang="en-US"` +
@@ -592,6 +683,8 @@ export function buildThreeMF(parts: ExportPart<ArrayLike<number>>[], meta: Expor
       // Declares the filament slots the parts above are asking for, so the colours
       // survive the trip into Bambu Studio / Orca even from a one-filament setup.
       'Metadata/project_settings.config': strToU8(projectSettings(palette, meta.process)),
+      // Only when pauses were asked for, so every other file stays exactly as it was.
+      ...(pauses ? { [PAUSE_FILE]: strToU8(pauses) } : {}),
       [PROVENANCE_FILE]: strToU8(mark.text),
       ...(meta.cover
         ? {

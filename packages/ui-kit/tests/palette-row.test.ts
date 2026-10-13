@@ -11,7 +11,7 @@
 import './support/install-mini-dom';
 import { html, miniDocument, type MiniElement } from './support/mini-dom';
 import { kitRules, cssValue } from './support/cascade';
-import { paletteRow } from '../src/components/filament';
+import { FILAMENTS, filamentRow, paletteRow } from '../src/components/filament';
 
 let pass = 0;
 const fails: string[] = [];
@@ -51,6 +51,24 @@ check('detected css: a 10 px round dot, border included', v('inline-size') === '
 check('detected css: painted in the colour it was given', v('background') === '#c0392b', v('background'));
 check('detected css: never squeezed by a long label', v('flex-grow') === '0' && v('flex-shrink') === '0', `${v('flex-grow')} ${v('flex-shrink')}`);
 miniDocument.body.replaceChildren();
+
+// filamentRow.setExtra: the swatches a row offers first change after it is built (a colour the
+// customer made), the shelf follows them without repeating one, and nothing else changes.
+{
+  const plain = filamentRow({ label: 'Card', value: '#161616' });
+  // The swatch buttons only: the custom picker wears the swatch class too.
+  const swatchCount = (r: unknown) => (r as MiniElement).querySelector('.vl-swatches')!.children.length;
+  check('filamentRow: the shelf alone by default', swatchCount(plain) === FILAMENTS.length);
+  const before = html(plain);
+  plain.setExtra([]);
+  check('filamentRow setExtra([]): builds what it built', html(plain) === before);
+  plain.setExtra([['Your colour', '#123456']]);
+  const first = (plain as unknown as MiniElement).querySelector('.vl-swatches')!.firstElementChild!;
+  check('filamentRow setExtra: the new colour comes first', first.getAttribute('title') === 'Your colour' && swatchCount(plain) === FILAMENTS.length + 1);
+  plain.setExtra([['Mine', '#161616']]);
+  check('filamentRow setExtra: a shelf colour given again is not offered twice', swatchCount(plain) === FILAMENTS.length);
+  check('filamentRow setExtra: the value is kept', plain.getValue() === '#161616');
+}
 
 console.log(`\npalette row: ${pass} passed, ${fails.length} failed`);
 if (fails.length) process.exit(1);

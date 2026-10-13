@@ -646,6 +646,9 @@ details.vl-section--collapsible[open] > summary {
 }
 .vl-preview-bar__toggle[aria-pressed='true'] .vl-preview-bar__dot { background: var(--accent-2); border-color: var(--accent-2); }
 .vl-preview-bar__rule { width: 1px; margin: 3px 4px; background: var(--line); }
+/* `display: inline-flex` above outranks the UA stylesheet's [hidden] rule. */
+.vl-preview-bar__btn[hidden],
+.vl-preview-bar__rule[hidden] { display: none; }
 /* A bare slider riding in the bar: as wide as a short label, centred on the row. */
 .vl-preview-bar > .vl-slider { align-self: center; width: 120px; margin: 0 8px; }
 .vl-stage__tools .vl-chip {
@@ -1361,6 +1364,7 @@ details.vl-section--collapsible[open] > summary {
 /* Templates, presets, designs: a picture, a name, a line, a click. See gallery.ts. */
 .vl-gallery {
   --vl-gallery-min: 220px;
+  --vl-gallery-aspect: 4 / 3;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--vl-gallery-min), 1fr));
   gap: var(--space-4);
@@ -1393,10 +1397,10 @@ details.vl-section--collapsible[open] > summary {
 
 .vl-gallery-card:focus-visible { outline: none; box-shadow: var(--ring); }
 
-/* 4:3, on the quieter surface, the preview centred inside it. */
+/* 4:3 unless the grid says otherwise, on the quieter surface, the preview centred inside it. */
 .vl-gallery-card__thumb {
   position: relative;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: var(--vl-gallery-aspect, 4 / 3);
   background: var(--panel-2);
   display: grid;
   place-items: center;
@@ -1409,6 +1413,34 @@ details.vl-section--collapsible[open] > summary {
   height: 100%;
   object-fit: contain;
   display: block;
+}
+
+/* `galleryCard({ hover })`: the second picture, over the first on the tile's own ground and
+   inside its padding, so nothing of the first shows through and the two are the same size. It
+   comes in while the card is hovered or has keyboard focus. Fade only, no movement, and out
+   quicker than in, as the help bubble does. With reduced motion the tiers collapse to a swap:
+   the picture still changes, only the fade goes. */
+.vl-gallery-card__hover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: inherit;
+  background: inherit;
+  opacity: 0;
+  transition: opacity var(--dur-out-sm) var(--ease-standard);
+}
+.vl-gallery-card__hover > img,
+.vl-gallery-card__hover > svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.vl-gallery-card:hover .vl-gallery-card__hover,
+.vl-gallery-card:focus-visible .vl-gallery-card__hover {
+  opacity: 1;
+  transition-duration: var(--dur-in-sm);
 }
 
 .vl-gallery-card__badge {
