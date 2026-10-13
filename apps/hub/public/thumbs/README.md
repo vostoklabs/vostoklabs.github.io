@@ -1,11 +1,10 @@
 # Generator Thumbnails
 
-One image per tool, named `<id>.png`, where `<id>` is the `id` field in `generators.json`.
-`cards.ts` loads `./thumbs/<id>.png` and nothing else — a `.webp` here is a file the hub will
-never ask for, which is what this note used to tell you to make.
-
-Recommended size: 800×500 (16:10). A missing file is not an error: the card falls back to a
-styled letter placeholder, so a new tool can ship its card before its photo.
+One image per tool, named `<id>.png`, where `<id>` is the `id` field in `generators.json`
+(or the name its `thumb` field gives). Pages never load this file: the build writes
+`/thumbs/<id>.webp`, 800 wide, from it (`images-plugin.ts`, names in `src/site/pictures.ts`), and the
+dev server makes the same on request. So any size works, but make it 4:3, which is how the card
+crops it (`--hub-thumb-ratio`).
 
 Present:
 
@@ -27,8 +26,4 @@ Present:
 - `photo-frame.png` — six of its designs, built with the app's own geometry and a sample photo in
   each, three across at 800×600 (`node scripts/render-photo-frame.mjs`, which also writes the
   product page's renders).
-
-Missing:
-
-- `house-number.png` — the card is live and links correctly; it is showing the letter
-  placeholder until a render is dropped in.
+- `house-number.png`

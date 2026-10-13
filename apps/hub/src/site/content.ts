@@ -3,6 +3,7 @@
 import { BRAND } from '@vostok/brand';
 import registryData from '../../../../generators.json';
 import type { Generator, MakeProcess, Registry, SellerTool } from '../registry';
+import { largeFor, thumbFor } from './pictures';
 import { TOPICS, type Topic } from './topics';
 
 export const registry = registryData as unknown as Registry;
@@ -25,7 +26,8 @@ export const featured = live
 
 export const productPath = (g: Generator) => `/generators/${g.id}/`;
 export const topicPath = (t: Topic) => `/make/${t.id}/`;
-export const thumbPath = (g: Generator) => `/thumbs/${g.thumb ?? `${g.id}.png`}`;
+export const thumbPath = (g: Generator) => thumbFor(g.thumb ?? `${g.id}.png`);
+export const thumbLargePath = (g: Generator) => largeFor(g.thumb ?? `${g.id}.png`);
 
 export function appHref(g: Generator): string | null {
   if (!isApp(g)) return null;

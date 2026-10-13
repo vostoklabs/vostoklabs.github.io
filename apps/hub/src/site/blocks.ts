@@ -5,8 +5,9 @@ import { BRAND } from '@vostok/brand';
 import { el, linkButton, supportLinks } from '@vostok/ui-kit';
 import type { Generator, Media, SellerTool } from '../registry';
 import {
-  appHref, featured, fmtPrice, inTopic, isApp, live, mwHref, processesOf, productPath, thumbPath, topicById, topicPath, TOPICS,
+  appHref, featured, fmtPrice, inTopic, isApp, live, mwHref, processesOf, productPath, thumbLargePath, thumbPath, topicById, topicPath, TOPICS,
 } from './content';
+import { stripFor } from './pictures';
 import type { Topic } from './topics';
 import type { FaqGroup } from './faq';
 import { NEWS } from './news';
@@ -190,7 +191,9 @@ export function breadcrumb(trail: [string, string?][]): HTMLElement {
 /** The main picture and, when there is more than one, a strip to switch it. A strip item is a
  *  link to its file, so it works before the script; the script swaps the main picture instead. */
 export function gallery(g: Generator): HTMLElement {
-  const items: Media[] = [{ type: 'image', src: thumbPath(g), alt: g.name }, ...(g.media ?? [])];
+  const items: Media[] = [{ type: 'image', src: thumbLargePath(g), alt: g.name }, ...(g.media ?? [])];
+  // A strip tile is a small copy: the card's picture for the first, a strip copy for the rest.
+  const tile = (m: Media, i: number) => (i === 0 ? thumbPath(g) : stripFor(m.type === 'video' ? m.poster ?? thumbPath(g) : m.src));
   const main = el('div', { className: 'hub-gallery__main', attrs: { 'data-gallery-main': '' } }, [mediaNode(items[0]!)]);
   if (items.length < 2) return el('div', { className: 'hub-gallery' }, [main]);
   const strip = el('div', { className: 'hub-gallery__strip' }, items.map((m, i) => {
@@ -204,7 +207,7 @@ export function gallery(g: Generator): HTMLElement {
         ...(m.poster ? { 'data-poster': m.poster } : {}),
         ...(i === 0 ? { 'aria-current': 'true' } : {}),
       },
-    }, [el('img', { attrs: { src: m.type === 'video' ? m.poster ?? thumbPath(g) : m.src, alt: '', loading: 'lazy' } })]);
+    }, [el('img', { attrs: { src: tile(m, i), alt: '', loading: 'lazy' } })]);
     if (m.type === 'video') link.append(el('span', { className: 'hub-gallery__play', text: '▶' }));
     return link;
   }));
