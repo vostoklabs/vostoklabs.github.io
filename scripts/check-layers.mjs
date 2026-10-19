@@ -60,6 +60,7 @@ const LAYERS = [
   ['packages/laser/', 'core'], // shape maths, 2D booleans, blanks, keyring, text
   ['packages/export/', 'connector'],
   ['packages/plates/', 'connector'],
+  ['packages/render/', 'connector'],
 ];
 
 const MAY_IMPORT = {

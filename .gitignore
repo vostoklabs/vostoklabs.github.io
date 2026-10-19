@@ -29,6 +29,8 @@ apps/*/
 !apps/bubble-pop-generator/
 !apps/business-card/
 !apps/photo-frame/
+!apps/price-calculator/
+!apps/render-studio/
 !apps/clicker-generator/
 !apps/foldbox/
 !apps/generator-template/
@@ -53,6 +55,7 @@ packages/*/
 !packages/patterns/
 !packages/plates/
 !packages/qr/
+!packages/render/
 !packages/shapes/
 !packages/trace/
 !packages/symbols/
@@ -98,6 +101,8 @@ apps/foldbox/README.internal.md
 !apps/business-card/tests/**
 !apps/photo-frame/tests/
 !apps/photo-frame/tests/**
+!apps/price-calculator/tests/
+!apps/price-calculator/tests/**
 !apps/foldbox/tests/
 apps/foldbox/tests/*
 !apps/foldbox/tests/corners.mts
@@ -136,6 +141,8 @@ packages/laser/tests/silhouettes.test.mjs
 !packages/viewer/tests/**
 !packages/qr/tests/
 !packages/qr/tests/**
+!packages/render/tests/
+!packages/render/tests/**
 # What the suites write while they run
 **/tests/.*
 

@@ -1,0 +1,27 @@
+{
+  "name": "@vostok/render",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Product photographs of a 3D model in the browser: a lit studio scene (backdrops, light rigs, filament finishes), a live preview of it, and accumulated stills as PNG; reads STL, OBJ and 3MF with the colours the file was sliced in.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json",
+    "test": "node tests/run.mjs"
+  },
+  "dependencies": {
+    "@vostok/export": "workspace:*",
+    "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "@types/three": "^0.171.0",
+    "esbuild": "^0.24.2",
+    "three": "^0.171.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  }
+}
