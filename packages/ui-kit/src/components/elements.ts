@@ -544,6 +544,27 @@ export interface NumberFieldOptions {
   help?: string;
   /** Fired with the clamped value on every change. */
   onInput?: (value: number) => void;
+  /**
+   * Report every keystroke that reads as a number, not only the commit: for a field whose result
+   * is on screen beside it, such as a running total. The value is clamped for `onInput` and the
+   * box is left as typed, so a "12" is not the minimum while its "2" is still coming. A commit
+   * that changes nothing reports nothing more. Default false: only a commit reports.
+   */
+  live?: boolean;
+  /**
+   * What an empty box means. Set it and the box may be left empty: emptying it commits this
+   * value, and this value shows as an empty box (with `placeholder`) rather than as a number, so
+   * there is no "0" to select and delete before typing. Default: none, and an emptied box is put
+   * back to the last value.
+   */
+  emptyValue?: number;
+  /** Shown in an empty box. */
+  placeholder?: string;
+  /**
+   * Give the unit a fixed width (room for "Kč/kWh"), so the boxes of fields stacked in a column
+   * end on one line whatever their units say. Default false: the unit takes its own width.
+   */
+  alignUnit?: boolean;
 }
 
 export type NumberFieldHandle = HTMLElement & {
@@ -552,6 +573,8 @@ export type NumberFieldHandle = HTMLElement & {
    *  `syncControls` with the rest of a controls map. */
   getValue(): number;
   setDisabled(disabled: boolean): void;
+  /** Change the unit after the box (a currency switched elsewhere on the page); `''` takes it away. */
+  setUnit(unit: string): void;
   readonly value: number;
   readonly field: HTMLInputElement;
 };
@@ -573,16 +596,17 @@ export function numberField(opts: NumberFieldOptions): NumberFieldHandle {
       ...(opts.min !== undefined ? { min: String(opts.min) } : {}),
       ...(opts.max !== undefined ? { max: String(opts.max) } : {}),
       ...(opts.step !== undefined ? { step: String(opts.step) } : {}),
+      ...(opts.placeholder ? { placeholder: opts.placeholder } : {}),
     },
   }) as HTMLInputElement;
-  input.value = String(opts.value);
   input.disabled = opts.disabled ?? false;
   /** The text the field last wrote into itself, so `change` can tell it from typing. */
-  let shown = input.value;
+  let shown = '';
   const show = (v: number) => {
-    input.value = String(v);
+    input.value = opts.emptyValue !== undefined && v === opts.emptyValue ? '' : String(v);
     shown = input.value;
   };
+  show(opts.value);
 
   const clamp = (n: number) => {
     let v = n;
@@ -592,16 +616,32 @@ export function numberField(opts: NumberFieldOptions): NumberFieldHandle {
   };
 
   let current = opts.value;
-  const commit = () => {
+  /** The box's number, clamped, or null for text that is not one. An empty box is `emptyValue`. */
+  const read = (): number | null => {
+    if (opts.emptyValue !== undefined && input.value.trim() === '') return clamp(opts.emptyValue);
     const parsed = parseFloat(input.value);
-    if (!Number.isFinite(parsed)) {
+    return Number.isFinite(parsed) ? clamp(parsed) : null;
+  };
+  const commit = () => {
+    const next = read();
+    if (next === null) {
       show(current); // reject rubbish rather than storing NaN
       return;
     }
-    current = clamp(parsed);
+    const changed = next !== current;
+    current = next;
     show(current);
-    opts.onInput?.(current);
+    // A live field has already reported what was typed.
+    if (changed || !opts.live) opts.onInput?.(current);
   };
+  if (opts.live) {
+    input.addEventListener('input', () => {
+      const next = read();
+      if (next === null || next === current) return;
+      current = next;
+      opts.onInput?.(current);
+    });
+  }
   // Only typing is committed, as in `sliderRow`. After a load has replaced a half-typed number
   // (see `setValue`), or Enter has committed and rewritten the field, leaving it can still fire
   // `change` on the field's own text, which is already the value.
@@ -623,12 +663,26 @@ export function numberField(opts: NumberFieldOptions): NumberFieldHandle {
   label.setAttribute('for', id);
   if (opts.help) label.append(helpTip(opts.help));
 
-  const row = el('div', { className: 'vl-number-row' }, [input]);
-  if (opts.unit) row.append(el('span', { className: 'vl-number-unit', text: opts.unit }));
+  const row = el('div', { className: `vl-number-row${opts.alignUnit ? ' vl-number-row--align-unit' : ''}` }, [input]);
+  let unit: HTMLElement | null = null;
+  const setUnit = (text: string) => {
+    if (!text) {
+      unit?.remove();
+      unit = null;
+      return;
+    }
+    if (!unit) {
+      unit = el('span', { className: 'vl-number-unit' });
+      row.append(unit);
+    }
+    unit.textContent = text;
+  };
+  if (opts.unit) setUnit(opts.unit);
 
   const root = el('div', { className: 'vl-field' }, [label, row]) as unknown as NumberFieldHandle;
   Object.defineProperty(root, 'value', { get: () => current });
   Object.defineProperty(root, 'field', { get: () => input });
+  root.setUnit = setUnit;
   root.setValue = (value, notify = false) => {
     // Never fight a typist, except for a load: under `syncControls` the field takes the value,
     // or leaving it would commit the typed number over the loaded one.

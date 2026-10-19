@@ -1343,6 +1343,15 @@
 .vl-color-popover__chip.is-on {
   box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
 }
+/* `colorPopover({ footer })`: more choices about the same part, under the chips, across the
+   popover, divided from them by a hairline. The popover widens to hold them three to a row. */
+.vl-color-popover:has(> .vl-color-popover__footer) { width: 232px; }
+.vl-color-popover__footer {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
 /* The custom cell wears the wheel with the native input laid over it at zero opacity —
    Chromium paints a colour input's value over any background it is given. */
 .vl-color-popover__custom {

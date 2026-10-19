@@ -81,6 +81,8 @@ select optgroup {
    styles the document, and it outranks the app's rule. */
 @media (max-width: 900px) {
   body:has(.vl-app--phone) { overflow: visible; }
+  /* `appShell({ pageStage })` stacks a page of content over its panel, read the same way. */
+  body:has(.vl-app--page-stage) { overflow: visible; }
 }
 
 /* `galleryPage()`: a page of cards longer than the window at any width, read by scrolling it, so

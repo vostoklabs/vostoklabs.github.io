@@ -41,6 +41,12 @@ export interface ColorPopoverOptions {
    */
   onCustom?: (hex: string) => void;
   onClose?: () => void;
+  /**
+   * More choices about the same thing, under the chips and the wheel, across the whole popover:
+   * a 3D app's surface finish for the part whose colour this is. Picking in it does not close
+   * the popover (the app decides). Default: none, and the popover is the chips and the wheel.
+   */
+  footer?: HTMLElement;
 }
 
 export interface ColorPopoverHandle {
@@ -116,6 +122,7 @@ export function colorPopover(opts: ColorPopoverOptions): ColorPopoverHandle {
     className: 'vl-color-popover__custom',
     attrs: { title: 'Custom colour' },
   }, [wheel]));
+  if (opts.footer) pop.append(el('div', { className: 'vl-color-popover__footer' }, [opts.footer]));
 
   document.body.append(pop);
 

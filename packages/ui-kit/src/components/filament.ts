@@ -255,6 +255,11 @@ export interface PaletteRowOptions {
    * control. Without it there is no dot.
    */
   detected?: string;
+  /**
+   * Built each time the picker opens and shown under its chips (`colorPopover({ footer })`):
+   * more choices about this part, such as its surface finish. Default: none.
+   */
+  popoverFooter?: () => HTMLElement;
 }
 
 /**
@@ -291,6 +296,7 @@ export function paletteRow(opts: PaletteRowOptions): ValueRow<string> {
         options: opts.options,
         onSelect: (hex) => set(hex),
         onCustom: opts.onCustom,
+        ...(opts.popoverFooter ? { footer: opts.popoverFooter() } : {}),
       });
     },
   });

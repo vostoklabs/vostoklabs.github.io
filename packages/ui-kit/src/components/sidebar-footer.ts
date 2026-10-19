@@ -1,5 +1,5 @@
 import { el } from '../dom';
-import { exportPanel, type ExportFormat } from './export-panel';
+import { exportPanel, ownExportPanel, type ExportFormat } from './export-panel';
 import { projectActions } from './generator-chrome';
 
 /* Standard right-sidebar sticky footer used by every Vostok generator.
@@ -56,5 +56,7 @@ export function sidebarFooter(opts: SidebarFooterOptions): HTMLElement {
   const children: (HTMLElement | Node)[] = [ep, pa];
   if (opts.extra) children.push(...opts.extra);
 
-  return el('div', { className: 'vl-sidebar-footer' }, children);
+  const root = el('div', { className: 'vl-sidebar-footer' }, children);
+  ownExportPanel(root, ep);
+  return root;
 }

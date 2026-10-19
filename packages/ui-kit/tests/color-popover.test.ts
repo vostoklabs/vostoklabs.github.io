@@ -76,5 +76,19 @@ function picker(tag: string, calls: string[]) {
   check('Escape closes the second, and nothing is left listening', calls.at(-1) === 'b close' && open() === 0 && listening('keydown') === 0 && listening('mousedown') === 0, `${calls.join()} | keydown ${listening('keydown')}, mousedown ${listening('mousedown')}`);
 }
 
+{
+  // `footer`: more choices about the same part, under the chips; without it, nothing new.
+  const plain = picker('plain', []);
+  check('no footer by default', !miniDocument.querySelector('.vl-color-popover__footer'));
+  plain.close();
+  const finish = miniDocument.createElement('div') as unknown as HTMLElement;
+  finish.className = 'finish-tiles';
+  const withFooter = colorPopover({ x: 10, y: 10, value: '#161616', onSelect: () => {}, footer: finish });
+  const footer = miniDocument.querySelector('.vl-color-popover__footer');
+  check('a footer sits in the popover, holding what it was given', !!footer && !!footer.querySelector('.finish-tiles'));
+  withFooter.close();
+  check('and goes with the popover', open() === 0);
+}
+
 console.log(`\ncolor popover: ${pass} passed, ${fails.length} failed`);
 if (fails.length) process.exit(1);

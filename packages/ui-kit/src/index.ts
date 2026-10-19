@@ -78,7 +78,7 @@ export {
   type ChangelogButtonOptions,
 } from './components/changelog';
 export { supportLinks } from './components/support-links';
-export { exportPanel, setExportNote, buildExportMetadata, type ExportFormat, type ExportPanelOptions } from './components/export-panel';
+export { exportPanel, setExportNote, setExportLabel, buildExportMetadata, type ExportFormat, type ExportPanelOptions } from './components/export-panel';
 export { captureCover, type RendererLike, type CaptureCoverOptions } from './components/cover-image';
 export {
   FILAMENTS,
@@ -144,7 +144,7 @@ export { dpad, type DpadOptions, type DpadHandle } from './components/dpad';
 export { nudgePad, type NudgePadOptions, type NudgeAxisOptions, type NudgePadHandle } from './components/nudge-pad';
 export { colorPopover, closeColorPopover, type ColorPopoverOptions, type ColorPopoverOption, type ColorPopoverHandle } from './components/color-popover';
 export { busyChip, type BusyChipOptions, type BusyChipHandle } from './components/busy-chip';
-export { section, collapsibleSection, inlineDisclosure, makeCollapsible, type SectionOptions, type InlineDisclosureOptions } from './components/section';
+export { section, collapsibleSection, inlineDisclosure, makeCollapsible, type SectionOptions, type InlineDisclosureOptions, type CollapsibleSectionHandle } from './components/section';
 export { galleryCard, galleryGrid, type GalleryCardOptions, type GalleryCardHandle, type GalleryGridOptions } from './components/gallery';
 export { galleryPage, type GalleryPageOptions, type GalleryPageGroup, type GalleryPage } from './components/gallery-page';
 export { sideNav, type SideNavItem, type SideNavSection, type SideNavOptions, type SideNavHandle } from './components/side-nav';
@@ -196,6 +196,7 @@ export {
   type ThumbTileOptions,
   type ThumbTileHandle,
 } from './components/sources';
+export { pictureStrip, type PictureStripOptions, type PictureStripItem, type PictureStripHandle } from './components/picture-strip';
 export {
   modeBar,
   stagePanel,

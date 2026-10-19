@@ -49,6 +49,20 @@
   .vl-app--2col > .vl-panel { height: auto; border-left: none; border-top: 1px solid var(--line); }
 }
 
+/* `appShell({ pageStage })`: a stage that is a page of content, not a picture. It scrolls in its
+   column like a panel; on a narrow screen it is as tall as its content and the page scrolls
+   (root.css lets the body scroll for it). */
+.vl-app--page-stage > .vl-stage {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+@media (max-width: 900px) {
+  .vl-app.vl-app--page-stage { grid-template-rows: auto auto auto; max-height: none; }
+  .vl-app.vl-app--page-stage.vl-app--no-topbar { grid-template-rows: auto auto; }
+  .vl-app--page-stage > .vl-stage { overflow: visible; }
+}
+
 /* Left / right side panels. */
 .vl-panel {
   overflow: hidden;

@@ -48,6 +48,13 @@ export interface AppShellOptions {
    *  frame. Default: the window (`100dvh`), which is what an app wants. */
   contained?: boolean;
   /**
+   * The stage holds a page of content (a form, a calculator) rather than a picture. Wide, it
+   * scrolls in its column as the panels do; under 900 px it takes its content's height and the
+   * page scrolls, where a picture keeps its fixed band, so a form is never read through a
+   * letterbox. Default false: the stage is a picture's.
+   */
+  pageStage?: boolean;
+  /**
    * The narrow-screen layout, under 900 px: one column, the picture first, then the right panel
    * with its footer pinned to the bottom of the screen and the page scrolling. The left panel's
    * settings move behind a Settings button in that footer and open in a drawer (a bottom sheet on
@@ -201,6 +208,7 @@ export function appShell(opts: AppShellOptions): AppShell {
       left ? 'vl-app' : 'vl-app vl-app--2col',
       opts.topbar ? '' : 'vl-app--no-topbar',
       opts.contained ? 'vl-app--contained' : '',
+      opts.pageStage ? 'vl-app--page-stage' : '',
       phone ? 'vl-app--phone' : '',
     ]
       .filter(Boolean)

@@ -22,8 +22,29 @@ export interface ExportPanelOptions {
  *  is merely grey reads as refused rather than working. The spinner is a `::before` on the
  *  button so `.textContent = 'Generate set'` — how every generator relabels this button per
  *  mode — cannot wipe it. */
+/** Each panel's buttons by format id, for `setExportLabel`. Kept here rather than as an attribute
+ *  on the buttons, so a panel nobody relabels is built exactly as it always was. */
+const buttonsByFormat = new WeakMap<HTMLElement, Map<string, HTMLButtonElement>>();
+
+/** The export panel inside a wrapper (`sidebarFooter`), remembered when the wrapper is built:
+ *  on a phone `appShell` moves the panel out of the footer into its pinned bar, where a search
+ *  of the footer no longer finds it. */
+const panelOf = new WeakMap<HTMLElement, HTMLElement>();
+
+/** Tell `setExportNote` and `setExportLabel` which export panel a wrapper holds. */
+export function ownExportPanel(wrapper: HTMLElement, panel: HTMLElement): void {
+  panelOf.set(wrapper, panel);
+}
+
+/** The export panel itself, given the panel or a wrapper of it, wherever it now sits. */
+function exportHost(panel: HTMLElement): HTMLElement | null {
+  if (panel.classList.contains('vl-export')) return panel;
+  return panelOf.get(panel) ?? panel.querySelector<HTMLElement>('.vl-export');
+}
+
 export function exportPanel(opts: ExportPanelOptions): HTMLElement {
   const buttons: HTMLButtonElement[] = [];
+  const byFormat = new Map<string, HTMLButtonElement>();
   const setBusy = (busy: boolean) => {
     for (const b of buttons) {
       b.disabled = busy;
@@ -52,12 +73,25 @@ export function exportPanel(opts: ExportPanelOptions): HTMLElement {
       },
     });
     buttons.push(btn);
+    byFormat.set(format.id, btn as HTMLButtonElement);
     row.append(btn);
   }
 
   const root = el('div', { className: 'vl-export' }, [row]);
   if (opts.note) root.append(el('p', { className: 'vl-hint', text: opts.note }));
+  buttonsByFormat.set(root, byFormat);
   return root;
+}
+
+/**
+ * Relabel one export button after the panel is built: a count in the words ("Download photo",
+ * "Download 8 photos"). Through the same host rule as the first label, so a desktop host still
+ * says Export. Pass the panel or the `sidebarFooter` that wraps it, as `setExportNote` takes.
+ */
+export function setExportLabel(panel: HTMLElement, formatId: string, label: string): void {
+  const host = exportHost(panel);
+  const btn = host ? buttonsByFormat.get(host)?.get(formatId) : undefined;
+  if (btn) btn.textContent = exportLabel(label);
 }
 
 /**
@@ -69,9 +103,7 @@ export function exportPanel(opts: ExportPanelOptions): HTMLElement {
  * panel or the `sidebarFooter` that wraps it. An empty note removes the line.
  */
 export function setExportNote(panel: HTMLElement, note: string): void {
-  const host = panel.classList.contains('vl-export')
-    ? panel
-    : panel.querySelector<HTMLElement>('.vl-export');
+  const host = exportHost(panel);
   if (!host) return;
   let p = host.querySelector<HTMLElement>(':scope > .vl-hint');
   if (!note) {
@@ -98,6 +130,9 @@ export function setExportNote(panel: HTMLElement, note: string): void {
  * the answer is a property of the host rather than of any one generator.
  */
 function exportLabel(label: string): string {
+  // A label that is an action of its own ("Generate 6 renders": things to look at before
+  // saving any) keeps its verb on every host.
+  if (label.startsWith('Generate')) return label;
   if (label.startsWith('Download') || label.startsWith('Export')) {
     return isDesktop() ? label.replace(/^Download/, 'Export') : label;
   }

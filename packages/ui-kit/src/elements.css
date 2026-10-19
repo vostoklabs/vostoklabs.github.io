@@ -400,6 +400,9 @@
   color: var(--muted);
   font-size: var(--label-fs);
 }
+/* `numberField({ alignUnit })`: the same room for every unit, so a column of boxes ends on one
+   line whether its units say "g" or "Kč/kWh". */
+.vl-number-row--align-unit > .vl-number-unit { min-width: 3.6em; }
 
 /* ---------- Search field ----------
    A live filter: magnifier, input, a clear cross while there is something to clear. It sits on

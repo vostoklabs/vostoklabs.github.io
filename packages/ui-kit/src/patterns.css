@@ -63,6 +63,19 @@ details.vl-section--collapsible[open] > summary {
   padding-bottom: 14px;
 }
 
+/* `collapsibleSection({ detail })`: what the folded settings come to, at the far end of the
+   heading, in the body face so it reads as a value and not as part of the title. */
+.vl-section__detail {
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: var(--control-fs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+details.vl-section--collapsible > summary:hover > .vl-section__detail { color: var(--text); }
+
 .vl-section__body {
   display: flex;
   flex-direction: column;
@@ -1578,4 +1591,74 @@ details.vl-section--collapsible[open] > summary {
   margin: 8px 0 0 2px;
   padding-left: 14px;
   border-left: 2px solid var(--line);
+}
+
+/* ----------------------------------------------------------- picture strip */
+/* `pictureStrip()`: picture tiles in one row, one selected, each removable, an add tile at the
+   end. One row that scrolls sideways unless `wrap`, so its height never changes and what sits
+   above it never moves. The tiles keep one height whatever the pictures' shape. */
+.vl-picture-strip {
+  --strip-size: 64px;
+  --strip-aspect: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.vl-picture-strip__heading { color: var(--muted); font-size: var(--label-fs); }
+.vl-picture-strip__row {
+  display: flex;
+  gap: var(--space-2);
+  /* Room for the selected ring and the remove button, which stand out past the tile. */
+  padding: 7px 7px 3px 3px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.vl-picture-strip--wrap > .vl-picture-strip__row { flex-wrap: wrap; overflow: visible; }
+.vl-picture-strip__cell { position: relative; flex: 0 0 auto; }
+.vl-picture-strip__tile,
+.vl-picture-strip__add {
+  display: block;
+  block-size: var(--strip-size);
+  overflow: hidden;
+  border-color: var(--line);
+  border-radius: var(--radius-m);
+  background: var(--panel-2);
+  transition: border-color var(--dur-hover) var(--ease-standard);
+}
+.vl-picture-strip__tile { aspect-ratio: var(--strip-aspect); }
+.vl-picture-strip__add { aspect-ratio: 1; color: var(--muted); padding: 22%; }
+.vl-picture-strip__add:hover { color: var(--text); }
+.vl-picture-strip__tile:hover,
+.vl-picture-strip__add:hover { border-color: var(--accent); }
+.vl-picture-strip__tile > img { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; }
+.vl-picture-strip__wait { display: block; inline-size: 100%; block-size: 100%; border-radius: 0; }
+/* The selected tile is ringed, not only bordered: a 1 px border on a busy picture is too faint to
+   find. */
+.vl-picture-strip__tile[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+/* The remove button: on the selected tile, and on any tile under the pointer or the focus. */
+.vl-picture-strip__remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: none;
+  inline-size: 20px;
+  block-size: 20px;
+  padding: 2px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+.vl-picture-strip__remove > svg { inline-size: 14px; block-size: 14px; }
+.vl-picture-strip__cell[data-selected] > .vl-picture-strip__remove,
+.vl-picture-strip__cell:hover > .vl-picture-strip__remove,
+.vl-picture-strip__cell:focus-within > .vl-picture-strip__remove { display: grid; place-items: center; }
+/* A bigger target where the pointer is a finger; the glyph stays the same size. */
+@media (pointer: coarse) {
+  .vl-picture-strip__remove::after { content: ''; position: absolute; inset: -12px; }
 }

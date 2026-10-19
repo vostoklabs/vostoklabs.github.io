@@ -167,6 +167,15 @@ export const ICONS = {
   move: stroke('<path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/>', 18),
   // The contactless waves: an NFC tag. Lucide's `nfc`.
   nfc: stroke('<path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/>', 18),
+  // A picture on a stand: what is behind the subject of a photo. Lucide's `wallpaper`.
+  backdrop: stroke('<path d="M12 17v4"/><path d="M8 21h8"/><path d="m9 17 6.1-6.1a2 2 0 0 1 2.81.01L22 15"/><circle cx="8" cy="9" r="2"/><rect x="2" y="3" width="20" height="14" rx="2"/>', 18),
+  // A desk lamp aimed at something: how a photo is lit. Not `sun`, which is the light-mode
+  // button's. Lucide's `lamp-desk`.
+  lighting: stroke('<path d="M10.293 2.293a1 1 0 0 1 1.414 0l2.5 2.5 5.994 1.227a1 1 0 0 1 .506 1.687l-7 7a1 1 0 0 1-1.687-.506l-1.227-5.994-2.5-2.5a1 1 0 0 1 0-1.414z"/><path d="m14.207 4.793-3.414 3.414"/><path d="M3 20a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="m9.086 6.5-4.793 4.793a1 1 0 0 0-.18 1.17L7 18"/>', 18),
+  // An arrow round two axes: which way up a model stands. Lucide's `rotate-3d`.
+  rotate3d: stroke('<path d="m15.194 13.707 3.814 1.86-1.86 3.814"/><path d="M16.47214 7.52786 A 5 10 0 1 0 13 21.79796"/><path d="M21.79796 11 A 10 5 0 1 0 19 15.57071"/>', 18),
+  // A tall frame over a wide one: the shape of a picture. Lucide's `ratio`.
+  ratio: stroke('<rect width="12" height="20" x="6" y="2" rx="2"/><rect width="20" height="12" x="2" y="6" rx="2"/>', 18),
 } as const;
 
 /** Parse a raw SVG string into an element. */

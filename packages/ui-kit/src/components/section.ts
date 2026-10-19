@@ -20,7 +20,19 @@ export interface SectionOptions {
    * that can grow into the space, such as `fontChooser({ fill: true })`, then does.
    */
   fill?: boolean;
+  /**
+   * `collapsibleSection()` only: a short value at the far end of the heading, such as what the
+   * settings folded inside it add up to, so a closed section still says what it holds.
+   * `setDetail()` changes it, and `''` takes it away. Default: none, and the heading is the
+   * title alone, as before.
+   */
+  detail?: string;
 }
+
+export type CollapsibleSectionHandle = HTMLDetailsElement & {
+  /** Change the value at the end of the heading; `''` takes it away. */
+  setDetail(text: string): void;
+};
 
 /** A plain, always-open section: heading + rows. Pass `title: ''` for no heading. */
 export function section(opts: SectionOptions): HTMLElement {
@@ -31,7 +43,7 @@ export function section(opts: SectionOptions): HTMLElement {
 }
 
 /** A collapsible section. Built on <details>, so it toggles without JS. */
-export function collapsibleSection(opts: SectionOptions): HTMLDetailsElement {
+export function collapsibleSection(opts: SectionOptions): CollapsibleSectionHandle {
   const summary = el('summary', { text: opts.title });
   const body = el('div', { className: 'vl-section__body' }, opts.body);
   /* The grid wrapper is what animates; `<details>` itself cannot. See `.vl-collapse` in
@@ -41,7 +53,20 @@ export function collapsibleSection(opts: SectionOptions): HTMLDetailsElement {
   const details = el('details', { className: 'vl-section vl-section--collapsible' }, [
     summary,
     collapse,
-  ]) as HTMLDetailsElement;
+  ]) as CollapsibleSectionHandle;
+
+  // Made the first time there is something to show, so a heading with none is the bare title.
+  let detail: HTMLElement | null = null;
+  details.setDetail = (text) => {
+    if (!text) {
+      detail?.remove();
+      detail = null;
+      return;
+    }
+    detail ??= summary.appendChild(el('span', { className: 'vl-section__detail' }));
+    detail.textContent = text;
+  };
+  if (opts.detail) details.setDetail(opts.detail);
 
   details.open = opts.open !== false;
   makeCollapsible(details);

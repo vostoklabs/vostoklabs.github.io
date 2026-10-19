@@ -140,5 +140,62 @@ check('setDisabled greys the field and stops it taking input', input.disabled &&
 width.setDisabled(false);
 check('and gives it back', !input.disabled && !width.classList.contains('vl-control--disabled') && width.getAttribute('aria-disabled') === 'false');
 
+/* ---- live: every keystroke that reads as a number ---- */
+
+const said: number[] = [];
+const grams = numberField({ label: 'Filament used', value: 0, min: 0, max: 5000, unit: 'g', live: true, emptyValue: 0, placeholder: '0', onInput: (v) => said.push(v) });
+const gramsBox = grams.field as unknown as FakeInput;
+
+check('emptyValue: the starting value shows as an empty box', gramsBox.value === '' && grams.getValue() === 0);
+check('the placeholder is on the box', (grams.field as unknown as { attrs: Record<string, string> }).attrs.placeholder === '0');
+type(gramsBox, '1');
+type(gramsBox, '12');
+check('live: each keystroke that reads as a number reports, before any commit', said.join() === '1,12' && grams.getValue() === 12);
+type(gramsBox, '12.');
+check('a keystroke that changes nothing reports nothing', said.join() === '1,12');
+leave(gramsBox);
+check('and the commit after it reports nothing more', said.join() === '1,12' && gramsBox.value === '12');
+said.length = 0;
+
+type(gramsBox, '9000');
+check('live reports the clamped value and leaves the box as typed', said.join() === '5000' && gramsBox.value === '9000');
+leave(gramsBox);
+check('the commit then writes the clamped value into the box', gramsBox.value === '5000' && said.join() === '5000');
+said.length = 0;
+
+type(gramsBox, '');
+check('emptying a live box reports the empty value', said.join() === '0' && grams.getValue() === 0);
+leave(gramsBox);
+check('and it stays empty after the commit, not "0"', gramsBox.value === '' && said.join() === '0');
+said.length = 0;
+
+grams.setValue(250);
+check('setValue shows a number that is not the empty value', gramsBox.value === '250');
+grams.setValue(0);
+check('and shows the empty value as an empty box', gramsBox.value === '' && grams.getValue() === 0);
+
+const rate = numberField({ label: 'Your rate', value: 20, min: 0, emptyValue: 0, onInput: (v) => said.push(v) });
+const rateBox = rate.field as unknown as FakeInput;
+type(rateBox, '');
+check('without live, emptying reports nothing until the commit', said.length === 0);
+leave(rateBox);
+check('and the commit takes the empty value', said.join() === '0' && rate.getValue() === 0 && rateBox.value === '');
+
+/* ---- setUnit ---- */
+
+type Kid = { className: string; textContent: string; kids: Kid[] };
+const unitOf = (field: unknown) =>
+  ((field as Kid).kids.find((k) => k.className === 'vl-number-row')?.kids ?? []).filter((k) => k.className === 'vl-number-unit');
+const price = numberField({ label: 'Price per roll', value: 25, unit: '$' });
+price.setUnit('Kč');
+check('setUnit changes the unit in place', unitOf(price).length === 1 && unitOf(price)[0]!.textContent === 'Kč');
+rate.setUnit('€/h');
+check('setUnit gives a field built without a unit one', unitOf(rate).length === 1 && unitOf(rate)[0]!.textContent === '€/h');
+check('a field with a unit is built as before', unitOf(width).length === 1 && unitOf(width)[0]!.textContent === 'mm');
+
+const rowOf = (field: unknown) => (field as Kid).kids.find((k) => k.className.startsWith('vl-number-row'))!;
+check('alignUnit marks the row', rowOf(numberField({ label: 'Power', value: 0, unit: 'W', alignUnit: true })).className === 'vl-number-row vl-number-row--align-unit');
+check('and without it the row is as before', rowOf(width).className === 'vl-number-row');
+
 console.log(`\nnumber field: ${pass} passed, ${fails.length} failed`);
 if (fails.length) process.exit(1);

@@ -168,6 +168,9 @@ option('appShell left PanelOptions.compact', 'vl-panel--compact', (on) =>
 option('appShell right PanelOptions.compact', 'vl-panel--compact', (on) =>
   appShell({ right: { scroll: [el('p', { text: 'r' })], ...(on === undefined ? {} : { compact: on }) } }).root,
 );
+option('appShell pageStage', 'vl-app--page-stage', (on) =>
+  appShell({ topbar: el('header', { className: 'vl-topbar' }), stage: [el('p', { text: 'form' })], right: { scroll: [] }, ...(on === undefined ? {} : { pageStage: on }) }).root,
+);
 option('studioView PanelOptions.compact', 'vl-panel--compact', (on) => studioView({ left: leftPanel(on), right: { scroll: [] } }).root);
 {
   const shell = appShell({ left: leftPanel(true), right: { scroll: [] } });

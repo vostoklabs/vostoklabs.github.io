@@ -72,6 +72,7 @@ import {
   uploadCta,
   sampleGrid,
   thumbGrid,
+  pictureStrip,
   thumbTile,
   openSvgImport,
   fontChooser,
@@ -1091,6 +1092,33 @@ const samples = sampleGrid({
     toast(`Sample: ${item.label}`);
   },
 });
+/* A strip of photos: each tile one picture, the selected one ringed and removable, + adds a copy
+   of it. The pictures are the shape tiles' own, so the demo needs no image files. */
+let stripItems = ['heart', 'star', 'hexagon'].map((id, i) => ({ id: `${id}-${i}`, label: `Photo ${i + 1} · ${shapeOf(id).label}`, src: shapePicture(shapeOf(id).d) }));
+let stripValue = stripItems[0]!.id;
+const photoStrip = pictureStrip({
+  items: stripItems,
+  value: stripValue,
+  max: 6,
+  addLabel: 'Add a photo of this view',
+  onSelect: (id) => { stripValue = id; photoStrip.setValue(id); },
+  onAdd: () => {
+    const from = stripItems.find((it) => it.id === stripValue)!;
+    const made = { ...from, id: `photo-${Date.now()}`, label: `Photo ${stripItems.length + 1}` };
+    stripItems = [...stripItems, made];
+    stripValue = made.id;
+    photoStrip.setItems(stripItems);
+    photoStrip.setValue(made.id);
+  },
+  onRemove: (id) => {
+    const at = stripItems.findIndex((it) => it.id === id);
+    stripItems = stripItems.filter((it) => it.id !== id);
+    stripValue = stripItems[Math.max(0, at - 1)]!.id;
+    photoStrip.setItems(stripItems);
+    photoStrip.setValue(stripValue);
+  },
+  removeLabel: (item) => `Remove ${item.label.split(' ·')[0]!.toLowerCase()}`,
+});
 const shapeTiles = DEMO_SHAPES.map((s) =>
   thumbTile({ svgPath: s.d, label: s.label, selected: s.id === 'circle', onClick: (tile) => shapeTiles.forEach((t) => t.setSelected(t === tile)) }),
 );
@@ -1226,6 +1254,14 @@ app.append(
       'thumbTile()s, each an image, a path drawn in currentColor, or a word in a face, with the ' +
       'column count set by a number (minPx) rather than a class.',
     panel(samples, thumbGrid({ heading: 'Base shape', tiles: shapeTiles, minPx: 52 })),
+  ),
+  entry(
+    'pictureStrip()',
+    'Picture strip',
+    'A row of picture tiles, one selected, each removable, with + at the end: the photos a batch ' +
+      'will make, the colourways a product comes in. One row that scrolls sideways, so its height ' +
+      'never changes and nothing above it moves; wrap puts it in rows inside a panel.',
+    panel(photoStrip.root),
   ),
   entry(
     'openSvgImport()',
