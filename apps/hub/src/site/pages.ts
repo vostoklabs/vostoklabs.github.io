@@ -6,10 +6,10 @@ import { el, linkButton } from '@vostok/ui-kit';
 import type { Generator } from '../registry';
 import {
   breadcrumb, cardGrid, faqList, featuredGrid, hero, homeTopicOf, licenceBand, mobileActionBar,
-  productCard, productLayout, section, supportStrip, toolCard, topicTiles, whatsNew,
+  liveToolCard, productCard, productLayout, section, supportStrip, toolCard, topicTiles, whatsNew,
 } from './blocks';
 import {
-  fmtPrice, inTopic, live, moreLike, mwOnly, productPath, sellerTools, TOPICS, topicPath, webApps,
+  fmtPrice, inTopic, live, liveTools, moreLike, mwOnly, productPath, soonTools, TOPICS, topicPath, webApps,
 } from './content';
 import { FAQ } from './faq';
 import type { Topic } from './topics';
@@ -48,8 +48,8 @@ function catalogue(): Page {
   return {
     path: '/make/',
     title: `Generators · ${BRAND.name}`,
-    description: 'Every Vostok Labs generator: web apps that run in your browser, MakerWorld listings, and the seller tools on the way.',
-    render: () => [
+    description: 'Every Vostok Labs generator: web apps that run in your browser, MakerWorld listings, and tools for people who sell their prints.',
+    render: () => blocks([
       section({
         title: 'Generators',
         level: 'h1',
@@ -65,11 +65,14 @@ function catalogue(): Page {
       section({ id: 'makerworld', title: `On MakerWorld · ${mwOnly.length}`, lead: 'Customise in MakerWorld’s Parametric Model Maker and print from there.', className: 'hub-shelf' }, [
         cardGrid(mwOnly.map(productCard)),
       ]),
-      section({ id: 'coming-soon', title: `Coming soon · ${sellerTools.length}`, lead: 'Tools for people who sell what they print.', className: 'hub-shelf' }, [
-        cardGrid(sellerTools.map(toolCard), 'hub-grid--compact'),
+      liveTools.length > 0 && section({ id: 'seller-tools', title: `For sellers · ${liveTools.length}`, lead: 'Tools for people who sell what they print. They run in your browser.', className: 'hub-shelf' }, [
+        cardGrid(liveTools.map(liveToolCard)),
+      ]),
+      soonTools.length > 0 && section({ id: 'coming-soon', title: `Coming soon · ${soonTools.length}`, lead: 'More for sellers, on the way.', className: 'hub-shelf' }, [
+        cardGrid(soonTools.map(toolCard), 'hub-grid--compact'),
       ]),
       el('p', { className: 'hub-container hub-empty', text: 'Nothing matches that search.', attrs: { 'data-empty': '', hidden: '' } }),
-    ],
+    ]),
   };
 }
 

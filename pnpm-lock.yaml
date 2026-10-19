@@ -709,6 +709,53 @@ importers:
         specifier: ^6.0.5
         version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
 
+  apps/price-calculator:
+    dependencies:
+      '@vostok/brand':
+        specifier: workspace:*
+        version: link:../../config
+      '@vostok/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.5
+        version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
+
+  apps/render-studio:
+    dependencies:
+      '@vostok/brand':
+        specifier: workspace:*
+        version: link:../../config
+      '@vostok/export':
+        specifier: workspace:*
+        version: link:../../packages/export
+      '@vostok/render':
+        specifier: workspace:*
+        version: link:../../packages/render
+      '@vostok/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
+      '@vostok/viewer':
+        specifier: workspace:*
+        version: link:../../packages/viewer
+      three:
+        specifier: ^0.171.0
+        version: 0.171.0
+    devDependencies:
+      '@types/three':
+        specifier: ^0.171.0
+        version: 0.171.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.5
+        version: 6.4.3(@types/node@24.13.3)(lightningcss@1.33.0)
+
   config: {}
 
   packages/export:
@@ -832,6 +879,28 @@ importers:
       esbuild:
         specifier: ^0.24.2
         version: 0.24.2
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/render:
+    dependencies:
+      '@vostok/export':
+        specifier: workspace:*
+        version: link:../export
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+    devDependencies:
+      '@types/three':
+        specifier: ^0.171.0
+        version: 0.171.0
+      esbuild:
+        specifier: ^0.24.2
+        version: 0.24.2
+      three:
+        specifier: ^0.171.0
+        version: 0.171.0
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

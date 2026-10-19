@@ -1,0 +1,22 @@
+{
+  "name": "price-calculator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "esbuild tests/price.test.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/price.test.mjs --log-level=error && node node_modules/.cache/price.test.mjs"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/ui-kit": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "description": "What a print costs you in filament, time and wear, and what to sell it for."
+}

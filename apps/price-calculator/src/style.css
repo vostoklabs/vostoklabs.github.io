@@ -1,0 +1,112 @@
+/* The calculator's own layout. Every control, its look and the page frame come from
+   @vostok/ui-kit; this places them: the form in a centred column, the answer on the right. */
+
+/* The page fills the window and the columns scroll, as every app does. */
+body {
+  overflow: hidden;
+}
+
+/* The form is centred in the middle column (which scrolls: `appShell({ pageStage })`), so it is
+   not left-anchored with a dead band between it and the answer. */
+.pc-form {
+  max-width: 660px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Fields side by side, their boxes on one line whatever their labels say. */
+.pc-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+.pc-row--name { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+/* The remove button's column is a fixed track, so it stays while the button is hidden and a
+   second filament moves nothing. */
+.pc-row--filament { grid-template-columns: repeat(2, minmax(0, 1fr)) var(--icon-btn-size); }
+.pc-row--fee { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.4fr) var(--icon-btn-size); }
+
+.pc-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.pc-list:empty { display: none; }
+
+/* The three optional sections read as one list of things you may add. */
+.pc-optional {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ---- the answer ---- */
+
+.pc-hero {
+  padding: var(--space-4);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.pc-hero__label { margin: 0; }
+/* The one biggest thing on the screen. */
+.pc-hero__price {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: calc(var(--fs-title) * 1.8);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.pc-hero__price--empty { color: var(--muted); }
+
+.pc-margin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+}
+.pc-stops {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.pc-costs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--control-fs);
+}
+.pc-costs__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--muted);
+}
+.pc-costs__row[hidden] { display: none; }
+.pc-costs__value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.pc-costs__rule {
+  width: 100%;
+  height: 1px;
+  margin: var(--space-1) 0;
+  border: 0;
+  background: var(--line);
+}
+.pc-costs__row--total { color: var(--text); font-weight: 600; }
+.pc-costs__row--profit,
+.pc-costs__row--profit > .pc-costs__value { color: var(--accent-2); }

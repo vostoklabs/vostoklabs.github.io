@@ -5,7 +5,7 @@ import { BRAND } from '@vostok/brand';
 import { el, linkButton, supportLinks } from '@vostok/ui-kit';
 import type { Generator, Media, SellerTool } from '../registry';
 import {
-  appHref, featured, fmtPrice, inTopic, isApp, live, mwHref, processesOf, productPath, thumbLargePath, thumbPath, topicById, topicPath, TOPICS,
+  appHref, featured, fmtPrice, inTopic, isApp, live, mwHref, processesOf, productPath, thumbLargePath, thumbPath, toolHref, toolThumbPath, topicById, topicPath, TOPICS,
 } from './content';
 import { stripFor } from './pictures';
 import type { Topic } from './topics';
@@ -81,6 +81,23 @@ export function productCard(g: Generator): HTMLElement {
         app ? linkButton({ label: 'Open app', href: app, emphasis: 'primary' }) : null,
         linkButton({ label: 'Details', href }),
       ])),
+    ]),
+  ]);
+}
+
+/** A seller tool you can open: the card's picture and its one button both open the tool. A tool
+ *  has no product page, so there is no Details. */
+export function liveToolCard(t: SellerTool): HTMLElement {
+  const href = toolHref(t);
+  return el('article', { className: 'hub-card', attrs: { 'data-card': '', 'data-search': `${t.name} ${t.blurb}`.toLowerCase() } }, [
+    el('a', { className: 'hub-card__media', attrs: { href, tabindex: '-1', 'aria-hidden': 'true' } }, [
+      el('img', { className: 'hub-thumb', attrs: { src: toolThumbPath(t), alt: '', loading: 'lazy', width: '800', height: '600' } }),
+    ]),
+    el('div', { className: 'hub-card__body' }, [
+      el('p', { className: 'hub-card__meta', text: 'For sellers · Web app' }),
+      el('h3', { className: 'hub-card__name' }, [el('a', { text: t.name, attrs: { href } })]),
+      el('p', { className: 'hub-card__blurb', text: t.blurb, attrs: { title: t.blurb } }),
+      el('div', { className: 'hub-card__actions' }, [linkButton({ label: 'Open tool', href, emphasis: 'primary' })]),
     ]),
   ]);
 }

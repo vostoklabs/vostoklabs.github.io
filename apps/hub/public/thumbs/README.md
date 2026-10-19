@@ -27,3 +27,6 @@ Present:
   each, three across at 800×600 (`node scripts/render-photo-frame.mjs`, which also writes the
   product page's renders).
 - `house-number.png`
+- `price-calculator.png`: the calculator itself, filled in, in light mode with no top bar.
+- `render-studio.png`: four photos of the Render Studio's sample made by its own engine, in four
+  looks, two across at 800×600.

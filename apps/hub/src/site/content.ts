@@ -10,6 +10,11 @@ export const registry = registryData as unknown as Registry;
 
 export const live = registry.generators.filter((g) => g.status === 'live');
 export const sellerTools: SellerTool[] = registry.sellerTools;
+/** The seller tools you can open now, and the ones on the way. */
+export const liveTools = sellerTools.filter((t) => t.status === 'live');
+export const soonTools = sellerTools.filter((t) => t.status !== 'live');
+export const toolHref = (t: SellerTool) => t.appUrl ?? `/${t.id}/`;
+export const toolThumbPath = (t: SellerTool) => thumbFor(t.thumb ?? `${t.id}.png`);
 
 export const isApp = (g: Generator) => g.route === 'app' || g.route === 'both';
 export const isMw = (g: Generator) => g.route === 'mw' || g.route === 'both';

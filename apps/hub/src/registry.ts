@@ -53,6 +53,8 @@ export interface SellerTool {
   status: 'live' | 'coming-soon';
   blurb: string;
   appUrl?: string;
+  /** A live tool's cover file name in /thumbs/, when it is not <id>.png. */
+  thumb?: string;
 }
 
 export interface Registry {

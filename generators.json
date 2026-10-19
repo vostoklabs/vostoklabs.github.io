@@ -1032,16 +1032,18 @@
   ],
   "sellerTools": [
     {
-      "id": "profit-calc",
-      "name": "Profit Calculator",
-      "status": "coming-soon",
-      "blurb": "3D print pricing: material, time, margin, all in one."
+      "id": "price-calculator",
+      "name": "Print Price Calculator",
+      "status": "live",
+      "blurb": "What a print costs you in filament, time and wear, and what to sell it for.",
+      "appUrl": "/price-calculator/"
     },
     {
-      "id": "photo-render",
-      "name": "Product Photo Tool",
-      "status": "coming-soon",
-      "blurb": "Upload your model, get store-ready product shots."
+      "id": "render-studio",
+      "name": "Render Studio",
+      "status": "live",
+      "blurb": "Listing photos of your own 3D models: real lighting, soft shadows, any filament colour.",
+      "appUrl": "/render-studio/"
     },
     {
       "id": "listing-copy",

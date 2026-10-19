@@ -68,6 +68,7 @@ export function footer(): HTMLElement {
         footerColumn('Generators', [
           ['Web apps', '/make/#web-apps'],
           ['On MakerWorld', '/make/#makerworld'],
+          ['For sellers', '/make/#seller-tools'],
           ['Coming soon', '/make/#coming-soon'],
         ]),
         footerColumn('Make', TOPICS.map((t) => [t.name, topicPath(t)])),

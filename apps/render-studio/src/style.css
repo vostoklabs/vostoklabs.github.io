@@ -1,0 +1,123 @@
+/* Render Studio's own layout. Every control, its look and the page frame come from
+   @vostok/ui-kit; this frames the photo in its own shape and spaces what is round it. */
+
+/* The page fills the window and the columns scroll, as every app does. */
+body {
+  overflow: hidden;
+}
+
+/* The picture's box: the photo is centred in it with room round it. */
+.rs-photo-wrap {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: var(--space-4);
+  display: flex;
+}
+/* Measured as a container, so the photo can be as large as fits in both directions. */
+.rs-photo-fit {
+  flex: 1 1 auto;
+  min-width: 0;
+  container-type: size;
+  display: grid;
+  place-items: center;
+}
+/* The photo, in its own proportion: what is inside this edge is exactly what the PNG holds. */
+.rs-photo {
+  --rs-aspect: 1;
+  position: relative;
+  width: min(100cqw, calc(100cqh * var(--rs-aspect)));
+  aspect-ratio: var(--rs-aspect);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+/* No background: the PNG keeps its alpha, so the frame shows a checkerboard behind the model. */
+.rs-photo--clear {
+  background: repeating-conic-gradient(var(--panel-2) 0% 25%, var(--bg) 0% 50%) 50% / 20px 20px;
+}
+
+/* The photos under the picture, lined up with the status line beneath them. */
+.rs-strip {
+  padding: var(--space-3) var(--space-4) 0;
+}
+
+.rs-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-caption);
+}
+/* On a phone the picture needs the height more than the bar needs the words. */
+@media (max-width: 900px) {
+  .rs-hint { display: none; }
+}
+
+/* The custom size: width and height side by side, their boxes on one line. */
+.rs-custom-size {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+
+/* A colour row per part of the model. */
+.rs-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rs-model {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.rs-file {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The renders, once made: the grid, a note when the settings have moved on, Download all. */
+.rs-renders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* One render, large: as big as the dialog allows without scrolling, the arrows under it. */
+.rs-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.rs-viewer__frame {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  background: var(--panel-2);
+}
+/* A render with no background keeps its alpha: a checkerboard shows it. */
+.rs-viewer__frame--clear {
+  background: repeating-conic-gradient(var(--panel-2) 0% 25%, var(--bg) 0% 50%) 50% / 20px 20px;
+}
+/* A fixed box the picture fits inside, whatever its size: as tall as the window leaves room for. */
+.rs-viewer__image {
+  display: block;
+  width: 100%;
+  height: min(calc(100dvh - 260px), 72vh);
+  object-fit: contain;
+}
+.rs-viewer__nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.rs-viewer__caption {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--control-fs);
+  text-align: center;
+}

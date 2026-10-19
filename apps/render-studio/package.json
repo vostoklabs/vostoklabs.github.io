@@ -1,0 +1,27 @@
+{
+  "name": "render-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "esbuild tests/shoot.test.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/shoot.test.mjs --log-level=error && node node_modules/.cache/shoot.test.mjs"
+  },
+  "dependencies": {
+    "@vostok/brand": "workspace:*",
+    "@vostok/export": "workspace:*",
+    "@vostok/render": "workspace:*",
+    "@vostok/ui-kit": "workspace:*",
+    "@vostok/viewer": "workspace:*",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.171.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "description": "Listing photos of your own 3D models: real lighting, soft shadows, any filament colour."
+}

@@ -103,6 +103,8 @@ apps/foldbox/README.internal.md
 !apps/photo-frame/tests/**
 !apps/price-calculator/tests/
 !apps/price-calculator/tests/**
+!apps/render-studio/tests/
+!apps/render-studio/tests/**
 !apps/foldbox/tests/
 apps/foldbox/tests/*
 !apps/foldbox/tests/corners.mts

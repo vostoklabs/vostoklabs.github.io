@@ -136,6 +136,18 @@ jobs:
       - name: Copy Photo Frames Studio to Hub Dist
         run: cp -r apps/photo-frame/dist apps/hub/dist/photo-frame
 
+      - name: Build Print Price Calculator
+        run: pnpm build:priceCalculator
+
+      - name: Copy Print Price Calculator to Hub Dist
+        run: cp -r apps/price-calculator/dist apps/hub/dist/price-calculator
+
+      - name: Build Render Studio
+        run: pnpm build:renderStudio
+
+      - name: Copy Render Studio to Hub Dist
+        run: cp -r apps/render-studio/dist apps/hub/dist/render-studio
+
       # Every generator the hub links to has to exist under the path generators.json gives it,
       # or the card is a 404 — which is exactly what shipped: the app was written, the registry
       # entry was added, and nothing here ever built it. Cheap to assert, and it fails the
@@ -145,7 +157,7 @@ jobs:
           node -e '
             const fs = require("fs");
             const reg = JSON.parse(fs.readFileSync("generators.json", "utf8"));
-            const missing = reg.generators
+            const missing = [...reg.generators, ...(reg.sellerTools ?? [])]
               .filter((g) => g.status === "live" && g.appUrl && !g.external)
               .map((g) => g.appUrl.replace(/^\/|\/$/g, ""))
               .filter((p) => !fs.existsSync(`apps/hub/dist/${p}/index.html`));

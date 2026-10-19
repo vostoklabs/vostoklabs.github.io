@@ -30,8 +30,9 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /** Apps that are not generators: the hub is the site itself, kit-demo is the component
- *  gallery. Neither produces a design anyone could sell. */
-const NOT_GENERATORS = new Set(['hub', 'kit-demo']);
+ *  gallery, and the seller tools work on the seller's own numbers and models. None of them
+ *  produces a design anyone could sell, so none carries the generator licence. */
+const NOT_GENERATORS = new Set(['hub', 'kit-demo', 'price-calculator', 'render-studio']);
 
 /** Fixed, not `new Date()`. Regenerating in a later year should not silently rewrite the
  *  copyright line on every app — that is a decision, not a side effect of running a script. */
