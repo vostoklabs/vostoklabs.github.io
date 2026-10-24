@@ -135,6 +135,12 @@ wall climbs out of the groove floor at 45°, one layer height per layer. At two 
 the slab IS one layer and there is nothing to ramp, which is the honest answer rather
 than a sub-layer chamfer.
 
+A blank in pieces (`tray-lid`) is one slicer object per piece. When the pieces fit the
+plate apart but not together, `solve` gives each a plate of its own (`SolveResult.plates`)
+and the 3MF carries them on two plates, laid out where Bambu Studio puts them; the fit
+check, "Resize to fit" and the flat view all measure each piece on its own plate. A cut
+blank stays one sheet.
+
 Three things the sheet needs from the geometry, all of them once bugs:
 
 - **The groove is not the slider.** It is cut at `max(slider, π × sheet)` and then

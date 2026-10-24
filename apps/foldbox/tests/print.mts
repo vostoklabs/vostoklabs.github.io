@@ -332,6 +332,112 @@ for (const sheetLayers of [2, 3, 4]) {
   console.log(`  ok  sheet ${sheet.toFixed(2)} mm · asked for the full sheet · lug built to ${top.toFixed(2)} mm`);
 }
 
+/** Area of the upward faces at height `z` whose centroid lies on `outline`. */
+function topArea(parts: { name: string; positions: Float32Array; indices: Uint32Array }[], outline: number[][], z: number): number {
+  let area = 0;
+  for (const part of parts) {
+    if (part.name === 'inserts' || part.name === 'logo') continue;
+    const v = part.positions;
+    const idx = part.indices;
+    for (let i = 0; i < idx.length; i += 3) {
+      const a = idx[i]! * 3, b = idx[i + 1]! * 3, c = idx[i + 2]! * 3;
+      if ([v[a + 2]!, v[b + 2]!, v[c + 2]!].some((h) => Math.abs(h - z) > 1e-6)) continue;
+      const up = ((v[b]! - v[a]!) * (v[c + 1]! - v[a + 1]!) - (v[b + 1]! - v[a + 1]!) * (v[c]! - v[a]!)) / 2;
+      if (up > 0 && inRing((v[a]! + v[b]! + v[c]!) / 3, (v[a + 1]! + v[b + 1]! + v[c + 1]!) / 3, outline)) area += up;
+    }
+  }
+  return area;
+}
+
+/* The tuck flap of the mailer with flaps, from a customer's report: with three sheet layers
+ * and "Flap layers" at 2 it printed one layer thick. Its sides are the lugs' folds and run
+ * straight into its rounded far corners, and the pull-back from those folds was mitred against
+ * the first facet of each corner, which leaves the fold at nine degrees: the corner landed
+ * millimetres past the flap, the slab was refused, and only the hinge layer was left. It took
+ * a groove of about 2 mm to set off at the customer's size, and from 4 layers up the floor on
+ * the groove does it at any width. */
+console.log('\na tuck flap with rounded corners keeps its layers');
+for (const sheetLayers of [2, 3, 4, 5]) {
+  const line: string[] = [];
+  for (const hingeWidthMm of [1.2, 2, 2.4, 4]) {
+    for (const flapLayers of new Set([2, sheetLayers])) {
+      const p: BoxParams = {
+        ...DEFAULT_PARAMS,
+        style: 'mailer-flaps',
+        makeMode: 'print',
+        lengthMm: 80,
+        widthMm: 64,
+        heightMm: 36,
+        lidWings: true,
+        sheetLayers,
+        hingeLayers: 1,
+        flapLayers,
+        hingeWidthMm,
+      };
+      const r = solve(p);
+      const { parts } = buildPrintable(r.net, r.params);
+      const tuck = r.net.panels.find((q) => q.id === 'ml-tuck')!;
+      const want = sandwichThicknessMm(r.params);
+      const share = topArea(parts, tuck.outline, want) / Math.abs(signedArea(tuck.outline));
+      ok(
+        share > 0.8,
+        `${sheetLayers}L sheet, groove ${hingeWidthMm} mm, ${flapLayers} flap layers: the tuck flap should be ${want.toFixed(2)} mm over most of it, ${(share * 100).toFixed(0)}% is`,
+      );
+      if (flapLayers === 2) line.push(`${hingeWidthMm} mm ${(share * 100).toFixed(0)}%`);
+    }
+  }
+  console.log(`  ok  ${sheetLayers}L sheet · tuck at the flap thickness · ${line.join(' · ')}`);
+}
+
+/* Nothing above the hinge may reach past the panel it belongs to. The same mitre that lost
+ * the tuck's slab at a wide groove pushed it out past the rounded corners at the default one,
+ * 0.8 mm into the air beside the sheet, and nothing measured it: each part was still closed,
+ * and the volume was still inside its band. */
+console.log('\nno slab reaches past its own panel');
+for (const style of PRINT_STYLES) {
+  let worst = 0;
+  for (const sheetLayers of [2, 3, 4]) {
+    for (const hingeWidthMm of [1.2, 2.4]) {
+      const p: BoxParams = { ...DEFAULT_PARAMS, style, makeMode: 'print', lidWings: style === 'mailer-flaps', sheetLayers, hingeWidthMm };
+      const r = solve(p);
+      const { parts } = buildPrintable(r.net, r.params);
+      const hinge = hingeThicknessMm(r.params);
+      for (const part of parts) {
+        if (!part.name.startsWith('panels')) continue;
+        const v = part.positions;
+        for (let i = 0; i < v.length; i += 3) {
+          if (v[i + 2]! <= hinge + 1e-6) continue;
+          const pt: [number, number] = [v[i]!, v[i + 1]!];
+          let off = Infinity;
+          for (const panel of r.net.panels) {
+            if (inRing(pt[0], pt[1], panel.outline)) {
+              off = 0;
+              break;
+            }
+            off = Math.min(off, distanceToRing(pt, panel.outline));
+          }
+          worst = Math.max(worst, off);
+        }
+      }
+    }
+  }
+  ok(worst < 1e-3, `${style}: a slab reaches ${worst.toFixed(3)} mm past its panel`);
+  console.log(`  ok  ${style.padEnd(13)} furthest past a panel · ${worst.toFixed(4)} mm`);
+}
+
+function distanceToRing(p: [number, number], ring: number[][]): number {
+  let d = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, ay] = ring[i] as [number, number];
+    const [bx, by] = ring[(i + 1) % ring.length] as [number, number];
+    const ex = bx - ax, ey = by - ay;
+    const L2 = ex * ex + ey * ey;
+    const t = L2 > 0 ? Math.max(0, Math.min(1, ((p[0] - ax) * ex + (p[1] - ay) * ey) / L2)) : 0;
+    d = Math.min(d, Math.hypot(p[0] - (ax + ex * t), p[1] - (ay + ey * t)));
+  }
+  return d;
+}
+
 // The 3MF has to carry the settings the geometry assumes. The hinge IS the first
 // layer, so a stock profile's flat 0.2 mm first layer prints a 0.12 mm hinge two
 // thirds too thick — see `sheetProcess`.
@@ -342,7 +448,6 @@ console.log('\nthe 3MF tells the slicer what the hinge needs');
     solve(p).net,
     p,
     { title: 'Fold-up box', baseName: 'foldbox', buildId: 'test' },
-    '3mf',
   );
   const zip = unzipSync(file.data);
   const cfg = JSON.parse(strFromU8(zip['Metadata/project_settings.config'] as Uint8Array));

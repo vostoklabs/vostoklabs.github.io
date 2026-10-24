@@ -7,12 +7,12 @@
 // Here it is in the status line the whole time.
 
 import type { Diagnostic } from '@vostok/ui-kit';
-import type { Artwork, BoxParams, Machine, Net, Poly, Sheet, SolveResult, Stock } from '../types';
+import type { Artwork, BoxParams, Machine, Net, Piece, Poly, Sheet, SolveResult, Stock } from '../types';
 import { CUSTOM_PLATE_ID, CUSTOM_SHEET_ID, MACHINES, SHEETS, STOCKS } from '../types';
 import { buildNet, placeNet } from './net';
 import { TRADE_INSET, buildStyle, insideDims, styleMeta } from './styles';
 import { slotFit } from './fit';
-import { at, polysBounds, offsetRing, pathLength, signedArea } from './poly';
+import { at, polysBounds, offsetRing, pathLength, pointInRing, signedArea } from './poly';
 import { markFaceFor, markInsetMm, placeMarks, type MarkProblem } from './marks';
 
 export const SHEET_MARGIN_MM = 5;
@@ -101,25 +101,83 @@ function applyKerf(net: Net, kerfMm: number): Net {
   };
 }
 
+/** Does a footprint go on an area, either way round? */
+function fitsOn(size: [number, number], avail: [number, number]): boolean {
+  return (size[0] <= avail[0] && size[1] <= avail[1]) || (size[1] <= avail[0] && size[0] <= avail[1]);
+}
+
+/** The blank's separate pieces, one per outer cut ring in `cutRings` order. Each is named after
+ *  the panel its fold tree grows from, less that panel's own role: the tray's root is the
+ *  "tray base", so the piece is the tray. */
+export function piecesOf(net: Net): Piece[] {
+  const roots = net.panels.filter((q) => q.parent === null);
+  const pieces: Piece[] = [];
+  net.cutRings.forEach((ring, i) => {
+    if (signedArea(ring) <= 0) return;
+    const [x0, y0, x1, y1] = polysBounds([ring]);
+    const root = roots.find((q) => {
+      const b = polysBounds([q.outline]);
+      return pointInRing([(b[0] + b[2]) / 2, (b[1] + b[3]) / 2], ring);
+    });
+    const name = root?.label.endsWith(` ${root.role}`) ? root.label.slice(0, -root.role.length - 1) : '';
+    pieces.push({ name: name || `piece ${pieces.length + 1}`, ring: i, sizeMm: [x1 - x0, y1 - y0] });
+  });
+  return pieces;
+}
+
+/** The plates a blank goes on, and whether it fits them.
+ *
+ *  One plate, whole, is how every blank goes when it fits, and how a cut one always goes: a
+ *  sheet of card is one sheet. A PRINTED blank in pieces that will not share a plate gets a
+ *  plate each instead, and then each piece has to fit its own. A tray and its lid at a size
+ *  an A1 mini prints one at a time used to be a blank too big for the printer. */
+function layOut(net: Net, p: BoxParams, avail: [number, number]): { pieces: Piece[]; plates: number[][]; fits: boolean; rotated: boolean } {
+  const pieces = piecesOf(net);
+  const size: [number, number] = [net.bbox[2] - net.bbox[0], net.bbox[3] - net.bbox[1]];
+  const whole = fitsOn(size, avail);
+  if (whole || p.makeMode !== 'print' || pieces.length < 2) {
+    const asIs = size[0] <= avail[0] && size[1] <= avail[1];
+    return { pieces, plates: [pieces.map((_, i) => i)], fits: whole, rotated: whole && !asIs };
+  }
+  return { pieces, plates: pieces.map((_, i) => [i]), fits: pieces.every((q) => fitsOn(q.sizeMm, avail)), rotated: false };
+}
+
+/** What a fit is quoted against: the whole blank, or with a plate per piece, the piece that
+ *  does not fit its plate (the biggest, when they all do). */
+export function fitSubject(
+  r: Pick<SolveResult, 'pieces' | 'plates' | 'netSizeMm' | 'usableMm'>,
+): { name: string; sizeMm: [number, number] } {
+  if (r.plates.length < 2 || !r.pieces.length) return { name: 'blank', sizeMm: r.netSizeMm };
+  return (
+    r.pieces.find((q) => !fitsOn(q.sizeMm, r.usableMm)) ??
+    r.pieces.reduce((m, q) => (q.sizeMm[0] * q.sizeMm[1] > m.sizeMm[0] * m.sizeMm[1] ? q : m))
+  );
+}
+
 /** The blank size for a cube of side S in the current style, used to invert the fit
  *  question into "what is the biggest box that WOULD fit". Measured rather than
  *  derived: build the net at two sizes and fit a line, which stays correct as the
  *  builders change and costs two cheap builds. */
 function largestCube(p: BoxParams, sheet: Sheet, margin: number): number {
   const avail: [number, number] = [sheet.widthMm - 2 * margin, sheet.heightMm - 2 * margin];
-  const measure = (s: number): [number, number] => {
+  // What has to fit: the whole blank, or each piece when a printed blank's pieces may take a
+  // plate each (`layOut`).
+  const measure = (s: number): [number, number][] => {
     const { net } = rawNet({ ...p, lengthMm: s, widthMm: s, heightMm: s, dimBasis: 'inside' });
-    return [net.bbox[2] - net.bbox[0], net.bbox[3] - net.bbox[1]];
+    const pieces = piecesOf(net);
+    return p.makeMode === 'print' && pieces.length > 1
+      ? pieces.map((q) => q.sizeMm)
+      : [[net.bbox[2] - net.bbox[0], net.bbox[3] - net.bbox[1]]];
   };
   const s0 = 20;
   const s1 = 100;
-  const a = measure(s0);
-  const b = measure(s1);
+  const as = measure(s0);
+  const bs = measure(s1);
 
   // Blank size is affine in S for every style here — panels are sums of L, W, H and
   // constants — so two builds determine it exactly. The sheet can be used either way
   // round, so the answer is the better of the two orientations.
-  const limitFor = (av: [number, number]): number => {
+  const limitFor = (a: [number, number], b: [number, number], av: [number, number]): number => {
     let lim = Infinity;
     for (const axis of [0, 1]) {
       const slope = ((b[axis] as number) - (a[axis] as number)) / (s1 - s0);
@@ -129,7 +187,11 @@ function largestCube(p: BoxParams, sheet: Sheet, margin: number): number {
     }
     return lim === Infinity ? 0 : lim;
   };
-  return Math.max(0, Math.floor(Math.max(limitFor(avail), limitFor([avail[1], avail[0]]))));
+  const each = as.map((a, k) => {
+    const b = bs[k] ?? a;
+    return Math.max(limitFor(a, b, avail), limitFor(a, b, [avail[1], avail[0]]));
+  });
+  return Math.max(0, Math.floor(Math.min(...each)));
 }
 
 /** The biggest version of THIS box, at the proportions the user typed, that still
@@ -159,12 +221,7 @@ export function fitToSheet(input: BoxParams, limits?: SizeLimits): Pick<BoxParam
     widthMm: Math.min(maxW, Math.max(minW, Math.round(p.widthMm * s))),
     heightMm: Math.min(maxH, Math.max(minH, Math.round(p.heightMm * s))),
   });
-  const fits = (dims: ReturnType<typeof at>): boolean => {
-    const { net } = rawNet({ ...p, ...dims });
-    const w = net.bbox[2] - net.bbox[0];
-    const h = net.bbox[3] - net.bbox[1];
-    return (w <= availW && h <= availH) || (h <= availW && w <= availH);
-  };
+  const fits = (dims: ReturnType<typeof at>): boolean => layOut(rawNet({ ...p, ...dims }).net, p, [availW, availH]).fits;
 
   if (fits(at(1))) {
     // Already fits — grow it instead, so the button is useful in both directions.
@@ -261,22 +318,23 @@ export function solve(input: BoxParams, artwork: Artwork | null = null): SolveRe
   const availW = sheet.widthMm - 2 * SHEET_MARGIN_MM;
   const availH = sheet.heightMm - 2 * SHEET_MARGIN_MM;
 
-  const fitsAsIs = netW <= availW && netH <= availH;
-  const fitsRotated = netH <= availW && netW <= availH;
-  const overflow = !fitsAsIs && !fitsRotated;
-  const rotated = !fitsAsIs && fitsRotated;
+  const { pieces, plates, fits, rotated } = layOut(net, p, [availW, availH]);
+  const overflow = !fits;
 
   const diagnostics: Diagnostic[] = [];
 
   if (overflow) {
     const cube = largestCube(p, sheet, SHEET_MARGIN_MM);
+    // On plates of their own it is a piece that does not fit, and the message names it.
+    const what = fitSubject({ pieces, plates, netSizeMm: [netW, netH], usableMm: [availW, availH] });
+    const [w, h] = what.sizeMm;
     diagnostics.push({
       // A warning, not an error: it is said everywhere, and the export goes ahead with a
       // toast saying so (Ian, 2026-10-11). Whether the blank fits is the user's call to make
       // about the sheet or bed in front of them, not ours.
       level: 'warning',
       code: 'sheet',
-      message: `The blank is ${netW.toFixed(0)} × ${netH.toFixed(0)} mm and ${sheet.name} gives you ${availW.toFixed(0)} × ${availH.toFixed(0)} mm.`,
+      message: `The ${what.name} is ${w.toFixed(0)} × ${h.toFixed(0)} mm and ${sheet.name} gives you ${availW.toFixed(0)} × ${availH.toFixed(0)} mm.`,
       // Naming the button matters more than naming the arithmetic. Boxes eat far more
       // paper than anyone predicts, so this is the NORMAL state on A4 rather than an edge
       // case — five of the eleven styles hit it at the default size — and "go smaller" left
@@ -524,6 +582,8 @@ export function solve(input: BoxParams, artwork: Artwork | null = null): SolveRe
     overflow,
     usableMm: [availW, availH],
     rotated,
+    pieces,
+    plates,
     largestCubeMm: largestCube(p, sheet, SHEET_MARGIN_MM),
     cutLengthMm:
       net.lengthByOp.cut + net.lengthByOp.crease + net.lengthByOp.perf + net.lengthByOp.film,

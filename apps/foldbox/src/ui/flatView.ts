@@ -31,15 +31,40 @@ export function createFlatView(): FlatView {
     // screen space and would drift with zoom.
     const paths = explodeDashes(collectPaths(result));
 
+    // A printed blank whose pieces take a plate each is drawn the way its 3MF lays them out:
+    // a plate per piece, side by side, each piece in the middle of its own. Everything drawn
+    // moves with the piece it is on.
+    const apart = params.makeMode === 'print' && result.plates.length > 1;
+    const PLATE_GAP = 10;
+    const groups = apart
+      ? result.plates.map((ks) => polysBounds(ks.map((k) => net.cutRings[result.pieces[k]!.ring]!)))
+      : [];
+    const shifts: Pt[] = groups.map((b, i) => [
+      i * (sheet.widthMm + PLATE_GAP) + sheet.widthMm / 2 - (b[0] + b[2]) / 2,
+      sheet.heightMm / 2 - (b[1] + b[3]) / 2,
+    ]);
+    const shiftOf = (p: Pt | undefined): Pt => {
+      if (!apart || !p) return [0, 0];
+      const i = groups.findIndex((b) => p[0] >= b[0] - 0.5 && p[0] <= b[2] + 0.5 && p[1] >= b[1] - 0.5 && p[1] <= b[3] + 0.5);
+      return shifts[Math.max(0, i)] as Pt;
+    };
+    const plateXs = apart ? groups.map((_, i) => i * (sheet.widthMm + PLATE_GAP)) : [0];
+
     // Frame whichever is bigger: the sheet when it is shown, or the blank when the
     // blank has outgrown it. A net that overflows must stay visible — hiding the
     // overflow is how a user ends up cutting a part that was never on the sheet.
-    const netBox = polysBounds([...net.cutRings, ...net.loose.map((l) => l.outline)]);
+    const netBox = apart
+      ? polysBounds(groups.map((b, i) => {
+          const [sx, sy] = shifts[i] as Pt;
+          return [[b[0] + sx, b[1] + sy], [b[2] + sx, b[3] + sy]] as Pt[];
+        }))
+      : polysBounds([...net.cutRings, ...net.loose.map((l) => l.outline)]);
+    const sheetsW = (plateXs[plateXs.length - 1] as number) + sheet.widthMm;
     const view: [number, number, number, number] = opts.showSheet
       ? [
           Math.min(0, netBox[0] - 4),
           Math.min(0, netBox[1] - 4),
-          Math.max(sheet.widthMm, netBox[2] + 4),
+          Math.max(sheetsW, netBox[2] + 4),
           Math.max(sheet.heightMm, netBox[3] + 4),
         ]
       : [netBox[0] - 6, netBox[1] - 6, netBox[2] + 6, netBox[3] + 6];
@@ -48,33 +73,36 @@ export function createFlatView(): FlatView {
 
     // Flip Y in the numbers so the drawing matches the exported file exactly.
     const fy = (y: number) => view[3] - (y - view[1]) + view[1];
-    const d = (pts: [number, number][], closed: boolean) =>
-      `M ${(pts[0] as Pt)[0].toFixed(2)} ${fy((pts[0] as Pt)[1]).toFixed(2)} ` +
+    const d = (pts: [number, number][], closed: boolean, [sx, sy]: Pt = shiftOf(pts[0])) =>
+      `M ${((pts[0] as Pt)[0] + sx).toFixed(2)} ${fy((pts[0] as Pt)[1] + sy).toFixed(2)} ` +
       pts
         .slice(1)
-        .map(([x, y]) => `L ${x.toFixed(2)} ${fy(y).toFixed(2)}`)
+        .map(([x, y]) => `L ${(x + sx).toFixed(2)} ${fy(y + sy).toFixed(2)}`)
         .join(' ') +
       (closed ? ' Z' : '');
 
     const out: SVGElement[] = [];
 
     if (opts.showSheet) {
-      out.push(
-        svgNode('rect', {
-          x: '0',
-          y: fy(sheet.heightMm).toFixed(2),
-          width: sheet.widthMm,
-          height: sheet.heightMm,
-          class: 'fb-flat__sheet',
-        }),
-      );
+      for (const x of plateXs) {
+        out.push(
+          svgNode('rect', {
+            x: String(x),
+            y: fy(sheet.heightMm).toFixed(2),
+            width: sheet.widthMm,
+            height: sheet.heightMm,
+            class: 'fb-flat__sheet',
+          }),
+        );
+      }
     }
 
     // Panels get a soft wash so the blank reads as a solid piece of card rather than
     // as a tangle of lines. Drawn under everything.
     for (const p of net.panels) {
-      const holes = p.holes.map((h) => d(h, true)).join(' ');
-      out.push(svgNode('path', { d: `${d(p.outline, true)} ${holes}`, 'fill-rule': 'evenodd', class: 'fb-flat__panel' }));
+      const s = shiftOf(p.outline[0]);
+      const holes = p.holes.map((h) => d(h, true, s)).join(' ');
+      out.push(svgNode('path', { d: `${d(p.outline, true, s)} ${holes}`, 'fill-rule': 'evenodd', class: 'fb-flat__panel' }));
     }
 
     // The logo, as one filled shape per mark rather than a stroke per ring, so a
@@ -120,12 +148,14 @@ export function createFlatView(): FlatView {
 
     if (opts.showLabels) {
       const size = Math.max(2.2, Math.min(vw, vh) / 55);
-      const label = (x: number, y: number, text: string) =>
-        svgNode(
+      const label = (x: number, y: number, text: string) => {
+        const [sx, sy] = shiftOf([x, y]);
+        return svgNode(
           'text',
-          { x: x.toFixed(2), y: (fy(y) + size * 0.35).toFixed(2), 'font-size': size.toFixed(2), class: 'fb-flat__label' },
+          { x: (x + sx).toFixed(2), y: (fy(y + sy) + size * 0.35).toFixed(2), 'font-size': size.toFixed(2), class: 'fb-flat__label' },
           [document.createTextNode(text)],
         );
+      };
       for (const p of net.panels) {
         if (p.role === 'flap' && p.label === 'dust flap') continue;
         const b = polysBounds([p.outline]);

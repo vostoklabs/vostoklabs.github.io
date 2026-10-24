@@ -23,9 +23,10 @@
 // this avoids pulling a WASM kernel into an app whose whole design is that it does
 // not need one.
 
-import { buildStl, buildThreeMF, downloadFile, type ExportPart, type RGB } from '@vostok/export';
+import { buildThreeMF, downloadFile, type ExportPart, type RGB } from '@vostok/export';
 import { BRAND } from '@vostok/brand';
-import type { Net, Panel, Poly, Pt } from '../types';
+import type { Net, Panel, Poly, Pt, SolveResult } from '../types';
+import { piecesOf } from '../geometry/solve';
 import { EPS, at, polysBounds, cross, len, pointInRing, ringIndex, ringWithin, signedArea, sub } from '../geometry/poly';
 import {
   effectiveHingeWidthMm,
@@ -296,7 +297,18 @@ function onSeg(p: Pt, a: Pt, b: Pt, tol: number): boolean {
 }
 
 /** Move each edge inward by its own distance and re-intersect the neighbours.
- *  `dists[i]` belongs to the edge from `ring[i]` to `ring[i+1]`. */
+ *  `dists[i]` belongs to the edge from `ring[i]` to `ring[i+1]`.
+ *
+ *  Where a moved edge meets one that stays put, its new end is where the moved line crosses
+ *  that neighbour's LINE, which is only near the corner when the neighbour turns away
+ *  steeply. The first facet of a rounded corner leaves the fold at nine degrees, so its line
+ *  crosses the moved fold several millimetres on, past the facet and off the panel. That is
+ *  the mailer's tuck flap: its sides are the lugs' folds and run straight into its rounded
+ *  far corners, so its slab poked out past both corners and, once the pull-back passed about
+ *  a millimetre, ran off the panel altogether, `panelTop` refused it, and the flap printed
+ *  one layer thick whatever "Flap layers" said. So the moved line is followed on along the
+ *  boundary to the facet it actually crosses, and the corners it passes are dropped: they
+ *  lie inside the groove. */
 function insetRing(ring: Poly, dists: number[]): Poly {
   const n = ring.length;
   const out: Poly = [];
@@ -327,7 +339,59 @@ function insetRing(ring: Poly, dists: number[]): Poly {
     const t = cross(sub(p2, p1), e2) / denom;
     out.push([p1[0] + e1[0] * t, p1[1] + e1[1] * t]);
   }
-  return out;
+
+  const wrap = (i: number): number => ((i % n) + n) % n;
+  const moves = (i: number): boolean => (dists[wrap(i)] ?? 0) > 0;
+  /** Edge i's moved line, as a point on it and its direction. */
+  const movedLine = (i: number): { p: Pt; e: Pt } | null => {
+    const a = at(ring, i);
+    const e = sub(at(ring, i + 1), a);
+    const l = len(e);
+    const d = dists[wrap(i)] ?? 0;
+    return l < EPS ? null : { p: [a[0] - (e[1] / l) * d, a[1] + (e[0] / l) * d], e };
+  };
+  /** Where a line crosses edge j, as a fraction along the edge. Null when they run parallel. */
+  const crossing = (line: { p: Pt; e: Pt }, j: number): { t: number; pt: Pt } | null => {
+    const a = at(ring, j);
+    const s = sub(at(ring, j + 1), a);
+    const denom = cross(s, line.e);
+    if (Math.abs(denom) < EPS * len(s) * len(line.e)) return null;
+    const t = cross(sub(line.p, a), line.e) / denom;
+    return { t, pt: [a[0] + s[0] * t, a[1] + s[1] * t] };
+  };
+  const ON = 1e-9;
+
+  // Two walks over one stretch mean two folds whose grooves swallow it between them, and
+  // that stays the mitre it always was.
+  const dropped = new Set<number>();
+  const landed = new Map<number, number>();
+  const fixed = [...out];
+  for (let i = 0; i < n; i++) {
+    if (moves(i - 1) === moves(i)) continue;
+    // A fold that ENDS at vertex i walks on over the edges after it, one that STARTS there
+    // walks back over the edges before it. A mitre that lands on its own neighbour, or
+    // behind the corner (a reflex one), is already right.
+    const forward = moves(i - 1);
+    const line = movedLine(forward ? i - 1 : i);
+    const first = line && crossing(line, forward ? i : i - 1);
+    if (!line || !first || (forward ? first.t <= 1 + ON : first.t >= -ON)) continue;
+    for (let k = 1; k < n; k++) {
+      const j = forward ? i + k : i - 1 - k;
+      if (moves(j)) break;
+      const c = crossing(line, j);
+      if (!c || c.t < -ON || c.t > 1 + ON) continue;
+      const passed = Array.from({ length: k }, (_, m) => wrap(forward ? i + 1 + m : i - 1 - m));
+      const other = landed.get(wrap(j));
+      if (passed.some((v) => dropped.has(v)) || (other !== undefined && (forward ? c.t > other : c.t < other))) {
+        return out;
+      }
+      for (const v of passed) dropped.add(v);
+      landed.set(wrap(j), c.t);
+      fixed[i] = c.pt;
+      break;
+    }
+  }
+  return fixed.filter((_, i) => !dropped.has(i));
 }
 
 /** The panel, pulled back from its own fold lines by half the groove width — the
@@ -537,9 +601,26 @@ export interface PrintableStats {
   logoRings: number;
 }
 
+/** The pieces of a blank and the plates they go on: `SolveResult.pieces` and `.plates`. */
+export type PrintLayout = Pick<SolveResult, 'pieces' | 'plates'>;
+
+/** A point just inside a panel: half way along its first edge, a hair to its left, which is
+ *  inward on a CCW ring. Its bbox centre would do for a rectangle and miss an L. */
+function insidePoint(panel: Panel): Pt {
+  const a = at(panel.outline, 0);
+  const b = at(panel.outline, 1);
+  const e = sub(b, a);
+  const l = len(e) || 1;
+  return [(a[0] + b[0]) / 2 - (e[1] / l) * 1e-3, (a[1] + b[1]) / 2 + (e[0] / l) * 1e-3];
+}
+
 /** The one printable-geometry function. `buildPrintable` -> parts, and every caller
- *  that wants a file goes through `downloadPrintable`. */
-export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; stats: PrintableStats } {
+ *  that wants a file goes through `downloadPrintable`.
+ *
+ *  A blank in one piece is one slicer object. A blank in more — a tray and its lid — is one
+ *  object per piece, named after it, so a slicer can move either alone; with a `layout`,
+ *  each also carries the plate it goes on. */
+export function buildPrintable(net: Net, o: PrintOpts, layout?: PrintLayout): { parts: ExportPart[]; stats: PrintableStats } {
   const sheet = sheetThicknessMm(o);
   const hinge = Math.min(hingeThicknessMm(o), sheet);
   const grooved = hinge < sheet - 1e-6;
@@ -551,7 +632,15 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
     if (slot) slots.push(slot);
   }
 
+  // One shell per piece, in `cutRings` order, which is the order `piecesOf` names them in.
   const blank = shells([...net.cutRings, ...slots]);
+  const pieceAt = (p: Pt): number => Math.max(0, blank.findIndex((s) => pointInRing(p, s.outer)));
+  const names = layout?.pieces.map((q) => q.name) ?? piecesOf(net).map((q) => q.name);
+  const groupOf = (k: number): string => (blank.length > 1 ? (names[k] ?? `piece ${k + 1}`) : 'blank');
+  const plateOf = (k: number): number | undefined => {
+    const i = layout?.plates.findIndex((pl) => pl.includes(k)) ?? -1;
+    return i > 0 ? i + 1 : undefined;
+  };
 
   // The logo, as an INLAY in the first layer rather than a bump on top of it.
   //
@@ -574,15 +663,29 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
   const inlayTop = Math.min(o.layerHeightMm, top);
   const inlaid = inlayRings.length > 0 && inlayTop > 1e-6;
 
-  const base = new MeshBuf();
-  // Above the inlay, when there is one. Its OWN part: two prisms in one buffer would
-  // meet on a face and stop being a closed shell, which is the same reason the chamfer's
-  // steps are separate parts.
-  const above = new MeshBuf();
+  // One buffer per step of the chamfer, and each becomes its own part. Two steps in
+  // the SAME buffer would meet on a face and stop being a closed shell; in separate
+  // parts they mate the way the base and the slab already do, which every slicer
+  // unions. At the default 2-layer sheet there is exactly one step, so this is the
+  // single `panels` part it has always been.
+  const profile = grooved ? slabProfile(o) : [];
+
+  // Every buffer below, once per piece.
+  const bufs = blank.map(() => ({
+    base: new MeshBuf(),
+    // Above the inlay, when there is one. Its OWN part: two prisms in one buffer would
+    // meet on a face and stop being a closed shell, which is the same reason the chamfer's
+    // steps are separate parts.
+    above: new MeshBuf(),
+    ink: new MeshBuf(),
+    steps: profile.map(() => new MeshBuf()),
+  }));
+
   // With no groove the blank is one plain prism and the file is a single closed
   // shell — the safest thing to hand a slicer, so it stays the shape of the output
   // whenever the hinge is not actually thinner.
-  for (const s of blank) {
+  blank.forEach((s, k) => {
+    const { base, above } = bufs[k]!;
     // Only the piece the logo is ON gets the cavity. A blank can be two pieces — a tray
     // and its lid — and handing the logo's rings to the other one puts edges OUTSIDE its
     // outer boundary, which the even-odd sweep reads as more material: the tray came back
@@ -597,16 +700,15 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
       // The whole lower band IS the first layer: one prism, with the logo cut out of it.
       base.prism(s.outer, [...s.holes, ...mine], 0, top);
     }
-  }
+  });
 
   // The ink: one prism per outer ring, with the counters that lie inside it as holes.
-  const ink = new MeshBuf();
   if (inlaid) {
     const outers = inlayRings.filter((r) => signedArea(r) > 0);
     const holes = inlayRings.filter((r) => signedArea(r) <= 0);
     for (const outer of outers) {
       const index = ringIndex(outer);
-      ink.prism(
+      bufs[pieceAt(outer[0] as Pt)]!.ink.prism(
         outer,
         holes.filter((h) => ringWithin(h, outer, 1e-9, index)),
         0,
@@ -615,13 +717,6 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
     }
   }
 
-  // One buffer per step of the chamfer, and each becomes its own part. Two steps in
-  // the SAME buffer would meet on a face and stop being a closed shell; in separate
-  // parts they mate the way the base and the slab already do, which every slicer
-  // unions. At the default 2-layer sheet there is exactly one step, so this is the
-  // single `panels` part it has always been.
-  const profile = grooved ? slabProfile(o) : [];
-  const steps = profile.map(() => new MeshBuf());
   const sandwich = sandwichThicknessMm(o);
   // A webbed corner is two halves folded onto each other before anything traps them,
   // so the pair shares the one gap.
@@ -640,6 +735,7 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
       }
       const mine = sharedEdges(panel, net.panels);
       const clearance = holeClearance(panel.outline, panel.holes);
+      const steps = bufs[pieceAt(insidePoint(panel))]!.steps;
       let placed = false;
       for (let i = 0; i < profile.length; i++) {
         const step = profile[i] as { back: number; z0: number; z1: number };
@@ -667,12 +763,18 @@ export function buildPrintable(net: Net, o: PrintOpts): { parts: ExportPart[]; s
   }
 
   const parts = [
-    base.toPart(grooved ? 'sheet + hinges' : 'sheet', 'blank'),
-    above.toPart('sheet above the logo', 'blank'),
-    ...steps.map((m, i) => m.toPart(steps.length === 1 ? 'panels' : `panels ${i + 1}`, 'blank')),
-    // Slot 2. Same object as the blank, so it stays in its cavity however the plate is
-    // arranged, and a slicer that ignores the colour still prints a correct sheet.
-    ink.toPart('logo', 'blank', INK, 2),
+    ...bufs.flatMap(({ base, above, steps, ink }, k) => {
+      const group = groupOf(k);
+      const plate = plateOf(k);
+      return [
+        base.toPart(grooved ? 'sheet + hinges' : 'sheet', group),
+        above.toPart('sheet above the logo', group),
+        ...steps.map((m, i) => m.toPart(steps.length === 1 ? 'panels' : `panels ${i + 1}`, group)),
+        // Slot 2. Same object as the blank, so it stays in its cavity however the plate is
+        // arranged, and a slicer that ignores the colour still prints a correct sheet.
+        ink.toPart('logo', group, INK, 2),
+      ].map((p) => (p && plate ? { ...p, plate } : p));
+    }),
     inserts.toPart('inserts', 'inserts'),
   ].filter((p): p is ExportPart => p !== null);
 
@@ -729,41 +831,48 @@ export interface PrintMeta {
   title: string;
   baseName: string;
   buildId?: string;
+  /** The build plate picked, mm: each plate's pieces are centred on it, and a second plate
+   *  starts where Bambu Studio puts the second plate of that bed. */
+  plateSize?: [number, number];
 }
 
 /** The bytes, and nothing else — so a test can open the file this app actually
- *  writes instead of a reconstruction of it (invariant #8). */
+ *  writes instead of a reconstruction of it (invariant #8).
+ *
+ *  A 3MF and nothing else. The hinge is the sheet's first layer, so the file has to tell the
+ *  slicer how to slice it (`sheetProcess`), and only a 3MF can; it also carries the logo's
+ *  second colour and the plates. An STL of the same sheet printed on a stock profile folds
+ *  badly, with nothing to say why. */
 export function buildPrintableFile(
   net: Net,
   o: PrintOpts,
   meta: PrintMeta,
-  format: '3mf' | 'stl',
+  layout?: PrintLayout,
 ): { data: Uint8Array; fileName: string; mime: string; stats: PrintableStats } {
-  const { parts, stats } = buildPrintable(net, o);
+  const { parts, stats } = buildPrintable(net, o, layout);
   if (!parts.length) throw new Error('There is no geometry to print at this size.');
-  return format === 'stl'
-    ? { data: buildStl(parts), fileName: `${meta.baseName}.stl`, mime: 'model/stl', stats }
-    : {
-        data: buildThreeMF(parts, {
-          title: meta.title,
-          generator: 'foldbox',
-          application: `${BRAND.name} Fold-Up Box Generator`,
-          buildId: meta.buildId,
-          process: sheetProcess(o),
-        }),
-        fileName: `${meta.baseName}.3mf`,
-        mime: 'model/3mf',
-        stats,
-      };
+  return {
+    data: buildThreeMF(parts, {
+      title: meta.title,
+      generator: 'foldbox',
+      application: `${BRAND.name} Fold-Up Box Generator`,
+      buildId: meta.buildId,
+      process: sheetProcess(o),
+      ...(meta.plateSize ? { plateSize: meta.plateSize } : {}),
+    }),
+    fileName: `${meta.baseName}.3mf`,
+    mime: 'model/3mf',
+    stats,
+  };
 }
 
 export function downloadPrintable(
   net: Net,
   o: PrintOpts,
   meta: PrintMeta,
-  format: '3mf' | 'stl',
+  layout?: PrintLayout,
 ): PrintableStats {
-  const { data, fileName, mime, stats } = buildPrintableFile(net, o, meta, format);
+  const { data, fileName, mime, stats } = buildPrintableFile(net, o, meta, layout);
   downloadFile(data, fileName, mime);
   return stats;
 }

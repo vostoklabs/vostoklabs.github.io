@@ -716,7 +716,9 @@ export const DEFAULT_PARAMS: BoxParams = {
   windowScale: 0.62,
   windowRadiusMm: 4,
   filmMarginMm: 5,
-  filmInsert: true,
+  // Off unless asked for (Ian, 2026-10-24). Without it the window is left open, and the
+  // assembly steps say to tape acetate behind it if you want one.
+  filmInsert: false,
   dividerCols: 0,
   dividerRows: 0,
   hangTab: 'none',
@@ -772,13 +774,24 @@ export const DEFAULT_PARAMS: BoxParams = {
   perfGapMm: 4.0,
 };
 
+/** One separate piece of a blank. */
+export interface Piece {
+  /** What it is called on a plate and in a slicer: "tray", "lid". */
+  name: string;
+  /** Its outer cut ring, as an index into `Net.cutRings`. */
+  ring: number;
+  /** Its footprint, mm. */
+  sizeMm: [number, number];
+}
+
 export interface SolveResult {
   net: Net;
   params: BoxParams;
   diagnostics: Diagnostic[];
   /** Net bounding box size, mm. */
   netSizeMm: [number, number];
-  /** True when the net does not fit the chosen sheet in either orientation. */
+  /** True when the net does not fit the chosen sheet in either orientation. With the pieces
+   *  on plates of their own (`plates`), true when one of them does not fit its plate. */
   overflow: boolean;
   /** What the sheet actually gives you, mm: its size less the margin the fit is
    *  measured against. Carried on the result rather than re-derived in the UI —
@@ -787,6 +800,12 @@ export interface SolveResult {
   usableMm: [number, number];
   /** Rotate the net 90 degrees to fit. */
   rotated: boolean;
+  /** The blank's separate pieces, one per outer cut ring: a tray and its lid are two. */
+  pieces: Piece[];
+  /** The build plates a printed blank goes on, each a list of indices into `pieces`. One plate
+   *  holding everything, unless the pieces fit a plate apart and not together: then a plate
+   *  each. A cut blank is always one sheet. */
+  plates: number[][];
   /** The largest cube this sheet could hold in the current style — the readout that
    *  answers the question every incumbent dodges. */
   largestCubeMm: number;

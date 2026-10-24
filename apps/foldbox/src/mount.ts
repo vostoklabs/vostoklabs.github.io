@@ -63,7 +63,7 @@ import {
   type StyleId,
 } from './types';
 import { OP_COLOR } from './export/paths';
-import { solve, fitToSheet, machineById, sheetFor, stockById, type SizeLimits } from './geometry/solve';
+import { solve, fitSubject, fitToSheet, machineById, sheetFor, stockById, type SizeLimits } from './geometry/solve';
 import { logoFaces } from './geometry/marks';
 import { readText, textArtwork } from './ui/artwork';
 import { svgArtwork } from './ui/svgLogo';
@@ -89,7 +89,7 @@ import {
   exportNote,
   printExport,
 } from './export/makerlabArtifacts';
-import { buildObjMtl, bytesToArrayBuffer, downloadFile, textToArrayBuffer } from '@vostok/export';
+import { buildObjMtlPlates, bytesToArrayBuffer, downloadFile, textToArrayBuffer } from '@vostok/export';
 // How long to wait for the host before the UI admits it does not know: the shelf's, one figure
 // for every MakerLab app.
 import { EXPORT_TIMEOUT_MS } from '@vostok/export/makerlab';
@@ -1364,11 +1364,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const tooBig = !!r.diagnostics.find((d) => d.code === 'sheet');
     const alert = cutting ? cutUI?.sheetAlert : plateAlert;
     for (const a of [cutUI?.sheetAlert, plateAlert]) a?.root.classList.toggle('hidden', !tooBig);
+    // The blank, or on a plate each, the piece that does not fit its plate.
+    const subject = fitSubject(r);
     if (alert && tooBig) {
-      const surface = sheetFor(r.params).name.replace(/\s*\(.*\)$/, '');
       alert.set(
         cutting ? 'Too big for this sheet' : 'Too big for this plate',
-        `Blank ${r.netSizeMm[0].toFixed(0)} × ${r.netSizeMm[1].toFixed(0)} mm
+        `${subject.name[0]!.toUpperCase()}${subject.name.slice(1)} ${subject.sizeMm[0].toFixed(0)} × ${subject.sizeMm[1].toFixed(0)} mm
 ` +
           `${cutting ? 'Sheet' : 'Plate'} ${r.usableMm[0].toFixed(0)} × ${r.usableMm[1].toFixed(0)} mm`,
       );
@@ -1391,11 +1392,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       stat(
         fits ? 'Fits' : 'Does not fit',
         fits
-          ? r.rotated
-            ? 'yes, turned 90°'
-            : 'yes'
-          : `needs ${r.netSizeMm[0].toFixed(0)} × ${r.netSizeMm[1].toFixed(0)}`,
+          ? r.plates.length > 1
+            ? `yes, on ${r.plates.length} plates`
+            : r.rotated
+              ? 'yes, turned 90°'
+              : 'yes'
+          : `needs ${subject.sizeMm[0].toFixed(0)} × ${subject.sizeMm[1].toFixed(0)}`,
         fits ? 'ok' : 'bad',
+        r.plates.length > 1
+          ? `The ${pieceList(r)} do not fit one plate together, so each prints on a plate of its own.`
+          : undefined,
       ),
       stat(
         'Inside',
@@ -1441,12 +1447,20 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     diagnostics.set(r.diagnostics);
   }
 
+  /** "tray and lid": a blank's pieces, for the lines that say they print on plates of their own. */
+  function pieceList(r: SolveResult): string {
+    return r.pieces.map((q) => q.name).join(' and ');
+  }
+
   function updateStatus(r: SolveResult, ms: number): void {
     // The worst problem and how many there are; the blank and the sheet when there is none.
+    const surface = sheetFor(r.params).name.replace(/\s*\(.*\)$/, '');
     status.setDiagnostics(
       r.diagnostics,
       `${r.netSizeMm[0].toFixed(0)} × ${r.netSizeMm[1].toFixed(0)} mm blank · ` +
-        `${r.rotated ? 'fits turned 90°' : 'fits'} ${sheetFor(r.params).name.replace(/\s*\(.*\)$/, '')}`,
+        (r.plates.length > 1
+          ? `${pieceList(r)} on ${r.plates.length} ${surface} plates`
+          : `${r.rotated ? 'fits turned 90°' : 'fits'} ${surface}`),
     );
     void ms;
   }
@@ -1852,9 +1866,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // no API for showing a subset, so the buttons are paired back up by position further
   // down. Two literals that had to agree by hand is how the print-only build would have
   // shipped a 3MF button wired to the zip exporter.
-  // MakerLab takes exactly two things from this app, a zip of cut files and an OBJ it turns
-  // into a 3MF, so the embed offers exactly those two and no STL. Labels start with "Export",
-  // which the kit passes through untouched: nothing is downloaded inside the host.
+  // One button per make mode: the cut files, and the 3MF every generator offers. No STL: the
+  // hinge is the sheet's first layer, and only the 3MF carries the slicer settings that keep
+  // it one layer, the logo's second colour and the plates. Inside MakerLab the labels start
+  // with "Export", which the kit passes through untouched: nothing is downloaded in the host.
   const EXPORT_FORMATS = MAKERLAB
     ? [
         { id: 'zip', label: 'Export cut files' },
@@ -1863,8 +1878,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     : CUT
       ? [
           { id: 'zip', label: 'Cut files' },
-          { id: '3mf', label: 'Printable 3MF' },
-          { id: 'stl', label: 'Printable STL' },
+          { id: '3mf', label: '3MF' },
         ]
       : [{ id: '3mf', label: '3MF' }];
 
@@ -1985,10 +1999,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // Too big for the sheet or plate is said, never refused: the user knows what they
       // will lay it out on (solve.ts, the `sheet` warning).
       if (result.overflow) {
-        const [w, h] = result.netSizeMm.map((v) => v.toFixed(0));
+        const what = fitSubject(result);
+        const [w, h] = what.sizeMm.map((v) => v.toFixed(0));
         const on = result.params.makeMode === 'cut' ? 'sheet' : 'plate';
-        toast(`The blank is ${w} × ${h} mm, bigger than the ${on}. Exported anyway.`, { kind: 'warn' });
+        toast(`The ${what.name} is ${w} × ${h} mm, bigger than the ${on}. Exported anyway.`, { kind: 'warn' });
       }
+      // Said in every print toast when the pieces print apart.
+      const onPlates = result.plates.length > 1 ? ` The ${pieceList(result)} are on ${result.plates.length} plates.` : '';
       const name = `${styleMeta(params.style).name} ${params.lengthMm}x${params.widthMm}x${params.heightMm}`;
 
       if (MAKERLAB) {
@@ -2024,9 +2041,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           // .3mf of our own inside a zip, which the SDK guide forbids and MakerWorld's review
           // made the clicker and the keycap generator stop doing.
           const baseName = `${params.style}-${params.lengthMm}x${params.widthMm}x${params.heightMm}-printable`;
-          const { parts, stats } = buildPrintable(result.net, params);
+          const { parts, stats } = buildPrintable(result.net, params, result);
           if (!parts.length) throw new Error('There is no geometry to print at this size.');
-          const { obj, mtl } = buildObjMtl(parts, {
+          // One OBJ per plate: the host makes a plate of each.
+          const { objs, mtl } = buildObjMtlPlates(parts, {
             mtlFileName: `${baseName}.mtl`,
             provenance: {
               title: name,
@@ -2038,12 +2056,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           const sent = await sendToMakerlab(
             printExport({
               fileName: `${baseName}.obj`,
-              buffer: textToArrayBuffer(obj),
+              buffer: objs.length === 1 ? textToArrayBuffer(objs[0]!) : objs.map(textToArrayBuffer),
               mtl,
               coverImage: await renderCoverDataUrl(),
               description:
                 `${name}, printed flat as a ${stats.sheetMm.toFixed(2)} mm sheet with ` +
-                `${stats.hingeMm.toFixed(2)} mm fold grooves. Print at 0.2 mm layers, no supports. ` +
+                `${stats.hingeMm.toFixed(2)} mm fold grooves.${onPlates} Print at 0.2 mm layers, no supports. ` +
                 LICENSE_NOTE,
             }),
             'the 3MF',
@@ -2051,7 +2069,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           if (sent) {
             const logo = stats.logoRings ? ' The logo is a second colour in the first layer.' : '';
             toast(
-              `Exported to MakerLab: ${stats.sheetMm.toFixed(2)} mm sheet, ${stats.hingeMm.toFixed(2)} mm hinges.${logo} ` +
+              `Exported to MakerLab: ${stats.sheetMm.toFixed(2)} mm sheet, ${stats.hingeMm.toFixed(2)} mm hinges.${onPlates}${logo} ` +
                 'Free for personal use; selling prints needs a commercial licence.',
               { kind: 'ok' },
             );
@@ -2089,10 +2107,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         throw new Error('Unknown format: ' + format);
       }
 
-      if (format === '3mf' || format === 'stl') {
+      if (format === '3mf') {
         const baseName = `${params.style}-${params.lengthMm}x${params.widthMm}x${params.heightMm}-printable`;
-        const meta = { title: name, baseName, buildId: import.meta.env.VITE_BUILD_ID };
-        const built = buildPrintableFile(result.net, params, meta, format);
+        // Centred on the plate picked, and a second plate where Studio puts that bed's second.
+        const plate = sheetFor(params);
+        const meta = {
+          title: name,
+          baseName,
+          buildId: import.meta.env.VITE_BUILD_ID,
+          ...(plate.kind === 'plate' ? { plateSize: [plate.widthMm, plate.heightMm] as [number, number] } : {}),
+        };
+        const built = buildPrintableFile(result.net, params, meta, result);
         const stats = built.stats;
 
         // With a host the file goes to the host's own export path rather than the browser's
@@ -2116,7 +2141,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           ? ` ${stats.mountains} fold${stats.mountains === 1 ? '' : 's'} go the other way; press those from the underside.`
           : '';
         toast(
-          `${headline}: ${stats.sheetMm.toFixed(2)} mm sheet, ${stats.hingeMm.toFixed(2)} mm hinges.${logo}${mountains}`,
+          `${headline}: ${stats.sheetMm.toFixed(2)} mm sheet, ${stats.hingeMm.toFixed(2)} mm hinges.${onPlates}${logo}${mountains}`,
           { kind: 'ok' },
         );
         licenseAfterExport();
@@ -2427,7 +2452,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       viewer,
       /** The printable solid, without writing a file — so the mesh can be inspected
        *  from the console and from a browser check without triggering a download. */
-      printable: () => (result ? buildPrintable(result.net, params) : null),
+      printable: () => (result ? buildPrintable(result.net, params, result) : null),
     };
     cleanups.push(() => {
       delete (window as unknown as Record<string, unknown>).__foldbox;

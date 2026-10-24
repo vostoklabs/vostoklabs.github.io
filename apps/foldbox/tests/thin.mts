@@ -26,7 +26,7 @@ const ok = (c: boolean, m: string) => { if (!c) { fails++; console.error('  FAIL
 for (const style of ['tuck-top','snap-lock','mailer','mailer-flaps','tray-webbed','flap-cover'] as StyleId[]) {
   const p: BoxParams = { ...DEFAULT_PARAMS, style, makeMode: 'print', sheetLayers: 3, layerHeightMm: 0.2, hingeLayers: 1, hingeWidthMm: 1.2 };
   const r = solve(p);
-  const built = buildPrintable(r.net, p, { title: style, baseName: style });
+  const built = buildPrintable(r.net, p);
   const sheet = sheetThicknessMm(p), hinge = hingeThicknessMm(p);
 
   // every triangle vertex z must be one of the three levels

@@ -57,7 +57,8 @@ export function exportNote(mode: 'cut' | 'print'): string {
  *  merges by itself above 500 meshes, which this never is. */
 export function printArtifact(input: {
   fileName: string;
-  buffer: ArrayBuffer;
+  /** One per build plate: a tray and its lid that do not share a plate are two. */
+  buffer: ArrayBuffer | ArrayBuffer[];
   mtl: string;
   coverImage: string;
   description: string;

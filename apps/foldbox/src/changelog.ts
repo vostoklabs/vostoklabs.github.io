@@ -21,6 +21,17 @@ import type { ChangelogEntry } from '@vostok/ui-kit';
 */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-24',
+    changes: [
+      { kind: 'fixed', text: 'Mailer + flaps: the tuck flap keeps its flap layers at any sheet thickness or groove width' },
+      { kind: 'added', text: 'Tray & lid: on a plate too small for both, the tray and the lid print on a plate each' },
+      { kind: 'changed', text: 'Tray & lid: the tray and the lid are separate objects in the slicer' },
+      { kind: 'changed', text: 'A printed box lands in the middle of the plate you picked, A1 mini and H2D included' },
+      { kind: 'changed', text: 'Printing downloads a 3MF only: an STL cannot carry the slicer settings the fold lines need' },
+      { kind: 'changed', text: 'A window no longer adds a film insert unless you turn it on' },
+    ],
+  },
+  {
     date: '2026-10-11',
     changes: [
       { kind: 'added', text: 'Cut it from card: SVG, DXF and a Bambu Suite project, as well as printing it flat' },

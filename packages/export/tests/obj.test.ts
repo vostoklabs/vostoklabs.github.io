@@ -16,7 +16,7 @@
 import { createHash } from 'node:crypto';
 import { strFromU8, unzipSync } from 'fflate';
 import {
-  buildObjMtl, buildMtl, buildThreeMF, objMaterials, objWriter, paletteOf,
+  buildObjMtl, buildObjMtlPlates, buildMtl, buildThreeMF, objMaterials, objWriter, paletteOf,
   type ExportPart, type ObjMtlOptions, type RGB,
 } from '../src/index';
 
@@ -167,6 +167,26 @@ for (const [name, [parts, opts]] of Object.entries(CASES)) {
   // buildObjMtl given the table answers for all of it: every material any plate has added.
   const third = buildObjMtl([part('third plate', [22, 22, 22], [0, 0, 0, 2])], { materials });
   check('a shared table: buildObjMtl gives the whole table\'s MTL and count', third.mtl === buildMtl(materials) && third.materialCount === 3, `${third.materialCount} materials`);
+}
+{
+  // By plate: one OBJ per plate a part names, in plate order, one MTL; no plates is buildObjMtl.
+  const plain = buildObjMtl(ONE_GROUP, { mtlFileName: 'one.mtl' });
+  const unplated = buildObjMtlPlates(ONE_GROUP, { mtlFileName: 'one.mtl' });
+  check('by plate: parts with no plate are one OBJ, the text buildObjMtl writes',
+    unplated.objs.length === 1 && unplated.objs[0] === plain.obj && unplated.mtl === plain.mtl && unplated.materialCount === plain.materialCount);
+  const plated = buildObjMtlPlates(
+    [{ ...ONE_GROUP[1]!, plate: 3 }, ONE_GROUP[0]!, { ...ONE_GROUP[2]!, plate: 3 }],
+    { mtlFileName: 'set.mtl' },
+  );
+  const objects = (text: string) => text.split('\n').filter((l) => l.startsWith('o ')).map((l) => l.slice(2));
+  check('by plate: plate 1, then plate 3, and no OBJ for the empty plate 2',
+    plated.objs.length === 2 && objects(plated.objs[0]!).join() === objects(buildObjMtl([ONE_GROUP[0]!]).obj).join()
+      && objects(plated.objs[1]!).length === 2,
+    plated.objs.map((o) => objects(o).join('+')).join(' / '));
+  check('by plate: one MTL naming every colour of every plate, in the order the plates use them',
+    plated.mtl === buildObjMtl([ONE_GROUP[0]!, ONE_GROUP[1]!, ONE_GROUP[2]!]).mtl && plated.materialCount === 2,
+    JSON.stringify(plated.mtl));
+  check('by plate: each plate numbers its own vertices from 1', plated.objs.every((o) => /\nf 1 /.test(o)));
 }
 {
   // One table names its materials one way. By colour and by slot, the first colour and slot 1

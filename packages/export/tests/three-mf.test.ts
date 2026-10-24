@@ -90,6 +90,7 @@ const CASES: Record<string, [ExportPart[], ExportMeta]> = {
   'cover and small cover': [ONE_GROUP, { ...META, cover: COVER, coverSmall: COVER_SMALL }],
   process: [ONE_GROUP, { ...META, process: { initial_layer_print_height: '0.12', wall_loops: ['2', '3'] } }],
   'two groups': [TWO_GROUPS, { ...META, title: 'Golden & <co> "x"', plateSize: [355, 346] }],
+  'two plates': [TWO_GROUPS.map((p) => (p.group === 'base' ? p : { ...p, plate: 2 })), { ...META, plateSize: [180, 180] }],
   'no parts': [[], META],
   'source model': [ONE_GROUP, { ...META, sourceModel: 'dragon & <co>.stl' }],
 };
@@ -157,6 +158,14 @@ const GOLDEN: Record<string, Record<string, string>> = {
     'Metadata/model_settings.config': 'f6171afde8768ffa',
     'Metadata/project_settings.config': 'e599fe61f0a327ba',
     'Metadata/vostok_labs.txt': 'd5fb8e26c1cf74b7',
+  },
+  'two plates': {
+    '[Content_Types].xml': 'a1ed066344e85390',
+    '_rels/.rels': '465f67e7a55f044d',
+    '3D/3dmodel.model': '96eb7c89c9ba1530',
+    'Metadata/model_settings.config': '64dea1223e04870d',
+    'Metadata/project_settings.config': 'e599fe61f0a327ba',
+    'Metadata/vostok_labs.txt': 'a3cc714246fb7238',
   },
   'no parts': {
     '[Content_Types].xml': 'a1ed066344e85390',
@@ -249,6 +258,71 @@ check('Float64 positions: the same OBJ + MTL', JSON.stringify(buildObjMtl(as64(T
   });
   check('exportPartOf: past numProp 3 only the xyz are kept', strided.every((q, i) => Buffer.from(q.positions.buffer).equals(Buffer.from(ONE_GROUP[i]!.positions.buffer))));
   check('exportPartOf: a de-strided mesh writes the same 3MF', same(entriesOf(buildThreeMF(strided, META)), GOLDEN['one group']));
+}
+
+/* ------------------------------------------------------------------ plates */
+
+/** The translation of each build item, by object id. */
+const itemsOf = (bytes: Uint8Array): Map<string, [number, number]> =>
+  new Map(
+    [...textOf(bytes, '3D/3dmodel.model').matchAll(/<item objectid="(\d+)" transform="([^"]+)"/g)].map((m) => {
+      const t = m[2]!.split(' ').map(Number);
+      return [m[1]!, [t[9]!, t[10]!]] as [string, [number, number]];
+    }),
+  );
+/** The object ids on each plate, as model_settings.config lists them. */
+const platesOf = (bytes: Uint8Array): string[][] =>
+  textOf(bytes, 'Metadata/model_settings.config')
+    .split('<plate>')
+    .slice(1)
+    .map((b) => [...b.matchAll(/<metadata key="object_id" value="(\d+)"\/>/g)].map((m) => m[1]!));
+/** Where a group's footprint lands, once its item's translation is applied. */
+const landsAt = (bytes: Uint8Array, id: string, of: ExportPart[]): [number, number] => {
+  const b = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  for (const p of of) {
+    for (let i = 0; i < p.positions.length; i += 3) {
+      b.minX = Math.min(b.minX, p.positions[i]!);
+      b.maxX = Math.max(b.maxX, p.positions[i]!);
+      b.minY = Math.min(b.minY, p.positions[i + 1]!);
+      b.maxY = Math.max(b.maxY, p.positions[i + 1]!);
+    }
+  }
+  const [tx, ty] = itemsOf(bytes).get(id)!;
+  return [tx + (b.minX + b.maxX) / 2, ty + (b.minY + b.maxY) / 2];
+};
+const near = (a: [number, number], b: [number, number]) => Math.abs(a[0] - b[0]) < 1e-3 && Math.abs(a[1] - b[1]) < 1e-3;
+
+// Plate 1 asked for by name is no plate asked for: the same bytes, for every case above.
+for (const [name, [parts, meta]] of Object.entries(CASES)) {
+  if (parts.some((p) => p.plate)) continue;
+  check(`plate: 1 on every part writes the same entries, ${name}`, same(entriesOf(buildThreeMF(parts.map((p) => ({ ...p, plate: 1 })), meta)), GOLDEN[name]));
+}
+
+// Two plates on an A1 mini: the lid on plate 2, each piece centred on its own plate, plate 2 a
+// fifth of a bed to the right of plate 1, as Studio lays them out.
+{
+  const lid = TWO_GROUPS.slice(0, 2).map((p) => ({ ...p, plate: 2 }));
+  const base = TWO_GROUPS.slice(2);
+  const bytes = buildThreeMF([...lid, ...base], { ...META, plateSize: [180, 180] });
+  // Leaves 2..4, then the wrappers: the lid's is 5, the base's 6.
+  check('two plates: two plate blocks, the base on plate 1 and the lid on plate 2', JSON.stringify(platesOf(bytes)) === '[["6"],["5"]]');
+  check('two plates: the base is centred on plate 1', near(landsAt(bytes, '6', base), [90, 90]));
+  check('two plates: the lid is centred on plate 2, 216 mm along', near(landsAt(bytes, '5', lid), [216 + 90, 90]));
+  const xml = textOf(bytes, 'Metadata/model_settings.config');
+  check('two plates: numbered from 1, each instance 0', /<metadata key="plater_id" value="1"\/>.*<metadata key="plater_id" value="2"\/>/.test(xml) && !/instance_id" value="[1-9]/.test(xml));
+  check('two plates: the objects are listed before the plates', xml.indexOf('<object id="6">') < xml.indexOf('<plate>'));
+  // No plate size: the profile's own bed, an A1.
+  const onA1 = buildThreeMF([...lid, ...base], META);
+  check('two plates, no plate size: plate 2 is 307.2 mm along an A1', near(landsAt(onA1, '5', lid), [307.2 + 128, 128]) && near(landsAt(onA1, '6', base), [128, 128]));
+}
+
+// Three plates fill two columns, and the third starts a row below, the way Studio does it.
+{
+  const three = TWO_GROUPS.map((p, i) => ({ ...p, group: `g${i}`, plate: i + 1 }));
+  const bytes = buildThreeMF(three, { ...META, plateSize: [180, 180] });
+  check('three plates: three plate blocks, one object each', JSON.stringify(platesOf(bytes)) === '[["5"],["6"],["7"]]');
+  check('three plates: plate 3 is a row down, 216 mm', near(landsAt(bytes, '7', [three[2]!]), [90, 90 - 216]));
+  check('three plates: plate 2 is beside plate 1', near(landsAt(bytes, '6', [three[1]!]), [216 + 90, 90]));
 }
 
 /* ------------------------------------------------------------------ print pauses */

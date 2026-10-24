@@ -42,6 +42,13 @@ export interface ExportPart<Positions extends ArrayLike<number> = Float32Array> 
   group?: string;
   /** Force a filament slot (1-based) instead of deriving it from the colour. */
   extruder?: number;
+  /**
+   * The build plate it goes on, 1-based: for a model whose pieces do not fit one plate together.
+   * A group goes where its first part says, each plate's pieces are centred on that plate, and
+   * the plates are laid out the way Bambu Studio lays them out. Left out on every part, the file
+   * is the single-plate file it always was, byte for byte.
+   */
+  plate?: number;
 }
 
 /**
@@ -545,6 +552,23 @@ export function plateItemTransform(bounds: PlateBounds, plateSize?: [number, num
   return `1 0 0 0 1 0 0 0 1 ${f(tx)} ${f(ty)} 0`;
 }
 
+/** The profile's own bed, read from `printable_area` like `plateCentre`. */
+function profilePlateSize(): [number, number] {
+  const [cx, cy] = plateCentre();
+  return [cx * 2, cy * 2];
+}
+
+/** Where plate `plate` (1-based) of `count` starts, in the coordinates every plate's items share.
+ *
+ *  Bambu Studio's own layout, read off projects it saved: the plates fill a grid of
+ *  ceil(sqrt(count)) columns, left to right and then down, each a fifth of a bed apart. On an
+ *  A1 mini (180 mm) plate 2 starts at x = 216; with seven plates, plate 4 starts at y = -216. */
+function plateOrigin(plate: number, count: number, size: [number, number]): [number, number] {
+  const cols = Math.ceil(Math.sqrt(count));
+  const i = plate - 1;
+  return [(i % cols) * size[0] * 1.2, -Math.floor(i / cols) * size[1] * 1.2];
+}
+
 /** The lowest z across every part — the model is dropped onto the bed by it. */
 function lowestZ(parts: ExportPart<ArrayLike<number>>[]): number {
   let minZ = Infinity;
@@ -592,9 +616,20 @@ export function buildThreeMF(parts: ExportPart<ArrayLike<number>>[], meta: Expor
         `</components></object>`,
     )
     .join('');
-  const transform = plateItemTransform(xyBounds(parts.map((p) => p.positions)), meta.plateSize);
+  // Every group on plate 1 is the file as it always was: one translation for everything. With
+  // more plates, each plate's groups are centred on their own plate, as one block.
+  const plateOf = groups.map((g) => Math.max(1, Math.floor(parts[g.indices[0]!]!.plate ?? 1)));
+  const plateCount = Math.max(1, ...plateOf);
+  const transforms = Array.from({ length: plateCount }, (_, k) => {
+    if (plateCount === 1) return plateItemTransform(xyBounds(parts.map((p) => p.positions)), meta.plateSize);
+    const size = meta.plateSize ?? profilePlateSize();
+    const [ox, oy] = plateOrigin(k + 1, plateCount, size);
+    const b = xyBounds(groups.flatMap((g, i) => (plateOf[i] === k + 1 ? g.indices.map((pi) => parts[pi]!.positions) : [])));
+    if (!Number.isFinite(b.minX)) return `1 0 0 0 1 0 0 0 1 ${f(ox + size[0] / 2)} ${f(oy + size[1] / 2)} 0`;
+    return `1 0 0 0 1 0 0 0 1 ${f(ox + size[0] / 2 - (b.minX + b.maxX) / 2)} ${f(oy + size[1] / 2 - (b.minY + b.maxY) / 2)} 0`;
+  });
   const buildItems = groups
-    .map((_, i) => `<item objectid="${wrapperIdFor(i)}" transform="${transform}" printable="1"/>`)
+    .map((_, i) => `<item objectid="${wrapperIdFor(i)}" transform="${transforms[plateOf[i]! - 1]}" printable="1"/>`)
     .join('');
 
   // Materials-Extension colour group, one entry per filament slot, taking the
@@ -647,7 +682,30 @@ export function buildThreeMF(parts: ExportPart<ArrayLike<number>>[], meta: Expor
         `</object>`,
     )
     .join('');
-  const modelSettings = `<?xml version="1.0" encoding="UTF-8"?>\n<config>${objectsCfg}</config>`;
+  // Which objects sit on which plate, in the block Studio saves: a plate is the slicer's idea,
+  // not the 3MF's, and an object placed on plate 2's patch of bed is not on plate 2 without it.
+  const platesCfg =
+    plateCount === 1
+      ? ''
+      : Array.from({ length: plateCount }, (_, k) =>
+          `<plate>` +
+          `<metadata key="plater_id" value="${k + 1}"/>` +
+          `<metadata key="plater_name" value=""/>` +
+          `<metadata key="locked" value="false"/>` +
+          groups
+            .map((_, i) =>
+              plateOf[i] === k + 1
+                ? `<model_instance>` +
+                  `<metadata key="object_id" value="${wrapperIdFor(i)}"/>` +
+                  `<metadata key="instance_id" value="0"/>` +
+                  `<metadata key="identify_id" value="${wrapperIdFor(i)}"/>` +
+                  `</model_instance>`
+                : '',
+            )
+            .join('') +
+          `</plate>`,
+        ).join('');
+  const modelSettings = `<?xml version="1.0" encoding="UTF-8"?>\n<config>${objectsCfg}${platesCfg}</config>`;
 
   const contentTypes =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
@@ -932,6 +990,26 @@ export function buildObjMtl(parts: ExportPart<ArrayLike<number>>[], opts: ObjMtl
     mtl: buildMtl(writer.materials),
     materialCount: writer.materials.byKey.size,
   };
+}
+
+/**
+ * `buildObjMtl` once per build plate (`ExportPart.plate`, 1 when left out), in plate order, with
+ * one MTL for all of them, its materials numbered in the order the plates use them: what a host
+ * that builds a multi-plate 3MF from OBJ files takes. A plate nothing is on gets no OBJ. Parts
+ * that all leave `plate` out give one OBJ, the same text `buildObjMtl` writes.
+ */
+export function buildObjMtlPlates(
+  parts: ExportPart<ArrayLike<number>>[],
+  opts: ObjMtlOptions = {},
+): { objs: string[]; mtl: string; materialCount: number } {
+  const materials = opts.materials ?? objMaterials();
+  const plates = [...new Set(parts.map((p) => p.plate ?? 1))].sort((a, b) => a - b);
+  const objs = plates.map((plate) => {
+    const writer = objWriter({ ...opts, materials });
+    for (const p of parts) if ((p.plate ?? 1) === plate) writer.add(p);
+    return writer.text;
+  });
+  return { objs, mtl: buildMtl(materials), materialCount: materials.byKey.size };
 }
 
 /** UTF-8 bytes of a text file as an exact `ArrayBuffer`. Sliced, so no shared or oversized
