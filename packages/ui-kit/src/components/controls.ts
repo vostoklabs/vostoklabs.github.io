@@ -609,6 +609,13 @@ export interface StepperRowOptions {
    * Aria-labels become "Move left" / "Move right", matching `dpad()`'s own arrow buttons.
    */
   arrows?: 'horizontal';
+  /**
+   * The colour the value belongs to, `#rrggbb`: a dot before the caption, as a palette row's
+   * `detected` dot. For a list of one value per colour (how far each colour of a picture is
+   * raised), where the caption alone ("Orange") would not show which colour it means. A sample,
+   * not a control. Default: no dot.
+   */
+  swatch?: string;
 }
 
 /**
@@ -678,6 +685,15 @@ export function stepperRow(opts: StepperRowOptions): TaggedRow<number> {
     if (!Number.isFinite(parsed)) return commit(current, false);
     commit(opts.parse ? opts.parse(parsed, raw) : parsed);
   });
+
+  // Painted through the CSSOM, as the palette row's dot: a host policy that refuses style
+  // attributes still shows it.
+  if (opts.swatch) {
+    cap.label.prepend(el('span', {
+      className: 'vl-row-swatch',
+      attrs: { 'aria-hidden': 'true', style: `--swatch: ${opts.swatch}` },
+    }));
+  }
 
   // `.vl-slider-row` for the outer column, because the caption/control rhythm is the same
   // one and a second name for it would drift.
@@ -827,6 +843,9 @@ export type SegmentedRow<T extends string = string> = TaggedRow<T> & {
   /** `variant: 'pictures'` and `'tiles'` only: swap one option's picture, or pass null to show
    *  it is being made again. */
   setOptionImage(value: T, src: string | null): void;
+  /** `variant: 'pictures'` and `'tiles'` only: rename one option, for a tile whose subject changes
+   *  while it is on screen (the shape in use when it is none of the ones offered). A badge stays. */
+  setOptionLabel(value: T, label: string): void;
   /**
    * Put a badge on one option, or take it off with null: the tab is drawn as it would have been
    * built with that badge, or without one. For a badge that stops being true while the control
@@ -1077,6 +1096,13 @@ export function segmentedControl<T extends string = string>(
   row.setOptionImage = (value: T, src: string | null) => {
     const slot = picturesByValue.get(value);
     if (slot) showPicture(slot, src);
+  };
+  row.setOptionLabel = (value: T, label: string) => {
+    const name = pictures ? buttons.get(value)?.querySelector('.vl-tab__label') : null;
+    if (!name) return;
+    const badge = name.querySelector('.vl-btn__badge');
+    name.textContent = label;
+    if (badge) name.append(badge);
   };
   row.setBadge = (value: T, badge: string | null) => {
     const btn = buttons.get(value);

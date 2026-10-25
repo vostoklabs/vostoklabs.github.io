@@ -53,3 +53,5 @@ export const chooseFile = async () => null;
 export const topbarLinks = () => new FakeElement('header');
 export const listRow = () => new FakeElement('button');
 export const stageHandle = () => Object.assign(new FakeElement('button'), { setLabel() {}, place() {} });
+export const closeColorPopover = () => {};
+export const stepperRow = () => Object.assign(new FakeElement('div'), { setValue() {}, getValue: () => 0, setDisabled() {}, setTag() {} });

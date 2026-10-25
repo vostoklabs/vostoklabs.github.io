@@ -179,6 +179,10 @@ export interface PreviewBar<T extends string = string> {
   /** Give a mode a badge, change its word, or take it away with `null`: a paid mode the user
    *  has since bought. Fires nothing. */
   setBadge(value: T, badge: string | null): void;
+  /** Show or hide a mode: one the thing on the stage cannot be shown as (a 2D layout view for a
+   *  model with no flat top) goes away rather than greying out. The app moves the value off a
+   *  hidden mode itself; this fires nothing. */
+  setModeVisible(value: T, on: boolean): void;
 }
 
 /**
@@ -258,6 +262,10 @@ export function previewBar<T extends string = string>(opts: PreviewBarOptions<T>
       if (!b) return;
       b.querySelector('.vl-btn__badge')?.remove();
       if (badge) b.append(badgePill(badge));
+    },
+    setModeVisible: (value, on) => {
+      const b = modeButtons.get(value);
+      if (b) b.hidden = !on;
     },
   };
 }

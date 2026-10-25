@@ -732,6 +732,19 @@
 .vl-stepper-bar .vl-val { text-align: center; }
 .vl-stepper-bar .vl-btn { flex: none; font-size: 18px; }
 .vl-stepper-bar .vl-btn:disabled { opacity: 0.4; }
+/* `stepperRow({ swatch })`: the colour the value belongs to, before the caption's text. The same
+   10 px sample dot as a palette row's `detected`. */
+.vl-row-swatch {
+  display: inline-block;
+  inline-size: 10px;
+  block-size: 10px;
+  box-sizing: border-box;
+  margin-inline-end: 8px;
+  vertical-align: middle;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--swatch, transparent);
+}
 
 /* ---------- Field (label + input/select) ---------- */
 .vl-field { display: grid; gap: 8px; }
@@ -1292,6 +1305,15 @@
   border: 1px solid var(--line);
   background: var(--swatch, transparent);
 }
+/* `detected` as a list: the dots follow the label's text rather than pushing to the chip, so the
+   label gives up the free space to them. */
+.vl-palette-row--dots .vl-palette-row__label { flex: 0 1 auto; }
+.vl-palette-row__dots {
+  display: inline-flex;
+  flex: 1 1 auto;
+  gap: 3px;
+  min-width: 0;
+}
 
 /* ---------- The colour picker popover ---------- */
 /* Round chips, because a colour here is a spool rather than a UI surface — and round reads as
@@ -1352,6 +1374,20 @@
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
+/* `colorPopover({ groups })`: each group's name across the grid above its chips, in the quiet
+   uppercase the source tag uses. Every group after the first starts on a fresh row anyway, as
+   the label spans all four columns. */
+.vl-color-popover__group {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.vl-color-popover__group:not(:first-child) { margin-top: 6px; }
 /* The custom cell wears the wheel with the native input laid over it at zero opacity —
    Chromium paints a colour input's value over any background it is given. */
 .vl-color-popover__custom {

@@ -1,0 +1,111 @@
+/* ------------------------------------------------------------------ design canvas */
+/* `designCanvas()`: a true-scale view from above where the parts of a design are objects to drag,
+   resize and turn. The app's drawing scales with the zoom; the selection, its handles, the guides
+   and the value pill are drawn in pixels and keep their size at any zoom.
+
+   It fills the positioned box it is put in, under the stage's own overlays (the status line and
+   the zoom tools carry a z-index, the canvas none). Every gesture on it is its own: no page
+   scroll, browser pinch or text selection underneath. */
+.vl-design-canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+.vl-design-canvas__svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: hidden;
+}
+
+/* What a press would do here, set from what is under the pointer. */
+.vl-design-canvas[data-cursor='move'] { cursor: move; }
+.vl-design-canvas[data-cursor='pointer'] { cursor: pointer; }
+.vl-design-canvas[data-cursor='grab'] { cursor: grab; }
+.vl-design-canvas[data-cursor='grabbing'] { cursor: grabbing; }
+.vl-design-canvas[data-cursor='nwse'] { cursor: nwse-resize; }
+.vl-design-canvas[data-cursor='nesw'] { cursor: nesw-resize; }
+
+/* Nothing drawn here takes a press: what a press grabs is the canvas's own hit test, so an outline
+   or a handle can never sit in the way of the drawing under it. */
+.vl-design-canvas__overlay,
+.vl-design-canvas__proxies { pointer-events: none; }
+
+/* An object under the pointer: a faint outline. */
+.vl-design-canvas__hover {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.5;
+  stroke-width: 1px;
+}
+/* The selected object: a thin dashed line round it, square corner handles, and a round grip on a
+   stem above its top edge. */
+.vl-design-canvas__outline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+  stroke-dasharray: 6 4;
+}
+.vl-design-canvas__stem {
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+}
+.vl-design-canvas__grip,
+.vl-design-canvas__handle {
+  fill: var(--panel);
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+}
+/* A guide the moving centre has snapped to, across the whole view. */
+.vl-design-canvas__guide {
+  stroke: var(--accent);
+  stroke-opacity: 0.8;
+  stroke-width: 1px;
+  stroke-dasharray: 4 4;
+}
+
+/* Each object's focusable twin, the same shape as its outline and never painted. Focusing one
+   selects its object, so the selection's outline and handles are the focus ring. (Not a
+   `:focus-visible` style: the canvas focuses the twin from script on a press too, and Chrome
+   counts that focus as visible.) */
+.vl-design-canvas__proxy {
+  fill: none;
+  stroke: none;
+  outline: none;
+}
+
+/* The selected object's value, by its bottom-right corner: the stage grip's pill, smaller. Placed
+   by transform through the CSSOM. */
+.vl-design-canvas__pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: var(--fs-compact);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+/* Words for a screen reader only: what a focused object can do, and a nudge's new value. */
+.vl-design-canvas__hint,
+.vl-design-canvas__said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

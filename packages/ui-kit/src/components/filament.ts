@@ -253,8 +253,12 @@ export interface PaletteRowOptions {
    * picture's own colour, which need not be the filament chosen to print it. Shown as a dot
    * before the label (beside it, not in it, so renaming the label keeps the dot); not a
    * control. Without it there is no dot.
+   *
+   * A list is every colour of the picture that prints in this one filament (several picture
+   * colours merged into one): a run of dots straight after the label instead, so a list of rows
+   * keeps its labels aligned whatever each row's count.
    */
-  detected?: string;
+  detected?: string | ReadonlyArray<string>;
   /**
    * Built each time the picker opens and shown under its chips (`colorPopover({ footer })`):
    * more choices about this part, such as its surface finish. Default: none.
@@ -302,13 +306,22 @@ export function paletteRow(opts: PaletteRowOptions): ValueRow<string> {
   });
 
   const row = el('div', { className: 'vl-palette-row' }, [label, chip]) as unknown as ValueRow<string>;
-  if (opts.detected) {
+  if (typeof opts.detected === 'string' && opts.detected) {
     // The colour through the CSSOM, as the chip's: a host whose policy refuses style attributes
     // still paints it.
     row.prepend(el('span', {
       className: 'vl-palette-row__detected',
       attrs: { title: 'Detected colour', 'aria-hidden': 'true', style: `--swatch: ${opts.detected}` },
     }));
+  } else if (Array.isArray(opts.detected) && opts.detected.length) {
+    row.classList.add('vl-palette-row--dots');
+    row.insertBefore(el('span', {
+      className: 'vl-palette-row__dots',
+      attrs: { title: 'Detected colours', 'aria-hidden': 'true' },
+    }, opts.detected.map((hex) => el('span', {
+      className: 'vl-palette-row__detected',
+      attrs: { style: `--swatch: ${hex}` },
+    }))), chip);
   }
 
   function set(hex: string, notify = true) {

@@ -1,4 +1,5 @@
 import { el } from '../dom';
+import { svgEl } from '../icons';
 import { section } from './section';
 import { toolRail } from './editor-shell';
 
@@ -62,6 +63,10 @@ export type SettingsRailHandle = HTMLElement & {
   refresh(): void;
   /** The open-category element for `id`, to append to later. */
   panel(id: string): HTMLElement | undefined;
+  /** Rename a category: the word under its icon, the button's tooltip and the heading over it
+   *  (`title`, default the label), and its icon if given, for one that holds something else in
+   *  another of the app's modes. A heading made empty at the start stays empty. */
+  setLabel(id: string, label: string, opts?: { title?: string; icon?: string }): void;
 };
 
 let uid = 0;
@@ -142,6 +147,22 @@ export function settingsRail(opts: SettingsRailOptions): SettingsRailHandle {
   };
   root.refresh = refresh;
   root.panel = (key) => entries.find((e) => e.item.id === key)?.panel;
+  root.setLabel = (key, label, labelOpts = {}) => {
+    const e = entries.find((x) => x.item.id === key);
+    if (!e) return;
+    const b = rail.button(key);
+    const word = b?.querySelector('.vl-tool-rail__label');
+    if (word) word.textContent = label;
+    b?.setAttribute('title', labelOpts.title || label);
+    // The icon is the button's first node, before the word (`toolRail`).
+    const icon = b?.childNodes[0];
+    if (labelOpts.icon && b && icon && icon !== word) {
+      b.insertBefore(svgEl(labelOpts.icon), icon);
+      b.removeChild(icon);
+    }
+    const heading = e.panel.querySelector(':scope > .vl-label');
+    if (heading) heading.textContent = labelOpts.title ?? label;
+  };
 
   refresh();
   open(opts.value ?? entries[0]?.item.id ?? '');

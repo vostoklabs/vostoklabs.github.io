@@ -152,6 +152,27 @@ for (const variant of VARIANTS) {
   }
 }
 
+/* setOptionLabel: a tile renamed while on screen (the shape in use when it is none of the offered
+   ones) changes its words and keeps its picture and its badge; a plain tab has no tile label, so
+   asking changes nothing. */
+for (const variant of ['pictures', 'tiles'] as const) {
+  const row = segmentedControl({ variant, options: OPTS('Pro'), value: 'one' });
+  const tile = mini(row).querySelectorAll('.vl-tab')[1]!;
+  const picture = tile.querySelector('.vl-tab__picture');
+  row.setOptionLabel('set', 'Pumpkin');
+  const name = tile.querySelector('.vl-tab__label');
+  const said = name?.textContent ?? '';
+  check(`${variant} setOptionLabel: the tile says its new name`, said.startsWith('Pumpkin') && !said.includes('Full set'), said);
+  check(`${variant} setOptionLabel: the badge stays after it`, name?.querySelectorAll('.vl-btn__badge').length === 1);
+  check(`${variant} setOptionLabel: the picture is untouched`, tile.querySelector('.vl-tab__picture') === picture);
+}
+{
+  const tabs = segmentedControl({ options: OPTS(), value: 'one' });
+  const before = norm(tabs);
+  tabs.setOptionLabel('set', 'Pumpkin');
+  check('tabs setOptionLabel: a plain tab is left as built', norm(tabs) === before);
+}
+
 /* A number must never disappear. Three tabs "1 | 2 Pro | 3 Pro" in a 200 px rail leave each tab
    about 45 px inside: the label "2" once got none of it beside a full pill. Now:
    - the label keeps two characters' width, so a 1-character label is never squeezed below itself;
@@ -255,6 +276,19 @@ for (const variant of VARIANTS) {
   const unbadged = build();
   unbadged.setBadge('cap', 'New');
   check('previewBar setBadge: a mode built without one can gain one', mini(unbadged.root).querySelectorAll('.vl-preview-bar__btn')[0]!.textContent === 'One capNew');
+
+  // setModeVisible: a mode the stage cannot show goes away rather than greying out, and comes
+  // back as built; an unknown mode changes nothing. It fires nothing either way.
+  let fired = 0;
+  const vis = previewBar({ modes: { options: MODES(), value: 'cap', onChange: () => fired++ } });
+  const before = norm(vis.root);
+  vis.setModeVisible('set', false);
+  const setBtn = mini(vis.root).querySelectorAll('.vl-preview-bar__btn')[1]!;
+  check('previewBar setModeVisible(false): the mode is hidden', setBtn.hidden === true);
+  vis.setModeVisible('set', true);
+  check('previewBar setModeVisible(true): back as built', norm(vis.root) === before, norm(vis.root));
+  vis.setModeVisible('nope' as 'set', false);
+  check('previewBar setModeVisible: an unknown mode changes nothing, and nothing fires', norm(vis.root) === before && fired === 0);
 }
 
 /* ------------------------------------------------------------------ chip count */

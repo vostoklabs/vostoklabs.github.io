@@ -225,6 +225,17 @@ body {
 }
 /* Just the bottom of a stage, for a demo that only needs the status line. */
 .kit-stage--short { block-size: 140px; }
+/* The design canvas demo's drawing, made in millimetres: a faint 5 mm grid, the base, a heart, a
+   ring and a frame. Outlines keep one width at any zoom. */
+.kit-design__grid,
+.kit-design__base,
+.kit-design__ring,
+.kit-design__frame { vector-effect: non-scaling-stroke; }
+.kit-design__grid { fill: none; stroke: var(--line); stroke-width: 1px; opacity: 0.5; }
+.kit-design__base { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.5px; }
+.kit-design__art { fill: var(--red); }
+.kit-design__ring { fill: var(--panel-2); stroke: var(--muted); stroke-width: 1.5px; }
+.kit-design__frame { fill: none; stroke: var(--muted); stroke-width: 1.5px; stroke-dasharray: 4 3; }
 /* The "model": a lid and a base on a plate, drawn by the page where the viewer's canvas would be.
    The base is 100 px tall and 200 px wide because the cut grip is placed on it in px. */
 .kit-model {

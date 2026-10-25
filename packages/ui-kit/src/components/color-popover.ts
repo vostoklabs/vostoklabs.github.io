@@ -22,6 +22,13 @@ export interface ColorPopoverOption {
   name?: string;
 }
 
+/** A labelled run of chips, for `colorPopover({ groups })`. */
+export interface ColorPopoverGroup {
+  /** Shown above the group's chips: "In this design", "Filaments". */
+  label: string;
+  options: ReadonlyArray<ColorPopoverOption>;
+}
+
 export interface ColorPopoverOptions {
   /** Viewport coordinates to anchor at — usually the trigger's `getBoundingClientRect()`. */
   x: number;
@@ -30,8 +37,16 @@ export interface ColorPopoverOptions {
   value: string;
   /** What to offer. Defaults to the shared filament shelf. */
   options?: ReadonlyArray<ColorPopoverOption>;
-  /** Fires on a chip click AND on every step of a custom-wheel drag, so a preview can track. */
-  onSelect: (hex: string) => void;
+  /**
+   * The chips in labelled groups instead of one list, when WHERE a colour comes from changes
+   * what picking it means: an import window offers the colours already in the design (picking
+   * one merges into it) above the shelf (picking one recolours). Takes the place of `options`.
+   * `onSelect` is told which group the chip came from. Default: one unlabelled list.
+   */
+  groups?: ReadonlyArray<ColorPopoverGroup>;
+  /** Fires on a chip click AND on every step of a custom-wheel drag, so a preview can track.
+   *  `from` is set for a chip in one of `groups` (its index) and absent for the wheel. */
+  onSelect: (hex: string, from?: { group: number }) => void;
   /**
    * Fires once on close, and only if the wheel was actually used, with the colour it ended on.
    *
@@ -98,10 +113,13 @@ export function colorPopover(opts: ColorPopoverOptions): ColorPopoverHandle {
   const dismiss = (e: MouseEvent) => { if (!pop.contains(e.target as Node)) close(); };
   document.addEventListener('keydown', onKey, true);
 
-  const list = opts.options ?? FILAMENTS.map(([name, hex]) => ({ name, hex }));
-  for (const option of list) {
-    const on = norm(option.hex) === norm(opts.value);
-    pop.append(el('button', {
+  /* One ring at most. With groups the same colour can sit in two of them (a design colour that
+     is also a shelf colour), and two rings would ask which one is "the" current colour. */
+  let ringed = false;
+  const chip = (option: ColorPopoverOption, from?: { group: number }) => {
+    const on = !ringed && norm(option.hex) === norm(opts.value);
+    if (on) ringed = true;
+    return el('button', {
       className: `vl-color-popover__chip${on ? ' is-on' : ''}`,
       attrs: {
         type: 'button',
@@ -110,8 +128,18 @@ export function colorPopover(opts: ColorPopoverOptions): ColorPopoverHandle {
         'aria-pressed': String(on),
         style: `--swatch: ${option.hex}`,
       },
-      on: { click: () => { opts.onSelect(option.hex); close(); } },
-    }));
+      on: { click: () => { opts.onSelect(option.hex, from); close(); } },
+    });
+  };
+  if (opts.groups) {
+    opts.groups.forEach((group, i) => {
+      if (!group.options.length) return;
+      pop.append(el('div', { className: 'vl-color-popover__group', text: group.label }));
+      for (const option of group.options) pop.append(chip(option, { group: i }));
+    });
+  } else {
+    const list = opts.options ?? FILAMENTS.map(([name, hex]) => ({ name, hex }));
+    for (const option of list) pop.append(chip(option));
   }
 
   /* The custom wheel: live while dragging, and the popover stays open for the whole drag so

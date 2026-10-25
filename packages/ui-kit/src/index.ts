@@ -229,6 +229,17 @@ export {
 export { previewCard, type PreviewCardOptions, type PreviewCard } from './components/preview-card';
 export { zoomControl, type ZoomControlOptions, type ZoomControl } from './components/zoom-control';
 export { lengthUnits, type LengthUnit, type LengthUnitsOptions, type LengthUnits } from './components/length-units';
+// A true-scale view from above where a design's parts are objects to drag, resize and turn.
+export {
+  designCanvas,
+  type DesignCanvasOptions,
+  type DesignCanvasHandle,
+  type DesignObject,
+  type DesignBox,
+  type DesignBounds,
+  type DesignChange,
+  type DesignShape,
+} from './components/design-canvas';
 export { ICONS, svgEl, svgPathEl } from './icons';
 export { el, svgNode } from './dom';
 export { themeColorHex, themeColor } from './tokens';

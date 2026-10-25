@@ -91,6 +91,7 @@ import {
   stageStatus,
   previewCard,
   zoomControl,
+  designCanvas,
   lengthUnits,
   diagnosticsList,
   buildLoop,
@@ -108,6 +109,8 @@ import {
   svgNode,
   themeColor,
   type CatalogSymbol,
+  type DesignBox,
+  type DesignObject,
   type Diagnostic,
   type FontPickerFont,
   type ListRowHandle,
@@ -1745,6 +1748,120 @@ app.append(
         'zero, and the choice is remembered. On a phone the zoom tools go to the top corner without ' +
         'the number.',
       el('div', { className: 'kit-stage' }, [demoCard.root]),
+    ),
+  ),
+);
+
+/* A design canvas: a heart that scales and turns, a ring that slides round the edge of the base,
+   and a frame over the heart that is grabbed by its border, so a press inside it reaches the heart.
+   The drawing is the page's own, in millimetres with +y up; the selection, its handles, the guides
+   and the value pill are the canvas's. The page keeps the boxes and redraws from them. */
+const DESIGN_BASE_MM = 25;
+const RING_ORBIT_MM = 27;
+const DESIGN_VIEW = { minX: -34, minY: -34, maxX: 34, maxY: 34 };
+const DESIGN_HINT = 'Drag to move · corner to resize · Shift turns in 15° steps';
+const designStart = (): DesignObject[] => [
+  { id: 'heart', label: 'Heart', box: { cx: 0, cy: 2, w: 28, h: 28, rotation: 0 }, resize: 'uniform', rotate: true },
+  {
+    id: 'ring', label: 'Ring', shape: 'circle',
+    box: { cx: RING_ORBIT_MM * Math.SQRT1_2, cy: RING_ORBIT_MM * Math.SQRT1_2, w: 8, h: 8, rotation: 0 },
+  },
+  { id: 'frame', label: 'Frame', box: { cx: 0, cy: -1, w: 14, h: 14, rotation: 0 }, grab: 'border', resize: 'free', rotate: true, deletable: true, z: 1 },
+];
+let designObjects = designStart();
+const gridPath = (extent: number, step: number) => {
+  let d = '';
+  for (let v = -extent; v <= extent; v += step) d += `M${v} ${-extent}V${extent}M${-extent} ${v}H${extent}`;
+  return d;
+};
+const heartArt = svgNode('g', {}, [svgNode('path', { class: 'kit-design__art', d: shapeOf('heart').d, transform: 'translate(-20 -20)' })]);
+const ringArt = svgNode('path', { class: 'kit-design__ring', 'fill-rule': 'evenodd' });
+const frameArt = svgNode('rect', { class: 'kit-design__frame' });
+/** Draw one object from its box: the heart's 40-unit drawing scaled into it, upright in the
+ *  model's +y-up frame. */
+function drawDesign(id: string, box: DesignBox): void {
+  if (id === 'heart') {
+    heartArt.setAttribute('transform', `translate(${box.cx} ${box.cy}) rotate(${box.rotation}) scale(${box.w / 40} ${-box.h / 40})`);
+  } else if (id === 'ring') {
+    const r = box.w / 2;
+    const hole = r / 2;
+    ringArt.setAttribute('d', `M${box.cx + r} ${box.cy}a${r} ${r} 0 1 0 ${-2 * r} 0a${r} ${r} 0 1 0 ${2 * r} 0Z` +
+      `M${box.cx + hole} ${box.cy}a${hole} ${hole} 0 1 0 ${-2 * hole} 0a${hole} ${hole} 0 1 0 ${2 * hole} 0Z`);
+  } else if (id === 'frame') {
+    for (const [k, v] of Object.entries({ x: box.cx - box.w / 2, y: box.cy - box.h / 2, width: box.w, height: box.h })) frameArt.setAttribute(k, String(v));
+    frameArt.setAttribute('transform', `rotate(${box.rotation} ${box.cx} ${box.cy})`);
+  }
+}
+const mmText = (v: number) => v.toFixed(1).replace(/\.0$/, '');
+const designPill = (id: string, box: DesignBox) =>
+  id === 'ring'
+    ? `${Math.round((Math.atan2(box.cy, box.cx) * 180) / Math.PI)}°`
+    : id === 'heart'
+      ? `${mmText(box.w)} mm · ${Math.round(box.rotation)}°`
+      : `${mmText(box.w)} × ${mmText(box.h)} mm · ${Math.round(box.rotation)}°`;
+const designLine = stageStatus(DESIGN_HINT);
+const designZoom = zoomControl({ onZoom: (factor) => designView.zoomBy(factor), onFit: () => designView.fit(DESIGN_VIEW) });
+const designView = designCanvas({
+  label: 'Design',
+  onSelect: () => designLine.set(DESIGN_HINT),
+  onChange: (id, box, phase) => {
+    drawDesign(id, box);
+    if (phase !== 'end') return;
+    designObjects = designObjects.map((o) => (o.id === id ? { ...o, box } : o));
+    designView.setObjects(designObjects);
+    const label = designObjects.find((o) => o.id === id)?.label ?? id;
+    designLine.set(`${label} · ${designPill(id, box)}`);
+  },
+  onDelete: (id) => {
+    designObjects = designObjects.filter((o) => o.id !== id);
+    designView.setObjects(designObjects);
+    if (id === 'frame') frameArt.setAttribute('display', 'none');
+    designLine.set('Frame removed. Reset brings it back.');
+  },
+  constrain: (id, box, kind) => {
+    // The ring slides round the edge of the base; the others keep their centre on it.
+    if (id === 'ring') {
+      const a = Math.atan2(box.cy, box.cx);
+      return { ...box, cx: RING_ORBIT_MM * Math.cos(a), cy: RING_ORBIT_MM * Math.sin(a) };
+    }
+    const d = Math.hypot(box.cx, box.cy);
+    if ((kind === 'move' || kind === 'nudge') && d > DESIGN_BASE_MM) return { ...box, cx: (box.cx * DESIGN_BASE_MM) / d, cy: (box.cy * DESIGN_BASE_MM) / d };
+    return box;
+  },
+  pill: designPill,
+  onZoom: (zoom) => designZoom.set(zoom),
+});
+designView.content.append(
+  svgNode('path', { class: 'kit-design__grid', d: gridPath(35, 5) }),
+  svgNode('circle', { class: 'kit-design__base', cx: 0, cy: 0, r: DESIGN_BASE_MM }),
+  heartArt,
+  ringArt,
+  frameArt,
+);
+function resetDesign(): void {
+  designObjects = designStart();
+  for (const o of designObjects) drawDesign(o.id, o.box);
+  frameArt.removeAttribute('display');
+  designView.setObjects(designObjects);
+  designView.select(null);
+  designView.fit(DESIGN_VIEW);
+  designLine.set(DESIGN_HINT);
+}
+resetDesign();
+
+app.append(
+  fullWidth(
+    entry(
+      'designCanvas() · zoomControl()',
+      'Design canvas',
+      'A view from above at true scale where the parts of a design are objects. Press one to pick ' +
+        'it and drag it; a corner resizes it, the round grip turns it, Shift turns in 15° steps, ' +
+        'and moving snaps its centre to the centre lines. The frame is grabbed by its border, so a ' +
+        'press inside it reaches the heart; the ring slides round the edge. Tab walks the objects, ' +
+        'arrows nudge (Shift for 5 mm), Delete removes the frame, Esc lets go. The wheel zooms at ' +
+        'the pointer, dragging empty space pans, two fingers pinch.',
+      el('div', { className: 'kit-stage' }, [designView.root, designLine.root, designZoom.root]),
+      buttonRow(button({ label: 'Reset', onClick: resetDesign })),
     ),
   ),
 );

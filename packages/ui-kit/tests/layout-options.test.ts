@@ -196,6 +196,24 @@ option('settingsRail flush', 'vl-settings-rail--flush', (on) => settingsRail({ i
   rail.open('text');
   check('settingsRail flush: still opens a category', rail.getValue() === 'text' && opened[opened.length - 1] === 'text');
 }
+{
+  // setLabel: one category renamed, word, tooltip and heading; the other untouched.
+  const rail = settingsRail({ items: RAIL() });
+  const before = rail.querySelector('[data-tool="shape"]')!.outerHTML;
+  const b = rail.querySelector('[data-tool="text"]')!;
+  const boxPath = /M12 3 3 7\.5v9L12 21l9-4\.5v-9L12 3z/;
+  const hadBox = boxPath.test(html(b as unknown as MiniElement));
+  rail.setLabel('text', 'Words', { title: 'Words on it', icon: ICONS.box });
+  const panel = rail.panel('text')!;
+  const after = html(b as unknown as MiniElement);
+  check('settingsRail setLabel: the word under the icon, the tooltip, the heading and the icon',
+    b.querySelector('.vl-tool-rail__label')?.textContent === 'Words' && b.getAttribute('title') === 'Words on it'
+      && panel.querySelector('.vl-label')?.textContent === 'Words on it'
+      && !hadBox && boxPath.test(after) && (after.match(/<svg/g) ?? []).length === 1 && after.indexOf('<svg') < after.indexOf('Words<'));
+  check('settingsRail setLabel: the other category is as it was', rail.querySelector('[data-tool="shape"]')!.outerHTML === before);
+  rail.setLabel('text', 'Text');
+  check('settingsRail setLabel: without a title, the heading is the label', panel.querySelector('.vl-label')?.textContent === 'Text' && b.getAttribute('title') === 'Text');
+}
 
 const VIEWS = [
   { value: 'design', label: '2D Design' },
