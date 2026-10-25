@@ -5,7 +5,7 @@ export type { RGB, Ring, RegionSet, CropRatio, PreprocessParams } from './types'
 export { DEFAULT_PREPROCESS } from './types';
 export { loadFileToImage, loadUrlToImage, drawToImageData, type RgbaImage } from './decode';
 export { preprocessImage, adjustImage, cropToRatio } from './adjust';
-export { processImage, discoverColours, type ProcessOptions, type ColourCandidate } from './pipeline';
+export { processImage, discoverColours, closestPairMapping, type ProcessOptions, type ColourCandidate } from './pipeline';
 export { describeSvg, parseSvg, parseSvgLegend, type SvgPart, type SvgPartChoice, type SvgOptions, type SvgLegend } from './logo';
 export { srgbToOklab, oklabToSrgb } from './colorspace';
 // The pipeline's stages one at a time, for the tests and benches that measure each. Background

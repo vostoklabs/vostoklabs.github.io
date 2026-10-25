@@ -49,7 +49,7 @@ const BUDGET = {
   'packages/qr': 150,
   // The image tracer moved here from packages/laser; magnet and bubble-pop still hold their own
   // copies of it.
-  'packages/trace': 914,
+  'packages/trace': 901,
   'packages/ui-kit': 14,
   'packages/viewer': 15,
 };

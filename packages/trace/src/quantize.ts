@@ -6,6 +6,8 @@ import type { RGB } from './types';
 import { srgbToOklab, oklabToSrgb } from './colorspace';
 
 export interface QuantizeResult {
+  /** Each colour a pixel landed on, with its share of the foreground; with `mergeInto`, one entry
+   *  per group instead, in group order (a group no pixel landed on keeps its entry, at 0). */
   palette: { rgb: RGB; coverage: number }[];
   /** Per-pixel palette index, or -1 for background. Length = width*height. */
   indices: Int16Array;
@@ -273,12 +275,31 @@ function softField(data: Uint8ClampedArray, n: number): Float32Array {
   return soft;
 }
 
+/** How many groups a `mergeInto` names, refusing one that does not name each of 0..m-1, one entry
+ *  per colour: a wrong length or a gap is the caller's mistake, and traced it would come out
+ *  silently in the wrong colours. */
+function groupsOf(mergeInto: number[], colours: number): number {
+  if (mergeInto.length !== colours) throw new Error(`mergeInto has ${mergeInto.length} entries for ${colours} colours`);
+  let groups = 0;
+  for (const g of mergeInto) {
+    if (!Number.isInteger(g) || g < 0) throw new Error(`mergeInto: ${g} is not a group number`);
+    groups = Math.max(groups, g + 1);
+  }
+  const named = new Uint8Array(groups);
+  for (const g of mergeInto) named[g] = 1;
+  const gap = named.indexOf(0);
+  if (gap >= 0) throw new Error(`mergeInto: no colour is in group ${gap}`);
+  return groups;
+}
+
 export function quantize(
   img: RgbaImage,
   colorCount: number,
   customColors?: RGB[],
   /** The background colour `removeBackground` stripped, if it found one — see `resolveEdge`. */
   outside?: RGB | null,
+  /** With `customColors`: the group each colour prints in — see `ProcessOptions.mergeInto`. */
+  mergeInto?: number[],
 ): QuantizeResult {
   const { data, width, height } = img;
   const n = width * height;
@@ -405,6 +426,53 @@ export function quantize(
       const bestK = label[i] >= 0 ? label[i] : nearestOf(i, null);
       indices[fgPixel[i]] = bestK;
       counts[bestK]++;
+    }
+
+    if (mergeInto) {
+      /*
+        Colours that print as one, relabelled only AFTER every pixel has been read against all of
+        them, exactly as above.
+
+        Not by handing this branch one colour per group instead. A colour can join any group, not
+        only the nearest (green eyes printed black), and read against the groups' colours alone a
+        green pixel goes to whichever is nearest, the orange. Read against every colour, each
+        pixel is the colour it really is, and takes its group's label after that, so a group's
+        outline is exactly the outline of its colours.
+
+        The edge rule is the part that has to know. A pixel blended from two colours of ONE group
+        is that group and nothing else, so it becomes a flat pixel of it: no other side, and a
+        flat pixel's share, its alpha. Kept as a share of the group with the group again on its
+        other side, the field sags along every seam. Summed to a share of one, it is right inside
+        the picture but not where a seam runs out to the edge of a cut-out: that pixel is a blend
+        with the outside too, and counted whole it bulges the silhouette at the seam's ends
+        (1.6 px² on the disc in tests/merge.test.ts, either way). Made flat, two merged colours
+        trace as the same picture drawn in one colour, silhouette and all. A blend across two
+        groups keeps its share and its other side as it was.
+
+        A group's colour is its biggest member's, by pixels: the one most of the region is.
+      */
+      const groups = groupsOf(mergeInto, customColors.length);
+      const size = new Float64Array(groups);
+      const lead = new Int32Array(groups).fill(-1);
+      for (let k = 0; k < customColors.length; k++) {
+        const g = mergeInto[k];
+        size[g] += counts[k];
+        if (lead[g] < 0 || counts[k] > counts[lead[g]]) lead[g] = k;
+      }
+      const palette = Array.from({ length: groups }, (_, g) => ({ rgb: customColors[lead[g]], coverage: size[g] / M }));
+      const soft = softField(data, n);
+      const other = new Int16Array(n).fill(-1);
+      for (let i = 0; i < M; i++) {
+        const p = fgPixel[i];
+        const g = mergeInto[indices[p]];
+        indices[p] = g;
+        const o = otherM[i] >= 0 ? mergeInto[otherM[i]] : -1;
+        if (o === g) { soft[p] = data[p * 4 + 3] / 255; continue; }
+        soft[p] = Math.min(softM[i], data[p * 4 + 3] / 255);
+        // As below for a colour: an edge toward a group no pixel landed on has no other side.
+        other[p] = o >= 0 && size[o] > 0 ? o : -1;
+      }
+      return { palette, indices, soft, other, width, height };
     }
 
     const palette: { rgb: RGB; coverage: number }[] = [];

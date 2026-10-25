@@ -12,6 +12,12 @@ export interface ProcessOptions {
   /** Edge smoothing strength, 0..1 (higher = smoother contours). */
   smoothing?: number;
   customColors?: RGB[];
+  /** With `customColors`: the group each of those colours prints in, one entry per colour, the
+   *  groups numbered 0..m-1 with none left out (anything else throws). The colours of one group
+   *  trace as ONE region, with no seam between them, in the colour of its biggest member; the
+   *  regions come in group order. `closestPairMapping` makes the default one. Ignored without
+   *  `customColors`; absent, every colour is its own region, as it always was. */
+  mergeInto?: number[];
   /** Protect small features via adaptive smoothing + speck absorption (default on). */
   preserveDetail?: boolean;
   /** Longest side of the FINISHED part, mm. Decides the smallest feature worth tracing —
@@ -67,6 +73,68 @@ export function discoverColours(img: RgbaImage, removeBg = true): ColourCandidat
   return kept.map(({ rgb, coverage }) => ({ rgb, coverage }));
 }
 
+/*
+  How unalike two of a picture's colours are, for deciding which two share a filament: the HyAB
+  distance in Oklab, the lightness difference plus the straight-line distance in colour (a, b).
+
+  Not the straight line through all three axes the quantiser measures with. That one answers
+  "can these two be told apart", a question about colours a hair apart. Every candidate here is
+  already plainly its own colour (`discoverColours` folds anything closer than 0.08), so the
+  question is which two are MOST alike, and at that size the straight line undercounts a pair
+  that differs in lightness and in colour at once against one that differs mostly in one of the
+  two. HyAB was put forward for exactly that range (Abasi et al., "Distance metrics for very
+  large color differences", 2020).
+
+  Measured on a cartoon cat, orange [240,140,40], black, white, brown stripes [140,80,40], pink
+  [245,150,160] and green eyes [40,160,60], four filaments: in a straight line the brown is 0.240
+  from the green and 0.247 from the orange, so the green eyes were merged into the stripes and
+  printed brown. By HyAB it is 0.330 from the green and 0.303 from the orange (brown is orange,
+  darker, which is what a person sees), and the eyes stay green.
+*/
+const unalike = (a: [number, number, number], b: [number, number, number]) =>
+  Math.abs(a[0] - b[0]) + Math.hypot(a[1] - b[1], a[2] - b[2]);
+
+/**
+ * Which of a picture's colours share a filament when it has more colours than `budget`: the
+ * `mergeInto` that `processImage` traces them with.
+ *
+ * The two most alike merge, again and again, until `budget` are left. A colour that looks like
+ * nothing else in the picture survives however small it is, which is the point: keeping the
+ * biggest colours and folding the rest into the nearest printed a cat's green eyes (4% of it)
+ * orange, while its brown stripes, which are orange darker, kept a filament.
+ *
+ * A group is represented by its biggest member's colour, because that is the colour it prints
+ * in (`processImage` gives a merged region its biggest member's colour), so two groups are as
+ * far apart as what they will print as. A group's average would be a colour nothing prints in,
+ * dragged a little further from its main colour by every small one folded in.
+ *
+ * `candidates` in `discoverColours`' order, biggest first. Groups are numbered by what they cover,
+ * biggest first, so with `budget` colours or fewer this is [0, 1, 2, …]: nothing merges.
+ */
+export function closestPairMapping(candidates: ColourCandidate[], budget = 4): number[] {
+  const lab = candidates.map((c) => srgbToOklab(c.rgb));
+  const groups = candidates.map((c, i) => ({ members: [i], lead: i, coverage: c.coverage }));
+  while (groups.length > Math.max(1, budget)) {
+    let a = 0, b = 1, best = Infinity;
+    for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const d = unalike(lab[groups[i].lead], lab[groups[j].lead]);
+        if (d < best) { best = d; a = i; b = j; }
+      }
+    }
+    const into = groups[a], from = groups[b];
+    into.members.push(...from.members);
+    into.coverage += from.coverage;
+    if (candidates[from.lead].coverage > candidates[into.lead].coverage) into.lead = from.lead;
+    groups.splice(b, 1);
+  }
+  // Biggest first; on a tie the group listed first, so a list already in order keeps it.
+  const order = groups.map((_, i) => i).sort((x, y) => groups[y].coverage - groups[x].coverage || x - y);
+  const mergeInto = new Array<number>(candidates.length);
+  order.forEach((g, rank) => { for (const m of groups[g].members) mergeInto[m] = rank; });
+  return mergeInto;
+}
+
 export function processImage(
   img: RgbaImage,
   colorCount: number,
@@ -78,6 +146,6 @@ export function processImage(
   const matte = opts.removeBg !== false ? removeBackground(img) : null;
   compositeOverMatte(img);
   cleanMask(img);
-  const q = quantize(img, colorCount, opts.customColors, matte);
+  const q = quantize(img, colorCount, opts.customColors, matte, opts.mergeInto);
   return traceRegions(q, opts.smoothing ?? 0.5, opts.preserveDetail ?? true, opts.designMm ?? 35);
 }
