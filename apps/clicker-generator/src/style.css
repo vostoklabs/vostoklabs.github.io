@@ -28,6 +28,61 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
 #viewport { position: relative; min-width: 0; height: 100%; background: #3a3f47; }
 #app { position: absolute; inset: 0; }
 
+/* ===== The Design view (ui/designView.ts) =====
+   Covers the 3D canvas while it is the view: above `#app`, under the stage's tools (6) and its
+   status line (5), so the view bar and the build's messages stay where they always are. Every
+   outline is one hairline at any zoom (`non-scaling-stroke`): the canvas is in millimetres. */
+.cg-design { position: absolute; inset: 0; z-index: 2; background: var(--bg); }
+.cg-design[hidden] { display: none; }
+.cg-design__grid { fill: none; stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; opacity: 0.5; }
+.cg-design__grid--major { opacity: 0.9; }
+.cg-design__body,
+.cg-design__cap {
+  stroke: color-mix(in srgb, var(--text) 22%, transparent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+/* The keyring hole is a ring of the body's outline. */
+.cg-design__body { fill-rule: evenodd; }
+/* A switch: the square it needs, faint so the picture under it still reads, and its number on a
+   badge. Picked, the square is tinted and the canvas's dotted line goes round it. */
+.cg-design__switch rect {
+  fill: color-mix(in srgb, var(--accent) 8%, transparent);
+  stroke: color-mix(in srgb, var(--accent) 50%, transparent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.cg-design__switch.is-picked rect { fill: color-mix(in srgb, var(--accent) 24%, transparent); }
+.cg-design__switch-badge { fill: var(--accent); }
+.cg-design__switch-number { fill: var(--accent-text); font-weight: 700; }
+/* The Switch category's list: a row per switch, its number on the badge the 2D view draws, and
+   × beside it. Layout and the badge only; the row, × and Add are kit controls. */
+.cg-switch-list { display: grid; gap: var(--space-1); }
+.cg-switch-list:empty { display: none; }
+/* The kit row is width 100%: in this flex row it shrinks to leave room for ×. */
+.cg-switch-list__row { display: flex; align-items: center; gap: var(--space-1); }
+.cg-switch-badge {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 22px;
+  block-size: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* The keyring loop while it is dragged, before the build redraws the body round it. */
+.cg-design__loop-ghost circle {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.cg-design__loop-ghost-hole { fill: var(--bg); }
+
 /* Theme button shows only the icon for the mode you'll switch to */
 #themeToggle svg { display: none; }
 :root[data-theme="dark"] #themeToggle svg.icon-sun,
@@ -239,6 +294,9 @@ button.primary:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
    `@vostok/ui-kit`), one per colour. `.fil` below was already unused before they came and is
    left as found. */
 .palette { display: flex; flex-direction: column; gap: 8px; }
+/* Relief's rows: one inline stepper per colour (`stepperRow({ swatch, inline })`), stacked at the
+   palette's own rhythm so the two lists read as the same colours. */
+.cg-relief-rows { display: flex; flex-direction: column; gap: 8px; }
 .fil { display: inline-flex; align-items: center; gap: 6px; position: relative; }
 
 .stepper { display: inline-flex; align-items: center; gap: 3px; }
@@ -311,7 +369,8 @@ button.primary:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
 }
 
 #status {
-  position: absolute; left: 18px; bottom: 15px; z-index: 5; max-width: 70ch;
+  /* Short of the stage's bottom-right corner, where the Design view keeps its zoom buttons. */
+  position: absolute; left: 18px; bottom: 15px; z-index: 5; max-width: min(70ch, calc(100% - 220px));
   padding: 10px 15px; border-radius: 10px; background: color-mix(in srgb, var(--panel) 90%, transparent);
   backdrop-filter: blur(4px); font-size: 15.5px; line-height: 1.4;
   border: 1px solid var(--line); color: var(--text);
@@ -388,19 +447,24 @@ button.primary:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
    sizing comment above), and the zoom/pan transform is applied to this same element in JS. */
 .wz-canvas canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
 
-/* Read-only palette: what the trace found, not a control — filaments are picked in the
-   sidebar afterwards. */
+/* Read-only palette: the filaments the trace prints in, not a control. */
 .wz-palette { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-height: 18px; }
 .wz-swatch { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
-.wz-swatch-dot { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--line); flex: 0 0 auto; }
-/* The keep-list: one kit switch row per colour found, with the swatch in front of the label. */
+.wz-swatch-dot { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--line); flex: 0 0 auto; background: var(--swatch, transparent); }
+/* The mapping: one row per colour found, its share, and the filament it prints in. A colour that
+   shares its filament with a bigger one sits under it, indented, and reads "with orange". */
 .wz-colours { display: flex; flex-direction: column; gap: 6px; }
-.wz-colours-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.wz-colours-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.wz-colour-count-line { display: inline-flex; align-items: center; gap: 4px; }
 .wz-colour-count { color: var(--muted); font-size: 13px; white-space: nowrap; }
-.wz-colour-list { display: flex; flex-direction: column; gap: 2px; }
-.wz-colour-row { gap: 10px; }
-.wz-colour-row .vl-switch-label { flex: 1 1 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
-.wz-colour-dot { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); flex: 0 0 auto; }
+.wz-colour-list { display: flex; flex-direction: column; gap: 4px; }
+.wz-map-row { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.wz-map-row--with { padding-left: 14px; }
+.wz-map-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); flex: 0 0 auto; background: var(--swatch, transparent); }
+.wz-map-pct { width: 3.2em; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.wz-map-arrow { color: var(--muted); }
+.wz-map-name { flex: 1 1 auto; min-width: 0; color: var(--text); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wz-map-row--with .wz-map-name { color: var(--muted); }
 .checker { background-image:
   linear-gradient(45deg, var(--panel-2) 25%, transparent 25%),
   linear-gradient(-45deg, var(--panel-2) 25%, transparent 25%),
@@ -847,26 +911,17 @@ body.tutorial-active.focus-center #viewport {
   line-height: 1.4;
 }
 
-/* The base-shape drawer's one sentence of guidance. A muted paragraph is not a control, so
-   an app class is right here — invariant #9 is about controls, and every control in that
-   drawer is a kit component. */
-/* The knob rows under the shape grid. They are kit rows with no margins of their own, so
-   without this a Points stepper and a Sharpness slider sit flush against each other and read as
-   one control with four parts. Gap on the container, not the rows: the rows are replaced on
-   every pick, so anything set on them has to be re-set, and eventually is not. */
-.cg-pick__knobs {
+/* The chosen shape's knob rows, under the Shape grid. They are kit rows with no margins of their
+   own, so without this a Points stepper and a Sharpness slider sit flush against each other and
+   read as one control with four parts. Gap on the container, not the rows: the rows are replaced
+   when the shape changes, so anything set on them has to be re-set, and eventually is not. The
+   same gap as the rows round it. */
+.cg-shape-knobs {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
+  gap: 18px;
 }
-
-.cg-pick__hint {
-  margin: var(--space-3) 0 var(--space-2);
-  font-size: var(--fs-small);
-  line-height: 1.4;
-  color: var(--muted);
-}
+.cg-shape-knobs[hidden] { display: none; }
 
 /* Sticky footer in sidebars for action buttons */
 .sidebar-sticky-footer {
@@ -935,152 +990,6 @@ body.tutorial-active.focus-center #viewport {
   font-variant-numeric: tabular-nums;
 }
 .extrude-height-indicator[hidden] { display: none; }
-
-/* ===== Right sidebar: docking wrapper for the Raise / Edges panels ===== */
-/*
-  `rightScrollWrap` (ui.ts) sits where `rightScroll` used to sit directly — the flex slot
-  inside `.vl-panel--right` — and now holds `rightScroll` plus, on top of it, whichever of
-  `#extrudePanel` / `#edgesPanel` is open. `position: relative` here is what makes their
-  `position: absolute; inset: 0` below cover exactly this box rather than the whole sidebar
-  (which would bury `rightFooter`) or the whole page.
-*/
-.right-scroll-wrap {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* ===== Raise / Edges panels (docked over the right sidebar's scroll area) ===== */
-/*
-  Used to float centred over the 3D viewport (`position: absolute; bottom: 112px; left: 50%`,
-  a blurred glass card) — covering the model it was editing, which is the opposite of what a
-  parameter panel should do. Docked instead, the same way the base-shape picker's drawer sits
-  over the sidebar rather than the stage: `inset: 0` inside `.right-scroll-wrap` above makes it
-  cover exactly the scroll area, so `rightFooter` (Export / Save / Load / Light mode, a flex
-  sibling of `.right-scroll-wrap` and NOT inside it) stays visible and clickable the whole time
-  a panel is open.
-*/
-.edges-panel {
-  position: absolute;
-  top: var(--space-3);
-  left: var(--space-3);
-  right: var(--space-3);
-  /* A card, not a full cover: the panel holds three controls, and covering the whole
-     column with them read as "the sidebar is gone". What is underneath is dimmed and
-     inert instead (below), so it still reads as the sidebar with a task on top of it. */
-  max-height: calc(100% - 2 * var(--space-3));
-  z-index: 5;
-  overflow-y: auto;
-  padding: var(--space-3) var(--space-4) var(--space-4);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-box);
-  box-shadow: var(--shadow-modal);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.edges-panel[hidden] { display: none; }
-.right-scroll-wrap:has(.edges-panel:not([hidden])) > .vl-panel__scroll {
-  opacity: 0.35;
-  pointer-events: none;
-}
-.edges-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-/* Placement only (a flex-shrink override), not a restyle — the button itself is a plain
-   `iconButton()`. Without it the title text and this button would fight over space if a
-   long edge target name ever pushed the row close to wrapping. */
-.edges-panel-close { flex-shrink: 0; }
-/* A title, not a caption: the card is the one thing on top of the sidebar, so its name is
-   what says what mode you are in. */
-.edges-panel .edges-title {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-  margin: 0;
-}
-.edge-row {
-  display: grid;
-  grid-template-columns: 90px 1fr auto;
-  align-items: center;
-  gap: 8px;
-}
-.edge-row .edge-label {
-  font-size: 13px;
-  color: var(--text);
-  white-space: nowrap;
-}
-.edge-row input[type="range"] {
-  width: 100%;
-  min-width: 80px;
-}
-.edge-row .edge-val {
-  font-size: 12px;
-  color: var(--muted);
-  min-width: 42px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-/* The None/Fillet/Chamfer picker (global rows + per-part rows) is a kit segmentedControl()
-   now — the `.edge-style-btn(s)` ladder that used to style it by hand is gone with it. */
-
-/* Empty-state hint inside the floating Edges panel (nothing selected). */
-.edges-empty {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--muted);
-  text-align: center;
-  padding: 4px 2px;
-}
-
-
-/* Generic button used inside the floating extrude/edges panels (+/- steppers). */
-.btn {
-  padding: 9px 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel-2);
-  color: var(--text);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  line-height: 1;
-  transition:
-    border-color var(--dur-hover) var(--ease-standard),
-    color var(--dur-hover) var(--ease-standard),
-    background var(--dur-hover) var(--ease-standard);
-}
-.btn:hover { border-color: var(--accent); color: var(--accent); }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn.primary {
-  background: var(--accent);
-  color: var(--accent-text);
-  border-color: var(--accent);
-}
-.btn.primary:hover { filter: brightness(1.07); color: var(--accent-text); }
-
-/* Chamfer toggle row inside the Extrude panel. */
-.extrude-chamfer-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; margin-top: 12px; font-size: 13px; color: var(--text);
-}
-
-/* Small explanatory line at the bottom of the floating panels. */
-.panel-hint {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--muted);
-  text-align: center;
-  margin-top: 4px;
-}
 
 /* ===== Switch position D-pad (left sidebar, "3 · Switch") ===== */
 .switch-pad-hint {

@@ -18,9 +18,10 @@
 //
 // Frame: Z = 0 is the switch plate top. socket cuts downward; stem rises to +Z.
 import { chamferCutter, csOf, ringsOf, extrude, withScope, type Keep } from '@vostok/manifold';
-import { ringBox } from '@vostok/shapes';
-import type { BuildParams, BuildRegion, ClickerPart, EdgeSetting, EdgeStyle, PartGroup, Ring, RGB, SwitchPlacement } from '../types';
+import { placeShapes, ringBox } from '@vostok/shapes';
+import type { BuildParams, BuildRegion, ClickerPart, DesignLayout, EdgeSetting, EdgeStyle, PartGroup, Ring, RGB, SwitchPlacement } from '../types';
 import { getMarkSeed, markVoids, hardcodedVoids } from './identityMark';
+import { texturedWall, texturePeakMm } from './skin';
 import { applyStemFit } from './stemFit';
 import {
   archRing, capsuleRing, crossRing, eggRing, heartRing, ngonRing, shieldRing,
@@ -62,6 +63,32 @@ const OVERHANG_OK = 2;
 */
 const SIZE_TRIES = 6;
 
+/*
+  Words placed on the design have to print with a 0.4 mm nozzle, which lays a stroke as two
+  lines at the least: a stroke under 0.8 mm comes out ragged or not at all. A morphological
+  opening by one nozzle width (erode, then dilate) deletes exactly the strokes narrower than two,
+  so the share of a word's area the opening keeps says how much of it is too thin. 75 % lets
+  through what an opening shaves off any sound word — its sharp corners and serifs — and stops a
+  word whose stems vanish. Thickening by WORD_THICKEN_MM is tried before refusing: it rescues a
+  light weight at a small size, and anything thinner than that needs a decision only the
+  customer can make (bigger, or bolder).
+*/
+const NOZZLE_MM = 0.4;
+const WORD_KEEPS_MIN = 0.75;
+const WORD_THICKEN_MM = 0.15;
+
+/** The thinnest bevel a textured wall is built with, mm. The skin starts its pattern above the
+ *  bottom bevel and stops below the top one, so it needs both; the app's default is 0.5. */
+const MIN_SKIN_BEVEL_MM = 0.3;
+
+/** How finely the outlines in the design layout are kept, mm. They are only drawn, but the cap is
+ *  drawn inside the well with 0.4 mm between them, and a coarser outline makes that gap wander. */
+const LAYOUT_EPS_MM = 0.01;
+
+/** Edge targets that bevel the body's top rim, and its underside edge. */
+const BODY_TOP_EDGES = new Set(['baseTop', 'base-body', 'clickerBase']);
+const BODY_BOTTOM_EDGES = new Set(['baseBottom', 'clickerBase']);
+
 /** The clicker's parts. Everything manifold makes on the way is freed before this returns, and
  *  when a build throws part way through. */
 export function buildClicker(
@@ -71,7 +98,16 @@ export function buildClicker(
   regions: BuildRegion[],
   outline: Ring[],
   params: BuildParams,
-): { parts: ClickerPart[]; switchPlacements: SwitchPlacement[]; warnings: string[] } {
+): {
+  parts: ClickerPart[];
+  switchPlacements: SwitchPlacement[];
+  warnings: string[];
+  /** What will not print as it is. Export refuses while this is not empty. Not repeated in
+   *  `warnings`, so show both. */
+  blocking: string[];
+  /** The design seen from above, for the 2D Design view. */
+  layout: DesignLayout;
+} {
   return withScope((track) => buildTracked(track, wasm, socket, stem, regions, outline, params));
 }
 
@@ -140,6 +176,35 @@ function buildTracked(
     socketBB.max[1] - socketBB.min[1],
   );
 
+  /* Pin the body to a chosen footprint, and fit the artwork inside it — the inversion of every
+     other path here, which sizes the base FROM the design.
+
+     Absent (the default, and what every clicker generated before this did) leaves all of the
+     code below exactly as it was. */
+  const req = params.bodySize;
+  const fixed = req && req.w > 0.1 && req.h > 0.1 ? { w: req.w, h: req.h } : null;
+  // A fixed size and an outline base are contradictory: the outline IS the artwork, so it
+  // cannot also be a size the user chose. Everything downstream branches on `isOutline`, so
+  // resolving it once here is cheaper than a special case in each.
+  const isOutline = params.baseShape === 'outline' && !fixed;
+
+  /* Turning the design, in degrees counter-clockwise, normalised so a whole turn is no turn.
+
+     On a preset base the artwork turns inside `placeRings`, after the base has been sized from
+     the artwork as drawn, so the base keeps its size and the frame crops what pokes out. On an
+     outline base the artwork IS the base, so the outline and the artwork turn together here,
+     before anything is measured, and everything below sizes the turned silhouette. A turn is
+     rigid: the design is not shrunk to keep its bounding box, so Size stays the size of the
+     design itself. Words (`mm` regions) are placed on the cap and never turn with it.
+
+     0 leaves `outline` and `regions` as they arrived, so the default is byte-identical. */
+  const rawTurn = params.designRotation ?? 0;
+  const turnDeg = Number.isFinite(rawTurn) ? ((rawTurn % 360) + 360) % 360 : 0;
+  if (isOutline && turnDeg !== 0) {
+    outline = placeShapes([outline], 0, 0, turnDeg)[0];
+    regions = regions.map((r) => (r.mm ? r : { ...r, rings: placeShapes([r.rings], 0, 0, turnDeg)[0] }));
+  }
+
   // --- Normalized image bbox (trace centers it; longest side = 1); no outline is a unit box ---
   const outlineBox = ringBox(outline);
   const noOutline = !Number.isFinite(outlineBox.minX);
@@ -162,27 +227,27 @@ function buildTracked(
   // The body's bezel wall. Declared up here rather than beside the body block, because a fixed
   // footprint has to work BACK from the outer size through it.
   const borderW = Math.max(0.4, params.borderWidth);
+  /* The outside texture, and how far its crests stand out from the wall. The same field the
+     letter blocks read, so a texture survives switching source. 0 for smooth, and for a name
+     this build does not know, which then builds the smooth wall it always did. */
+  const texture = params.blockTexture ?? 'smooth';
+  const texPeak = texturePeakMm(texture);
   /** What the body adds around the cap plate on every side: the slip-fit gap the cap rides in
    *  plus the bezel wall. Working back through it is what makes the number on the fixed-size
    *  control the size of the finished PART, which is the only number a seller can put in a
-   *  listing or measure with calipers. */
-  const plateInset = borderW + tol;
-
-  /* Pin the body to a chosen footprint, and fit the artwork inside it — the inversion of every
-     other path here, which sizes the base FROM the design.
-
-     Absent (the default, and what every clicker generated before this did) leaves all of the
-     code below exactly as it was. */
-  const req = params.bodySize;
-  const fixed = req && req.w > 0.1 && req.h > 0.1 ? { w: req.w, h: req.h } : null;
-  // A fixed size and an outline base are contradictory: the outline IS the artwork, so it
-  // cannot also be a size the user chose. Everything downstream branches on `isOutline`, so
-  // resolving it once here is cheaper than a special case in each.
-  const isOutline = params.baseShape === 'outline' && !fixed;
+   *  listing or measure with calipers.
+   *
+   *  A texture's crests are part of the finished part too — they are what calipers touch — so
+   *  with a fixed size they come out of the plate, and the crests, not the wall under them,
+   *  measure the size that was locked. */
+  const plateInset = fixed && texPeak > 0 ? borderW + tol + texPeak : borderW + tol;
 
   // Declared here rather than beside the first push, because the size clamp immediately below
   // is the earliest thing that has something to say to the user.
   const warnings: string[] = [];
+  /** What will not print as it is: Export refuses while this holds anything. Kept apart from
+   *  `warnings`, which are printable either way. */
+  const blocking: string[] = [];
   /* The three switch-fit clamps below (design too narrow, design grown for the column, base
      widened) all say "the model grew so the switch fits" and routinely fire TOGETHER — the
      default two-line text at 35 mm raised all three at once, a five-line wall under the
@@ -254,12 +319,18 @@ function buildTracked(
   // Up to 2: past 1 the artwork is larger than the frame and `imageArea` crops it, which is
   // how "zoom in on the middle of the picture" is expressed. The base never grows for it.
   const designScale = isOutline ? 1 : Math.min(2, Math.max(0.3, params.designScale ?? 1));
-  /** Scaled rings, moved by the design nudge. Used for the ARTWORK only; the silhouette
-   *  that drives an outline base is left where it is. */
+  /* The turn `placeRings` applies: a preset base's. An outline base turned its rings when they
+     arrived, so turning them here as well would turn them twice. */
+  const artTurn = isOutline ? 0 : turnDeg;
+  /** Scaled rings, turned and moved by the design nudge. Used for the ARTWORK only; the
+   *  silhouette that drives an outline base is left where it is. Turning about the origin before
+   *  the nudge is turning about the artwork's own centre, where the trace puts it. */
   const placeRings = (rings: Ring[]): Ring[] =>
-    offX === 0 && offY === 0
-      ? scaleRings(rings)
-      : rings.map((r) => r.map(([x, y]) => [x * sR + offX, y * sR + offY] as [number, number]));
+    artTurn !== 0
+      ? placeShapes([scaleRings(rings)], offX, offY, artTurn)[0]
+      : offX === 0 && offY === 0
+        ? scaleRings(rings)
+        : rings.map((r) => r.map(([x, y]) => [x * sR + offX, y * sR + offY] as [number, number]));
 
   const removeHoles = (cs: Section): Section => {
     if (sectionIsEmpty(cs)) return cs;
@@ -327,6 +398,60 @@ function buildTracked(
     const r = track(sec.offset(-d, 'Round', 2.0, 32));
     return sectionIsEmpty(r) ? fb : r;
   };
+
+  /* Words placed on the design (`mm` regions): their outlines, decided once, before anything is
+     sized, because an outline base grows round them and the carve loop below cuts them.
+
+     Each is in cap millimetres already, so nothing scales, moves or turns it. Its boldness is
+     its own (`boldMm`); the Text mode boldness is for Text mode's letters, which ARE the
+     artwork, and never reaches a word.
+
+     Then the strokes are checked against the nozzle (see NOZZLE_MM), measured on the word as it
+     prints: with the colour bleed every region is grown by in the carve loop, since that is
+     plastic too. A word that fails is thickened once and checked again; one that still fails is
+     carved as typed, so the preview shows it, and refuses the export. */
+  const strokesTooThin = (cs: Section): boolean => {
+    const printed = grow(cs, params.colorBleed);
+    const area = sectionArea(printed);
+    if (!(area > 0)) return false;
+    const opened = track(track(printed.offset(-NOZZLE_MM, 'Round', 2.0, 24)).offset(NOZZLE_MM, 'Round', 2.0, 24));
+    return sectionArea(opened) < WORD_KEEPS_MIN * area;
+  };
+  const words = new Map<BuildRegion, Section>();
+  let wordsThickened = false;
+  let wordsTooThin = false;
+  for (const r of regions) {
+    if (!r.mm) continue;
+    const valid = r.rings.filter((ring) => ring.length >= 3 && getRingArea(ring) > 0.001);
+    if (!valid.length) continue;
+    let cs: Section = simp(track(csOf(wasm, valid, 'NonZero')), 0.03);
+    const bold = r.boldMm ?? 0;
+    if (Math.abs(bold) > 0.005) cs = track(cs.offset(bold, 'Round', 2.0, 24));
+    if (sectionIsEmpty(cs)) continue;
+    if (strokesTooThin(cs)) {
+      const thicker = grow(cs, WORD_THICKEN_MM);
+      if (strokesTooThin(thicker)) wordsTooThin = true;
+      else {
+        cs = thicker;
+        wordsThickened = true;
+      }
+    }
+    words.set(r, cs);
+  }
+  if (wordsThickened) warnings.push('Letters thickened to print.');
+  if (wordsTooThin) blocking.push('Words too thin to print — make them bigger or bolder.');
+  /* An outline base follows the words as well as the picture: their footprint as they print,
+     with the same frame round it the picture gets, joins the plate before the plate is closed.
+     Words under a picture give the silhouette a tab rather than being cropped off it. The frame
+     is 0.05 mm wider than the picture's because the plate is simplified to 0.05 mm afterwards,
+     and that much taken back would shave the word's edge off on the image area. */
+  let wordsFp: Section | null = null;
+  for (const cs of words.values()) {
+    const printed = grow(cs, params.colorBleed);
+    wordsFp = wordsFp ? track(wordsFp.add(printed)) : printed;
+  }
+  const wordsFramed: Section | null = wordsFp ? grow(wordsFp, border + 0.05) : null;
+  const withWords = (sec: Section): Section => (wordsFramed ? track(sec.add(wordsFramed)) : sec);
 
   // --- Shape Generators ---
   const makeHexagon = (r: number): Section => {
@@ -597,7 +722,8 @@ function buildTracked(
     const plateAt = (scale: number): Section => {
       const prev = sR;
       sR = scale;
-      const p = track(removeHoles(track(filledOutline().offset(border, 'Round', 2.0, 32)))
+      // Words count here too: a tab round them may be where the switch finds its room.
+      const p = track(removeHoles(withWords(track(filledOutline().offset(border, 'Round', 2.0, 32))))
         .offset(4, 'Round', 2.0, 8)).offset(-4, 'Round', 2.0, 8);
       sR = prev;
       return simp(track(p), 0.05);
@@ -624,7 +750,7 @@ function buildTracked(
       outlineScale = sR;
     }
     void outlineScale;
-    const rawPlate = track(filledOutline().offset(border, 'Round', 2.0, 32));
+    const rawPlate = withWords(track(filledOutline().offset(border, 'Round', 2.0, 32)));
     const solidPlate = removeHoles(rawPlate);
     // Apply morphological closing (+offset followed by -offset) to smooth out
     // deep scalloped indentations between letters. This prevents the clicker
@@ -860,18 +986,22 @@ function buildTracked(
 
      The size search above is the fix, because the box only exists when the artwork is too
      small to contain the column at all. Make it big enough and there is nothing to hide. */
-  const bodyFootprint = simp(grow(wellFootprint, borderW));
+  // `let`: a fixed size whose texture could not be built thickens the wall instead (see the
+  // body block below), so the part still measures what was locked.
+  let bodyFootprint = simp(grow(wellFootprint, borderW));
   if (bulgeArea > OVERHANG_OK && !grewForSwitchMm) grewForSwitchMm = -1;
 
   /* A fixed footprint is a PROMISE about the finished part, so check it rather than assume it.
      The switch's clear column is unioned into the well after the plate is built, and on a round
      or pointed shape at a tight size it reaches outside — which grows the body past the box the
      user typed. That is the one failure mode that would quietly ship a run of SKUs whose real
-     size is not the one in the listing, so name the size actually produced. */
+     size is not the one in the listing, so name the size actually produced. A texture's crests
+     stand outside this footprint on both sides, and are counted. */
   if (fixed) {
     const bb = bodyFootprint.bounds();
-    const gotW = bb.max[0] - bb.min[0];
-    const gotH = bb.max[1] - bb.min[1];
+    const crests = texPeak > 0 ? 2 * texPeak : 0;
+    const gotW = bb.max[0] - bb.min[0] + crests;
+    const gotH = bb.max[1] - bb.min[1] + crests;
     if (gotW > fixed.w + 0.3 || gotH > fixed.h + 0.3) {
       warnings.push(
         `The base came out ${gotW.toFixed(1)} × ${gotH.toFixed(1)} mm rather than the fixed `
@@ -983,23 +1113,48 @@ function buildTracked(
      and most icons while nothing was ever actually floating. */
   const droppedParts: string[] = [];
   const throughCapParts: string[] = [];
+  /* A word reaching past the frame is cropped like any colour, which on a preset base is the
+     rule (the base keeps its size). It is said rather than left to be found on the print, and
+     apart from "too small to print", which is not what happened to it. An outline base grows
+     round its words, so there nothing is past the edge but the build's own rounding. */
+  let wordsCut = false;
+  /** The same for the artwork, said only when the app asks (`artCutNote`: letters). */
+  let artCut = false;
+  /** Some shape stands above the face, so the top cannot print face-down (see the return). */
+  let raised = false;
 
   for (const { r } of ordered) {
-    const validRings = placeRings(r.rings).filter(ring => ring.length >= 3 && getRingArea(ring) > 0.001);
-    if (validRings.length === 0) continue;
-    let cs: Section = simp(track(csOf(wasm, validRings, 'NonZero')), 0.03);
-    // Text boldness: fatten (or thin) the glyph in the plane, the same way a block legend
-    // is. Thinning can erase a hairline stroke entirely; the empty check below drops it.
-    const textBold = params.textBold ?? 0;
-    if (Math.abs(textBold) > 0.005) cs = track(cs.offset(textBold, 'Round', 2.0, 24));
+    let cs: Section;
+    if (r.mm) {
+      // A word: in millimetres already, its boldness and any thickening decided above.
+      const word = words.get(r);
+      if (!word) continue;
+      cs = word;
+    } else {
+      const validRings = placeRings(r.rings).filter(ring => ring.length >= 3 && getRingArea(ring) > 0.001);
+      if (validRings.length === 0) continue;
+      cs = simp(track(csOf(wasm, validRings, 'NonZero')), 0.03);
+      // Text boldness: fatten (or thin) the glyph in the plane, the same way a block legend
+      // is. Thinning can erase a hairline stroke entirely; the empty check below drops it.
+      const textBold = params.textBold ?? 0;
+      if (Math.abs(textBold) > 0.005) cs = track(cs.offset(textBold, 'Round', 2.0, 24));
+    }
     if (params.colorBleed > 0.001) cs = grow(cs, params.colorBleed);
     const clipped = track(cs.intersect(imageArea));
-    if (sectionIsEmpty(clipped)) { droppedParts.push(r.partName); continue; }
+    // Half a square millimetre: where a frame's edge runs along a word's, the round offsets'
+    // polygons still shave slivers off it, and a sliver is not a word cut off.
+    if (r.mm && !isOutline && sectionArea(clipped) < sectionArea(cs) - 0.5) wordsCut = true;
+    if (!r.mm && params.artCutNote && !isOutline && sectionArea(clipped) < sectionArea(cs) - 0.5) artCut = true;
+    if (sectionIsEmpty(clipped)) {
+      if (!r.mm) droppedParts.push(r.partName);
+      continue;
+    }
 
     // Prevent overlapping with smaller parts processed earlier
     let fp = clipped;
     if (placed2D) fp = track(fp.subtract(placed2D));
-    if (sectionIsEmpty(fp)) { droppedParts.push(r.partName); continue; }
+    // A word hidden under another word is not a colour too small to print.
+    if (sectionIsEmpty(fp)) { if (!r.mm) droppedParts.push(r.partName); continue; }
     
     placed2D = placed2D ? track(placed2D.add(fp)) : fp;
 
@@ -1021,21 +1176,22 @@ function buildTracked(
 
     // Round (fillet) or bevel (chamfer) the TOP edge of this color part. Two sources:
     //   1. An explicit per-part entry configured in Edges mode (takes priority).
-    //   2. The global "Chamfer edges" toggle from Extrude mode — a fixed chamfer on
-    //      EVERY raised part, not tied to any selection.
+    //   2. Relief's Bevelled edges: a chamfer of `extrudeChamferMm` on EVERY raised part, not
+    //      tied to any selection (once a fixed 0.5 mm, `extrudeChamfer`, which older callers
+    //      still send).
     // Default (neither): no rounding on inlays — only the outer cap frame + body edges.
     const es = params.edgeSettings?.find(s => s.target === r.partName);
     let edgeStyle: EdgeStyle | null = null;
     let edgeRadius = 0;
+    const bevelMm = params.extrudeChamferMm ?? (params.extrudeChamfer ? 0.5 : 0);
     if (es && es.style !== 'none' && es.radius >= 0.05) {
       edgeStyle = es.style;
       edgeRadius = es.radius;
-    } else if (params.extrudeChamfer && heightShift > 0) {
-      // Global toggle: bevel the top edge of every RAISED color part only. Parts you
-      // haven't touched (level 0, flush with the cap top) are left sharp — the chamfer
-      // is meant for the relief you extrude up in Extrude mode.
+    } else if (bevelMm >= 0.05 && heightShift > 0) {
+      // Bevel the top edge of every RAISED color part only. Parts you haven't touched (level
+      // 0, flush with the cap top) are left sharp: the chamfer is for the relief.
       edgeStyle = 'chamfer';
-      edgeRadius = 0.5;
+      edgeRadius = bevelMm;
     }
     if (edgeStyle) {
       // The bevel can't exceed roughly half the part's height, so on a flat color
@@ -1048,7 +1204,8 @@ function buildTracked(
     }
 
     parts.push(toPart(inlay, 'cap', 'top', r.filamentRgb, r.partName));
-    
+    if (heightShift > 0) raised = true;
+
     // Group the 2D footprint by its level to carve a single hole per height level
     const existing = holesByLevel.get(level);
     holesByLevel.set(level, existing ? track(existing.add(fp)) : fp);
@@ -1066,6 +1223,8 @@ function buildTracked(
       'A lowered part reaches the back of the cap and will print as a hole through it. Raise it, or increase Cap thickness.',
     );
   }
+  if (wordsCut) warnings.push('Words past the edge are cut off.');
+  if (artCut && params.artCutNote) warnings.push(params.artCutNote);
 
   // Base-color cap = plate − holes, then ∪ stem ∪ perimeter skirt.
   let base: Solid = cap;
@@ -1124,22 +1283,82 @@ function buildTracked(
   }
   parts.unshift(toPart(base, 'cap', 'top', params.baseFilamentRgb, 'top-base'));
 
+  /* The outside wall, textured: the body is built from the letter blocks' skin of the body
+     footprint instead of extruded from it, and gets every cut the smooth block gets below — the
+     keyring loop, the well, the sockets, the hollow, the identity voids, the brand mark — by the
+     same code. The skin carries the body's top and bottom bevels itself, at the radius the bevel
+     settings give, so they are not cut again.
+
+     That code runs on a stand-in: a plain prism of the closed outline, a little taller than the
+     body so every cut keeps its overshoot. A skin is tens of thousands of triangles to the
+     smooth block's two thousand, and each identity void's burial test forces a boolean on the
+     body as it stands — nine voids in a release build — which on the skin itself added most of
+     a second. In the prism they are cheap, and they decide the same: the voids sit far from the
+     outside wall, where the prism and the skin are the same solid. The skin then takes what the
+     prism lost, all at once (the finish, below the brand mark).
+
+     Only the outside changes. The well is cut from the same footprint with the same tolerance,
+     so the cap's slip fit is the smooth body's; the hollow shrinks the untextured footprint; and
+     the texture only pushes out, on an outline that was only closed (never thinned), so the
+     wall is never thinner. An outline even the last closing cannot make round enough keeps its
+     smooth wall, and says so — it prints either way, so that is a note, not a refusal. */
+  let texturedBlock: Solid | null = null;
+  /** The prism the cuts are made in while the body is textured. */
+  let cutStandIn: Solid | null = null;
+  let textureMm = 0;
+  if (texPeak > 0) {
+    const bevel = (edges: Set<string>): number => {
+      let r = 0;
+      for (const es of params.edgeSettings ?? []) {
+        if (es.style === 'none' || es.radius < 0.05 || !edges.has(es.target)) continue;
+        r = Math.max(r, Math.min(es.radius, (bodyTopZ - bodyBottomZ) * 0.3, 2.5));
+      }
+      return Math.max(MIN_SKIN_BEVEL_MM, r);
+    };
+    const wall = texturedWall(wasm, bodyFootprint, {
+      bottomZ: bodyBottomZ,
+      rimZ: bodyTopZ,
+      chamferTop: bevel(BODY_TOP_EDGES),
+      chamferBottom: bevel(BODY_BOTTOM_EDGES),
+      texture,
+    });
+    if (wall) {
+      texturedBlock = track(wall.solid);
+      // 2 mm past the top and the bottom: more than any cut below overshoots the body by, so
+      // what the prism loses is every cut whole, overshoot included.
+      cutStandIn = extrudeAt(track(wall.outline), bodyTopZ - bodyBottomZ + 4, bodyBottomZ - 2);
+      textureMm = texPeak;
+    } else {
+      warnings.push('Texture left off: this outline is too tight for it.');
+      // The plate was made smaller for crests that are not there; a wall that much thicker
+      // keeps the locked size the promise it is.
+      if (fixed) bodyFootprint = simp(grow(bodyFootprint, texPeak));
+    }
+  }
+
   // --- Body: solid block − well − socket. The well is the cup the cap presses into;
   //     the border ring around it frames the proud cap (and the cap's skirt hides the
   //     gap). The socket is cut into the well floor (= plate plane) to grip the switch. ---
-  const bodyBlock = extrudeAt(bodyFootprint, bodyTopZ - bodyBottomZ, bodyBottomZ);
+  const bodyBlock = cutStandIn ?? extrudeAt(bodyFootprint, bodyTopZ - bodyBottomZ, bodyBottomZ);
   const well = extrudeAt(wellFootprint, bodyTopZ - wellFloorZ + 1, wellFloorZ);
   let body: Solid = bodyBlock;
 
   // Apply edge modifications (fillet / chamfer) to the body block first,
   // before adding the keychain loop and bridge, so that the bevel block
   // subtraction does not cut a groove through the keychain loop/bridge.
-  body = applyEdges(body, params.edgeSettings, bodyFootprint, bodyBottomZ, bodyTopZ, wellFloorZ);
+  // A textured body has its bevels in the skin.
+  if (!cutStandIn) body = applyEdges(body, params.edgeSettings, bodyFootprint, bodyBottomZ, bodyTopZ, wellFloorZ);
 
   // Optional keychain attachment: a loop tab or an inside hole, placed anywhere around
   // the body edge. Built and cut BEFORE the well/socket subtraction so a loop rotated
   // near the well never leaves floating material.
   const kc = params.keychain;
+  /** Where the loop landed, for the design layout. */
+  let loopAt: DesignLayout['loop'];
+  /** The body with the loop on it, seen from above, for the design layout. */
+  let silhouette: Section | null = null;
+  /** The loop and its hole, which a textured skin is given at the finish. */
+  let loopSolids: { loop: Solid; hole: Solid } | null = null;
   if (kc && kc.enabled) {
     const holeR = Math.max(1.5, (kc.holeDiameterMm ?? 5.2) / 2);
     const th = Math.max(2.5, Math.min(4.0, (bodyTopZ - bodyBottomZ) * 0.35));
@@ -1201,8 +1420,12 @@ function buildTracked(
     const rr = (rotDeg * Math.PI) / 180;
     const hcx = -outward * Math.sin(rr) + px;
     const hcy = outward * Math.cos(rr) + py;
-    const hole = extrudeAt(track(track(CrossSection.circle(holeR, 48)).translate([hcx, hcy])), th + 2, zb - 1);
+    const holeCs = track(track(CrossSection.circle(holeR, 48)).translate([hcx, hcy]));
+    const hole = extrudeAt(holeCs, th + 2, zb - 1);
     body = track(body.subtract(hole));
+    loopAt = { x: hcx, y: hcy, outerR: loopR, holeR };
+    silhouette = track(track(bodyFootprint.add(loopFootprint)).subtract(holeCs));
+    loopSolids = { loop, hole };
   }
 
   // Subtract the well and every socket afterwards to ensure the interior cavity is clean
@@ -1456,6 +1679,18 @@ function buildTracked(
     }
   }
 
+  /* The textured finish. Everything above was cut from the stand-in prism; what the prism lost
+     is every cut (the well, the sockets, the hollow, the voids that landed, the brand mark), and
+     the skin, with the keyring loop welded on and its hole through, takes all of it at once. The
+     cuts all sit inside the closed outline the prism stands on, so this is the body the same
+     cuts made one by one in the skin would give, for one to three booleans on the big mesh
+     instead of twenty. */
+  if (texturedBlock && cutStandIn) {
+    let outer: Solid = texturedBlock;
+    if (loopSolids) outer = track(track(outer.add(loopSolids.loop)).subtract(loopSolids.hole));
+    body = track(outer.subtract(track(cutStandIn.subtract(body))));
+  }
+
   // Invariant #2: the provenance mark is never removed. It is the file's proof of origin, so a build
   // that quietly ships without it is worse than one that fails — the file looks fine and proves
   // nothing. This does not block the export (a legitimately thin body may genuinely have no room)
@@ -1497,7 +1732,29 @@ function buildTracked(
     }
   }
 
-  return { parts, switchPlacements: applied, warnings };
+  /* A top prints face-down, for the face the plate gives it. With a shape raised above that
+     face it cannot: only the raised shapes would touch the plate and the face would start in
+     mid-air. So it prints the way it stands, on its skirt and stem, which end on one plane, with
+     the face bridging between them and the raised shapes on top. */
+  if (raised) for (const p of parts) if (p.group === 'top') p.printUpright = true;
+
+  /* The design seen from above, for the 2D Design view: read off the outlines the parts were
+     made from, after every part exists, so nothing here can change one. Simplified first, since
+     they are only drawn; the sections themselves are the build's and are freed with it. */
+  const drawn = (cs: Section): Ring[] => (sectionIsEmpty(cs) ? [] : ringsOf(simp(cs, LAYOUT_EPS_MM)));
+  const layout: DesignLayout = {
+    cap: drawn(plate),
+    imageArea: drawn(imageArea),
+    body: drawn(bodyFootprint),
+    well: drawn(wellFootprint),
+    art: { scale: sR, offX, offY, rotation: turnDeg },
+    switchBox: { loX, hiX, loY, hiY },
+    ...(loopAt ? { loop: loopAt } : {}),
+    ...(silhouette ? { silhouette: drawn(silhouette) } : {}),
+    textureMm,
+  };
+
+  return { parts, switchPlacements: applied, warnings, blocking, layout };
 
   /** Apply fillet/chamfer edge modifications to the body solid.
    *  Targets: 'clickerBase' is the merged global control that bevels the body's top
@@ -1515,8 +1772,8 @@ function buildTracked(
     let result = bodyIn;
     for (const es of edgeSettings) {
       if (es.style === 'none' || es.radius < 0.05) continue;
-      const doBodyTop = es.target === 'baseTop' || es.target === 'base-body' || es.target === 'clickerBase';
-      const doBodyBottom = es.target === 'baseBottom' || es.target === 'clickerBase';
+      const doBodyTop = BODY_TOP_EDGES.has(es.target);
+      const doBodyBottom = BODY_BOTTOM_EDGES.has(es.target);
       if (!doBodyTop && !doBodyBottom) continue; // cap / inlay targets handled elsewhere
       const r = Math.min(es.radius, (topZ - bottomZ) * 0.3, 2.5);
       if (r < 0.05) continue;

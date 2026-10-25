@@ -5,18 +5,14 @@ import {
   helpTip,
   historyControls,
   type HistoryControlsHandle,
-  iconButton,
-  modeBar,
   selectField,
   thumbTile,
   toggleSwitch,
   type ValueRow,
-  dpad,
   generatorHeader,
   ICONS,
   qualityCallout,
   segmentedControl,
-  type SegmentedRow,
   setExportNote,
   setFieldOptions,
   panelCredit,
@@ -26,8 +22,8 @@ import {
   sliderRow,
   stepperRow,
   makeCollapsible,
+  modeBar,
   previewBar,
-  type PreviewBar,
   slider,
   stageRow,
   stageTools,
@@ -42,18 +38,21 @@ import {
   colorPopover,
   closeColorPopover,
   paletteRow,
+  listRow,
+  type ListRowHandle,
+  iconButton,
 } from '@vostok/ui-kit';
 import { MAKERLAB, SELLER_PACK, isUnlocked } from 'virtual:makerlab';
-import type { BaseShapeKind, BlockStyle, BlockTexture, KeychainSide, EditMode, EdgeSetting, EdgeStyle, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB } from '../types';
+import type { BaseShapeKind, BlockStyle, BlockTexture, KeychainSide, EdgeSetting, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB, Ring } from '../types';
 import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
 import { SAMPLES } from '../image/sample';
-import type { RgbaImage } from '@vostok/trace';
+import { srgbToOklab, type RgbaImage } from '@vostok/trace';
 import { facesThatWrite, fontWritesText, STANDARD_FONTS } from '../image/letter';
 import { FONTS, curatedFonts, getRequiredSubsets, toPickerFont } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from '../image/lucideIcons';
 import { CHANGELOG } from '../changelog';
-import { entryForState, loadPackShapes } from '../shapes/directory';
+import { entryForState, findShape, loadPackShapes, type ShapeEntry } from '../shapes/directory';
 import { designUrl, inSeason, loadDesignImage, orderedDesignPacks } from '../packs';
 import { openShapePicker } from './shapePicker';
 import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from '../geometry/stemFit';
@@ -67,12 +66,16 @@ import { lookOf, lookRings } from '../image/symbolRings';
 import { lucideImg, ringsSvg } from './symbols';
 import { symbolLines, type LineSpec } from './symbolLines';
 import { fmtSignedMm, readSigned } from './signedReadout';
+import { RELIEF_MAX, RELIEF_MIN, reliefLevelOf, reliefMm } from '../relief';
+import { wordsColour } from '../words';
+import { capColourOf } from '../frame';
+import type { MappedColour } from './wizard';
 
 /** Fallback swatch for the keycap row before the build derives a contrasting frame. */
 const DEFAULT_CAP_RGB: RGB = [240, 240, 240];
 
 /** The left panel's categories, in rail order. Which ones a mode shows: `RAIL_FOR_MODE`. */
-type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'body' | 'colors' | 'switch' | 'keychain' | 'fit' | 'seller';
+type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'body' | 'colors' | 'relief' | 'switch' | 'keychain' | 'fit' | 'seller';
 
 /** The licence and the seller tools: a category of their own, set apart at the end of the rail
  *  in every mode. Only the MakerWorld build has anything to put in it. */
@@ -82,10 +85,12 @@ const SELLER: RailId[] = MAKERLAB ? ['seller'] : [];
  *  that kind of clicker, never the font (Laser Studio's rule). The design comes first and Fit,
  *  which is about your printer and your switches rather than the design, comes last. */
 const RAIL_FOR_MODE: Record<UiState['importMode'], { show: RailId[]; first: RailId }> = {
-  image: { show: ['shape', 'body', 'colors', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
-  svg: { show: ['shape', 'body', 'colors', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
-  icon: { show: ['shape', 'body', 'colors', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
-  text: { show: ['shape', 'font', 'lettering', 'body', 'colors', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
+  // A picture's words are its Lettering category, called Text there, with the font in it too
+  // (see `update()`): Add text is always there, and the font and the rest come with the words.
+  image: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
+  svg: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
+  icon: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
+  text: { show: ['shape', 'font', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
   blocks: { show: ['layout', 'font', 'lettering', 'body', 'colors', 'keychain', 'fit', ...SELLER], first: 'layout' },
   model: { show: ['cut', 'model', 'colors', 'fit', ...SELLER], first: 'cut' },
 };
@@ -124,6 +129,18 @@ function layoutPicture(layout: BlockLayout): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+/** A line of words on a picture: where it sits on the cap and how big, in mm, +y up. */
+export interface WordItem {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  /** The height of the line's box, mm. */
+  heightMm: number;
+  /** Degrees, counter-clockwise. */
+  rotation: number;
+}
+
 export interface UiState {
   status: string;
   building: boolean;
@@ -149,6 +166,9 @@ export interface UiState {
   fixedSize: { w: number; h: number } | null;
   /** How much of the room inside the frame the artwork takes, 0.3-1. 1 = fills it. */
   designScale: number;
+  /** The picture turned on its base, degrees counter-clockwise (the Design view's grip). On an
+   *  Outline base the whole silhouette turns. 0 = as drawn. */
+  designRotation: number;
   /** The "detail" knob of whichever parametric shape is selected — sides, points or teeth.
    *  One field because the shapes are mutually exclusive. */
   shapeSides: number;
@@ -175,6 +195,9 @@ export interface UiState {
    *  looking at would read as a bug, and it is also the number people ask for when they say
    *  "how big is this actually". */
   builtBodyMm: { w: number; h: number } | null;
+  /** The box the LAST build clamped every switch centre into, mm (`DesignLayout.switchBox`):
+   *  the range of the switch's sliders. Read-only, like `builtBodyMm`; null before a build. */
+  switchBox: { loX: number; hiX: number; loY: number; hiY: number } | null;
   /** Top ↔ base slip-fit clearance, mm. Baseline 0.4 reads as a 0 offset in the UI. */
   tolerance: number;
   /** Cap stem fit, mm of clearance on the cross hole that grips the switch. 0 = as authored. */
@@ -188,12 +211,15 @@ export interface UiState {
   socketFitPct: number;
   /** MX switch placements (1..3): each x/y offset (mm) + rotation (deg) from centre. */
   switches: SwitchPlacement[];
-  /** Which switch the d-pad drives (0-based). */
+  /** Which switch the Switch sliders move (0-based). */
   activeSwitchIndex: number;
   smoothing: number;
   keychain: KeychainParams;
   removeBg: boolean;
   view: ViewMode;
+  /** The stage shows the Design view rather than the 3D model. Viewport state, like `view`: not
+   *  undone, not saved. */
+  designView: boolean;
   showSwitch: boolean;
   /** Whether the preview is cut open. Independent of `view`. */
   sectionOn: boolean;
@@ -211,8 +237,15 @@ export interface UiState {
   /** Model mode: what the last build reported — slider ranges, where the cut landed. */
   modelMeta: ModelMeta | null;
   currentIconName: string;
-  colorMode: 'normal' | 'limited';
+  /** How a picture's colours were chosen: split automatically into `colorCount` ('normal'), a
+   *  kept list with the rest folded into the nearest (projects saved before mapping, 'limited'),
+   *  or every colour pointed at the filament it prints in by the import window ('mapped'). */
+  colorMode: 'normal' | 'limited' | 'mapped';
   limitedColors: RGB[];
+  /** 'mapped': every colour found in the picture and the group it prints in. */
+  mappedColors: MappedColour[];
+  /** 'mapped': each group's filament, by group. */
+  mappedFilaments: RGB[];
   bodyColorRgb: RGB;
   paletteOverrides: RGB[];
   /** Explicit cap-backing/frame color set by clicking it on the model (else derived). */
@@ -225,12 +258,21 @@ export interface UiState {
    *  anywhere they are offered as swatches everywhere, so the second element can get the
    *  same colour as the first without the colour wheel. */
   customColors: RGB[];
-  /** Current edit mode for the 3D viewport. */
-  editMode: EditMode;
+  /** How far each colour is raised, in height steps, by palette index (Relief). A part set on
+   *  its own in `componentHeights` wins over its colour's row. Absent = 0. */
+  colourLevels: number[];
+  /** Words on a picture (image, SVG, icon): cut into the cap first, so they cut through the art.
+   *  Text mode's text is the design itself and does not use these. */
+  words: WordItem[];
+  /** The words' filament. Null = the design's darkest, so words add no filament. */
+  wordsColorRgb: RGB | null;
+  /** How far the words are raised, in Relief steps. */
+  wordsLevel: number;
   /** Edge modification settings (fillet / chamfer). */
   edgeSettings: EdgeSetting[];
-  /** Global toggle: chamfer every raised (extruded) color part. Not tied to selection. */
-  extrudeChamfer: boolean;
+  /** Relief's Bevelled edges: how far the top edge of every raised colour is chamfered, mm;
+   *  0 leaves them sharp. Not tied to selection. */
+  extrudeChamferMm: number;
   /** Text mode: when true each letter is its own selectable/colorable part. Default false. */
   separateLetters: boolean;
   /** Text mode typography: multiplier on the line gap (1 = default). */
@@ -337,29 +379,32 @@ export interface UiCallbacks {
   onStemFit(mm: number): void;
   /** Body switch-pocket fit, absolute % of the socket footprint (+ looser, − tighter). */
   onSocketFit(pct: number): void;
-  /** Nudge the active switch by a step (mm). +dx = right, +dy = toward the design's top. */
-  onSwitchNudge(dx: number, dy: number): void;
-  /** Rotate the active switch by a step (degrees, + = clockwise / right). */
-  onSwitchRotate(deltaDeg: number): void;
-  /** Recenter (and unrotate) the active switch to its default slot. */
-  onSwitchReset(): void;
   /** Set the number of switches (1..3); replaces the layout with symmetric defaults. */
-  onSwitchCount(n: number): void;
-  /** Select which switch the d-pad drives (0-based). */
-  onActiveSwitch(i: number): void;
+  /** Put another switch on, up to three. */
+  onSwitchAdd(): void;
+  /** Take one switch off; the last one stays. */
+  onSwitchRemove(index: number): void;
   /** Reset every switch to the default layout. */
   onSwitchResetAll(): void;
+  /** Which switch the Switch sliders move. */
+  onActiveSwitch(index: number): void;
+  /** Move or turn one switch, absolute mm from the centre and degrees; what is absent stays. */
+  onSwitchMove(index: number, patch: { x?: number; y?: number; rotation?: number }): void;
+  /** The picture's place on its base, absolute mm from the centre. */
+  onImageOffset(x: number, y: number): void;
+  /** The picture's turn, degrees. */
+  onDesignRotation(deg: number): void;
   onKeychainToggle(on: boolean): void;
-  /** Set the keychain attachment's bearing around the body edge, absolute degrees (90 = top). */
-  onKeychainAngle(deg: number): void;
   /** Change the keychain ring hole diameter by delta mm. */
   onKeychainSize(deltaMm: number): void;
-  /** Set the keychain attachment's fine offset along the body edge tangent, absolute mm. */
+  /** Where the loop sits round the edge, degrees (90 is the top). */
+  onKeychainAngle(deg: number): void;
+  /** The loop's small shift along the edge from there, absolute mm. */
   onKeychainOffsetSet(mm: number): void;
-  /** Put the keyring loop back at the top of the body. */
-  onKeychainReset(): void;
   onRemoveBg(on: boolean): void;
   onView(mode: ViewMode): void;
+  /** The stage shows the Design view (the top at true scale) instead of the 3D model. */
+  onDesignView(on: boolean): void;
   onShowSwitch(on: boolean): void;
   /** Turn the cut on or off. Separate from `onView` — the two are unrelated questions. */
   onSectionEnabled(on: boolean): void;
@@ -412,21 +457,33 @@ export interface UiCallbacks {
    *  host's own file picker. Nothing here calls it. */
   host?: DesktopHost;
   onThemeChange(theme: string): void;
-  onEditMode(mode: EditMode): void;
-  onEdgeStyle(target: string, style: EdgeStyle): void;
-  onEdgeStep(target: string, delta: number): void;
-  onExtrudeStep(delta: number): void;
-  /** Global toggle: chamfer every raised (extruded) part. Not tied to selection. */
-  onExtrudeChamfer(on: boolean): void;
+  /** Relief: raise one whole colour (a palette row), in height steps. */
+  onColourLevel(index: number, level: number): void;
+  /** Words on a picture: a new line, placed by the app. */
+  onWordAdd(): void;
+  /** A line of words retyped. */
+  onWordText(index: number, text: string): void;
+  /** A line of words taken off. */
+  onWordRemove(index: number): void;
+  /** The words' filament. */
+  onWordsColor(hex: string): void;
+  /** How far the words are raised, in Relief steps. */
+  onWordsLevel(level: number): void;
+  /** Lettering's Text size, mm, for the line Lettering is on (`onActiveWord`; the first line until
+   *  another is picked). */
+  onWordSize(mm: number): void;
+  /** Which line of words Lettering's per-line rows set. */
+  onActiveWord(id: string): void;
+  /** Move or turn that line, absolute mm from the centre and degrees; what is absent stays. */
+  onWordMove(id: string, patch: { x?: number; y?: number; rotation?: number }): void;
+  /** Relief's Bevelled edges, mm: how far every raised colour's top edge is chamfered. */
+  onExtrudeChamferMm(mm: number): void;
   /** Text mode: toggle splitting the word into per-letter parts. */
   onSeparateLetters(on: boolean): void;
   onLineSpacing(v: number): void;
   onLetterSpacing(v: number): void;
   onTextBold(mm: number): void;
   onTextScale(v: number): void;
-  /** Slide the design inside a preset base shape by dx/dy mm. */
-  onImageNudge(dx: number, dy: number): void;
-  onImageNudgeReset(): void;
   // ---- Letter blocks ----
   /** The whole chain changed (a chip was added or removed). */
   onBlockLayout(layout: BlockLayout): void;
@@ -502,18 +559,6 @@ const hexRgb = (hex: string): [number, number, number] => [
   parseInt(hex.slice(5, 7), 16),
 ];
 
-// Friendly label for an edge target (global edge, body, cap frame, or a color part).
-const friendlyTargetLabel = (t: string): string => {
-  if (t === 'capTop') return 'Cap Top';
-  if (t === 'baseTop') return 'Base Top';
-  if (t === 'baseBottom') return 'Base Bottom';
-  if (t === 'base-body') return 'Body';
-  if (t === 'top-base') return 'Cap Frame';
-  const m = /^top-color-(\d+)-\d+$/.exec(t);
-  if (m) return `Color ${+m[1] + 1}`;
-  return t;
-};
-
 /** Whether the base reads as an outline. Icon line-art makes a broken outline body, so
  *  an icon design is always a solid shape whatever `baseShape` says. */
 const isOutlineBase = (s: Pick<UiState, 'baseShape' | 'importMode'>) =>
@@ -543,16 +588,7 @@ export function createUi(
    *  "Top / base gap" stepper reads a 0 offset on a fresh design. */
   const BASE_SOCKET_TOL = initial.tolerance;
 
-  /* Two toggles live on panels that float over the viewport rather than in a sidebar, so
-     they are built further down but read by the sync pass at the bottom. */
   let history: HistoryControlsHandle;
-  let editModes: ReturnType<typeof modeBar<EditMode>> | null = null;
-  let lettersBar: PreviewBar | null = null;
-  let extrudeChamferToggle: ValueRow<boolean> | null = null;
-  let extrudeLevelRow: ValueRow<number> | null = null;
-  /** What the Level stepper last reported, so its absolute readout can be turned back into
-   *  the delta `onExtrudeStep` actually wants — see where it is built, below. */
-  let extrudeLevelLast = 0;
   /** The source the rail last opened for, so arriving in a mode opens its first category once
    *  and later updates leave the open one alone. */
   let railMode: UiState['importMode'] | null = null;
@@ -621,14 +657,9 @@ export function createUi(
       <div id="blockStyleMount"></div>
     </div>
     <div data-rail="shape">
-      <div class="field" id="shapeTypeField">
-        <label>Base style ${tip('Outline follows your image silhouette. Shape places the image on a preset base such as a circle or square.')}</label>
-        <div id="shapeTypeTabsMount"></div>
-      </div>
-      <div class="field" id="shapeSelectField">
-        <label>Base shape ${tip('The shape of the printed base.')}</label>
-        <div id="shapePickMount"></div>
-      </div>
+      <div id="shapeGridMount"></div>
+      <div class="cg-shape-knobs" id="shapeKnobsMount"></div>
+      <div id="shapePickMount"></div>
       <div class="prow-stacked"><div id="widthMount"></div></div>
       <div class="prow-stacked"><div id="designScaleMount"></div></div>
       <div class="prow-stacked"><div id="fixedSizeMount"></div></div>
@@ -637,10 +668,9 @@ export function createUi(
         <div class="prow-stacked"><div id="fixedHMount"></div></div>
         <div id="fixedSizePresetMount"></div>
       </div>
-      <div class="field" id="imageNudgeField" style="display:none;">
-        <label>Move design ${tip('Slide the artwork around inside the base shape. The base keeps its size; anything pushed past the frame is cropped.')}</label>
-        <div id="imageNudgePadMount"></div>
-      </div>
+      <div class="prow-stacked" id="artMoveXRow"><div id="artMoveXMount"></div></div>
+      <div class="prow-stacked" id="artMoveYRow"><div id="artMoveYMount"></div></div>
+      <div class="prow-stacked" id="artTurnRow"><div id="artTurnMount"></div></div>
     </div>
     <div data-rail="cut"><div id="modelCutMount"></div>
     </div>
@@ -654,12 +684,16 @@ export function createUi(
       <div class="prow-stacked" id="textBoldRow"><div id="textBoldMount"></div></div>
       <div class="prow-stacked" id="letterSpacingRow"><div id="letterSpacingMount"></div></div>
       <div class="prow-stacked" id="lineSpacingRow"><div id="lineSpacingMount"></div></div>
+      <div id="wordPickMount"></div>
+      <div class="prow-stacked" id="wordSizeRow"><div id="wordSizeMount"></div></div>
+      <div class="prow-stacked" id="wordMoveXRow"><div id="wordMoveXMount"></div></div>
+      <div class="prow-stacked" id="wordMoveYRow"><div id="wordMoveYMount"></div></div>
+      <div class="prow-stacked" id="wordTurnRow"><div id="wordTurnMount"></div></div>
     </div>
     <div data-rail="body">
       <div id="blockTextureMount"></div>
       <div class="prow-stacked" id="blockRimRow"><div id="blockRimMount"></div></div>
       <div class="prow-stacked"><div id="topthickMount"></div></div>
-      <div class="prow-stacked"><div id="imgdepthMount"></div></div>
       <div class="prow-stacked"><div id="capProudMount"></div></div>
       <div class="prow-stacked"><div id="hollowMount"></div></div>
     </div>
@@ -671,10 +705,19 @@ export function createUi(
       <div class="prow-stacked" id="smoothingField">
         <div id="smoothMount"></div>
       </div>
+      <div id="separateLettersMount"></div>
       <div class="palette" id="palette">
         <div class="hint">Load an image/vector to pick colors.</div>
       </div>
       <div id="modelColoursMount"></div>
+    </div>
+    <div data-rail="relief">
+      <div class="field" id="reliefLevelsField">
+        <label>Raised by ${tip('How far each colour stands above the top. No AMS? Raise one colour, print in one filament, and swap filament at that layer.')}</label>
+        <div class="cg-relief-rows" id="reliefRowsMount"></div>
+      </div>
+      <div id="reliefBevelMount"></div>
+      <div class="prow-stacked"><div id="imgdepthMount"></div></div>
     </div>
     <div data-rail="fit">
       <div class="prow-stacked"><div id="gapTolMount"></div></div>
@@ -686,30 +729,18 @@ export function createUi(
       </div>
     </div>
     <div data-rail="switch">
-      <div class="field" id="switchCountField">
-        <label>Switches ${tip('Use 1 to 3 MX switches for larger or wider designs, for more click points and stability. Each switch can be moved and rotated individually.')}</label>
-        <div id="switchCountMount"></div>
-      </div>
-      <div id="switchChipsMount" style="display:none;"></div>
-      <div class="field" id="switchPadField">
-        <p class="switch-pad-hint">Move &amp; rotate the MX switch ${tip('Slide and rotate the selected MX switch away from the design centre. Handy when a switch doesn\'t sit neatly in the centre of your design.')}</p>
-        <div id="switchPadMount"></div>
-      </div>
+      <div class="cg-switch-list" id="switchListMount"></div>
+      <div id="switchAddMount"></div>
+      <div class="prow-stacked" id="switchMoveXRow"><div id="switchMoveXMount"></div></div>
+      <div class="prow-stacked" id="switchMoveYRow"><div id="switchMoveYMount"></div></div>
+      <div class="prow-stacked" id="switchTurnRow"><div id="switchTurnMount"></div></div>
       <div id="switchResetAllMount"></div>
     </div>
     <div data-rail="keychain">
       <div id="keychainMount"></div>
       <div id="keychainOpts" style="display:none;">
-        <!-- Free-form body: an absolute angle round the edge, a fine offset along it, and
-             a way back to the default — replacing the d-pad whose arrows moved the loop in
-             directions that did not match what they pointed at (audit: keychain controls). -->
-        <div class="prow-stacked" id="keychainAngleRow">
-          <div id="keychainAngleMount"></div>
-        </div>
-        <div class="prow-stacked" id="keychainOffsetRow">
-          <div id="keychainOffsetMount"></div>
-        </div>
-        <div id="keychainFreeResetMount" style="margin-bottom: 12px;"></div>
+        <div class="prow-stacked" id="keychainAngleRow"><div id="keychainAngleMount"></div></div>
+        <div class="prow-stacked" id="keychainOffsetRow"><div id="keychainOffsetMount"></div></div>
 
         <!-- Letter blocks: the loop welds onto an end block's outer face, so the choice is
              which side it hangs from and how far along that side it sits. -->
@@ -744,6 +775,7 @@ export function createUi(
     { id: 'lettering', label: 'Lettering', icon: ICONS.sliders },
     { id: 'body', label: 'Body', icon: ICONS.pattern },
     { id: 'colors', label: 'Colors', icon: ICONS.droplet },
+    { id: 'relief', label: 'Relief', icon: ICONS.mountain },
     { id: 'switch', label: 'Switch', icon: ICONS.target },
     { id: 'keychain', label: 'Keychain', icon: ICONS.link },
     { id: 'fit', label: 'Fit', icon: ICONS.ruler },
@@ -883,6 +915,11 @@ export function createUi(
 
       <!-- Model Panel: filled by ui/modelPanel.ts (mounted from mount.ts) -->
       <div id="modelPanel" class="mode-panel" hidden></div>
+
+      <div class="field" id="wordsField" hidden>
+        <div id="wordsLinesMount"></div>
+        <div id="wordsAddMount"></div>
+      </div>
     </div>
   `;
   resolveHelpTips(rightScroll);
@@ -904,17 +941,7 @@ export function createUi(
     themeStorageKey: 'clicker_theme',
   });
 
-  // Wrapper the Raise/Edges panels dock into (see their construction below): a
-  // `position: relative` box around just the scroll area, so a docked panel can cover it
-  // exactly (`position: absolute; inset: 0`) without also covering `rightFooter` — the
-  // export button has to stay reachable while a panel is open. Takes over the flex slot
-  // `rightScroll` used to hold directly in `.vl-panel--right`; `rightScroll` still owns its
-  // own scrolling underneath.
-  const rightScrollWrap = document.createElement('div');
-  rightScrollWrap.className = 'right-scroll-wrap';
-  rightScrollWrap.appendChild(rightScroll);
-
-  sidebarRight.append(rightScrollWrap, rightFooter);
+  sidebarRight.append(rightScroll, rightFooter);
 
   // Global ID helper
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -1311,6 +1338,122 @@ export function createUi(
   }
   renderTextLines();
 
+  // --- Words on a picture: the rail's Text category ---
+  /* A line per piece of words, each its own object on the cap, and Add text under them: the same
+     line fields Text mode uses, without its symbols. A setting of the picture's clicker rather
+     than what it is made from, so in the rail with the rest: a picture's Text category is the
+     Lettering one renamed, the lines first, then the font, then how the lines are lettered and
+     where they sit (see `update()`). */
+  const MAX_WORDS = 3;
+  const WORD_MAX = 24;
+  /** The lines the fields were built for, by id, so typing never rebuilds the field under it. */
+  let wordFieldsFor = '';
+  let wordCount = 0;
+  const wordsUi = symbolLines({
+    placement: false,
+    onSymbols: () => {},
+    onLine: (i, text) => cb.onWordText(i, text),
+  });
+  $('wordsLinesMount').append(wordsUi.lines);
+  const addWordBtn = button({
+    label: 'Add text',
+    icon: ICONS.plus,
+    emphasis: 'secondary',
+    block: true,
+    onClick: () => cb.onWordAdd(),
+  });
+  $('wordsAddMount').append(addWordBtn);
+  settings.panel('lettering')?.querySelector('.vl-section__body')?.prepend($('wordsField'));
+  function renderWords(state: UiState) {
+    const ids = state.words.map((w) => w.id).join();
+    if (ids !== wordFieldsFor) {
+      const added = state.words.length > wordCount;
+      wordFieldsFor = ids;
+      wordCount = state.words.length;
+      wordsUi.setLines(
+        state.words.map((_, i) => ({ label: `Line ${i + 1}`, maxLength: WORD_MAX, onRemove: () => cb.onWordRemove(i) })),
+        state.words.map((w) => w.text),
+      );
+      if (added) wordsUi.focus(state.words.length - 1);
+    } else {
+      wordsUi.setValues(state.words.map((w) => w.text));
+    }
+    addWordBtn.hidden = state.words.length >= MAX_WORDS;
+  }
+  /* --- Moving things: the same rows wherever something moves ------------------------------
+     Left / right, Up / down and Turn, in mm from the centre and degrees, for each line of words
+     here, and for the picture and each switch further down; the keyring loop goes round the edge
+     instead. The 2D view sets the same values by dragging and `update()` moves these to match,
+     so either hand works in either view. With only the 2D view to move things, a 3D view gave no
+     sign that anything could be moved at all. */
+  const signedDeg = (v: number) => `${v > 0.5 ? '+' : v < -0.5 ? '−' : ''}${Math.abs(Math.round(v))}°`;
+  /** A turn as the rows show it, in (-180, 180]. */
+  const wrapTurn = (d: number) => {
+    const r = ((d % 360) + 360) % 360;
+    return r > 180 ? r - 360 : r;
+  };
+  /** A range read off a build, pulled onto the rows' 0.5 mm grid so that 0 stays on it. */
+  const onGrid = (v: number, up: boolean) => (up ? Math.ceil(v * 2) : Math.floor(v * 2)) / 2;
+  /** `centred`: 0 is where the thing starts, so the row offers the way back to it. */
+  function moveRows(onX: (v: number) => void, onY: (v: number) => void, onTurn: (v: number) => void, centred: boolean) {
+    const axis = (label: string, onInput: (v: number) => void) => sliderRow({
+      label, min: -25, max: 25, step: 0.5, value: 0,
+      ...(centred ? { defaultValue: 0 } : {}),
+      format: (v) => fmtSignedMm(v, 1),
+      parse: readSigned,
+      onInput,
+    });
+    return {
+      x: axis('Left / right', onX),
+      y: axis('Up / down', onY),
+      turn: sliderRow({
+        label: 'Turn', min: -180, max: 180, step: 1, value: 0, defaultValue: 0,
+        format: signedDeg,
+        parse: readSigned,
+        onInput: onTurn,
+      }),
+    };
+  }
+
+  /** The line Lettering's own rows set: picked under Line, or on the 2D view; else the first. */
+  let activeWordId: string | null = null;
+  const activeWord = () => {
+    const words = latestState?.words ?? [];
+    return words.find((w) => w.id === activeWordId) ?? words[0];
+  };
+  // With two or three lines, which one the rows under it set. Boldness and Letter spacing,
+  // above it, are every line's.
+  const wordPick = segmentedControl<'0' | '1' | '2'>({
+    label: 'Line',
+    options: [
+      { value: '0', label: '1' },
+      { value: '1', label: '2' },
+      { value: '2', label: '3' },
+    ],
+    value: '0',
+    onChange: (v) => {
+      const w = latestState?.words[+v];
+      if (w) cb.onActiveWord(w.id);
+    },
+  });
+  $('wordPickMount').append(wordPick);
+  const wordSizeRow = sliderRow({
+    label: 'Text size',
+    help: 'How tall the line prints.',
+    min: 2, max: 30, step: 0.5, value: 6, unit: 'mm',
+    onInput: (v) => cb.onWordSize(v),
+  });
+  $('wordSizeMount').append(wordSizeRow);
+  const wordMove = moveRows(
+    (x) => { const w = activeWord(); if (w) cb.onWordMove(w.id, { x }); },
+    (y) => { const w = activeWord(); if (w) cb.onWordMove(w.id, { y }); },
+    (rotation) => { const w = activeWord(); if (w) cb.onWordMove(w.id, { rotation }); },
+    false,
+  );
+  $('wordMoveXMount').append(wordMove.x);
+  $('wordMoveYMount').append(wordMove.y);
+  $('wordTurnMount').append(wordMove.turn);
+
   const textScaleRow = sliderRow({
     label: 'Text size',
     help: 'How big the letters print. Above 100% the clicker grows with them rather than the letters being squeezed in — a bigger part prints more reliably than a smaller one. On a preset base shape, below 100% shrinks the letters inside a base that stays the size you set.',
@@ -1355,6 +1498,9 @@ export function createUi(
   const fontWrites = (f: FontPickerFont, text: string) => fontWritesText(f.id, text);
   const cardsFor = (): string[] =>
     fontNeeds ? facesThatWrite(fontSample) : [...STANDARD_FONTS.map((f) => f.id), ...curatedFonts().map((f) => f.id)];
+  /** The font block is a picture's Text category's (under its lines, in the rail's usual short
+   *  grid) or the Font category's (Text and Blocks mode, filling it). See `placeFontBlock`. */
+  let fontInText = false;
   function makeFontBlock(value: string): FontChooserHandle {
     return fontChooser({
       fonts: allFonts(),
@@ -1363,7 +1509,7 @@ export function createUi(
       sample: fontSample,
       featuredLabel: fontNeeds ? 'Works with your text' : 'Popular',
       supports: fontWrites,
-      fill: true,
+      fill: !fontInText,
       importAccept: '.ttf,.otf,.woff,.zip,.json',
       ...(cb.host ? { host: cb.host } : {}),
       onChange: (id) => cb.onFontSelect(id),
@@ -1381,6 +1527,16 @@ export function createUi(
     const next = makeFontBlock(fontBlock.getValue());
     fontBlock.replaceWith(next);
     fontBlock = next;
+  }
+  /** Move the font block to where the mode wants it, built for the room it has there. */
+  function placeFontBlock(inText: boolean) {
+    if (inText === fontInText) return;
+    fontInText = inText;
+    const next = makeFontBlock(fontBlock.getValue());
+    fontBlock.remove();
+    fontBlock = next;
+    if (inText) $('wordsField').after(fontBlock);
+    else settings.panel('font')?.querySelector('.vl-section__body')?.append(fontBlock);
   }
   /** The text the cards draw: the words, without the symbols (no font has those). */
   function setFontSample(text: string) {
@@ -1458,7 +1614,9 @@ export function createUi(
   });
   $('blockStyleMount').append(blockBordersToggle);
 
-  /* Body: the outside of the block body, each option a picture of a real one. */
+  /* Body: the outside of the body, each option a picture of a real one. Every clicker but a cut
+     model has it, one field for all of them (so a texture survives switching source); the flat
+     clicker's body takes the same skin as the blocks' (buildClicker). */
   const TEXTURE_OPTIONS: { value: BlockTexture; label: string }[] = [
     { value: 'smooth', label: 'Smooth' },
     { value: 'knurl', label: 'Diamond' },
@@ -1469,7 +1627,7 @@ export function createUi(
   ];
   const blockTextureCtl = segmentedControl<BlockTexture>({
     label: 'Outside texture',
-    help: 'The pattern on the outside walls. It only adds to the wall, so the keys fit the same.',
+    help: 'The pattern on the outside walls. It only adds to the wall, so everything still fits the same.',
     variant: 'tiles',
     columns: 2,
     options: TEXTURE_OPTIONS.map((o) => ({ ...o, image: assetUrl(`assets/textures/${o.value}.png`) })),
@@ -1629,160 +1787,21 @@ export function createUi(
       viewport.appendChild(overlay);
     }
 
-    // --- Edit Mode Bar (Color / Extrude) ---
-    //
-    // The kit's `modeBar()`, which is where this control came from in the first place. What it
-    // buys is the thing the hand-built version could not have: one pill that TRAVELS between the
-    // two labels over `--dur-in-md`, instead of one background switching off in the same frame
-    // another switches on. Five other tab rows in this app already slide; this was the one that
-    // blinked, which is what made it read as unfinished next to them.
-    //
-    // It also deletes two duplicate sync loops that both toggled `.active` from
-    // `[data-editmode]`, and the `is-ready` guard means the selection still paints correctly in
-    // a background tab, where the ResizeObserver behind the indicator never fires.
-    //
-    // 'edges' is deliberately NOT an option here. Its button carried a hardcoded
-    // `style="display:none"` and nothing ever removed it, so the mode has shipped unreachable —
-    // even though its panel, empty state and rebuild path are all complete. Listing it would be
-    // enabling an untested mode as a side effect of a UI migration; that is Ian's call to make
-    // deliberately, and `editMode: 'edges'` still works the moment it is added back.
-    editModes = modeBar<EditMode>({
-      modes: [
-        { value: 'color', label: 'Color', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>' },
-        { value: 'extrude', label: 'Raise', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>' },
-      ],
-      value: initial.editMode,
-      onChange: (m) => cb.onEditMode(m),
-    });
-    editModes.root.id = 'editModeBar';
-
-    /* The stage's top-left: how the preview is shown (the bar, filled in below), then what a
-       click on the model does with Separate letters beside it, then Cut it open's own settings
-       while it is on. One `stageTools()` with a row each, so they stack instead of colliding. */
+    /* The stage's top-left: 2D or 3D first, on a row of its own; then, in 3D, how the model is
+       shown (the bar, filled in below); then Cut it open's own settings while it is on. One
+       `stageTools()` with a row each, so they stack instead of colliding. A click on the model
+       always means the same thing, the picker for that shape (its colour and how far it is
+       raised, in mount.ts); Relief is a rail category. */
+    const modeRow = stageRow([]);
+    modeRow.id = 'stageModeRow';
     const viewRow = stageRow([]);
     viewRow.id = 'stageViewRow';
-    lettersBar = previewBar({
-      label: 'Letters',
-      toggles: [{
-        id: 'letters',
-        label: 'Separate letters',
-        pressed: initial.separateLetters,
-        title: 'Each letter becomes its own part, so you can pick and colour letters one at a time.',
-        onToggle: (v) => cb.onSeparateLetters(v),
-      }],
-    });
-    lettersBar.root.id = 'lettersToggle';
-    lettersBar.root.hidden = true;
-    const clickRow = stageRow([editModes.root, lettersBar.root]);
     const cutRow = stageRow([]);
     cutRow.id = 'stageCutRow';
     cutRow.hidden = true;
-    viewport.appendChild(stageTools([viewRow, clickRow, cutRow]));
+    viewport.appendChild(stageTools([modeRow, viewRow, cutRow]));
     // The tools take the label's slot.
     viewport.querySelector<HTMLElement>('.vl-stage__label')?.setAttribute('hidden', '');
-
-
-    // --- Extrude Panel ---
-    // Docked over the right sidebar's scroll area (`rightScrollWrap`, built alongside
-    // `rightScroll` above) rather than floating over the 3D view: it used to sit centred over
-    // the viewport, covering the design it was supposed to be editing. `.edges-panel-head`
-    // holds the title beside a close button that hands editing back to Color mode — the
-    // panel has no other way out once it is covering the sidebar.
-    const extrudePanel = document.createElement('div');
-    extrudePanel.id = 'extrudePanel';
-    extrudePanel.className = 'edges-panel';
-    extrudePanel.setAttribute('hidden', '');
-    extrudePanel.innerHTML = `
-      <div class="edges-panel-head"><div class="edges-title">Raise part</div></div>
-      <div id="extrudeSelCountHint" class="panel-hint"></div>
-      <div id="extrudeLevelMount"></div>
-      <div class="extrude-chamfer-row" id="extrudeChamferMount"></div>
-      <div class="panel-hint">Click a part on the model. Shift-click to select several.</div>
-    `;
-    extrudePanel.querySelector('.edges-panel-head')?.append(
-      iconButton({
-        icon: ICONS.close,
-        label: 'Close',
-        emphasis: 'ghost',
-        className: 'edges-panel-close',
-        onClick: () => cb.onEditMode('color'),
-      }),
-    );
-    rightScrollWrap.appendChild(extrudePanel);
-
-    /* Was two `<button class="btn" id="extrudeMinus/Plus">` beside a text-only readout div
-       that stated the raw number ("Level: 0") with no unit and no explanation — audit #16.
-       `stepperRow()` is `onExtrudeStep`'s natural shape once it has one: the callback takes a
-       DELTA (it applies the same nudge to every selected part, which can each start at a
-       different height), while the row itself only ever reports an ABSOLUTE value — so
-       `extrudeLevelLast` is what turns "the row now reads 3" back into "+1 from what it read
-       before", the same trick `keychainSizeRow` below needs for the same reason. The help
-       text is what answers "why does this have no mm" (audit #16): a level is a fixed step,
-       not a continuous height — see `buildClicker`'s `stepHeight`, which is not part of
-       `UiState` and so cannot be named here as an exact millimetre count. */
-    extrudeLevelRow = stepperRow({
-      label: 'Level',
-      help: 'Raises or lowers the selected parts in fixed steps. No AMS? Raise one color and print in a single filament, then swap filament at that layer.',
-      min: -5, max: 6, value: 0,
-      format: (v) => (v > 0 ? `+${v}` : String(v)),
-      onInput: (v) => {
-        const delta = v - extrudeLevelLast;
-        extrudeLevelLast = v;
-        cb.onExtrudeStep(delta);
-      },
-    });
-    extrudePanel.querySelector('#extrudeLevelMount')?.append(extrudeLevelRow);
-    // The kit toggle stays uncontrolled the way the raw checkbox was: the browser flips it on
-    // click and we push the value out. update() only calls setValue() for programmatic changes
-    // (undo/redo, project load), so it never fights the user's click.
-    extrudeChamferToggle = toggleSwitch({
-      label: 'Chamfer edges',
-      help: 'Bevels the top edge of every raised color part, so a stepped color reads as a deliberate facet rather than a sharp ledge.',
-      checked: initial.extrudeChamfer,
-      onChange: (v) => cb.onExtrudeChamfer(v),
-    });
-    extrudePanel.querySelector('#extrudeChamferMount')?.append(extrudeChamferToggle);
-
-    // --- Edges Panel ---
-    // Docked the same way as the Raise panel above (see that comment).
-    const edgesPanel = document.createElement('div');
-    edgesPanel.id = 'edgesPanel';
-    edgesPanel.className = 'edges-panel';
-    edgesPanel.setAttribute('hidden', '');
-    edgesPanel.innerHTML = `
-      <div class="edges-panel-head"><div class="edges-title" id="edgesTitle"><span id="edgesTitleText">Edge Modifications</span></div></div>
-      <div id="edgesContent"></div>
-      <div class="panel-hint">Select a part to round (fillet) or bevel (chamfer) its top edge. Shift-click for several.</div>
-    `;
-    rightScrollWrap.appendChild(edgesPanel);
-    // The title text is rewritten on every sync (`edgesTitleText`, below) — audit #16 flagged
-    // this floating panel as having no help anywhere, so the tip lives beside the title
-    // instead, where it survives that rewrite.
-    edgesPanel.querySelector('#edgesTitle')?.append(
-      helpTip('None leaves the edge sharp. Fillet rounds it; Chamfer bevels it at an angle.'),
-    );
-    edgesPanel.querySelector('.edges-panel-head')?.append(
-      iconButton({
-        icon: ICONS.close,
-        label: 'Close',
-        emphasis: 'ghost',
-        className: 'edges-panel-close',
-        onClick: () => cb.onEditMode('color'),
-      }),
-    );
-
-    // The style row (None/Fillet/Chamfer) is a segmentedControl() built per target in
-    // `update()` now and fires through its own `onChange` — only the size +/- stepper is
-    // still a hand-built pair delegated from here.
-    edgesPanel.addEventListener('click', (e) => {
-      const targetEl = e.target as HTMLElement;
-      if (targetEl.classList.contains('edge-size-minus') || targetEl.classList.contains('edge-size-plus')) {
-        const sizeRow = targetEl.closest('.edge-size-btns') as HTMLElement;
-        const target = sizeRow.dataset.edge;
-        const delta = targetEl.classList.contains('edge-size-minus') ? -0.2 : 0.2;
-        if (target) cb.onEdgeStep(target, delta);
-      }
-    });
   }
 
   // --- Import mode tabs ---
@@ -1837,43 +1856,186 @@ export function createUi(
   });
   $('smoothMount').append(smoothRow);
 
+  /* Text only: each letter its own part, so letters can be coloured and raised one at a time.
+     It sat beside the Color / Raise bar on the stage; with that bar gone it lives with the
+     colours it is about. */
+  const separateLettersToggle = toggleSwitch({
+    label: 'Separate letters',
+    help: 'Each letter becomes its own part, so you can colour and raise letters one at a time.',
+    checked: initial.separateLetters,
+    onChange: (v) => cb.onSeparateLetters(v),
+  });
+  $('separateLettersMount').append(separateLettersToggle);
+
+  // --- Relief ---
+  /* How far each colour stands above the top, one row per filament, in the millimetres it prints
+     (the geometry still counts in 0.6 mm steps). A click on a shape on the model sets that one
+     shape instead, through the picker mount.ts opens there; a row sets the whole colour and
+     clears the shapes of it that were set one by one, the rule the colour rows already follow. */
+  // How far every raised colour's top edge is bevelled; shown once something is raised.
+  const reliefBevelRow = sliderRow({
+    label: 'Bevelled edges',
+    help: 'Bevels the top edge of every raised colour, so a step reads as a facet rather than a sharp ledge.',
+    min: 0, max: 1.2, step: 0.1, value: initial.extrudeChamferMm,
+    format: (v) => (v < 0.05 ? 'Off' : `${v.toFixed(1)} mm`),
+    onInput: (v) => cb.onExtrudeChamferMm(v),
+  });
+  $('reliefBevelMount').append(reliefBevelRow);
+  /** The colours the rows were last built for, so a press (which repaints) does not rebuild the
+   *  row under the pointer; only a new set of colours does. */
+  let reliefKey = '';
+  let reliefRows: ValueRow<number>[] = [];
+  let reliefWordsRow: ValueRow<number> | null = null;
+  function renderReliefRows(state: UiState, words: RGB | null) {
+    const key = [...state.palette.map((p) => rgbHex(p.filamentRgb)), words ? `text:${rgbHex(words)}` : ''].join();
+    if (key !== reliefKey) {
+      reliefKey = key;
+      const levelRow = (label: string, rgb: RGB, value: number, onInput: (level: number) => void) => stepperRow({
+        label,
+        swatch: rgbHex(rgb),
+        min: RELIEF_MIN, max: RELIEF_MAX, value,
+        format: reliefMm,
+        // Typed in millimetres, kept in steps: "1.2" is two steps up.
+        parse: (typed, raw) => reliefLevelOf(readSigned(typed, raw)),
+        onInput,
+      });
+      reliefRows = state.palette.map((p, i) =>
+        levelRow(getFilamentNameAndHex(p.filamentRgb)[0], p.filamentRgb, state.colourLevels[i] ?? 0, (level) => cb.onColourLevel(i, level)));
+      // The words, when a picture has them: their own row, under the picture's colours.
+      reliefWordsRow = words ? levelRow('Text', words, state.wordsLevel, (level) => cb.onWordsLevel(level)) : null;
+      $('reliefRowsMount').replaceChildren(...reliefRows, ...(reliefWordsRow ? [reliefWordsRow] : []));
+    }
+    reliefRows.forEach((row, i) => row.setValue(state.colourLevels[i] ?? 0));
+    reliefWordsRow?.setValue(state.wordsLevel);
+  }
+
   // --- Shape ---
 
-  /* The last of the five tab rows. This one needed `setOptionVisible`, which the kit did not
-     have: icon line-art makes a broken outline body, so in icon mode the Outline option is
-     hidden rather than merely disabled. Hiding it from app CSS would not have worked — the
-     grid's column count comes from the option count, so a `display: none` child leaves a dead
-     column and the sliding indicator travels into the gap. */
-  const shapeTypeTabs = segmentedControl<'outline' | 'shape'>({
+  /* The base, as pictures: Outline first (the design's own silhouette), then the shapes people
+     pick most, and the whole directory a press away. It was two decisions and a drawer (Base
+     style Outline | Shape, then Choose a shape) for what is one question, "what shape is it",
+     and a shape is a picture. The tiles are the directory's thumbnails, made by the same ring
+     functions the geometry uses (`shapePaths.ts`), so a tile cannot show what the build would
+     not make. A shape from the drawer that is none of these takes the last tile, by name.
+     Icon line-art makes a broken outline body, so in icon mode Outline is hidden, not greyed. */
+  const GRID_SHAPES = ['circle', 'square', 'heart', 'star', 'ngon', 'shield', 'arch'] as const;
+  type ShapeTile = 'outline' | (typeof GRID_SHAPES)[number] | 'other';
+  /** A path in the directory's 40 × 40 box as a tile picture, in the mid grey the Layout tiles
+   *  use: a picture tile takes a URL, so it cannot follow the theme's text colour. */
+  const shapePicture = (d: string) => {
+    const grey = '#8a94a6';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="${d}" fill="${grey}" fill-opacity="0.32" fill-rule="evenodd" stroke="${grey}" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  };
+  /** Outline's picture until the design has been traced: a soft blob rather than nothing. */
+  const OUTLINE_PLACEHOLDER = 'M20 6c8 0 14 5 14 13s-5 15-14 15S6 28 6 20 12 6 20 6z';
+  /** Which tile the state is: an icon's outline base builds as a circle (buildParamsFor), and
+   *  the hidden Hexagon entry is the six-sided Polygon. */
+  const shapeTileOf = (s: Pick<UiState, 'baseShape' | 'packShapeToken' | 'importMode'>): { tile: ShapeTile; entry: ShapeEntry | null } => {
+    if (isOutlineBase(s)) return { tile: 'outline', entry: null };
+    if (s.baseShape === 'outline') return { tile: 'circle', entry: findShape('circle') };
+    const entry = entryForState(s.baseShape, s.packShapeToken);
+    if (entry && (GRID_SHAPES as readonly string[]).includes(entry.id)) return { tile: entry.id as ShapeTile, entry };
+    if (entry?.id === 'hexagon') return { tile: 'ngon', entry };
+    return { tile: 'other', entry };
+  };
+  /** The drawer's shape on the last tile, by directory id, so pressing it again brings it back. */
+  let otherShapeId: string | null = null;
+  let otherPictureId: string | null = null;
+  const shapeGrid = segmentedControl<ShapeTile>({
+    label: 'Shape',
+    help: 'Outline follows the outline of your design. The others put your design on that shape.',
+    variant: 'tiles',
+    // Four a row in a settings rail: the kit's compact tiles, whose smaller names fit "Polygon".
+    size: 'compact',
+    columns: 4,
     options: [
-      { value: 'outline', label: 'Outline' },
-      { value: 'shape', label: 'Shape' },
+      { value: 'outline', label: 'Outline', image: shapePicture(OUTLINE_PLACEHOLDER) },
+      ...GRID_SHAPES.map((id) => {
+        const entry = findShape(id)!;
+        return { value: id, label: entry.name, image: shapePicture(entry.thumb) };
+      }),
+      { value: 'other' as const, label: 'Your shape', image: shapePicture(OUTLINE_PLACEHOLDER) },
     ],
-    value: isOutlineBase(initial) ? 'outline' : 'shape',
+    value: shapeTileOf(initial).tile,
     onChange: (v) => {
-      // Switching back to Shape re-applies whatever shape is already selected, so the tabs
-      // never silently change WHICH shape you have — only whether it is used.
       if (v === 'outline') cb.onShape('outline');
-      else cb.onShapePick(lastShapeId);
+      else if (v === 'other') { if (otherShapeId) cb.onShapePick(otherShapeId); }
+      else cb.onShapePick(v);
     },
   });
-  $('shapeTypeTabsMount').append(shapeTypeTabs);
+  shapeGrid.setOptionVisible('other', false);
+  $('shapeGridMount').append(shapeGrid);
 
-  /* The base-shape directory.
+  /** Outline's tile drawn from the design's own silhouette: normalised rings (longest side 1,
+   *  centred, +y up) into the 40 × 40 box, every ring thinned to a picture's worth of points. */
+  function setOutlinePicture(rings: Ring[] | null) {
+    const parts: string[] = [];
+    for (const ring of rings ?? []) {
+      if (ring.length < 3) continue;
+      const stride = Math.max(1, Math.ceil(ring.length / 160));
+      const pts: string[] = [];
+      for (let i = 0; i < ring.length; i += stride) {
+        pts.push(`${(20 + ring[i][0] * 32).toFixed(1)} ${(20 - ring[i][1] * 32).toFixed(1)}`);
+      }
+      if (pts.length >= 3) parts.push(`M${pts.join('L')}Z`);
+    }
+    shapeGrid.setOptionImage('outline', shapePicture(parts.length ? parts.join('') : OUTLINE_PLACEHOLDER));
+  }
 
-     A `<select>` held seven options and there are now several hundred, which is the whole
-     reason this is a picker and not a longer dropdown: a dropdown cannot show you what a
-     shape LOOKS like, and a shape is a picture. The kit's symbol picker already does the hard
-     parts — search, category chips, paging, a drawer that leaves the model visible while you
-     click through — so this widens that with an SVG preview rather than growing a second one.
-
-     Thumbnails come from the same ring functions the geometry does (`shapePaths.ts`), so a
-     tile cannot show something the build would not produce. */
-  /** The last non-outline shape chosen, so switching Outline → Shape restores it. */
-  let lastShapeId = 'circle';
+  /* The chosen shape's own knobs, under the grid: a polygon's sides, a star's points and
+     sharpness, a rounded square's corners. The tile that picks a shape and the knobs that change
+     it are in one place, and only the shapes that have one show one. Rebuilt only when the shape
+     changes, each row's range and default coming from the directory entry: a star's Sharpness is
+     30-80% and a cross's Arm width 15-45%, different questions wearing the same field. */
+  let knobsFor: string | null = null;
+  let knobRows: { sides?: ValueRow<number>; corner?: ValueRow<number>; feature?: ValueRow<number> } = {};
+  function paintShapeKnobs(state: UiState) {
+    const entry = isOutlineBase(state) || state.baseShape === 'outline' ? null : entryForState(state.baseShape, state.packShapeToken);
+    const id = entry && (entry.param || entry.corner || entry.feature) ? entry.id : null;
+    const mount = $('shapeKnobsMount');
+    if (id !== knobsFor) {
+      knobsFor = id;
+      knobRows = {};
+      const rows: HTMLElement[] = [];
+      if (entry && id) {
+        if (entry.param) {
+          rows.push((knobRows.sides = stepperRow({
+            label: entry.param.label,
+            help: 'How many sides or points the shape has.',
+            min: entry.param.min, max: entry.param.max, step: entry.param.step, value: state.shapeSides,
+            onInput: (v) => cb.onShapeSides(v),
+          })));
+        }
+        if (entry.corner) {
+          rows.push((knobRows.corner = sliderRow({
+            label: entry.corner.label,
+            help: 'How far the corners are rounded off.',
+            min: entry.corner.min, max: entry.corner.max, step: entry.corner.step,
+            value: Math.round(state.shapeCornerPct * 100), unit: '%',
+            onInput: (v) => cb.onShapeCorner(v / 100),
+          })));
+        }
+        if (entry.feature) {
+          rows.push((knobRows.feature = sliderRow({
+            label: entry.feature.label,
+            help: 'How deep the shape cuts in: a star’s valleys, a cross’s arms.',
+            min: entry.feature.min, max: entry.feature.max, step: entry.feature.step,
+            value: Math.round(state.shapeArmPct * 100), unit: '%',
+            onInput: (v) => cb.onShapeArm(v / 100),
+          })));
+        }
+      }
+      mount.replaceChildren(...rows);
+    }
+    mount.hidden = !knobsFor;
+    knobRows.sides?.setValue(state.shapeSides);
+    knobRows.corner?.setValue(Math.round(state.shapeCornerPct * 100));
+    knobRows.feature?.setValue(Math.round(state.shapeArmPct * 100));
+  }
 
   const shapeBtn = button({
-    label: 'Choose a shape',
+    label: 'All shapes…',
     emphasis: 'secondary',
     block: true,
     onClick: () => {
@@ -1884,15 +2046,7 @@ export function createUi(
         const st = latestState;
         openShapePicker({
           selectedId: st ? (entryForState(st.baseShape, st.packShapeToken)?.id ?? null) : null,
-          params: {
-            shapeSides: st?.shapeSides ?? 5,
-            shapeCornerPct: st?.shapeCornerPct ?? 0.22,
-            shapeArmPct: st?.shapeArmPct ?? 0.56,
-          },
           onPick: (entry) => cb.onShapePick(entry.id),
-          onSides: (n) => cb.onShapeSides(n),
-          onCornerPct: (v) => cb.onShapeCorner(v),
-          onArmPct: (v) => cb.onShapeArm(v),
           onDrawYourOwn: () => cb.onEditShape(),
           /* The pill, in the MakerWorld build only. In the public build `MAKERLAB` is false
              (and the editor is not in the bundle at all, so this button is not drawn either).
@@ -2065,7 +2219,7 @@ export function createUi(
     return [
       ...new Set([$('licenceCtaMount'), ...rows]),
       $('historyControls')?.closest('.sidebar-sticky-footer'),
-      rightScrollWrap, editModes?.root, $('lettersToggle'),
+      rightScroll,
     ].filter((n): n is HTMLElement => n instanceof HTMLElement);
   };
   let fitLockOn = false;
@@ -2125,82 +2279,13 @@ export function createUi(
   });
   $('socketFitMount').append(socketFitRow);
 
-  /* --- The two directional pads ---
-
-     These were 12 hand-built `<button class="switch-pad-btn">` elements written into the
-     sidebar's innerHTML, with delegated `[data-dir]` / `[data-rot]` / `[data-nudge]`
-     listeners on top. The kit's `dpad()` is a straight port of this very control — the
-     clicker is where it came from — so the markup and the delegation both go, and the
-     component supplies the readout too.
-
-     One deliberate behaviour gain: `dpad()` holds-to-repeat (fires on pointerdown, then
-     repeats after 300ms). Nudging a switch a millimetre at a time used to need one click
-     per millimetre. */
-  const SWITCH_STEP = 1; // mm per press
-  const switchDpad = dpad({
-    readout: 'Centered',
-    onMove: (dir) => {
-      if (dir === 'up') cb.onSwitchNudge(0, SWITCH_STEP);
-      else if (dir === 'down') cb.onSwitchNudge(0, -SWITCH_STEP);
-      else if (dir === 'left') cb.onSwitchNudge(-SWITCH_STEP, 0);
-      else cb.onSwitchNudge(SWITCH_STEP, 0);
-    },
-    // Signed like the old `data-rot`: left was +3, right -3, and the kit uses the same sign.
-    onRotate: (deltaDeg) => cb.onSwitchRotate(deltaDeg),
-    onReset: () => cb.onSwitchReset(),
-  });
-  $('switchPadMount').replaceWith(switchDpad.root);
-
-  const NUDGE_STEP = 0.5; // mm per press
-  const imageDpad = dpad({
-    readout: 'Centered',
-    rotate: false,
-    onMove: (dir) => {
-      if (dir === 'up') cb.onImageNudge(0, NUDGE_STEP);
-      else if (dir === 'down') cb.onImageNudge(0, -NUDGE_STEP);
-      else if (dir === 'left') cb.onImageNudge(-NUDGE_STEP, 0);
-      else cb.onImageNudge(NUDGE_STEP, 0);
-    },
-    onReset: () => cb.onImageNudgeReset(),
-  });
-  $('imageNudgePadMount').replaceWith(imageDpad.root);
-
-  // --- Switch count + active-switch chips + reset-all ---
-  const switchCountTabs = segmentedControl<'1' | '2' | '3'>({
-    options: [
-      { value: '1', label: '1' },
-      { value: '2', label: '2' },
-      { value: '3', label: '3' },
-    ],
-    value: String(initial.switches.length) as '1' | '2' | '3',
-    onChange: (v) => cb.onSwitchCount(+v),
-  });
-  $('switchCountMount').append(switchCountTabs);
-  /* The active-switch chips (S1/S2/S3), shown only for 2-3 switches. Was a `<button
-     class="tab" data-sw="…">` string rebuilt by `.innerHTML` whenever the count changed, with
-     a delegated `[data-sw]` click listener and a matching sync loop that toggled `.active` by
-     hand below — the S2/S3 case of this very migration's item #7. `setOptionVisible` is what
-     the rebuild-on-count-change existed for: the three options are built once and S2/S3 are
-     hidden rather than never created, so there is no "does the chip for this index exist yet"
-     bookkeeping left to get wrong. */
-  const activeSwitchTabs = segmentedControl<'0' | '1' | '2'>({
-    options: [
-      { value: '0', label: 'S1' },
-      { value: '1', label: 'S2' },
-      { value: '2', label: 'S3' },
-    ],
-    value: String(initial.activeSwitchIndex) as '0' | '1' | '2',
-    onChange: (v) => cb.onActiveSwitch(+v),
-  });
-  $('switchChipsMount').append(activeSwitchTabs);
-  // Only for two or three switches (see update()): one switch has the pad's own reset.
+  // --- The switches, and the way back to the default layout ---
   const switchResetAll = button({
-    label: 'Reset all switches',
+    label: 'Reset switch position',
     emphasis: 'secondary',
     block: true,
     onClick: () => cb.onSwitchResetAll(),
   });
-  switchResetAll.hidden = true;
   $('switchResetAllMount').replaceWith(switchResetAll);
 
   const keychainToggle = toggleSwitch({
@@ -2211,16 +2296,70 @@ export function createUi(
   });
   $('keychainMount').append(keychainToggle);
 
-  /* Two sliders instead of a d-pad.
-   *
-   * `angleDeg` picks the bearing round the body edge (90° = top) and `offsetMm` is a small
-   * shift along the tangent from there, for a shape where the ray from the centre lands
-   * awkwardly (a heart, a star). The d-pad this replaces mapped them to left/right (coarse)
-   * and up/down (fine) — arrows that moved the loop by an amount and a direction neither
-   * pointed at, which is the "arrows that do not move the loop the way they point" complaint.
-   * Both callbacks are absolute (`onKeychainAngle`, `onKeychainOffsetSet`): the slider always
-   * reports the value it shows, so there is no delta bookkeeping to keep pinned across
-   * renders the way the hole-size stepper below still needs. */
+  // The picture on its base (on an Outline base the picture IS the base, so only Turn shows).
+  const artMove = moveRows(
+    (x) => cb.onImageOffset(x, latestState?.imageOffset.y ?? 0),
+    (y) => cb.onImageOffset(latestState?.imageOffset.x ?? 0, y),
+    (deg) => cb.onDesignRotation(deg),
+    true,
+  );
+  $('artMoveXMount').append(artMove.x);
+  $('artMoveYMount').append(artMove.y);
+  $('artTurnMount').append(artMove.turn);
+
+  /* The switches: a row each, numbered as the 2D view numbers them. Picking one is picking it in
+     2D too, and the rows under the list move it; × takes it off and Add switch puts another on,
+     up to three. A switch picked in 2D is the one lit here. */
+  const switchList = $('switchListMount');
+  let switchRows: ListRowHandle[] = [];
+  const switchAdd = button({
+    label: 'Add switch',
+    icon: ICONS.plus,
+    emphasis: 'secondary',
+    block: true,
+    title: 'Up to three switches, for a larger or wider design: more places to press, and steadier.',
+    onClick: () => cb.onSwitchAdd(),
+  });
+  $('switchAddMount').append(switchAdd);
+  function renderSwitchList(state: UiState) {
+    const n = state.switches.length;
+    if (switchRows.length !== n) {
+      const rows = state.switches.map((_, i) => {
+        const row = listRow({ label: `Switch ${i + 1}`, onClick: () => cb.onActiveSwitch(i) });
+        const badge = document.createElement('span');
+        badge.className = 'cg-switch-badge';
+        badge.setAttribute('aria-hidden', 'true');
+        badge.textContent = String(i + 1);
+        row.prepend(badge);
+        const remove = iconButton({ icon: ICONS.close, label: `Remove switch ${i + 1}`, emphasis: 'ghost', onClick: () => cb.onSwitchRemove(i) });
+        // The last one stays: a clicker needs a switch.
+        remove.hidden = n < 2;
+        const wrap = document.createElement('div');
+        wrap.className = 'cg-switch-list__row';
+        wrap.append(row, remove);
+        return { row, wrap };
+      });
+      switchRows = rows.map((r) => r.row);
+      switchList.replaceChildren(...rows.map((r) => r.wrap));
+    }
+    const at = Math.max(0, Math.min(state.activeSwitchIndex, n - 1));
+    switchRows.forEach((row, i) => row.setActive(i === at));
+    switchAdd.hidden = n >= 3;
+  }
+  const switchAt = () => Math.max(0, Math.min(latestState?.activeSwitchIndex ?? 0, (latestState?.switches.length ?? 1) - 1));
+  const switchMove = moveRows(
+    (x) => cb.onSwitchMove(switchAt(), { x }),
+    (y) => cb.onSwitchMove(switchAt(), { y }),
+    (rotation) => cb.onSwitchMove(switchAt(), { rotation }),
+    false,
+  );
+  $('switchMoveXMount').append(switchMove.x);
+  $('switchMoveYMount').append(switchMove.y);
+  $('switchTurnMount').append(switchMove.turn);
+
+  /* The loop: a bearing round the body's edge (90° = top), then a small slide along the edge from
+     there, for a shape where the ray from the centre lands awkwardly (a heart, a star). Both are
+     absolute, so a row always reports the value it shows. */
   const keychainAngleRow = sliderRow({
     label: 'Loop position',
     help: 'Where the keyring loop sits around the edge. 90° is the top.',
@@ -2228,26 +2367,18 @@ export function createUi(
     onInput: (v) => cb.onKeychainAngle(v),
   });
   $('keychainAngleMount').append(keychainAngleRow);
-
-  // arrows: 'horizontal' — same reasoning as the block-chain slide below: the offset is a
-  // left/right nudge along the edge, not a swept quantity, so left/right arrows read the way
-  // the motion happens rather than asking "which way is minus".
-  const keychainOffsetRowCtl = stepperRow({
+  // Left/right arrows, as the block chain's slide has: it is a nudge along the edge, not a
+  // swept quantity, so the arrows read the way the loop moves.
+  const keychainOffsetRow = stepperRow({
     label: 'Fine offset',
-    help: 'Nudges the loop along the edge by a small amount, without changing the angle above. Useful on a shape where the edge does not sit exactly where the angle points.',
+    help: 'Slides the loop along the edge from where Loop position puts it.',
     min: -15, max: 15, step: 0.5, value: initial.keychain.offsetMm, unit: 'mm',
     arrows: 'horizontal',
     onInput: (v) => cb.onKeychainOffsetSet(v),
   });
-  $('keychainOffsetMount').append(keychainOffsetRowCtl);
+  $('keychainOffsetMount').append(keychainOffsetRow);
 
-  $('keychainFreeResetMount').append(button({
-    label: 'Reset',
-    emphasis: 'ghost',
-    onClick: () => cb.onKeychainReset(),
-  }));
-
-  /* Was a `<button class="btn" id="keychainSizeMinus/Plus">` pair around a plain `<span>`
+  /* Was a hand-built `keychainSizeMinus/Plus` button pair around a plain `<span>`
      readout. `onKeychainSize` takes a DELTA (mount.ts clamps the result to 3.0-8.0mm), while
      `stepperRow()` only ever reports an ABSOLUTE value, so `keychainHoleLast` is what turns
      "the row now reads 5.6" back into "+0.4 from what it read before" — `update()` keeps it
@@ -2270,31 +2401,6 @@ export function createUi(
   });
   $('keychainSizeMount').append(keychainSizeRow);
 
-  /** None / Fillet / Chamfer, shared by the two global edge rows (Shape & Size) and every
-   *  per-part row in the floating Edges panel. Was a `<button class="edge-style-btn">` triple
-   *  in each spot with its own delegated `[data-style]` listener and a matching `.active`
-   *  toggle loop in `update()` — the same shape as the import cards and the switch chips,
-   *  duplicated once per edge target instead of fixed once here. */
-  function edgeStyleTabs(target: string, value: EdgeStyle) {
-    return segmentedControl<EdgeStyle>({
-      options: [
-        { value: 'none', label: 'None' },
-        { value: 'fillet', label: 'Fillet' },
-        { value: 'chamfer', label: 'Chamfer' },
-      ],
-      value,
-      onChange: (v) => cb.onEdgeStyle(target, v),
-    });
-  }
-
-  /** One row per selected part in the floating Edges panel: the segmented style control plus
-   *  the size stepper it shows once a style is picked. Rebuilt only when the selection
-   *  changes (see `update()`), so this is what survives that rebuild to be read back from. */
-  const partEdgeRows = new Map<
-    string,
-    { tabs: SegmentedRow<EdgeStyle>; sizeRow: HTMLElement; radiusLabelEl: HTMLElement }
-  >();
-
   // --- Typeable value inputs: parse typed number, commit on Enter / blur ---
 
   /* The three sidebar sections are written into the innerHTML above, so
@@ -2305,11 +2411,27 @@ export function createUi(
     makeCollapsible(d);
   }
 
-  // --- How the preview is shown: one bar on the stage, the same in every mode ---
-  // The arrangement as a pill pair, then the two preview-only switches as dots. Their
+  /* --- The stage's two modes, and the 3D one's own ways of looking ---
+     2D lays the top out flat at true scale, where everything on it is dragged; 3D shows the
+     clicker as it prints. The kit's mode pill, the stage's one choice, on a row above the 3D
+     bar: the 2D view used to be a third tab beside Assembled and Exploded, which read as one
+     more way of looking at the model rather than the other half of the app. Hidden for a block
+     set and a cut model, which have no flat top to lay out. */
+  const stageMode = modeBar<'2d' | '3d'>({
+    modes: [
+      { value: '2d', label: '2D', icon: ICONS.frame },
+      { value: '3d', label: '3D', icon: ICONS.box },
+    ],
+    value: initial.designView ? '2d' : '3d',
+    onChange: (v) => cb.onDesignView(v === '2d'),
+  });
+  stageMode.root.setAttribute('aria-label', 'View');
+  document.getElementById('stageModeRow')?.append(stageMode.root);
+
+  // In 3D: the arrangement as a pill pair, then the two preview-only switches as dots. Their
   // explanations are tooltips: the bar has no room for a "?".
   const viewTabs = previewBar<ViewMode>({
-    label: 'Preview',
+    label: '3D view',
     modes: {
       options: [
         { value: 'assembled', label: 'Assembled' },
@@ -2378,16 +2500,16 @@ export function createUi(
   // Help tooltips are the kit's `helpTip()` now (see `tip()` / `resolveHelpTips()` above) —
   // each marker owns its own bubble and positioning, so there is nothing left to wire here.
 
+  /** The shelf filament nearest a colour, as a person sees it (Oklab): a row is now named after
+   *  its filament, and by plain RGB distance a leaf green came out nearer Brown than Green. */
   function getFilamentNameAndHex(rgb: RGB): [string, string] {
     let bestHex = rgbHex(rgb);
     let bestName = 'Custom Color';
     let bestD = Infinity;
+    const [l, a, b] = srgbToOklab(rgb);
     for (const [name, hex] of FILAMENTS) {
-      const [fr, fg, fb] = hexRgb(hex);
-      const dr = rgb[0] - fr;
-      const dg = rgb[1] - fg;
-      const db = rgb[2] - fb;
-      const d = dr * dr + dg * dg + db * db;
+      const [fl, fa, fb] = srgbToOklab(hexRgb(hex));
+      const d = (l - fl) ** 2 + (a - fa) ** 2 + (b - fb) ** 2;
       if (d < bestD) {
         bestD = d;
         bestHex = hex;
@@ -2408,7 +2530,7 @@ export function createUi(
     clientY: number,
     currentHex: string,
     options: RGB[],
-    handlers: { onSelect: (hex: string) => void; onClose?: () => void }
+    handlers: { onSelect: (hex: string) => void; onClose?: () => void; footer?: HTMLElement }
   ) {
     colorPopover({
       x: clientX,
@@ -2418,6 +2540,7 @@ export function createUi(
       onSelect: handlers.onSelect,
       onCustom: (hex) => cb.onCustomColor(hex),
       onClose: handlers.onClose,
+      ...(handlers.footer ? { footer: handlers.footer } : {}),
     });
   }
 
@@ -2430,7 +2553,7 @@ export function createUi(
    *  a clicked part; computing it the same way here is what keeps the two entry points
    *  offering one identical list instead of two that can quietly drift apart. */
   function colorOptionsFor(
-    colorMode: 'normal' | 'limited' | undefined,
+    colorMode: UiState['colorMode'] | undefined,
     limitedColors: RGB[] | undefined,
     customColors: RGB[],
   ): RGB[] {
@@ -2445,11 +2568,18 @@ export function createUi(
   function renderPalette(
     palette: PaletteEntry[],
     bodyColorRgb: RGB,
-    colorMode?: 'normal' | 'limited',
+    colorMode?: UiState['colorMode'],
     limitedColors?: RGB[],
     blocks?: { capRgb: RGB },
     recolored = 0,
     customColors: RGB[] = [],
+    /** The words on a picture, when it has some: their own row, after the picture's colours. */
+    wordsRgb: RGB | null = null,
+    /** A mapped picture's colours and their groups: each filament row shows every colour of the
+     *  picture that prints in it. */
+    mapped: MappedColour[] = [],
+    /** An image: its colours are chosen in the import window, which a button here reopens. */
+    picture = false,
   ) {
     const pal = $('palette');
     pal.replaceChildren();
@@ -2482,7 +2612,7 @@ export function createUi(
        list (`colorOptionsFor`, above). A colour traced from the picture shows as a dot before
        the name (`detected`), beside the filament chosen to print it. */
     const offered = offerOf(colorOptionsFor(colorMode, limitedColors, customColors));
-    const row = (label: string, value: string, onChange: (hex: string) => void, detected?: string) =>
+    const row = (label: string, value: string, onChange: (hex: string) => void, detected?: string | string[]) =>
       paletteRow({ label, value, options: offered, onChange, onCustom: (hex) => cb.onCustomColor(hex), ...(detected ? { detected } : {}) });
 
     // Letter blocks print in exactly three filaments — the blocks, the caps, and the
@@ -2504,11 +2634,41 @@ export function createUi(
       hint.textContent = 'Load an image/vector to pick colors.';
       pal.appendChild(hint);
     } else {
+      /* One row per filament, named for it. A mapped picture's row shows, as dots after the name,
+         every colour of the picture that prints in it (two colours merged in the import window
+         are one row, two dots); a row's chip recolours that filament, and which colours share a
+         filament is changed in the window. */
+      const same = (a: RGB, b: RGB) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
       palette.forEach((entry, i) => {
-        pal.append(row(`Color ${i + 1}`, rgbHex(entry.filamentRgb), (hex) => cb.onFilament(i, hex), rgbHex(entry.quantRgb)));
+        const group = colorMode === 'mapped' ? mapped.find((c) => same(c.rgb, entry.quantRgb))?.group : undefined;
+        const members = group === undefined ? [] : mapped.filter((c) => c.group === group).map((c) => rgbHex(c.rgb));
+        const label = picture || colorMode === 'mapped' ? getFilamentNameAndHex(entry.filamentRgb)[0] : `Color ${i + 1}`;
+        pal.append(row(label, rgbHex(entry.filamentRgb), (hex) => cb.onFilament(i, hex), members.length ? members : rgbHex(entry.quantRgb)));
       });
-
-      appendTip('Tip: click a shape on the 3D model to recolor just that shape. A row above recolors its whole color.');
+      if (wordsRgb) pal.append(row('Text', rgbHex(wordsRgb), (hex) => cb.onWordsColor(hex)));
+      if (picture) {
+        pal.append(button({
+          label: 'Edit picture colours…',
+          emphasis: 'secondary',
+          block: true,
+          onClick: () => cb.onAdjustImage(),
+        }));
+      }
+      // Once shapes have been recoloured one by one, the way back: a row only resets its own
+      // colour, so without this a scattered set of shape colours has no single undo.
+      if (recolored > 0) {
+        pal.appendChild(button({
+          label: `Reset ${recolored} recolored shape${recolored === 1 ? '' : 's'}`,
+          emphasis: 'ghost',
+          block: true,
+          className: 'reset-part-colors',
+          title: 'Put every individually recolored shape back on its palette row',
+          onClick: (e) => {
+            e.stopPropagation();
+            cb.onResetPartColors();
+          },
+        }));
+      }
     }
   }
 
@@ -2544,6 +2704,10 @@ export function createUi(
 
   function update(state: UiState) {
     latestState = state;
+    /** The three sources a picture comes from, and whether this one has words on it. */
+    const pictureMode = state.importMode === 'image' || state.importMode === 'svg' || state.importMode === 'icon';
+    const hasWords = pictureMode && state.words.length > 0;
+    const wordsRgb = hasWords ? wordsColour(state.palette, state.wordsColorRgb, capColourOf(state)) : null;
     statusSpinner.style.display = state.building ? '' : 'none';
     statusText.data = (state.building ? ' ' : '') + state.status;
     // Nothing to say: no empty pill on the stage.
@@ -2562,7 +2726,7 @@ export function createUi(
     const countStr = String(state.colorCount);
     setFieldOptions(
       ccountField,
-      state.colorMode === 'limited' && !COLOR_COUNT_OPTIONS.some((o) => o.value === countStr)
+      state.colorMode !== 'normal' && !COLOR_COUNT_OPTIONS.some((o) => o.value === countStr)
         ? [...COLOR_COUNT_OPTIONS, { value: countStr, label: `${state.colorCount} Colors (from image)` }]
         : COLOR_COUNT_OPTIONS,
       countStr,
@@ -2576,17 +2740,32 @@ export function createUi(
     widthRow.setValue(state.capWidthMm);
     topthickRow.setValue(state.topThickness);
     imgdepthRow.setValue(state.imageDepth);
-    // What the colored part IS in this mode: an image, a drawing or the letters.
-    imgdepthRow.setBounds(0.2, 3, state.importMode === 'text' ? 'Letter depth' : state.importMode === 'image' ? 'Image depth' : 'Design depth');
+    // How deep the colours go into the top, in Relief beside how far they rise: the letters in
+    // Text mode, the colours everywhere else.
+    imgdepthRow.setBounds(0.2, 3, state.importMode === 'text' ? 'Letter depth' : 'Colour depth');
+    renderReliefRows(state, wordsRgb);
+    // A bevel has an edge to bevel only once something stands above the face.
+    const raised = state.colourLevels.some((l) => l > 0) || state.wordsLevel > 0
+      || Object.values(state.componentHeights).some((l) => l > 0);
+    $('reliefBevelMount').hidden = !raised;
+    reliefBevelRow.setValue(state.extrudeChamferMm);
+    separateLettersToggle.setValue(state.separateLetters);
+    $('separateLettersMount').hidden = state.importMode !== 'text';
     capProudRow.setValue(RIM_SPAN - state.capProud);
     hollowToggle.setValue(state.hollowBase);
     lastBuiltBody = state.builtBodyMm;
     designScaleRow.setValue(Math.round((state.designScale ?? 1) * 100));
-    // An outline base ignores it, so the control must not sit there looking live. In Text
-    // mode "Text size" is the same knob under a name that means something there, so this
-    // one goes away entirely rather than being a second control fighting it.
-    designScaleRow.hidden = state.importMode === 'text';
-    designScaleRow.setDisabled(isOutlineBase(state));
+    // An outline base ignores it, so it goes away there rather than sitting greyed out. In Text
+    // mode "Text size" is the same knob under a name that means something there, so this one
+    // goes away too rather than being a second control fighting it.
+    designScaleRow.hidden = state.importMode === 'text' || isOutlineBase(state);
+    paintShapeKnobs(state);
+    // The picture's place: on an Outline base the picture is the base, so it only turns.
+    $('artMoveXRow').hidden = isOutlineBase(state);
+    $('artMoveYRow').hidden = isOutlineBase(state);
+    artMove.x.setValue(state.imageOffset.x);
+    artMove.y.setValue(state.imageOffset.y);
+    artMove.turn.setValue(wrapTurn(state.designRotation));
     fixedSizeToggle.setValue(!!state.fixedSize);
     (document.getElementById('fixedSizeFields') as HTMLElement | null)?.toggleAttribute('hidden', !state.fixedSize);
     if (state.fixedSize) {
@@ -2602,36 +2781,33 @@ export function createUi(
     syncFitTest(state.fitTestActive);
     socketFitRow.setValue(state.socketFitPct);
     const switchCountN = state.switches.length;
-    const activeIdx = Math.min(state.activeSwitchIndex, switchCountN - 1);
-    const active = state.switches[activeIdx] ?? { x: 0, y: 0, rotation: 0 };
-    {
-      const bits: string[] = [];
-      if (Math.abs(active.x) >= 0.05 || Math.abs(active.y) >= 0.05) {
-        bits.push(`X ${active.x > 0 ? '+' : ''}${active.x.toFixed(1)} · Y ${active.y > 0 ? '+' : ''}${active.y.toFixed(1)} mm`);
-      }
-      if (Math.abs(active.rotation) >= 0.5) bits.push(`${active.rotation > 0 ? '↺' : '↻'} ${Math.abs(active.rotation)}°`);
-      const body = bits.length ? bits.join('  ·  ') : 'Centered';
-      switchDpad.setReadout(switchCountN > 1 ? `S${activeIdx + 1} · ${body}` : body);
+    switchResetAll.setLabel(switchCountN > 1 ? 'Reset switch positions' : 'Reset switch position');
+    // The list, the one the rows move lit; then the rows, over the box the last build clamped the
+    // switches into (before one, the base). An axis with no room is not offered.
+    renderSwitchList(state);
+    const switchIdx = Math.max(0, Math.min(state.activeSwitchIndex, switchCountN - 1));
+    const sb = state.switchBox;
+    const halfCap = onGrid(state.capWidthMm / 2, false);
+    const swRange: [number, number, number, number] = sb
+      ? [onGrid(sb.loX, true), onGrid(sb.hiX, false), onGrid(sb.loY, true), onGrid(sb.hiY, false)]
+      : [-halfCap, halfCap, -halfCap, halfCap];
+    const sw = state.switches[switchIdx];
+    $('switchMoveXRow').hidden = swRange[0] >= swRange[1];
+    $('switchMoveYRow').hidden = swRange[2] >= swRange[3];
+    if (swRange[0] < swRange[1]) switchMove.x.setBounds(swRange[0], swRange[1]);
+    if (swRange[2] < swRange[3]) switchMove.y.setBounds(swRange[2], swRange[3]);
+    if (sw) {
+      switchMove.x.setValue(sw.x);
+      switchMove.y.setValue(sw.y);
+      switchMove.turn.setValue(wrapTurn(sw.rotation));
     }
-    // Switch count segmented control.
-    switchCountTabs.setValue(String(switchCountN) as '1' | '2' | '3');
-    // Active-switch chips (only shown for 2–3 switches). S2/S3 are hidden rather than rebuilt,
-    // so there is no count to reconcile against a rendered button list any more.
-    const chipsMountEl = document.getElementById('switchChipsMount');
-    if (chipsMountEl) {
-      chipsMountEl.style.display = switchCountN > 1 ? 'block' : 'none';
-      activeSwitchTabs.setOptionVisible('1', switchCountN >= 2);
-      activeSwitchTabs.setOptionVisible('2', switchCountN >= 3);
-      activeSwitchTabs.setValue(String(activeIdx) as '0' | '1' | '2');
-    }
-    switchResetAll.hidden = switchCountN <= 1;
     const kc = state.keychain;
     keychainToggle.setValue(kc.enabled);
     const kcOpts = document.getElementById('keychainOpts');
     if (kcOpts) kcOpts.style.display = kc.enabled ? '' : 'none';
-
     keychainAngleRow.setValue(kc.angleDeg ?? 90);
-    keychainOffsetRowCtl.setValue(kc.offsetMm ?? 0);
+    keychainOffsetRow.setValue(kc.offsetMm ?? 0);
+
     keychainHoleLast = kc.holeDiameterMm;
     keychainSizeRow.setValue(kc.holeDiameterMm);
     removeBgToggle.setValue(state.removeBg);
@@ -2651,10 +2827,35 @@ export function createUi(
     $('textLinesField').hidden = isBlockMode;
     textUi.setSymbols(state.textSymbols);
     blockUi.setSymbols(state.blockSymbols);
-    // Lettering holds both modes' rows; each shows only in its own.
+    // Words on a picture: the field under the picture's own controls.
+    $('wordsField').hidden = !pictureMode;
+    // The font goes in with a picture's words, under them, once there are some.
+    placeFontBlock(pictureMode);
+    fontBlock.hidden = pictureMode && !hasWords;
+    renderWords(state);
+    // Lettering holds every mode's rows; each shows only where it means something. A picture's
+    // words share Text mode's Boldness and Letter spacing, and size by the line (Text size, mm).
     for (const id of ['legendSizeRow', 'legendBoldRow']) $(id).hidden = !isBlockMode;
-    for (const id of ['textScaleRow', 'textBoldRow', 'letterSpacingRow', 'lineSpacingRow']) {
-      $(id).hidden = state.importMode !== 'text';
+    // On an Outline base the letters are the shape, so Size (in Shape) is their size.
+    $('textScaleRow').hidden = state.importMode !== 'text' || isOutlineBase(state);
+    $('lineSpacingRow').hidden = state.importMode !== 'text';
+    for (const id of ['textBoldRow', 'letterSpacingRow']) $(id).hidden = state.importMode !== 'text' && !hasWords;
+    // A line of words at a time: its size and its place, under Line with two or three of them.
+    for (const id of ['wordSizeRow', 'wordMoveXRow', 'wordMoveYRow', 'wordTurnRow']) $(id).hidden = !hasWords;
+    $('wordPickMount').hidden = !hasWords || state.words.length < 2;
+    if (hasWords) {
+      const at = Math.max(0, state.words.findIndex((w) => w.id === activeWordId));
+      const active = state.words[at];
+      wordPick.setOptionVisible('2', state.words.length >= 3);
+      wordPick.setValue(String(at) as '0' | '1' | '2');
+      wordSizeRow.setValue(active.heightMm);
+      // Anywhere on the cap and a little past it, where an Outline base grows a tab round them.
+      const reach = onGrid(state.capWidthMm * 0.75, false);
+      wordMove.x.setBounds(-reach, reach);
+      wordMove.y.setBounds(-reach, reach);
+      wordMove.x.setValue(active.x);
+      wordMove.y.setValue(active.y);
+      wordMove.turn.setValue(wrapTurn(active.rotation));
     }
     if (!isBlockMode) {
       textScaleRow.setValue(Math.round(state.textScale * 100));
@@ -2664,11 +2865,14 @@ export function createUi(
     }
     const keycapLink = document.getElementById('blocksKeycapLink');
     if (keycapLink) keycapLink.hidden = !isBlockMode;
-    $('blockTextureMount').hidden = !isBlockMode;
+    // Body, and with it the texture, is not a category of a cut model at all.
+    blockTextureCtl.setValue(state.blockTexture);
     $('blockRimRow').hidden = !isBlockMode;
-    // The font list draws what will be printed: the blocks' keys, or Text mode's words.
+    // The font list draws what will be printed: the blocks' keys, Text mode's words, or the words
+    // on a picture.
     if (isBlockMode) setFontSample(state.blockLines.join(' '));
     else if (state.importMode === 'text') setFontSample(textLines.join(' '));
+    else if (hasWords) setFontSample(state.words.map((w) => w.text).join(' '));
     if (isBlockMode) {
       const arr = arrangeBlocks(state.blockLayout, state.blockGridRows, state.blockGridCols,
         state.blockCells, state.blockLines, state.blockSymbols);
@@ -2681,7 +2885,6 @@ export function createUi(
         blockKeyMap.set(arr.grid.rows, arr.grid.cols, arr.grid.on, keyLegends(state, arr));
       }
       blockBordersToggle.setValue(state.blockStyle !== 'open');
-      blockTextureCtl.setValue(state.blockTexture);
       blockRimRow.setValue(state.blockRimRaiseMm);
       renderBlockLines(state, arr);
       legendSizeRow.setValue(state.legendScale);
@@ -2690,8 +2893,10 @@ export function createUi(
       keychainSlideRow.setValue(state.keychainSlideMm ?? 0);
     }
 
-    // Hide/show image specific fields in colors section
-    const showSmoothingAndBg = state.importMode === 'image';
+    // An image's count and smoothing: only for one whose colours were never mapped (a project
+    // saved before the import window mapped them). A mapped picture's colours, and how smooth
+    // its outlines are, are chosen in the window, which "Edit picture colours…" reopens.
+    const showSmoothingAndBg = state.importMode === 'image' && state.colorMode !== 'mapped';
     // Named `...Wrap`, not `ccountField` — that name is the selectField() control itself now
     // (declared above, outside `update()`); this is only the wrapper div around its mount.
     const ccountFieldWrap = $('colorCountField');
@@ -2699,21 +2904,21 @@ export function createUi(
     if (ccountFieldWrap) ccountFieldWrap.style.display = showSmoothingAndBg ? 'grid' : 'none';
     if (smoothingField) smoothingField.style.display = showSmoothingAndBg ? 'grid' : 'none';
 
-    // Update Shape controls. Icons can't use the outline style (their thin
-    // line-art makes a broken body), so the Outline tab is hidden for icon mode
-    // and the body is always a solid shape.
-    shapeTypeTabs.setOptionVisible('outline', state.importMode !== 'icon');
-    const treatAsOutline = isOutlineBase(state);
-    $('shapeSelectField').style.display = treatAsOutline ? 'none' : 'block';
-    // Moving the design only applies to a preset shape: on an outline base the shape IS
-    // the design, so there is nothing to move it against.
-    const showNudge = !treatAsOutline && !isBlockMode;
-    $('imageNudgeField').style.display = showNudge ? '' : 'none';
-    if (showNudge) {
-      const { x, y } = state.imageOffset;
-      const signed = (v: number) => (v > 0 ? '+' : '') + v.toFixed(1);
-      imageDpad.setReadout(x === 0 && y === 0 ? 'Centered' : `${signed(x)}, ${signed(y)} mm`);
+    // The shape tiles: Outline goes for icons (their line art makes a broken body), and a shape
+    // from the drawer that is none of the tiles takes the last one, under its own name.
+    const shapeNow = shapeTileOf(state);
+    shapeGrid.setOptionVisible('outline', state.importMode !== 'icon');
+    if (shapeNow.tile === 'other') {
+      otherShapeId = shapeNow.entry?.id ?? null;
+      shapeGrid.setOptionLabel('other', shapeNow.entry?.name ?? 'Your shape');
+      const picId = shapeNow.entry?.id ?? '';
+      if (picId !== otherPictureId) {
+        otherPictureId = picId;
+        shapeGrid.setOptionImage('other', shapePicture(shapeNow.entry?.thumb ?? OUTLINE_PLACEHOLDER));
+      }
     }
+    shapeGrid.setOptionVisible('other', shapeNow.tile === 'other');
+    shapeGrid.setValue(shapeNow.tile);
 
     // Blocks mode: the block shells are fixed CAD parts, so everything that shapes a
     // free-form clicker body (base style, size, keychain angle, backing thickness, legend
@@ -2745,8 +2950,8 @@ export function createUi(
       hideForBlocks(document.getElementById(mount)?.closest('.prow-stacked') as HTMLElement | null);
     }
     // The keychain stays, but a block set has no round edge to slide a loop around, so it
-    // welds to one side of the set instead — Side + Slide show, Angle + Offset hide, and
-    // each pair gets its own Reset since they write different fields.
+    // welds to one side of the set instead: Side + Slide show. A flat clicker's loop goes round
+    // its edge: Loop position and Fine offset, or dragged in 2D.
     const showForBlocks = (el: HTMLElement | null) => {
       if (el) el.style.display = isBlockMode ? '' : 'none';
     };
@@ -2755,7 +2960,6 @@ export function createUi(
     showForBlocks(document.getElementById('keychainBlockResetMount'));
     hideForBlocks(document.getElementById('keychainAngleRow'));
     hideForBlocks(document.getElementById('keychainOffsetRow'));
-    hideForBlocks(document.getElementById('keychainFreeResetMount'));
 
     /* Model mode has its own sections (modelPanel.ts) for the cut, the switch, the size and the
        colours, so the image clicker's versions of those hide. What stays is what still means
@@ -2786,37 +2990,24 @@ export function createUi(
     for (const it of RAIL_ITEMS) settings.setVisible(it.id, railPlan.show.includes(it.id));
     if (state.importMode !== railMode) {
       railMode = state.importMode;
+      // A picture's Lettering is its Text: the words, their font and where they sit.
+      settings.setLabel('lettering', pictureMode ? 'Text' : 'Lettering', { icon: pictureMode ? ICONS.text : ICONS.sliders });
       settings.open(railPlan.first);
     }
 
-    shapeTypeTabs.setValue(treatAsOutline ? 'outline' : 'shape');
-
-    if (treatAsOutline) {
-      shapeBtn.setDisabled(true);
-    } else {
-      shapeBtn.setDisabled(false);
-    }
-    /* The button names the shape you have, which is the job the `<select>` used to do and the
-       one thing a "Choose a shape" button would otherwise fail at. A pack or library shape is
-       stored as its token rather than as 'custom' — 'custom' names the mechanism and there are
-       hundreds of them, so it would leave the button reading "Custom" forever. */
-    const entry = entryForState(state.baseShape, state.packShapeToken);
-    if (entry) lastShapeId = entry.id;
-    // A shape drawn in the editor is not in the directory and never will be, so it has no
-    // entry and no name — say so rather than falling back to "Choose a shape", which would
-    // read as though nothing had been chosen.
-    shapeBtn.setLabel(
-      entry ? entry.name : state.baseShape === 'custom' ? 'Your shape' : 'Choose a shape',
-    );
-
-    // Update View tabs. This loop used to query `'button'` and key off `dataset.view`; once
-    // the row became a `segmentedControl()` its buttons carry no such attribute, so the
-    // comparison was false for every tab and it stripped `.active` off all of them — the
-    // label kept `--muted` grey while the indicator pill painted accent behind it, 1.03:1.
+    // The stage's mode, then the 3D bar, set from the state rather than from their own clicks.
+    // (A loop here once keyed the view tabs off `dataset.view` after the row stopped carrying it,
+    // and stripped the selection off every tab: the label stayed `--muted` grey over an accent
+    // pill, 1.03:1. Each control's own `setValue` is the only way a selection is shown.)
+    // 2D is for the flat clickers: a block set has its key map, a cut model its own grip.
+    const designable = pictureMode || state.importMode === 'text';
+    $('stageModeRow').hidden = !designable;
+    stageMode.setValue(state.designView ? '2d' : '3d');
+    $('stageViewRow').hidden = state.designView;
     viewTabs.setValue(state.view);
     viewTabs.setPressed('cut', state.sectionOn);
     const cutRowEl = document.getElementById('stageCutRow');
-    if (cutRowEl) cutRowEl.hidden = !state.sectionOn;
+    if (cutRowEl) cutRowEl.hidden = !state.sectionOn || state.designView;
     cutAxis = state.sectionAxis;
     cutBar.setValue(state.sectionAxis);
     cutPos.setValue(Math.round(state.sectionPos * 100));
@@ -2848,6 +3039,9 @@ export function createUi(
       isBlockMode ? { capRgb: state.baseColorOverride ?? DEFAULT_CAP_RGB } : undefined,
       Object.keys(state.partOverrides ?? {}).length,
       state.customColors ?? [],
+      wordsRgb,
+      state.mappedColors,
+      state.importMode === 'image',
     );
 
     // Highlight the active icon in the Lucide gallery
@@ -2857,138 +3051,17 @@ export function createUi(
       });
     }
 
-    editModes?.setValue(state.editMode);
-    if (editModes) editModes.root.style.display = state.importMode === 'model' ? 'none' : '';
-
     // --- Undo / redo / refresh toolbar ---
     history.setState({ canUndo: state.canUndo, canRedo: state.canRedo, canRefresh: state.canRefresh });
-
-    // --- Extrude tooltip ---
-    const extrudeTooltipEl = document.getElementById('extrudeTooltip');
-    if (extrudeTooltipEl) {
-      extrudeTooltipEl.classList.toggle('hidden', state.editMode !== 'extrude');
-    }
-
-    // --- Separate-letters toggle: text mode only, in Color + Extrude ---
-    const lettersToggleEl = document.getElementById('lettersToggle');
-    if (lettersToggleEl) {
-      const showLetters = state.importMode === 'text'
-        && (state.editMode === 'color' || state.editMode === 'extrude');
-      lettersToggleEl.toggleAttribute('hidden', !showLetters);
-      lettersBar?.setPressed('letters', state.separateLetters);
-    }
-
-    // --- Extrude panel ---
-    const extrudePanelEl = document.getElementById('extrudePanel');
-    if (extrudePanelEl) {
-      if (state.editMode === 'extrude') {
-        extrudePanelEl.removeAttribute('hidden');
-        const selCountHint = extrudePanelEl.querySelector('#extrudeSelCountHint');
-        // Global, part-independent toggle: always reflects the single flag.
-        extrudeChamferToggle?.setValue(state.extrudeChamfer);
-
-        if (state.selectedParts.length === 0) {
-          extrudeLevelRow?.setDisabled(true);
-          if (selCountHint) selCountHint.textContent = 'Select a part to raise or lower it.';
-        } else {
-          extrudeLevelRow?.setDisabled(false);
-          const firstPart = state.selectedParts[0];
-          const level = state.componentHeights[firstPart] ?? 0;
-          extrudeLevelLast = level;
-          extrudeLevelRow?.setValue(level);
-          const n = state.selectedParts.length;
-          if (selCountHint) selCountHint.textContent = n > 1 ? `${n} parts selected` : '';
-        }
-      } else {
-        extrudePanelEl.setAttribute('hidden', '');
-      }
-    }
-
-    // --- Edges panel (floating): per-part edges only. Global cap/base edges now live
-    //     in the left sidebar, so with nothing selected we just prompt to pick a part. ---
-    const edgesPanelEl = document.getElementById('edgesPanel');
-    const edgesContentEl = document.getElementById('edgesContent');
-    // The text-bearing span inside the title, not the title bar itself — the bar also holds
-    // the help tip added at construction, which a `.textContent =` on the bar would wipe out.
-    const edgesTitleEl = document.getElementById('edgesTitleText');
-    if (edgesPanelEl && edgesContentEl && edgesTitleEl) {
-      if (state.editMode === 'edges') {
-        edgesPanelEl.removeAttribute('hidden');
-
-        if (state.selectedParts.length === 0) {
-          edgesTitleEl.textContent = 'Edge Modifications';
-          if (!edgesContentEl.querySelector('.edges-empty')) {
-            edgesContentEl.innerHTML =
-              `<div class="edges-empty">Click a part on the model to round or bevel its top edge.<br/>Cap &amp; base edges are in the left panel, under <strong>Shape &amp; Size</strong>.</div>`;
-          }
-        } else {
-          const targets = state.selectedParts;
-          edgesTitleEl.textContent = 'Part Edges';
-
-          // Rebuild only if the selection changed. The style row for each target is a
-          // segmentedControl() now rather than a `.edge-style-btn` triple in an HTML string,
-          // so what has to survive a rebuild is the map from target to its live handle —
-          // `partEdgeRows`, populated below — not a DOM query for a data attribute.
-          const currentTargets = Array.from(partEdgeRows.keys());
-          if (targets.join(',') !== currentTargets.join(',')) {
-            edgesContentEl.replaceChildren();
-            partEdgeRows.clear();
-            for (const t of targets) {
-              const radiusLabelEl = document.createElement('span');
-              radiusLabelEl.className = 'edge-radius-label';
-              radiusLabelEl.style.color = 'var(--muted)';
-              const labelRow = document.createElement('div');
-              labelRow.className = 'edge-label';
-              labelRow.title = t;
-              labelRow.style.marginBottom = '4px';
-              labelRow.append(`${friendlyTargetLabel(t)} `, radiusLabelEl);
-
-              const tabs = edgeStyleTabs(t, 'none');
-              const tabsWrap = document.createElement('div');
-              tabsWrap.style.marginBottom = '8px';
-              tabsWrap.append(tabs);
-
-              const sizeRow = document.createElement('div');
-              sizeRow.className = 'edge-size-btns';
-              sizeRow.dataset.edge = t;
-              sizeRow.style.cssText = 'gap:8px; margin-bottom: 12px; display: none;';
-              sizeRow.innerHTML = `
-                <button class="btn edge-size-minus" type="button" style="flex:1;">-</button>
-                <button class="btn edge-size-plus" type="button" style="flex:1;">+</button>
-              `;
-
-              edgesContentEl.append(labelRow, tabsWrap, sizeRow);
-              partEdgeRows.set(t, { tabs, sizeRow, radiusLabelEl });
-            }
-          }
-
-          // Sync from edgeSettings.
-          for (const target of targets) {
-            const es = state.edgeSettings.find(s => s.target === target) || { target, style: 'none' as EdgeStyle, radius: 1.0 };
-            const row = partEdgeRows.get(target);
-            if (!row) continue;
-            row.tabs.setValue(es.style);
-            if (es.style === 'none') {
-              row.sizeRow.style.display = 'none';
-              row.radiusLabelEl.textContent = '';
-            } else {
-              row.sizeRow.style.display = 'flex';
-              const safeRadius = es.radius !== undefined ? es.radius : 1.0;
-              row.radiusLabelEl.textContent = `(${safeRadius.toFixed(1)} mm)`;
-            }
-          }
-        }
-      } else {
-        edgesPanelEl.setAttribute('hidden', '');
-      }
-    }
   }
 
   return { 
     update, 
     hexRgb, 
-    showColorPopoverAt, 
-    addUploadedSvg, 
+    showColorPopoverAt,
+    addUploadedSvg,
+    /** The Outline tile drawn from a fresh trace's silhouette (null: the placeholder). */
+    setOutlinePicture,
     /**
      * Undoes everything this UI put outside its two sidebars.
      *
@@ -3014,6 +3087,13 @@ export function createUi(
       textLines = text.split('\n').slice(0, MAX_TEXT_LINES);
       if (!textLines.length) textLines = [''];
       renderTextLines();
+    },
+    /** Open a rail category: the one that answers to what was picked on the Design view. */
+    openCategory: (id: 'shape' | 'lettering' | 'switch' | 'keychain') => settings.open(id),
+    /** The words selected on the Design view, which Lettering's Text size then sizes alone. */
+    setActiveWord: (id: string | null) => {
+      activeWordId = id;
+      if (latestState) update(latestState);
     },
   };
 }

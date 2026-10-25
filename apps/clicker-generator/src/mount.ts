@@ -30,7 +30,15 @@ import './style.css';
 import { createViewer, type SectionAxis } from './viewer/viewer';
 import { mountPlatePicker } from '@vostok/plates';
 import { downloadFile, textToArrayBuffer } from '@vostok/export';
-import { createUi, type UiState } from './ui/ui';
+import { createUi, type UiState, type WordItem } from './ui/ui';
+import {
+  createDesignView, type DesignArtRegion, type DesignEdit, type DesignInput, type DesignTarget,
+  type DesignView, type DesignWord,
+} from './ui/designView';
+import { lowestFit, wordsColour } from './words';
+import { capColourOf, deriveFrameColor } from './frame';
+import { clampLevel, RELIEF_MAX, RELIEF_MIN, reliefLevelOf, reliefMm } from './relief';
+import { readSigned } from './ui/signedReadout';
 import { loadFileToImage, parseSvg, processImage, type RgbaImage, type SvgOptions } from '@vostok/trace';
 import { runWizard } from './ui/wizard';
 import { clickerThreeMF, downloadClickerThreeMF } from './export/threemfExport';
@@ -71,7 +79,7 @@ import type {
   BuildParams,
   BuildRegion,
   ClickerPart,
-  EdgeStyle,
+  DesignLayout,
   GeometryRequest,
   GeometryResponse,
   PaletteEntry,
@@ -84,7 +92,7 @@ import type {
 import { FILAMENTS, type PreprocessParams } from './types';
 
 import type { DesktopHost } from '@vostok/ui-kit';
-import { closeAllDialogs, dialog, toast } from '@vostok/ui-kit';
+import { closeAllDialogs, closeColorPopover, dialog, stepperRow, toast } from '@vostok/ui-kit';
 import { setAssetBase, assetBase } from './assets';
 import { TEMPLATE } from './template';
 import { createModelMode, type ModelMode } from './ui/modelMode';
@@ -167,6 +175,169 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     /** Exactly one named part — a single keycap or a single letter picked in the viewport. */
     | { kind: 'part'; name: string };
 
+  /** Shapes that take a height: a colour's shapes and a picture's words. A body, a cap or a
+   *  keycap is a colour only. */
+  const raisable = (name: string) => /^top-color-\d+-\d+$/.test(name) || name.startsWith('text-');
+
+  /** A mapped picture's group for one of its colours (a traced region's colour is one of them). */
+  const mappedGroupOf = (s: UiState, rgb: RGB): number | undefined =>
+    s.mappedColors.find((c) => c.rgb[0] === rgb[0] && c.rgb[1] === rgb[1] && c.rgb[2] === rgb[2])?.group;
+  /** …and that group's filament, or undefined when the picture is not mapped. */
+  const mappedFilamentOf = (s: UiState, rgb: RGB): RGB | undefined => {
+    if (s.colorMode !== 'mapped') return undefined;
+    const g = mappedGroupOf(s, rgb);
+    return g === undefined ? undefined : s.mappedFilaments[g];
+  };
+
+  /** Lines of words a picture can carry. */
+  const MAX_WORDS = 3;
+  let wordSeq = 0;
+  /** The line selected on the Design view: what Lettering's Text size sizes alone. */
+  let selectedWordId: string | null = null;
+  /** The three sources a picture comes from: the ones words can be put on. */
+  const pictureSource = (mode: UiState['importMode']) => mode === 'image' || mode === 'svg' || mode === 'icon';
+
+  /**
+   * Where a new line of words lands. On an Outline base, just under the picture's silhouette (or
+   * the last line), and the base grows a tab round it (buildClicker). On a shape base, inside the
+   * frame: the lowest place under the picture's middle where the line fits across, at a size the
+   * cap can hold or smaller if it must, since the foot of a heart or a circle is narrower than a
+   * word. A further line goes under the last; where the frame is too narrow there, the lines above
+   * move up to make room (`lift`, mm), so they still read top to bottom.
+   */
+  function placeNewWord(s: UiState, id: string): { word: WordItem; lift: number } {
+    const size = Math.round(Math.max(4, Math.min(9, s.capWidthMm * 0.16)) * 2) / 2;
+    const ys = (rings: Ring[]) => rings.flatMap((r) => r.map(([, y]) => y));
+    const L = latestLayout;
+    const outline = s.baseShape === 'outline' && !s.fixedSize && s.importMode !== 'icon';
+    const at = (y: number, heightMm: number, lift = 0) => ({ word: { id, text: 'Text', x: 0, y, heightMm, rotation: 0 }, lift });
+    const lowest = s.words.length ? Math.min(...s.words.map((w) => w.y - w.heightMm / 2)) : null;
+    if (L && !outline) {
+      const frame = L.imageArea;
+      const foot = Math.min(...ys(frame));
+      const head = Math.max(...ys(frame));
+      for (let h = size; h >= 3; h -= 0.5) {
+        const w = wordGlyphs({ id, text: 'Text', x: 0, y: 0, heightMm: h, rotation: 0 })?.w ?? h * 2.2;
+        if (lowest === null) {
+          const y = lowestFit(frame, w, h, foot + h / 2, -h * 0.3 - h / 2);
+          if (y !== null) return at(y, h);
+        } else {
+          const under = lowest - h * 0.3 - h / 2;
+          const y = lowestFit(frame, w, h, under, head - h / 2);
+          if (y !== null) return at(y, h, y - under);
+        }
+      }
+    }
+    // An Outline base, no build to measure yet, or nowhere it fits: under the picture, or the last line.
+    let top: number;
+    if (lowest !== null) top = lowest - size * 0.3;
+    else if (L && outline) top = Math.min(...ys(L.cap)) - 1;
+    else if (L) top = Math.min(...ys(L.imageArea)) + size * 1.2;
+    else top = -s.capWidthMm * 0.45;
+    const y = Math.round((top - size / 2) * 10) / 10;
+    return at(Number.isFinite(y) ? y : -s.capWidthMm * 0.5, size);
+  }
+
+  /** Words from a project file, checked field by field (a file is a document from outside), at
+   *  most three, and the id counter moved past them so a new line never reuses one. */
+  function loadedWords(raw: unknown): WordItem[] {
+    if (!Array.isArray(raw)) return [];
+    const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+    const out: WordItem[] = [];
+    for (const r of raw.slice(0, MAX_WORDS)) {
+      if (!r || typeof r !== 'object') continue;
+      const w = r as Record<string, unknown>;
+      out.push({
+        id: typeof w.id === 'string' && w.id ? w.id : `w${++wordSeq}`,
+        text: typeof w.text === 'string' ? w.text.slice(0, 24) : '',
+        x: num(w.x, 0),
+        y: num(w.y, 0),
+        heightMm: Math.max(2, Math.min(30, num(w.heightMm, 6))),
+        rotation: num(w.rotation, 0),
+      });
+    }
+    for (const w of out) {
+      const n = Number(/^w(\d+)$/.exec(w.id)?.[1] ?? 0);
+      if (n > wordSeq) wordSeq = n;
+    }
+    return out;
+  }
+
+  /** A text clicker saved when Text size also sized the clicker (on an outline base at any
+   *  value, on a preset one above 100%): that share is moved into Size, so the project opens at
+   *  the size it was made, to the millimetre the Size slider holds (see buildParamsFor). */
+  function foldTextSize(mode: unknown, baseShape: unknown, capWidthMm: number, textScale: number) {
+    if (mode !== 'text' || (baseShape !== 'outline' && textScale <= 1) || textScale === 1) return { capWidthMm, textScale };
+    return { capWidthMm: Math.max(20, Math.min(70, Math.round(capWidthMm * textScale))), textScale: 1 };
+  }
+
+  /** A line's glyph layout, by what changes it. Fonts and spacing change rarely; a drag never. */
+  const glyphCache = new Map<string, { rings: Ring[]; w: number; h: number } | null>();
+  /**
+   * A line of words as outlines in millimetres, centred on its own box and unturned: the build
+   * places it, the Design view draws it. `heightMm` is the box's height. Null for an empty line
+   * or one the face cannot write.
+   */
+  function wordGlyphs(w: WordItem): { rings: Ring[]; w: number; h: number } | null {
+    const spacing = store.get().letterSpacing;
+    const key = `${w.text}\u0000${currentFontId}\u0000${spacing}\u0000${w.heightMm}`;
+    if (glyphCache.has(key)) return glyphCache.get(key)!;
+    let out: { rings: Ring[]; w: number; h: number } | null = null;
+    if (w.text.trim()) {
+      try {
+        const rs = parseLetter(w.text, currentFontId, 24, false, { letterSpacing: spacing });
+        const rings = rs.regions.flatMap((r) => r.components.flatMap((c) => c.rings));
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const r of rings) for (const [x, y] of r) {
+          minX = Math.min(minX, x); minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+        }
+        const h = maxY - minY;
+        if (rings.length && h > 1e-6) {
+          const k = w.heightMm / h;
+          const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+          out = {
+            rings: rings.map((r) => r.map(([x, y]) => [(x - cx) * k, (y - cy) * k] as [number, number])),
+            w: (maxX - minX) * k,
+            h: w.heightMm,
+          };
+        }
+      } catch {
+        out = null;
+      }
+    }
+    if (glyphCache.size > 200) glyphCache.clear();
+    glyphCache.set(key, out);
+    return out;
+  }
+
+  /**
+   * The words as build regions: each line in cap millimetres (turned and placed), carved before
+   * any colour of the picture (coverage 0) so they cut through it. A line recoloured on its own
+   * keeps its colour; the rest wear the words' filament.
+   */
+  function wordRegions(s: UiState): BuildRegion[] {
+    if (!pictureSource(s.importMode)) return [];
+    const base = wordsColour(s.palette, s.wordsColorRgb, capColourOf(s));
+    const out: BuildRegion[] = [];
+    for (const w of s.words) {
+      const g = wordGlyphs(w);
+      if (!g) continue;
+      const rad = (w.rotation * Math.PI) / 180;
+      const c = Math.cos(rad), sn = Math.sin(rad);
+      const partName = `text-${w.id}`;
+      out.push({
+        filamentRgb: s.partOverrides?.[partName] ?? base,
+        coverage: 0,
+        rings: g.rings.map((r) => r.map(([x, y]) => [w.x + x * c - y * sn, w.y + x * sn + y * c] as [number, number])),
+        partName,
+        mm: true,
+        boldMm: s.textBold,
+      });
+    }
+    return out;
+  }
+
   /** Symmetric default placement layout for 1..3 switches, spread across the cap width. */
   function defaultSwitchLayout(n: number, capWidthMm: number): SwitchPlacement[] {
     if (n <= 1) return [{ x: 0, y: 0, rotation: 0 }];
@@ -196,12 +367,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     hollowBase: false,
     fixedSize: null,
     designScale: 1,
+    designRotation: 0,
     shapeSides: 6,
     shapeCornerPct: 0.22,
     shapeArmPct: 0.34,
     packShapeToken: null,
     drawnShapeId: null,
     builtBodyMm: null,
+    switchBox: null,
     tolerance: 0.4,
     stemFitMm: 0,
     fitTestActive: false,
@@ -213,6 +386,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     keychain: { enabled: false, style: 'loop', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 },
     removeBg: true,
     view: 'exploded',
+    designView: false,
     showSwitch: true,
     // Cut-open state. Viewport only: not in HISTORY_FIELDS, not in a saved project.
     sectionOn: false,
@@ -227,19 +401,24 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     currentIconName: 'circle',
     colorMode: 'normal',
     limitedColors: [],
+    mappedColors: [],
+    mappedFilaments: [],
     bodyColorRgb: [240, 240, 240] as RGB,
     paletteOverrides: [],
     baseColorOverride: null,
     imageOffset: { x: 0, y: 0 },
     partOverrides: {},
     customColors: [],
-    editMode: 'color',
+    colourLevels: [],
+    words: [],
+    wordsColorRgb: null,
+    wordsLevel: 0,
     edgeSettings: [
       { target: 'capTop', style: 'chamfer', radius: 0.5 },
       // One control for the whole clicker base — bevels top + bottom body edges together.
       { target: 'clickerBase', style: 'chamfer', radius: 0.5 },
     ],
-    extrudeChamfer: false,
+    extrudeChamferMm: 0,
     separateLetters: false,
     lineSpacing: 1,
     letterSpacing: 0,
@@ -563,7 +742,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   cleanups.push(() => viewer.dispose());
 
   // Build plate picker (top-right of the stage); the plate is shared across generators.
-  mountPlatePicker(document.getElementById('viewport')!, viewer);
+  const platePicker = mountPlatePicker(document.getElementById('viewport')!, viewer);
 
   // ---- Sync the 3D viewport to the active theme ----
   // index.html's bootstrap and the ui-kit sidebar-footer theme toggle both own
@@ -637,8 +816,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       void openWizard(() => Promise.resolve(base));
     },
     onColorCount: (n) => {
-      // A count picked here overrides the wizard's kept-colour list: the picture is split
-      // automatically into that many again. The list is still one "Adjust image" away.
+      // The count the design already has is not a choice: the select reports one whenever a
+      // sync moves its value (the import window confirming 3 colours where it showed 4), and
+      // taking that for a pick threw the window's colours away for an automatic split.
+      if (n === store.get().colorCount) return;
+      // A count picked here overrides the window's colours: the picture is split automatically
+      // into that many again. The window is still one "Adjust image" away.
       store.set({ colorCount: n, colorMode: 'normal', limitedColors: [] });
       debouncedReprocess();
     },
@@ -789,51 +972,29 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ socketFitPct: Math.round(Math.max(-5, Math.min(5, pct)) * 10) / 10 });
       debouncedRebuild();
     },
-    onSwitchNudge: (dx, dy) => {
-      // Move only the active switch. Bound the requested offset; the worker does the
-      // precise clamp to the cap footprint + min-pitch and reports the applied
-      // placements back (moving the preview switches).
-      const LIMIT = 15;
-      const clamp = (v: number) => Math.max(-LIMIT, Math.min(LIMIT, v));
+    /* Another switch, or one fewer. Switches nobody has moved are laid out afresh for the new
+       count, evenly; once one has been placed by hand, the others keep their places and the new
+       one takes its slot in the even layout. The new one is the one picked. */
+    onSwitchAdd: () => {
       const s = store.get();
-      const i = Math.min(s.activeSwitchIndex, s.switches.length - 1);
-      const switches = s.switches.map((sw, idx) =>
-        idx === i ? { ...sw, x: clamp(sw.x + dx), y: clamp(sw.y + dy) } : sw,
-      );
-      store.set({ switches });
+      const n = s.switches.length;
+      if (n >= 3) return;
+      const even = defaultSwitchLayout(n + 1, s.capWidthMm);
+      const untouched = JSON.stringify(s.switches) === JSON.stringify(defaultSwitchLayout(n, s.capWidthMm));
+      store.set({ switches: untouched ? even : [...s.switches, even[n]], activeSwitchIndex: n });
+      if (s.designView) designView.select(`switch:${n}`);
       debouncedRebuild();
     },
-    onSwitchRotate: (deltaDeg) => {
-      // Rotate only the active switch a couple of degrees per press; clamp so the socket
-      // stays sensibly aligned with the design.
+    onSwitchRemove: (index) => {
       const s = store.get();
-      const i = Math.min(s.activeSwitchIndex, s.switches.length - 1);
-      const switches = s.switches.map((sw, idx) =>
-        idx === i ? { ...sw, rotation: Math.round(Math.max(-30, Math.min(30, sw.rotation + deltaDeg))) } : sw,
-      );
-      store.set({ switches });
+      const n = s.switches.length;
+      if (n < 2 || index < 0 || index >= n) return;
+      const untouched = JSON.stringify(s.switches) === JSON.stringify(defaultSwitchLayout(n, s.capWidthMm));
+      store.set({
+        switches: untouched ? defaultSwitchLayout(n - 1, s.capWidthMm) : s.switches.filter((_, i) => i !== index),
+        activeSwitchIndex: Math.min(index, n - 2),
+      });
       debouncedRebuild();
-    },
-    onSwitchReset: () => {
-      // Recenter only the active switch to its default slot for the current count.
-      const s = store.get();
-      const layout = defaultSwitchLayout(s.switches.length, s.capWidthMm);
-      const i = Math.min(s.activeSwitchIndex, s.switches.length - 1);
-      const switches = s.switches.map((sw, idx) => (idx === i ? layout[idx] : sw));
-      store.set({ switches });
-      debouncedRebuild();
-    },
-    onSwitchCount: (n) => {
-      // Changing count replaces the whole array with the symmetric default layout
-      // (users re-tune after); keeps the logic simple and always well-spaced.
-      const s = store.get();
-      if (n === s.switches.length) return;
-      store.set({ switches: defaultSwitchLayout(n, s.capWidthMm), activeSwitchIndex: 0 });
-      debouncedRebuild();
-    },
-    onActiveSwitch: (i) => {
-      // Selection only — no rebuild.
-      store.set({ activeSwitchIndex: i });
     },
     onSwitchResetAll: () => {
       const s = store.get();
@@ -843,22 +1004,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
       debouncedRebuild();
     },
-    onKeychainReset: () => {
-      // 90° is +Y, the top of the body — where a hanger looks deliberate.
-      store.set({ keychain: { ...store.get().keychain, angleDeg: 90, offsetMm: 0 } });
-      debouncedRebuild();
-    },
     onKeychainToggle: (on) => {
       store.set({ keychain: { ...store.get().keychain, enabled: on } });
-      debouncedRebuild();
-    },
-
-    onKeychainAngle: (deg) => {
-      // Absolute now — the slider that replaced the rotate d-pad always reports the value it
-      // shows, so there is no delta to accumulate the way the old `onKeychainRotate` did.
-      const kc = store.get().keychain;
-      const angleDeg = ((deg % 360) + 360) % 360;
-      store.set({ keychain: { ...kc, angleDeg } });
       debouncedRebuild();
     },
     onKeychainSize: (deltaMm) => {
@@ -867,13 +1014,34 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ keychain: { ...kc, holeDiameterMm } });
       debouncedRebuild();
     },
-    onKeychainOffsetSet: (mm) => {
-      // Absolute, same reasoning as `onKeychainAngle` above.
-      const kc = store.get().keychain;
-      const offsetMm = Math.round(Math.max(-15.0, Math.min(15.0, mm)) * 10) / 10;
-      store.set({ keychain: { ...kc, offsetMm } });
+    onActiveSwitch: (index) => {
+      const i = Math.max(0, Math.min(store.get().switches.length - 1, index));
+      store.set({ activeSwitchIndex: i });
+      // The Design view picks the same one, so the two never point at different switches.
+      if (store.get().designView) designView.select(`switch:${i}`);
+    },
+    onSwitchMove: (index, patch) => {
+      const s = store.get();
+      store.set({ switches: s.switches.map((sw, i) => (i === index ? { ...sw, ...patch } : sw)), activeSwitchIndex: index });
       debouncedRebuild();
     },
+    onImageOffset: (x, y) => {
+      store.set({ imageOffset: { x, y } });
+      debouncedRebuild();
+    },
+    onDesignRotation: (deg) => {
+      store.set({ designRotation: deg });
+      debouncedRebuild();
+    },
+    onKeychainAngle: (deg) => {
+      store.set({ keychain: { ...store.get().keychain, angleDeg: ((deg % 360) + 360) % 360 } });
+      debouncedRebuild();
+    },
+    onKeychainOffsetSet: (mm) => {
+      store.set({ keychain: { ...store.get().keychain, offsetMm: Math.max(-15, Math.min(15, mm)) } });
+      debouncedRebuild();
+    },
+    onDesignView: (on) => showDesignView(on),
     onSmoothing: (v) => {
       store.set({ smoothing: v });
       if (store.get().importMode === 'image' && hasImage()) debouncedReprocess();
@@ -1046,7 +1214,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
     onModelFile: (file) => {
       pendingReframe = true;
-      store.set({ editMode: 'color', selectedParts: [] });
+      store.set({ selectedParts: [] });
       void modelMode.loadFile(file);
     },
     onImportMode: (mode) => {
@@ -1064,9 +1232,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // pinned frame colour from the previous mode would apply to the wrong thing.
         selectedParts: [],
         baseColorOverride: null,
-        // Model mode has no Raise or Edges: its parts are recoloured by clicking them.
-        ...(mode === 'model' ? { editMode: 'color' as const } : {}),
       });
+      // A block set or a cut model has no Design view; the stage goes back to the 3D one.
+      if (s.designView && !hasDesignView(mode)) showDesignView(false);
       reprocess();
     },
     onSvgUpload: async (file) => {
@@ -1245,85 +1413,85 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       applyTheme(theme === 'light' ? 'light' : 'dark');
       viewer.setTheme(theme);
     },
-    onEditMode: (mode) => {
-      // Geometry is always kept in sync by the live edit rebuilds. Keep the selection
-      // when moving between extrude/edges (so you can raise then bevel the same parts),
-      // but clear it entering color mode so no stray highlight tints the swatches.
-      store.set({ editMode: mode, selectedParts: mode === 'color' ? [] : store.get().selectedParts });
-    },
-    onEdgeStyle: (target: string, style: EdgeStyle) => {
+    onWordAdd: () => {
       const s = store.get();
-      const edgeSettings = [...s.edgeSettings];
-      const idx = edgeSettings.findIndex(x => x.target === target);
-      if (idx >= 0) {
-        const cur = edgeSettings[idx];
-        // Picking fillet/chamfer with no size yet gets a sensible default so the
-        // result is immediately visible (the old code left radius at 0 = no-op).
-        const radius = style !== 'none' && (!cur.radius || cur.radius < 0.2) ? 1.0 : cur.radius;
-        edgeSettings[idx] = { ...cur, style, radius };
-      } else {
-        edgeSettings.push({ target, style, radius: style === 'none' ? 0 : 1.0 });
-      }
-      store.set({ edgeSettings });
-      debouncedQuietRebuild(); // live preview of the bevel
+      if (s.words.length >= MAX_WORDS) return;
+      const { word, lift } = placeNewWord(s, `w${++wordSeq}`);
+      const lifted = lift > 0 ? s.words.map((w) => ({ ...w, y: Math.round((w.y + lift) * 100) / 100 })) : s.words;
+      store.set({ words: [...lifted, word] });
+      debouncedRebuild();
     },
-    onEdgeStep: (target: string, delta: number) => {
+    onWordText: (index, text) => {
+      const words = store.get().words.slice();
+      if (!words[index]) return;
+      words[index] = { ...words[index], text };
+      fitFontTo(text);
+      store.set({ words });
+      debouncedRebuild();
+    },
+    onWordRemove: (index) => {
       const s = store.get();
-      const edgeSettings = [...s.edgeSettings];
-      const idx = edgeSettings.findIndex(x => x.target === target);
-      const current = idx >= 0 ? edgeSettings[idx].radius : 1.0;
-      const next = Math.max(0.2, Math.min(5.0, current + delta));
-      if (idx >= 0) {
-        edgeSettings[idx] = { ...edgeSettings[idx], radius: next };
-      } else {
-        edgeSettings.push({ target, style: 'chamfer', radius: next });
-      }
-      store.set({ edgeSettings });
-      debouncedQuietRebuild(); // live preview of the bevel size
+      const gone = s.words[index];
+      if (!gone) return;
+      if (selectedWordId === gone.id) selectedWordId = null;
+      store.set({ words: s.words.filter((_, i) => i !== index) });
+      debouncedRebuild();
     },
-    onExtrudeStep: (delta: number) => {
-      const s = store.get();
-      if (s.selectedParts.length === 0) return;
-      const componentHeights = { ...s.componentHeights };
-      let changed = false;
-      for (const partName of s.selectedParts) {
-        const current = componentHeights[partName] ?? 0;
-        const next = Math.max(-5, Math.min(6, current + delta));
-        if (current !== next) {
-          componentHeights[partName] = next;
-          changed = true;
-        }
-      }
-      if (changed) {
-        store.set({ componentHeights });
-        // Rebuild for real so the part grows in place (no floating slab) — this IS
-        // the preview, and it bakes the height into the exported geometry.
-        debouncedQuietRebuild();
-      }
+    onWordsColor: (hex) => {
+      // The row sets every line, and so clears the lines recoloured one by one. Colour never
+      // changes geometry, so the parts are repainted in place.
+      const rgb = hexToRgb(hex);
+      const partOverrides = Object.fromEntries(
+        Object.entries(store.get().partOverrides ?? {}).filter(([name]) => !name.startsWith('text-')),
+      );
+      store.set({ wordsColorRgb: rgb, partOverrides });
+      latestParts.forEach((p, i) => {
+        if (!p.name.startsWith('text-')) return;
+        latestParts[i] = { ...p, colorRgb: rgb };
+        viewer.setPartColor(i, rgb);
+      });
     },
-    onExtrudeChamfer: (on) => {
-      // Global, part-independent toggle: when on, every raised (extruded) color part
-      // gets a small beveled top edge. Not tied to the current selection — flip it once
-      // and all extruded parts pick up the chamfer (buildClicker applies it per part).
-      store.set({ extrudeChamfer: on });
+    onWordsLevel: (level) => {
+      store.set({ wordsLevel: clampLevel(level) });
       debouncedQuietRebuild();
     },
-    onImageNudge: (dx, dy) => {
-      // Clamped to a sane range: past this the base shape has grown so much that the design
-      // is a speck in the corner, which is never what someone wants.
-      const o = store.get().imageOffset;
-      const lim = 25;
-      store.set({
-        imageOffset: {
-          x: Math.round(Math.min(lim, Math.max(-lim, o.x + dx)) * 10) / 10,
-          y: Math.round(Math.min(lim, Math.max(-lim, o.y + dy)) * 10) / 10,
-        },
-      });
+    onWordSize: (mm) => {
+      const heightMm = Math.max(2, Math.min(30, mm));
+      const s = store.get();
+      // The line Lettering is on: the one picked there or on the Design view, else the first.
+      const id = s.words.some((w) => w.id === selectedWordId) ? selectedWordId : s.words[0]?.id;
+      store.set({ words: s.words.map((w) => (w.id === id ? { ...w, heightMm } : w)) });
       debouncedRebuild();
     },
-    onImageNudgeReset: () => {
-      store.set({ imageOffset: { x: 0, y: 0 } });
+    onActiveWord: (id) => {
+      selectedWordId = id;
+      ui.setActiveWord(id);
+      if (store.get().designView) designView.select(`word:${id}`);
+    },
+    onWordMove: (id, patch) => {
+      store.set({ words: store.get().words.map((w) => (w.id === id ? { ...w, ...patch } : w)) });
       debouncedRebuild();
+    },
+    onColourLevel: (index, level) => {
+      // A row sets the whole colour, and so clears the shapes of that colour that were raised
+      // one by one: the rule a colour row already follows for its filament. Baked into the
+      // geometry by a real rebuild (quiet, so a press does not flash the overlay).
+      const s = store.get();
+      const colourLevels = s.colourLevels.slice();
+      while (colourLevels.length <= index) colourLevels.push(0);
+      colourLevels[index] = clampLevel(level);
+      const prefix = `top-color-${index}-`;
+      const componentHeights = Object.fromEntries(
+        Object.entries(s.componentHeights).filter(([name]) => !name.startsWith(prefix)),
+      );
+      store.set({ colourLevels, componentHeights });
+      debouncedQuietRebuild();
+    },
+    onExtrudeChamferMm: (mm) => {
+      // Global and part-independent: every raised colour part gets its top edge bevelled by
+      // this much (buildClicker applies it per part, capped at half the part's height).
+      store.set({ extrudeChamferMm: Math.max(0, Math.min(1.2, Math.round(mm * 10) / 10)) });
+      debouncedQuietRebuild();
     },
     onSeparateLetters: (on) => {
       // Text only: re-trace the word so letters are either merged into one element (off)
@@ -1363,13 +1531,172 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   container.querySelector('#modelBodyMount')?.append(modelMode.panel.parts.model);
   container.querySelector('#modelColoursMount')?.append(modelMode.panel.parts.colours);
 
+  /* ---- The Design view (ui/designView.ts) -------------------------------------------------
+     The top of the clicker at true scale, drawn from the outlines the last build sent back. It
+     covers the 3D stage while it is on and edits the same state the rail does, so undo, saving and
+     every other path see one design: a drag ends in one `store.set`, then one rebuild. */
+  /** The outlines the last flat-clicker build made, and the Size and Design size it was built at. */
+  let latestLayout: DesignLayout | null = null;
+  let layoutBuiltAt = { designScale: 1, capWidthMm: 35 };
+  /** What each design build still in flight was sent with, oldest first: the worker answers in
+   *  order, so the head is what the next layout was built from. */
+  const designSent: { designScale: number; capWidthMm: number }[] = [];
+  const designView: DesignView = createDesignView({
+    stage: container.querySelector<HTMLElement>('#viewport')!,
+    onEdit: (edit) => applyDesignEdit(edit),
+    onSelect: (target) => onDesignSelect(target),
+  });
+  cleanups.push(() => designView.destroy());
+
+  /** The sources with a flat top to arrange: a block set has its key map, a cut model its grip. */
+  const hasDesignView = (mode: UiState['importMode']) => pictureSource(mode) || mode === 'text';
+  /** How big the design is on its base: Design size, or in Text mode Text size (buildParamsFor). */
+  const artScaleOf = (s: UiState) => (s.importMode === 'text' ? s.textScale : s.designScale);
+
+  function showDesignView(on: boolean) {
+    const allowed = on && hasDesignView(store.get().importMode);
+    store.set({ designView: allowed });
+    designView.show(allowed);
+    // The plate picker and the mouse hint are about the 3D view.
+    platePicker.root.hidden = allowed;
+    container.querySelector<HTMLElement>('#hint')?.toggleAttribute('hidden', allowed);
+    // The default clicker arrives pre-built, with no outlines: build it once to have some.
+    if (allowed && !latestLayout) rebuild();
+    renderDesign();
+  }
+
+  /** The picture's colours as the view draws them, rebuilt only when the trace or a colour
+   *  changes. One entry per shape, so a shape recoloured on its own shows its own colour. */
+  let artCache: { set: RegionSet; key: string; art: DesignArtRegion[]; box: { w: number; h: number } } | null = null;
+  function designArt(s: UiState, set: RegionSet) {
+    const key = JSON.stringify([s.palette.map((p) => p.filamentRgb), s.partOverrides ?? {}]);
+    if (artCache && artCache.set === set && artCache.key === key) return artCache;
+    const art: DesignArtRegion[] = [];
+    set.regions.forEach((r, i) => {
+      const base = s.palette[i]?.filamentRgb ?? r.quantRgb;
+      r.components.forEach((c, j) => art.push({ rings: c.rings, rgb: s.partOverrides?.[`top-color-${i}-${j}`] ?? base, coverage: r.coverage }));
+    });
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const ring of set.outline) for (const [x, y] of ring) {
+      minX = Math.min(minX, x); minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    const box = Number.isFinite(minX) ? { w: maxX - minX, h: maxY - minY } : { w: 1, h: 1 };
+    artCache = { set, key, art, box };
+    return artCache;
+  }
+
+  /** Everything the view draws, from the last build and the state as it is now. */
+  function designInput(): DesignInput | null {
+    const s = store.get();
+    if (!latestLayout || !regionSet || !hasDesignView(s.importMode)) return null;
+    const L = latestLayout;
+    const { art, box } = designArt(s, regionSet);
+    const wordRgb = wordsColour(s.palette, s.wordsColorRgb, capColourOf(s));
+    const words: DesignWord[] = [];
+    if (pictureSource(s.importMode)) {
+      for (const w of s.words) {
+        const g = wordGlyphs(w);
+        if (g) words.push({ ...w, rings: g.rings, w: g.w, rgb: s.partOverrides?.[`text-${w.id}`] ?? wordRgb });
+      }
+    }
+    // Where the build will put each switch: clamped into its box, as the worker clamps it.
+    const sb = L.switchBox;
+    const hold = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+    return {
+      layout: L,
+      builtDesignScale: layoutBuiltAt.designScale,
+      builtCapWidthMm: layoutBuiltAt.capWidthMm,
+      outlineBase: s.baseShape === 'outline' && !s.fixedSize && s.importMode !== 'icon',
+      art,
+      artBox: box,
+      imageOffset: s.imageOffset,
+      designScale: artScaleOf(s),
+      designRotation: s.designRotation,
+      capWidthMm: s.capWidthMm,
+      words,
+      switches: s.switches.map((sw) => ({ ...sw, x: hold(sw.x, sb.loX, sb.hiX), y: hold(sw.y, sb.loY, sb.hiY) })),
+      switchColumnMm,
+      keychain: { enabled: s.keychain.enabled, angleDeg: s.keychain.angleDeg },
+      freeAspect: s.baseShape === 'rect' || s.baseShape === 'capsule',
+      bodyRgb: s.bodyColorRgb,
+      capRgb: s.baseColorOverride ?? deriveFrameColor(s),
+      // As buildParamsFor and wordRegions pass Boldness on: Text mode's letters, a picture's words.
+      artBold: s.importMode === 'text' ? s.textBold : 0,
+      wordBold: s.textBold,
+    };
+  }
+  function renderDesign() {
+    if (store.get().designView) designView.render(designInput());
+  }
+
+  /** A finished drag or nudge on the Design view, as the state it becomes, and one rebuild. */
+  function applyDesignEdit(edit: DesignEdit) {
+    const s = store.get();
+    switch (edit.kind) {
+      case 'art':
+        // Text mode sizes its letters with Text size, not Design size: the corner drives that.
+        if (s.importMode === 'text') {
+          store.set({ imageOffset: edit.offset, textScale: Math.max(0.5, Math.min(2, Math.round(edit.designScale * 100) / 100)), designRotation: edit.rotation });
+        } else {
+          store.set({ imageOffset: edit.offset, designScale: edit.designScale, designRotation: edit.rotation });
+        }
+        break;
+      case 'outline':
+        store.set({ capWidthMm: edit.capWidthMm, designRotation: edit.rotation });
+        break;
+      case 'outline-move':
+        // An Outline base's picture is the base: moving it on the switches is moving them on it,
+        // the other way. The words and the loop are placed on the picture, so they stay with it.
+        store.set({
+          switches: s.switches.map((sw) => ({ ...sw, x: Math.round((sw.x - edit.dx) * 10) / 10, y: Math.round((sw.y - edit.dy) * 10) / 10 })),
+        });
+        break;
+      case 'word':
+        store.set({ words: s.words.map((w) => (w.id === edit.id ? { ...w, x: edit.x, y: edit.y, heightMm: edit.heightMm, rotation: edit.rotation } : w)) });
+        break;
+      case 'word-delete':
+        if (selectedWordId === edit.id) selectedWordId = null;
+        store.set({ words: s.words.filter((w) => w.id !== edit.id) });
+        break;
+      case 'switch':
+        store.set({
+          switches: s.switches.map((sw, i) => (i === edit.index ? { ...sw, x: edit.x, y: edit.y, rotation: edit.rotation } : sw)),
+          activeSwitchIndex: edit.index,
+        });
+        break;
+      case 'loop':
+        // A dragged loop sits where the bearing puts it: the old fine offset goes.
+        store.set({ keychain: { ...s.keychain, angleDeg: edit.angleDeg, offsetMm: 0 } });
+        break;
+      case 'base':
+        store.set({ fixedSize: { w: edit.w, h: edit.h } });
+        break;
+    }
+    debouncedRebuild();
+  }
+
+  /** What was picked opens the category that answers to it: Lettering for words, and so on. */
+  function onDesignSelect(target: DesignTarget | null) {
+    selectedWordId = target?.kind === 'word' ? target.id : null;
+    ui.setActiveWord(selectedWordId);
+    if (!target) return;
+    if (target.kind === 'switch') store.set({ activeSwitchIndex: target.index });
+    ui.openCategory(
+      target.kind === 'word' ? 'lettering'
+        : target.kind === 'switch' ? 'switch'
+        : target.kind === 'loop' ? 'keychain'
+        : 'shape',
+    );
+  }
+
   // ---- Undo / redo ----------------------------------------------------------
   // History snapshots the editable "document" fields (colors, heights, edges,
   // shape/size). Each tracked change pushes a snapshot; re-tracing a new source
   // (reprocess) starts a fresh baseline. Restoring rebuilds the geometry.
   const HISTORY_FIELDS = [
     'palette', 'paletteOverrides', 'partOverrides', 'customColors', 'bodyColorRgb', 'baseColorOverride',
-    'componentHeights', 'edgeSettings', 'extrudeChamfer', 'baseShape', 'capWidthMm', 'topThickness',
+    'componentHeights', 'edgeSettings', 'extrudeChamferMm', 'baseShape', 'capWidthMm', 'topThickness',
     'imageDepth', 'capProud', 'hollowBase', 'fixedSize', 'designScale', 'shapeSides', 'shapeCornerPct',
     'shapeArmPct', 'tolerance',
     /* Which custom outline, as well as THAT it is custom.
@@ -1382,6 +1709,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     'stemFitMm',
     'socketFitPct',
     'switches', 'keychain',
+    // Relief's rows, and where the picture sits on its base: moving it could not be undone.
+    'colourLevels', 'imageOffset', 'designRotation', 'mappedFilaments',
+    // Words on a picture: what they say, where they sit, their colour and height.
+    'words', 'wordsColorRgb', 'wordsLevel',
     'modelCut',
     // Blocks: the look. What is ON the keys (layout, lines) re-traces, which starts a new
     // baseline the way typing does in Text mode, so it is not in here.
@@ -1501,6 +1832,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       if (idx >= 0) indices.push(idx);
     });
     viewer.highlightParts(indices);
+    // The Design view follows the state the moment it changes (a rail row, an undo), drawing
+    // against the last build's outlines until the next one lands.
+    renderDesign();
 
     // Record undoable edits (debounced; no-op if nothing tracked actually changed).
     if (!restoringHistory && !pendingHistoryReset) commitHistory();
@@ -1541,45 +1875,73 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       return;
     }
 
-    const partName = latestParts[index]?.name;
-    if (!partName) return;
+    const part = latestParts[index];
+    if (!part || !partColorTarget(part.name)) return;
+    const partName = part.name;
 
-    if (s.editMode === 'color') {
-      // Color mode: single target. Open the swatch picker for the clicked color and
-      // recolor its whole group; clear the highlight on close so the true color shows.
-      store.set({ selectedParts: [partName] });
-      const part = latestParts[index];
-      if (!part) return;
-      const target = partColorTarget(part.name);
-      if (!target) return;
-      const offered: RGB[] =
-        s.colorMode === 'limited' && s.limitedColors.length > 0
-          ? s.limitedColors
-          : FILAMENTS.map(([, hex]) => hexToRgb(hex));
-      const sameRgb = (a: RGB, b: RGB) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
-      const options: RGB[] = [
-        ...s.customColors.filter((c) => !offered.some((o) => sameRgb(o, c))),
-        ...offered,
-      ];
-      ui.showColorPopoverAt(clientX, clientY, rgbToHex(part.colorRgb), options, {
-        onSelect: (hex) => applyModelRecolor(target, hexToRgb(hex), index),
-        onClose: () => store.set({ selectedParts: [] }),
-      });
-      return;
-    }
+    /* One click, one picker, whatever was clicked: its colour, and for a coloured shape how far
+       it is raised, under the chips. There used to be a Color / Raise bar deciding which of the
+       two a click meant; a click now means "this shape" and the picker offers both.
 
-    // Extrude / edges: unified multi-selection — shift toggles a part in/out, a plain
-    // click selects one. The floating panels act on every selected part.
-    let nextSelected = s.selectedParts.slice();
-    if (shiftKey) {
-      nextSelected = nextSelected.includes(partName)
-        ? nextSelected.filter((p) => p !== partName)
-        : [...nextSelected, partName];
-    } else {
-      nextSelected = [partName];
-    }
-    store.set({ selectedParts: nextSelected });
+       Shift adds a shape to what the picker changes (or takes it back out), so several shapes
+       can be raised or recoloured together. Read before the old picker is closed: its own close
+       clears the selection. A body or a cap has no height and is only ever picked alone. */
+    const before = s.selectedParts.filter(raisable);
+    closeColorPopover();
+    const selected = shiftKey && raisable(partName)
+      ? (before.includes(partName) ? before.filter((p) => p !== partName) : [...before, partName])
+      : [partName];
+    if (!selected.length) return;
+    store.set({ selectedParts: selected });
+
+    const offered: RGB[] =
+      s.colorMode === 'limited' && s.limitedColors.length > 0
+        ? s.limitedColors
+        : FILAMENTS.map(([, hex]) => hexToRgb(hex));
+    const sameRgb = (a: RGB, b: RGB) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+    const options: RGB[] = [
+      ...s.customColors.filter((c) => !offered.some((o) => sameRgb(o, c))),
+      ...offered,
+    ];
+    const heights = s.importMode !== 'blocks' && raisable(partName);
+    const footer = heights
+      ? stepperRow({
+          label: selected.length > 1 ? `Raised by (${selected.length} shapes)` : 'Raised by',
+          min: RELIEF_MIN, max: RELIEF_MAX, value: partLevel(partName),
+          format: reliefMm,
+          parse: (typed, raw) => reliefLevelOf(readSigned(typed, raw)),
+          onInput: (level) => setPartLevels(selected, level),
+        })
+      : undefined;
+    ui.showColorPopoverAt(clientX, clientY, rgbToHex(part.colorRgb), options, {
+      onSelect: (hex) => {
+        const rgb = hexToRgb(hex);
+        for (const name of selected) {
+          const idx = latestParts.findIndex((p) => p.name === name);
+          const target = partColorTarget(name);
+          if (idx >= 0 && target) applyModelRecolor(target, rgb, idx);
+        }
+      },
+      onClose: () => store.set({ selectedParts: [] }),
+      footer,
+    });
   });
+
+  /** A shape's height: its own, if a click set one, else its colour's Relief row. */
+  function partLevel(name: string): number {
+    const s = store.get();
+    const own = s.componentHeights[name];
+    if (own !== undefined) return own;
+    const m = /^top-color-(\d+)-\d+$/.exec(name);
+    return m ? s.colourLevels[+m[1]] ?? 0 : 0;
+  }
+  /** Raise these shapes on their own, over their colour's row. */
+  function setPartLevels(names: string[], level: number) {
+    const componentHeights = { ...store.get().componentHeights };
+    for (const name of names) componentHeights[name] = clampLevel(level);
+    store.set({ componentHeights });
+    debouncedQuietRebuild();
+  }
 
   function partColorTarget(name: string): ColorTarget | null {
     if (name === 'base-body') return { kind: 'body' };
@@ -1594,6 +1956,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // every mode, not just blocks. Both the click and the palette row used to funnel
     // into the whole colour bucket, which left no way to recolour a single component.
     if (/^top-color-\d+-\d+$/.test(name)) return { kind: 'part', name };
+    // A line of words on a picture: that line alone. Its Colors row recolours them all.
+    if (name.startsWith('text-')) return { kind: 'part', name };
     // Fallback for a region carrying no component index. The bucket-wide path is what
     // the left-hand palette rows use; they call applyModelRecolor directly.
     const m = /^top-color-(\d+)(?:-(\d+))?$/.exec(name);
@@ -1650,9 +2014,18 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
       const palette = s.palette.slice();
       if (palette[i]) palette[i] = { ...palette[i], filamentRgb: rgb };
-      const paletteOverrides = s.paletteOverrides.slice();
-      paletteOverrides[i] = rgb;
-      store.set({ partOverrides: overrides, palette, paletteOverrides });
+      // A mapped picture keeps its filaments by group, so the colour survives a re-trace that
+      // numbers the regions differently.
+      const group = s.colorMode === 'mapped' && palette[i] ? mappedGroupOf(s, palette[i].quantRgb) : undefined;
+      if (group !== undefined) {
+        const mappedFilaments = s.mappedFilaments.slice();
+        mappedFilaments[group] = rgb;
+        store.set({ partOverrides: overrides, palette, mappedFilaments });
+      } else {
+        const paletteOverrides = s.paletteOverrides.slice();
+        paletteOverrides[i] = rgb;
+        store.set({ partOverrides: overrides, palette, paletteOverrides });
+      }
       syncBaseColor(); // the cap frame mirrors the dominant region, keep it in step
     } else if (target.kind === 'part') {
       // One part only. Recorded in partOverrides so it survives the next rebuild.
@@ -1676,40 +2049,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   }
 
-  // ---- Cap frame / backing color ----
-  const LIGHT_FRAME: RGB = [240, 240, 240];
-  const DARK_FRAME: RGB = [38, 38, 42];
-
-  function relLuminance(rgb: RGB): number {
-    return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
-  }
-  // A light or dark backing chosen to contrast the given ink, so a single-color design
-  // is always visible against it.
-  function contrastingFrame(ink: RGB): RGB {
-    return relLuminance(ink) > 150 ? DARK_FRAME : LIGHT_FRAME;
-  }
-
-  function dominantInk(s: UiState): RGB {
-    if (s.palette.length === 0) return [180, 180, 185];
-    let domIdx = 0;
-    for (let i = 1; i < s.palette.length; i++) {
-      if (s.palette[i].coverage > s.palette[domIdx].coverage) domIdx = i;
-    }
-    return s.palette[domIdx]?.filamentRgb ?? [180, 180, 185];
-  }
-
-  // The cap backing/frame color. A photographic IMAGE tiles the whole cap, so the frame
-  // mirrors its dominant region and blends in naturally. Line-art modes (icon/svg/text)
-  // are typically a single ink — mirroring that ink would make the design vanish into
-  // its own backing (the "svg comes out one color" bug), so we pick a contrasting frame
-  // instead. The design then reads clearly without any manual recolor.
-  function deriveFrameColor(s: UiState): RGB {
-    // Blocks: the keycap is its own filament the user picks, not a backing derived from the
-    // artwork — deriving it would flip the caps light/dark every time the legend changed.
-    if (s.importMode === 'blocks') return s.baseColorOverride ?? LIGHT_FRAME;
-    const ink = dominantInk(s);
-    return s.importMode === 'image' ? ink : contrastingFrame(ink);
-  }
+  // ---- Cap frame / backing color (the rule itself: frame.ts) ----
 
   // After a region recolor, repaint the frame part to match the derived color — live, no
   // rebuild — so it never lags a frame behind the inlay it shares a color with.
@@ -1933,6 +2273,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // A design build that was already in flight when the fit test opened. It is still the
         // design, so keep it for when the preview goes back, but leave the tiles on screen.
         const showingFitTest = store.get().fitTestActive;
+        // The Design view's outlines, and what they were built at. A new subject frames them
+        // afresh, the way it frames the 3D camera: once they are drawn, below.
+        let reframeDesign = false;
+        if (msg.layout) {
+          latestLayout = msg.layout;
+          layoutBuiltAt = designSent.shift() ?? layoutBuiltAt;
+          reframeDesign = pendingReframe;
+        }
         if (!showingFitTest) {
           // Re-frame the camera only when the SUBJECT changed (a new image, icon, SVG, or a
           // different import mode). Editing what is already on screen — the text, the font,
@@ -1953,7 +2301,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // never mentioned it, so the file arrived with pieces off the plate and the slicer was
         // the one to break the news. Same status line, because to the user it is the same
         // question — is this going to print.
-        const notes = [...(msg.warnings ?? []), ...plateWarnings(msg.parts)].map((n) =>
+        // What will not print comes first and refuses Export until a build that prints lands
+        // (invariant #13): words too thin for the nozzle, today.
+        const blocking = msg.blocking ?? [];
+        if (blocking.length && !showingFitTest) onScreen.failed(blocking.join(' · '));
+        const notes = [...blocking, ...(msg.warnings ?? []), ...plateWarnings(msg.parts)].map((n) =>
           // The base-widened note has no next step of its own — "Lock the base size" exists
           // and fixes it, but nothing points there. Only when the lock is off: once it's on,
           // the size IS pinned, so the suggestion would be telling someone to do what they
@@ -1978,6 +2330,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           builtBodyMm: isFinite(bodyBB.minX)
             ? { w: bodyBB.maxX - bodyBB.minX, h: bodyBB.maxY - bodyBB.minY }
             : null,
+          // The switch sliders' range: the box this build clamped the switches into.
+          ...(msg.layout ? { switchBox: msg.layout.switchBox } : {}),
           hasParts: msg.parts.length > 0,
           // Surface every non-fatal build note (switches pinched, base widened for the switch,
           // no keychain room) or clear. `warnings[0]` dropped the rest on the floor, which
@@ -2014,6 +2368,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           pendingHistoryReset = false;
           resetHistory();
         }
+        renderDesign();
+        if (reframeDesign) designView.refit();
         break;
       }
       case 'modelInfo':
@@ -2037,6 +2393,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           console.error('[geometry worker]', msg.message);
           break;
         }
+        // A design build that failed answers its place in the queue of what was sent.
+        if (msg.request === 'buildClicker') designSent.shift();
         store.set({ building: false, status: 'Error: ' + firstLine(msg.message) });
         console.error('[geometry worker]', msg.message);
         isInitialLoad = false;
@@ -2149,7 +2507,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         initialSmoothing: s.smoothing,
         initialRemoveBg: s.removeBg,
         initialPreprocess: reopening && wizardParams ? wizardParams : undefined,
-        initialLimitedColors: reopening && s.colorMode === 'limited' ? s.limitedColors : undefined,
+        initialMapping: reopening && s.colorMode === 'mapped' && s.mappedColors.length
+          ? { colors: s.mappedColors, filaments: s.mappedFilaments }
+          : undefined,
         designMm: s.capWidthMm * (s.designScale ?? 1),
         onCancel: () => {
           // Cancelling never reaches the build that would have consumed this — clear it here
@@ -2158,14 +2518,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           pendingSampleLoadName = null;
           store.set({ status: originalImage ? 'Ready.' : 'Ready. Drop an image or try the sample.' });
         },
-        onComplete: ({ adjusted, preprocess, colorCount, smoothing, colorMode, limitedColors, paletteOverrides }) => {
+        onComplete: ({ adjusted, preprocess, colorCount, smoothing, colorMode, mappedColors, mappedFilaments }) => {
           originalImage = adjusted;
           wizardBase = baseImage;
           wizardParams = preprocess;
-          /* The body colour is NOT touched here any more. The wizard now always confirms a
-             kept-colour list (`limited`), and the old rule for that mode — body becomes the
-             list's black, else its first colour — would have repainted the base after every
-             confirm with whatever the picture's biggest colour happened to be. */
+          /* The body colour is NOT touched here any more. The wizard always confirms a mapping
+             of the picture's colours to filaments, and repainting the base after every confirm
+             with whatever the picture's biggest colour happened to be is not what anyone asked. */
           store.set({
             removeBg: !preprocess.keepBackground,
             colorCount,
@@ -2175,14 +2534,21 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             // confirm meant this dialog silently clobbered whatever the sidebar had just
             // been set to.
             colorMode,
-            limitedColors: limitedColors || [],
-            paletteOverrides: paletteOverrides || [],
+            limitedColors: [],
+            mappedColors,
+            mappedFilaments,
+            // The filaments now come from the mapping, group by group.
+            paletteOverrides: [],
             /* And the per-shape recolors, which nothing else clears.
                A part is named by position — `top-color-<region>-<component>` — so an
                override recorded on one picture lands on whatever occupies that slot in
                the next one. Recolor a black outline yellow, import a different image,
                and its region 0 comes back yellow with no palette row saying so. */
             partOverrides: {},
+            // Heights are named the same way (by region and component, and by palette row), so
+            // a raised colour would come back on whatever fills its slot in the new picture.
+            componentHeights: {},
+            colourLevels: [],
           });
           reprocess();
         },
@@ -2298,14 +2664,19 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       if (!originalImage) return;
       try {
         store.set({ building: true, status: 'Removing background & tracing…' });
-        regionSet = processImage(cloneImage(originalImage), s.colorCount, {
+        // A mapped picture traces every colour it has, each relabelled to the filament group
+        // the import window put it in (merged colours as one region, no seam).
+        const mapped = s.colorMode === 'mapped' && s.mappedColors.length > 0;
+        regionSet = processImage(cloneImage(originalImage), mapped ? s.mappedFilaments.length : s.colorCount, {
           removeBg: s.removeBg,
           smoothing: s.smoothing,
           // The artwork's printed size, so the tracer's minimum feature is a real millimetre
           // rather than a fraction of whatever the uploaded file's pixel dimensions happened
           // to be. A bigger cap keeps finer detail, which is what it should do.
           designMm: s.capWidthMm * (s.designScale ?? 1),
-          customColors: s.colorMode === 'limited' ? s.limitedColors : undefined,
+          ...(mapped
+            ? { customColors: s.mappedColors.map((c) => c.rgb), mergeInto: s.mappedColors.map((c) => c.group) }
+            : { customColors: s.colorMode === 'limited' ? s.limitedColors : undefined }),
         });
       } catch (e: any) {
         traceFailed('Error: ' + e.message);
@@ -2368,6 +2739,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
 
     if (!regionSet) return;
+    // The Shape grid's Outline tile is a picture of this design's own silhouette.
+    if (s.importMode !== 'blocks') ui.setOutlinePicture(regionSet.outline);
 
     // Blocks print in three filaments (blocks / caps / legends), so every letter shares one
     // palette entry instead of getting a swatch of its own.
@@ -2382,7 +2755,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           ]
         : regionSet.regions.map((r, i) => ({
             quantRgb: r.quantRgb,
-            filamentRgb: s.paletteOverrides[i] ?? r.quantRgb,
+            // A mapped picture's filament is its group's, found by colour (a region's colour is
+            // one of its group's) rather than by position: a group whose shapes are all too small
+            // to trace has no region, and the ones after it would otherwise take its filament.
+            filamentRgb: s.paletteOverrides[i] ?? mappedFilamentOf(s, r.quantRgb) ?? r.quantRgb,
             coverage: r.coverage,
           }));
     store.set({ palette });
@@ -2427,17 +2803,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const textOutline = effectiveBaseShape === 'outline';
     return {
       baseShape: effectiveBaseShape,
-      /* Text mode sizing. Two multipliers on the Size the user set, and both exist so the
-         LETTERS never shrink to accommodate something else:
-           · textSizeMul — spacing widened the word, so the part grows to match.
-           · textScale   — the Text size slider itself. On an outline base the letters ARE
-             the shape, so growing them grows the clicker. On a preset base there is a frame
-             to shrink into, so below 100% the letters shrink inside a base that stays put
-             (that is `designScale`), and above 100% the base grows with them. */
-      capWidthMm: isTextMode
-        ? s.capWidthMm * (s.textSizeMul ?? 1)
-          * (textOutline ? textScale : Math.max(1, textScale))
-        : s.capWidthMm,
+      /* Text mode sizing. `textSizeMul` grows the part when letter spacing widened the word, so
+         the letters never shrink to make room for it. Text size (`textScale`) is the letters'
+         share of a preset base, the base staying the Size it was set to (that is `designScale`,
+         below); above 100% the frame crops them, as Design size crops a picture. It used to grow
+         the base above 100%, a second Size control in Lettering. An outline base is the letters'
+         own outline, so there Size is the only size and Text size is not shown. */
+      capWidthMm: isTextMode ? s.capWidthMm * (s.textSizeMul ?? 1) : s.capWidthMm,
       topThickness: Math.max(1, s.topThickness),
       imageDepth: s.imageDepth,
       imageMargin: isText ? 2.5 : 1.2,
@@ -2447,7 +2819,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // Null, not `{w:0,h:0}` — buildClicker treats any absent/degenerate size as "follow the
       // design", and the whole point of the control is that it is off until asked for.
       bodySize: s.fixedSize ?? undefined,
-      designScale: isTextMode && !textOutline ? Math.min(1, textScale) : s.designScale,
+      designScale: isTextMode && !textOutline ? textScale : s.designScale,
+      // 0 is the identity, byte for byte, so every design made before the grip existed builds
+      // exactly as it did.
+      designRotation: s.designRotation,
       shapeSides: s.shapeSides,
       shapeCornerPct: s.shapeCornerPct,
       shapeArmPct: s.shapeArmPct,
@@ -2469,12 +2844,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       baseFilamentRgb: capBaseColor,
       bodyColorRgb: s.bodyColorRgb ?? ([120, 124, 130] as RGB),
       edgeSettings: s.edgeSettings,
-      extrudeChamfer: s.extrudeChamfer,
-      componentHeights: s.componentHeights,
+      extrudeChamfer: s.extrudeChamferMm > 0,
+      extrudeChamferMm: s.extrudeChamferMm,
+      componentHeights: reliefHeights(s),
       ...blockBuildParams(s),
       legendScale: s.legendScale,
       legendBold: s.legendBold,
       textBold: s.importMode === 'text' ? s.textBold : 0,
+      // Letters a frame cuts off are worth a word: Text size above 100% on a shape base.
+      ...(isTextMode ? { artCutNote: 'Letters past the edge are cut off.' } : {}),
       keychainEnd: s.keychainEnd,
       keychainSlideMm: s.keychainSlideMm,
       partOverrides: s.partOverrides,
@@ -2482,6 +2860,27 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // the public build, where the module is an inline stub.
       ...(proPanel?.paramsPatch() ?? {}),
     };
+  }
+
+  /**
+   * Every coloured shape's height for the build: its own, if a click on the model set one, else
+   * its colour's Relief row. The geometry reads one map by part name, as it always has, so Relief
+   * asks nothing new of it; a row survives a recolour, and a shape set on its own keeps its own.
+   * With every row at 0 this is exactly `componentHeights`, so nothing already made moves.
+   */
+  function reliefHeights(s: UiState): Record<string, number> {
+    const fromRows: Record<string, number> = {};
+    if (regionSet && s.importMode !== 'blocks' && s.importMode !== 'model') {
+      regionSet.regions.forEach((r, i) => {
+        const level = s.colourLevels[i] ?? 0;
+        if (level) r.components.forEach((_, j) => { fromRows[`top-color-${i}-${j}`] = level; });
+      });
+    }
+    // The words' own row, for every line not raised on its own.
+    if (s.wordsLevel && pictureSource(s.importMode)) {
+      for (const w of s.words) fromRows[`text-${w.id}`] = s.wordsLevel;
+    }
+    return { ...fromRows, ...s.componentHeights };
   }
 
   function rebuild(quiet = false) {
@@ -2559,6 +2958,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
     });
 
+    // A picture's words, carved first so they cut through it.
+    regions.push(...wordRegions(s));
+
     const isBlocks = blocksMode;
     const params = buildParamsFor(s);
 
@@ -2572,6 +2974,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     if (isBlocks) {
       send({ type: 'buildBlocks', regions, params });
     } else {
+      // What this build is made at, for the Design view to draw a later edit against.
+      designSent.push({ designScale: artScaleOf(s), capWidthMm: s.capWidthMm });
       send({ type: 'buildClicker', regions, outline: regionSet.outline, params });
     }
   }
@@ -2664,6 +3068,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         hollowBase: s.hollowBase,
         fixedSize: s.fixedSize,
         designScale: s.designScale,
+        designRotation: s.designRotation,
         shapeSides: s.shapeSides,
         shapeCornerPct: s.shapeCornerPct,
         shapeArmPct: s.shapeArmPct,
@@ -2701,19 +3106,25 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         currentImageName,
         colorMode: s.colorMode,
         limitedColors: s.limitedColors,
+        mappedColors: s.mappedColors,
+        mappedFilaments: s.mappedFilaments,
         bodyColorRgb: s.bodyColorRgb,
         paletteOverrides: s.paletteOverrides,
         baseColorOverride: s.baseColorOverride,
         partOverrides: s.partOverrides,
         customColors: s.customColors,
         edgeSettings: s.edgeSettings,
-        extrudeChamfer: s.extrudeChamfer,
+        extrudeChamferMm: s.extrudeChamferMm,
         separateLetters: s.separateLetters,
         lineSpacing: s.lineSpacing,
         letterSpacing: s.letterSpacing,
         textBold: s.textBold,
         textScale: s.textScale,
         componentHeights: s.componentHeights,
+        colourLevels: s.colourLevels,
+        words: s.words,
+        wordsColorRgb: s.wordsColorRgb,
+        wordsLevel: s.wordsLevel,
         // Blocks mode: the arrangement, what is on the keys, the look, and the keyring.
         blockLayout: s.blockLayout,
         blockGridRows: s.blockGridRows,
@@ -2886,12 +3297,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         ui.addUploadedSvg(currentSvgText, currentSvgName);
       }
 
+      const sizing = foldTextSize(set.importMode ?? 'image', set.baseShape ?? store.get().baseShape,
+        set.capWidthMm ?? store.get().capWidthMm, set.textScale ?? 1);
       store.set({
         importMode: set.importMode ?? 'image',
         colorCount: set.colorCount ?? store.get().colorCount,
         baseShape: set.baseShape ?? store.get().baseShape,
         imageOffset: set.imageOffset ?? { x: 0, y: 0 },
-        capWidthMm: set.capWidthMm ?? store.get().capWidthMm,
+        capWidthMm: sizing.capWidthMm,
         topThickness: set.topThickness ?? store.get().topThickness,
         imageDepth: set.imageDepth ?? store.get().imageDepth,
         capProud: set.capProud ?? 4.0,
@@ -2901,6 +3314,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         fixedSize: set.fixedSize ?? null,
         // Absent means 1 — every project saved before this control existed renders unchanged.
         designScale: set.designScale ?? 1,
+        // Absent before the picture could be turned: as drawn.
+        designRotation: typeof set.designRotation === 'number' ? set.designRotation : 0,
         /* Per-shape, not a flat 6.
            `?? 6` looked harmless and silently changed geometry: `makeStar` used to be called
            with its own default of 5 and nothing else, so every star ever saved was 5-pointed —
@@ -2938,18 +3353,31 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         currentIconName: currentIconName || 'circle',
         colorMode: set.colorMode ?? 'normal',
         limitedColors: set.limitedColors ?? [],
+        // A project saved before the import window mapped colours has neither, and keeps its
+        // own mode ('normal' or 'limited') exactly as it was.
+        mappedColors: Array.isArray(set.mappedColors) ? set.mappedColors : [],
+        mappedFilaments: Array.isArray(set.mappedFilaments) ? set.mappedFilaments : [],
         bodyColorRgb: set.bodyColorRgb ?? [120, 124, 130],
         paletteOverrides: set.paletteOverrides ?? [],
         partOverrides: set.partOverrides ?? {},
         customColors: set.customColors ?? [],
         edgeSettings: set.edgeSettings ?? store.get().edgeSettings,
-        extrudeChamfer: set.extrudeChamfer ?? false,
+        // Saved before the bevel had a size: the toggle was a fixed 0.5 mm.
+        extrudeChamferMm: typeof set.extrudeChamferMm === 'number'
+          ? Math.max(0, Math.min(1.2, set.extrudeChamferMm))
+          : set.extrudeChamfer === true ? 0.5 : 0,
         separateLetters: set.separateLetters ?? false,
         lineSpacing: set.lineSpacing ?? 1,
         letterSpacing: set.letterSpacing ?? 0,
         textBold: set.textBold ?? 0,
-        textScale: set.textScale ?? 1,
+        textScale: sizing.textScale,
         componentHeights: set.componentHeights ?? {},
+        // Absent in every project saved before Relief had rows: no colour raised as a whole.
+        colourLevels: Array.isArray(set.colourLevels) ? set.colourLevels.map((v: unknown) => clampLevel(Number(v) || 0)) : [],
+        // Absent before words could go on a picture: none.
+        words: loadedWords(set.words),
+        wordsColorRgb: Array.isArray(set.wordsColorRgb) ? set.wordsColorRgb : null,
+        wordsLevel: clampLevel(Number(set.wordsLevel) || 0),
         keychainEnd: set.keychainEnd ?? 'left',
         keychainSlideMm: set.keychainSlideMm ?? 0,
         // A project from before the rim could be raised has the standard body.

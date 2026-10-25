@@ -12,6 +12,8 @@
     manifold   manifold-3d stays external, so its WASM loads from beside its own module;
     xmldom     @xmldom/xmldom stays external, the DOMParser the SVG reader is given under node;
     env        `import.meta.env` is defined, for the modules that read the asset base from it;
+    seed       ...and carries a test VITE_MARK_SEED, so the identity mark's seeded tier is on,
+               as it is in a release build (without it, node builds only the always-on tier);
     fonts      `import.meta.glob` is defined and its stand-in injected (Vite's glob, which
                @vostok/fonts reads its font table through, does not exist under node).
 
@@ -30,6 +32,9 @@ const TESTS = dirname(fileURLToPath(import.meta.url));
 const APP = resolve(TESTS, '..');
 const ROOT = resolve(APP, '../..');
 
+/** The seed a `seed` suite builds with: the identity-mark test's own, not a release build's. */
+const TEST_MARK_SEED = 'clicker-pin-seed';
+
 /** How long one suite may run, in seconds: many times the slowest, so only a hang reaches it. */
 const TIMEOUT_S = Number(process.env.CLICKER_SUITE_TIMEOUT_S) || 15 * 60;
 
@@ -38,6 +43,8 @@ const SUITES = {
   'block-layout': [],
   'blocks-body': ['manifold'],
   'blocks-fit': ['manifold'],
+  'clicker-texture': ['manifold', 'seed'],
+  'design-layout': ['manifold'],
   'fit-controls': ['manifold'],
   'font-fallback': ['fonts'],
   'model-cut': ['manifold', 'env'],
@@ -52,6 +59,7 @@ const SUITES = {
   'svg-import': ['xmldom'],
   'switch-fit': ['manifold', 'env'],
   'text-sizing': ['manifold', 'fonts'],
+  words: [],
   // What every export writes, and every model file reads as, pinned (tests/golden/).
   'golden/export-matrix': ['manifold', 'xmldom', 'env', 'fonts'],
   'golden/readers': [],
@@ -83,7 +91,9 @@ for (const [name, needs] of Object.entries(SUITES)) {
       logLevel: 'error',
       external: [...(needs.includes('manifold') ? ['manifold-3d'] : []), ...(needs.includes('xmldom') ? ['@xmldom/xmldom'] : [])],
       define: {
-        ...(needs.includes('env') ? { 'import.meta.env': JSON.stringify({ BASE_URL: '/' }) } : {}),
+        ...(needs.includes('env') || needs.includes('seed')
+          ? { 'import.meta.env': JSON.stringify({ BASE_URL: '/', ...(needs.includes('seed') ? { VITE_MARK_SEED: TEST_MARK_SEED } : {}) }) }
+          : {}),
         ...(needs.includes('fonts') ? { 'import.meta.glob': 'globalThis.__viteGlob' } : {}),
       },
       inject: needs.includes('fonts') ? [join(ROOT, 'packages/fonts/tests/vite-glob-shim.mts')] : [],

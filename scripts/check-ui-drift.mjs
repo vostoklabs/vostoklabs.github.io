@@ -178,7 +178,7 @@ void HISTORY_OF_TOTALS;
 */
 const BUDGET = {
   'bubble-pop-generator': { button: 1, html: 2, restyle: 17 },
-  'clicker-generator': { button: 4, input: 2, html: 9, restyle: 6 },
+  'clicker-generator': { button: 2, input: 2, html: 5, restyle: 4 },
   'house-number': { restyle: 5 },
   'keycap-generator': { button: 4, select: 1, input: 4, range: 2, html: 2 },
   'keychain-carabiner': { restyle: 1 },
@@ -202,11 +202,8 @@ const KNOWN_ORPHAN_CLASSES = new Set([
   'vl-topbar-btn--theme',
   'vl-stage-panel__body',
   // clicker-generator
-  // `edge-size-minus`/`edge-size-plus`: read only via `classList.contains(...)` in a
-  // delegated click handler (ui.ts), which this check's query-hook detector does not parse
-  // (it only recognises querySelector/closest/matches and classList add/remove/toggle) —
-  // a real JS hook, not a missed style, same as `reset-part-colors` beside it.
-  'edge-radius-label', 'reset-part-colors', 'edge-size-minus', 'edge-size-plus',
+  // `reset-part-colors`: a hook, not a missed style.
+  'reset-part-colors',
   // magnet-generator
   'body-row', 'region-row', 'mg-magnet-step',
   // keycap-generator — a state flag on <body>, set once the MakerWorld build has connected to

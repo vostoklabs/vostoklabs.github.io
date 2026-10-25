@@ -162,7 +162,9 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
 
     if (msg.type === 'buildClicker') {
       if (!socket || !stem) throw new Error('Assets not initialized');
-      const { parts, switchPlacements, warnings } = buildClicker(
+      // `blocking` (what will not print) and `layout` (the design from above, for the 2D view)
+      // come only from this build: blocks and models have neither.
+      const { parts, switchPlacements, warnings, blocking, layout } = buildClicker(
         wasm,
         socket,
         stem,
@@ -172,7 +174,7 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       );
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
-      post({ type: 'parts', parts, switchPlacements, warnings, requestId: msg.requestId }, transfer);
+      post({ type: 'parts', parts, switchPlacements, warnings, blocking, layout, requestId: msg.requestId }, transfer);
       return;
     }
 

@@ -23,22 +23,32 @@
 // writes them to the store and runs the trace/build pipeline. It can be reopened on the same
 // picture from the sidebar, with the settings it was last confirmed with.
 import {
-  button, collapsibleSection, el, ICONS, iconButton, section, segmentedControl,
-  sliderRow, toggleSwitch, type SliderRowHandle,
+  button, collapsibleSection, colorChip, colorPopover, el, helpTip, ICONS, iconButton, section,
+  segmentedControl, sliderRow, toggleSwitch, type SliderRowHandle,
 } from '@vostok/ui-kit';
 import {
-  discoverColours, preprocessImage, processImage, srgbToOklab, type ColourCandidate, type RgbaImage,
+  closestPairMapping, discoverColours, preprocessImage, processImage, srgbToOklab,
+  type ColourCandidate, type RgbaImage,
 } from '@vostok/trace';
-import { DEFAULT_PREPROCESS, type PreprocessParams, type RegionSet, type RGB } from '../types';
+import { DEFAULT_PREPROCESS, FILAMENTS, type PreprocessParams, type RegionSet, type RGB } from '../types';
+
+/** A colour found in the picture, and the filament group it prints in (groups numbered biggest
+ *  first, the way `processImage`'s `mergeInto` takes them). */
+export interface MappedColour {
+  rgb: RGB;
+  group: number;
+}
 
 export interface WizardResult {
   adjusted: RgbaImage; // cropped + tone-adjusted, background still present
   preprocess: PreprocessParams;
   colorCount: number;
   smoothing: number;
-  colorMode: 'normal' | 'limited';
-  limitedColors?: RGB[];
-  paletteOverrides?: RGB[];
+  colorMode: 'mapped';
+  /** Every colour of the picture, and the group it prints in. */
+  mappedColors: MappedColour[];
+  /** Each group's filament, by group. */
+  mappedFilaments: RGB[];
 }
 
 interface WizardOpts {
@@ -48,8 +58,8 @@ interface WizardOpts {
   initialRemoveBg: boolean;
   /** Reopening on the same picture: start from what was confirmed last time. */
   initialPreprocess?: PreprocessParams;
-  /** The colours kept last time, so reopening shows the same ticks. */
-  initialLimitedColors?: RGB[];
+  /** The mapping confirmed last time, so reopening shows the same choices. */
+  initialMapping?: { colors: MappedColour[]; filaments: RGB[] };
   /** The finished part's longest side, mm — sets the tracer's smallest feature. */
   designMm: number;
   onComplete(result: WizardResult): void;
@@ -70,9 +80,29 @@ const SLIDERS: [keyof PreprocessParams, string][] = [
 ];
 
 const MAX_COLOURS = 12;
-/** Two colours this close in Oklab are "the same tick" when the list is rebuilt after a tone
+/** Two colours this close in Oklab are "the same colour" when the list is rebuilt after a tone
  *  change nudges every candidate a little. */
 const SAME_COLOUR = 0.12;
+/** How many filaments the engine fits a picture into before anyone has said otherwise: what
+ *  most AMS units hold. Not a limit: five prints, with a filament swap. */
+const FILAMENT_BUDGET = 4;
+
+const hexOf = (c: RGB) => '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+const rgbOf = (hex: string): RGB => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+const sameRgb = (a: RGB, b: RGB) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+/** The shelf filament nearest a colour as a person sees it (Oklab), by name: what the picker
+ *  calls it. By plain RGB distance a leaf green came out nearer Brown than Green. */
+function filamentName(rgb: RGB): string {
+  let best = 'Custom';
+  let bestD = Infinity;
+  const [l, a, b] = srgbToOklab(rgb);
+  for (const [name, hex] of FILAMENTS) {
+    const [fl, fa, fb] = srgbToOklab(rgbOf(hex));
+    const d = (l - fl) ** 2 + (a - fa) ** 2 + (b - fb) ** 2;
+    if (d < bestD) { bestD = d; best = name; }
+  }
+  return best;
+}
 
 // The traced result is drawn from vector rings, so rendering it larger costs nothing but a
 // bigger canvas — unlike the source photo, it never gets blurrier for it. A fixed, generous
@@ -97,7 +127,7 @@ function imageToCanvas(img: RgbaImage): HTMLCanvasElement {
  * down biggest-first and the smallest-coverage colour lands on top, which is the carve order
  * `buildClicker` uses, so a boundary between two colours shows the side that wins there.
  */
-function regionsToCanvas(set: RegionSet, width: number, height: number): HTMLCanvasElement {
+function regionsToCanvas(set: RegionSet, width: number, height: number, paint: (rgb: RGB) => RGB): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = width;
   c.height = height;
@@ -125,7 +155,9 @@ function regionsToCanvas(set: RegionSet, width: number, height: number): HTMLCan
   };
   const ordered = set.regions.slice().sort((a, b) => b.coverage - a.coverage);
   for (const r of ordered) {
-    ctx.fillStyle = `rgb(${r.quantRgb[0]},${r.quantRgb[1]},${r.quantRgb[2]})`;
+    // In the filament it prints in, not the picture's colour: what you confirm is what prints.
+    const [cr, cg, cb] = paint(r.quantRgb);
+    ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
     for (const comp of r.components) ctx.fill(toPath(comp.rings), 'evenodd');
   }
   return c;
@@ -134,8 +166,6 @@ function regionsToCanvas(set: RegionSet, width: number, height: number): HTMLCan
 export function runWizard(opts: WizardOpts) {
   const params: PreprocessParams = { ...DEFAULT_PREPROCESS, ...(opts.initialPreprocess ?? {}) };
   params.keepBackground = !opts.initialRemoveBg;
-  /* How many colours to keep when nothing has been ticked yet — biggest first. */
-  const defaultKeep = Math.max(1, Math.min(MAX_COLOURS, opts.initialColorCount || 4));
   let smoothing = opts.initialSmoothing;
   let view: 'original' | 'result' = 'result';
 
@@ -182,21 +212,22 @@ export function runWizard(opts: WizardOpts) {
 
   const cancelBtn = button({ label: 'Cancel', emphasis: 'secondary', onClick: cancel });
   const doneBtn = button({
-    label: 'Confirm',
+    label: 'Use these colours',
     emphasis: 'primary',
     onClick: () => {
       if (doneBtn.disabled) return;
       close();
-      const kept = keptColours();
+      // Always the mapping, even when nobody touched it: the Result view was drawn from exactly
+      // it, and confirming must give the cap what was shown.
+      const m = mapping();
       opts.onComplete({
         adjusted: adjusted(),
         preprocess: { ...params },
-        colorCount: kept.length,
+        colorCount: m.filaments.length,
         smoothing,
-        // Always the ticked list, even when nobody touched it: the Result view was drawn from
-        // exactly these colours, and confirming must give the cap what was shown.
-        colorMode: 'limited',
-        limitedColors: kept,
+        colorMode: 'mapped',
+        mappedColors: m.colors,
+        mappedFilaments: m.filaments,
       });
     },
   });
@@ -288,63 +319,156 @@ export function runWizard(opts: WizardOpts) {
   let resultStale = true;
   let resultTimer = 0;
 
-  /* ---------------- The colours the picture has, and which to keep ----------------
+  /* ---------------- The colours the picture has, and the filament each prints in ----------------
 
-     This is the handle that was missing. An automatic split into N colours has no way to
-     know that the 1.7% of pink on a heart's cheeks matters more than the difference between
-     two reds, and when it got that wrong there was nothing to pull: Ian's words were "the
-     wizard removed the pink cheeks and there is nothing I can do to fix or adjust it". So the
-     picture's colours are listed, biggest first, each with a Keep switch. What is not kept
-     merges into the nearest kept colour, and the Result view is drawn from the ticked set —
-     never from a count.
+     One list, one idea: every colour the picture is made of, biggest first, pointing at the
+     filament it prints in. Two colours pointed at one filament merge (they trace as one region,
+     no seam); a colour with a filament of its own is its own part. Picking a colour that is
+     already in the design merges into it; picking any other filament recolours.
 
-     The list is rebuilt whenever the PICTURE changes (tone, background), because those change
-     what colours exist. A tick survives the rebuild by colour, not by position: after a tone
-     nudge every candidate moves a little, so "the pink one" is matched by nearest colour. */
+     The engine decides first: the two closest colours merge until the design fits four filaments
+     (`closestPairMapping`), so a colour that looks different survives even when it is small: the
+     green eyes on an orange cat. Keeping the four biggest painted them orange, with nothing in
+     the window able to say so.
+
+     The list is rebuilt whenever the PICTURE changes (tone, background), because that changes
+     what colours exist. A choice survives the rebuild by colour, not by position: after a tone
+     nudge every colour moves a little, so each new colour takes the group of the old one nearest
+     it, and a colour near none of them is a part of its own. */
   let candidates: ColourCandidate[] = [];
-  let keep: boolean[] = [];
+  /** The group each candidate prints in: any integers, one per group. */
+  let groupOf: number[] = [];
+  /** Each group's filament. */
+  const filamentOf = new Map<number, RGB>();
+  let nextGroup = 0;
   let candidatesStale = true;
-  /** Ticks a person set by hand, remembered by colour so they outlive a rebuild. */
-  const ticks: { lab: [number, number, number]; keep: boolean }[] = (opts.initialLimitedColors ?? [])
-    .map((rgb) => ({ lab: srgbToOklab(rgb), keep: true }));
-  // Reopening with a remembered list: everything NOT on it was unticked last time.
-  let untickedByDefault = ticks.length > 0;
+  /** The mapping as it stands, by colour, to carry across a rebuild. Seeded from a reopen. */
+  let remembered: { lab: [number, number, number]; group: number; filament: RGB }[] = opts.initialMapping
+    ? opts.initialMapping.colors.map((c) => ({
+        lab: srgbToOklab(c.rgb),
+        group: c.group,
+        filament: opts.initialMapping!.filaments[c.group] ?? c.rgb,
+      }))
+    : [];
 
   const labDist = (a: [number, number, number], b: [number, number, number]) =>
     Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-  const keptColours = (): RGB[] => candidates.filter((_, i) => keep[i]).map((c) => c.rgb);
+  /** The groups, biggest first by the share of the picture they print. */
+  const groupsInOrder = (): number[] => {
+    const cover = new Map<number, number>();
+    candidates.forEach((c, k) => cover.set(groupOf[k], (cover.get(groupOf[k]) ?? 0) + c.coverage));
+    return [...cover.keys()].sort((p, q) => cover.get(q)! - cover.get(p)!);
+  };
+  /** The mapping as `processImage` and the build take it: groups numbered biggest first. */
+  const mapping = (): { colors: MappedColour[]; filaments: RGB[] } => {
+    const order = groupsInOrder();
+    const rank = new Map(order.map((g, i) => [g, i] as const));
+    return {
+      colors: candidates.map((c, k) => ({ rgb: c.rgb, group: rank.get(groupOf[k])! })),
+      filaments: order.map((g) => filamentOf.get(g)!),
+    };
+  };
+  /** The filament a traced region prints in: its colour is one of the candidates (its group's
+   *  biggest), so its group is that candidate's. */
+  const filamentFor = (rgb: RGB): RGB => {
+    const k = candidates.findIndex((c) => sameRgb(c.rgb, rgb));
+    return k >= 0 ? filamentOf.get(groupOf[k]) ?? rgb : rgb;
+  };
+  const remember = () => {
+    remembered = candidates.map((c, k) => ({ lab: srgbToOklab(c.rgb), group: groupOf[k], filament: filamentOf.get(groupOf[k])! }));
+  };
 
   const colourList = el('div', { className: 'wz-colour-list' });
   const colourCount = el('span', { className: 'wz-colour-count' });
 
+  /** Merge (`into` a group already in the design) or recolour one colour of the picture. The
+   *  first colour of a group carries the whole group with it; any other goes alone. */
+  const choose = (k: number, hex: string, into?: number) => {
+    const g = groupOf[k];
+    const first = groupOf.indexOf(g) === k;
+    if (into !== undefined) {
+      if (into === g || !filamentOf.has(into)) return;
+      if (first) {
+        for (let i = 0; i < groupOf.length; i++) if (groupOf[i] === g) groupOf[i] = into;
+        filamentOf.delete(g);
+      } else {
+        groupOf[k] = into;
+      }
+      changed(true);
+      return;
+    }
+    const rgb = rgbOf(hex);
+    if (first || groupOf.filter((x) => x === g).length === 1) {
+      filamentOf.set(g, rgb);
+      changed(false);
+    } else {
+      const ng = nextGroup++;
+      groupOf[k] = ng;
+      filamentOf.set(ng, rgb);
+      changed(true);
+    }
+  };
+  /** After a choice: the list, and either a fresh trace (the groups changed) or only a repaint
+   *  (a filament changed, which the trace does not depend on). */
+  const changed = (retrace: boolean) => {
+    remember();
+    renderColourList();
+    if (retrace) {
+      traceChanged();
+    } else {
+      renderPalette(lastResult?.set ?? null);
+      if (view === 'result') show();
+    }
+  };
+
+  const openPicker = (e: MouseEvent, k: number) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const order = groupsInOrder();
+    const design = order.map((g) => ({ hex: hexOf(filamentOf.get(g)!), name: filamentName(filamentOf.get(g)!) }));
+    colorPopover({
+      x: r.left,
+      y: r.bottom + 6,
+      value: hexOf(filamentOf.get(groupOf[k])!),
+      groups: [
+        { label: 'In this design', options: design },
+        { label: 'Filaments', options: FILAMENTS.map(([name, hex]) => ({ name, hex })) },
+      ],
+      onSelect: (hex, from) => {
+        if (from?.group === 0) choose(k, hex, order[design.findIndex((d) => d.hex === hex.toLowerCase() || d.hex === hex)]);
+        else choose(k, hex);
+      },
+    });
+  };
+
   const renderColourList = () => {
     colourList.replaceChildren();
-    const n = keep.filter(Boolean).length;
+    const order = groupsInOrder();
     colourCount.textContent = candidates.length
-      ? `${n} of ${candidates.length} kept`
+      ? `${order.length} ${order.length === 1 ? 'filament' : 'filaments'}`
       : 'no colours found';
-    candidates.forEach((c, i) => {
-      const [r, g, b] = c.rgb;
-      const pct = c.coverage >= 0.01 ? `${Math.round(c.coverage * 100)}%` : '<1%';
-      const row = toggleSwitch({
-        label: pct,
-        checked: keep[i],
-        onChange: (on) => {
-          // The last kept colour cannot go: a design with no colours is not a design.
-          if (!on && keep.filter(Boolean).length <= 1) { row.setValue(true); return; }
-          keep[i] = on;
-          ticks.push({ lab: srgbToOklab(c.rgb), keep: on });
-          renderColourList();
-          traceChanged();
-        },
+    for (const g of order) {
+      const fil = filamentOf.get(g)!;
+      const name = filamentName(fil);
+      candidates.forEach((c, k) => {
+        if (groupOf[k] !== g) return;
+        const first = groupOf.indexOf(g) === k;
+        const pct = c.coverage >= 0.01 ? `${Math.round(c.coverage * 100)}%` : '<1%';
+        colourList.append(el('div', { className: first ? 'wz-map-row' : 'wz-map-row wz-map-row--with' }, [
+          el('span', {
+            className: 'wz-map-dot',
+            attrs: { style: `--swatch: ${hexOf(c.rgb)}`, title: `rgb(${c.rgb.join(', ')})`, 'aria-hidden': 'true' },
+          }),
+          el('span', { className: 'wz-map-pct', text: pct }),
+          el('span', { className: 'wz-map-arrow', text: '→', attrs: { 'aria-hidden': 'true' } }),
+          colorChip({
+            hex: hexOf(fil),
+            label: `${pct} of the picture prints in ${name}`,
+            onClick: (e) => openPicker(e, k),
+          }),
+          el('span', { className: 'wz-map-name', text: first ? name : `with ${name.toLowerCase()}` }),
+        ]));
       });
-      row.classList.add('wz-colour-row');
-      row.prepend(el('span', {
-        className: 'wz-colour-dot',
-        attrs: { style: `background:rgb(${r},${g},${b})`, title: `rgb(${r}, ${g}, ${b})` },
-      }));
-      colourList.append(row);
-    });
+    }
   };
 
   const refreshCandidates = () => {
@@ -356,17 +480,48 @@ export function runWizard(opts: WizardOpts) {
       height: lastAdjusted.height,
     };
     candidates = discoverColours(img, !params.keepBackground).slice(0, MAX_COLOURS);
-    keep = candidates.map((_, i) => (untickedByDefault ? false : i < defaultKeep));
-    candidates.forEach((c, i) => {
-      const lab = srgbToOklab(c.rgb);
-      // The LAST decision about this colour wins, so a tick that was flipped twice reads right.
-      for (const t of ticks) if (labDist(t.lab, lab) <= SAME_COLOUR) keep[i] = t.keep;
-    });
-    if (candidates.length && !keep.some(Boolean)) {
-      // A remembered list that matched nothing (a different picture): fall back to the default.
-      for (let i = 0; i < keep.length; i++) keep[i] = i < defaultKeep;
-      untickedByDefault = false;
+    filamentOf.clear();
+    groupOf = [];
+    if (remembered.length) {
+      const fromOld = new Map<number, number>();
+      candidates.forEach((c, k) => {
+        const lab = srgbToOklab(c.rgb);
+        let best = -1;
+        let bestD = SAME_COLOUR;
+        remembered.forEach((m, i) => {
+          const d = labDist(m.lab, lab);
+          if (d <= bestD) { bestD = d; best = i; }
+        });
+        if (best < 0) {
+          const g = nextGroup++;
+          groupOf[k] = g;
+          filamentOf.set(g, c.rgb);
+          return;
+        }
+        let g = fromOld.get(remembered[best].group);
+        if (g === undefined) {
+          g = nextGroup++;
+          fromOld.set(remembered[best].group, g);
+          filamentOf.set(g, remembered[best].filament);
+        }
+        groupOf[k] = g;
+      });
+    } else {
+      // Candidates come biggest first, so a group's first member is its biggest: its colour is
+      // the group's filament until someone picks another.
+      const merge = closestPairMapping(candidates, FILAMENT_BUDGET);
+      const ids = new Map<number, number>();
+      candidates.forEach((c, k) => {
+        let g = ids.get(merge[k]);
+        if (g === undefined) {
+          g = nextGroup++;
+          ids.set(merge[k], g);
+          filamentOf.set(g, c.rgb);
+        }
+        groupOf[k] = g;
+      });
     }
+    remember();
     renderColourList();
   };
 
@@ -375,11 +530,10 @@ export function runWizard(opts: WizardOpts) {
     if (!set) return;
     const ordered = set.regions.slice().sort((a, b) => b.coverage - a.coverage);
     for (const r of ordered) {
-      const [rr, gg, bb] = r.quantRgb;
       const pct = Math.round(r.coverage * 100);
       palette.append(
         el('span', { className: 'wz-swatch', attrs: { title: `${pct}% of the design` } }, [
-          el('span', { className: 'wz-swatch-dot', attrs: { style: `background:rgb(${rr},${gg},${bb})` } }),
+          el('span', { className: 'wz-swatch-dot', attrs: { style: `--swatch: ${hexOf(filamentFor(r.quantRgb))}` } }),
           `${pct}%`,
         ]),
       );
@@ -393,7 +547,7 @@ export function runWizard(opts: WizardOpts) {
       prev.appendChild(imageToCanvas(lastAdjusted));
       prev.classList.remove('is-stale');
     } else {
-      if (lastResult) prev.appendChild(regionsToCanvas(lastResult.set, RESULT_PX, RESULT_PX));
+      if (lastResult) prev.appendChild(regionsToCanvas(lastResult.set, RESULT_PX, RESULT_PX, filamentFor));
       prev.classList.toggle('is-stale', resultStale);
     }
     applyView();
@@ -408,12 +562,14 @@ export function runWizard(opts: WizardOpts) {
       height: lastAdjusted.height,
     };
     if (candidatesStale) refreshCandidates();
-    const kept = keptColours();
-    const set = processImage(img, Math.max(1, kept.length), {
+    // Every colour the picture has, each relabelled to the group it prints in: the trace is the
+    // groups' outlines, merged colours as one region with no seam between them.
+    const m = mapping();
+    const set = processImage(img, Math.max(1, m.filaments.length), {
       removeBg: !params.keepBackground,
       smoothing,
       designMm: opts.designMm,
-      customColors: kept.length ? kept : undefined,
+      ...(candidates.length ? { customColors: m.colors.map((c) => c.rgb), mergeInto: m.colors.map((c) => c.group) } : {}),
     });
     lastResult = { set };
     resultStale = false;
@@ -423,7 +579,7 @@ export function runWizard(opts: WizardOpts) {
     const shapes = set.regions.reduce((n, r) => n + r.components.length, 0);
     stats.classList.remove('is-busy');
     stats.textContent = ok
-      ? `${set.regions.length} ${set.regions.length === 1 ? 'colour' : 'colours'} · ${shapes} ${shapes === 1 ? 'shape' : 'shapes'}`
+      ? `${m.filaments.length} ${m.filaments.length === 1 ? 'filament' : 'filaments'} · ${shapes} ${shapes === 1 ? 'shape' : 'shapes'}`
       : '';
     renderPalette(ok ? set : null);
     if (view === 'result') show();
@@ -478,11 +634,13 @@ export function runWizard(opts: WizardOpts) {
 
   const coloursBlock = el('div', { className: 'wz-colours' }, [
     el('div', { className: 'wz-colours-head' }, [
-      el('span', { className: 'vl-switch-label', text: 'Colours in this picture' }),
-      colourCount,
+      el('span', { className: 'vl-switch-label', text: 'Colours in your picture' }),
+      el('span', { className: 'wz-colour-count-line' }, [
+        colourCount,
+        helpTip('Each colour prints in the filament beside it. Pick a colour already in the design to merge two. Most AMS units hold 4.'),
+      ]),
     ]),
     colourList,
-    el('p', { className: 'vl-hint', text: 'Each kept colour becomes a filament. Anything unticked merges into the nearest kept colour.' }),
   ]);
 
   const bgRow = toggleSwitch({

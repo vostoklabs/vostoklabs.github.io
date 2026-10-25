@@ -174,8 +174,9 @@ export function plateLayout(
   const groupOf = new Map<string, PartGroup>();
   for (const p of parts) if (!groupOf.has(objectKeyOf(p))) groupOf.set(objectKeyOf(p), p.group);
   // A Model-mode cap has a model's top, not a flat face, so it prints standing on the flat face
-  // under it. One upright part makes the whole object upright: the parts of one object are one
-  // print and cannot be turned separately.
+  // under it; a cap with a raised colour prints standing on its skirt and stem. One upright part
+  // makes the whole object upright: the parts of one object are one print and cannot be turned
+  // separately.
   const upright = new Set<string>();
   for (const p of parts) if (p.printUpright) upright.add(objectKeyOf(p));
 

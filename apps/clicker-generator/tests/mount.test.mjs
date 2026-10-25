@@ -19,6 +19,7 @@ const replaced = [
   '@vostok/plates',
   '@vostok/export',
   './ui/ui',
+  './ui/designView',
   './modelPanel',
   '@vostok/trace',
   './ui/wizard',

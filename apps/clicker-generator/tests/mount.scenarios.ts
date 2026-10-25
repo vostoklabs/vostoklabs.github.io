@@ -285,7 +285,7 @@ async function until(ready: () => boolean) {
   ui().onWidth(40);
   await clock.advance(200);
   worker.refuseIf = (msg) => msg.type === 'buildClicker';
-  ui().onEdgeStep('capTop', 0.5); // a live edit: its build goes out with no busy overlay
+  ui().onColourLevel(0, 1); // a live edit (a Relief row): its build goes out with no busy overlay
   const exp = press();
   await clock.advance(300);
   check('a build that cannot even be sent to the worker: Export is answered, not left waiting', exp.done, describe(exp));
@@ -556,11 +556,64 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
 /* ===================================================== what the panel's controls call */
 
 {
+  // Add switch and × on the Switch list: an untouched layout is laid out evenly for the new count;
+  // once one is placed by hand, the others keep their places. The one added is the one picked.
   const unmount = await fresh();
-  ui().onSwitchCount(2);
+  const one = JSON.stringify(seen.state?.switches);
+  ui().onSwitchAdd();
+  await clock.advance(200);
+  const two = seen.state!.switches;
+  check('Add switch: two switches, evenly placed, the new one picked', two.length === 2 && two[0].x === -two[1].x && two[0].x !== 0 && seen.state?.activeSwitchIndex === 1,
+    `${JSON.stringify(two)}, picked ${seen.state?.activeSwitchIndex}`);
+  seen.designView.onEdit({ kind: 'switch', index: 0, x: -5, y: 4, rotation: 0 });
+  await clock.advance(200);
+  ui().onSwitchAdd();
+  await clock.advance(200);
+  const three = seen.state!.switches;
+  check('…a third after one was moved: the moved one stays where it was put', three.length === 3 && three[0].x === -5 && three[0].y === 4 && seen.state?.activeSwitchIndex === 2,
+    JSON.stringify(three));
+  ui().onSwitchAdd();
+  await clock.advance(200);
+  check('…and no fourth', seen.state?.switches.length === 3, `${seen.state?.switches.length} switches`);
+  ui().onSwitchRemove(1);
+  await clock.advance(200);
+  const left = seen.state!.switches;
+  check('× takes that one off, the others where they were', left.length === 2 && left[0].x === -5 && JSON.stringify(left[1]) === JSON.stringify(three[2]),
+    JSON.stringify(left));
+  ui().onSwitchRemove(0);
+  await clock.advance(200);
+  ui().onSwitchRemove(0);
+  await clock.advance(200);
+  check('…and the last one stays', seen.state?.switches.length === 1, `${seen.state?.switches.length} switches`);
+  // An Outline base's picture dragged on the 2D view: the switches move the other way.
+  const at = seen.state!.switches[0];
+  seen.designView.onEdit({ kind: 'outline-move', dx: 3, dy: -2 });
+  await clock.advance(200);
+  const now = seen.state!.switches[0];
+  check('an Outline picture moved 3 right and 2 down: the switch goes 3 left and 2 up on it', now.x === Math.round((at.x - 3) * 10) / 10 && now.y === Math.round((at.y + 2) * 10) / 10,
+    `${JSON.stringify(at)} → ${JSON.stringify(now)}`);
+  void one;
+  finish(unmount);
+}
+
+{
+  // Relief's Bevelled edges: a size, to a tenth of a millimetre, to the build.
+  const unmount = await fresh();
+  ui().onExtrudeChamferMm(0.74);
+  await clock.advance(300);
+  const last = [...posted].reverse().find((m) => m.type === 'buildClicker');
+  check('Bevelled edges: 0.74 mm is kept as 0.7 and built with it', seen.state?.extrudeChamferMm === 0.7 && last?.params.extrudeChamferMm === 0.7 && last?.params.extrudeChamfer === true,
+    `${seen.state?.extrudeChamferMm}; sent ${last?.params.extrudeChamferMm}`);
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onSwitchAdd();
   await clock.advance(200);
   const layout = JSON.stringify(seen.state?.switches);
-  ui().onSwitchNudge(5, 0);
+  // A switch dragged on the Design view.
+  seen.designView.onEdit({ kind: 'switch', index: 0, x: -4, y: 3, rotation: 0 });
   await clock.advance(200);
   const moved = JSON.stringify(seen.state?.switches) !== layout;
   const before = posted.length;
@@ -568,6 +621,55 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   await clock.advance(200);
   check('Reset all switches: every switch goes back where two switches start', moved && JSON.stringify(seen.state?.switches) === layout && seen.state?.activeSwitchIndex === 0, `${JSON.stringify(seen.state?.switches)}, was ${layout}`);
   check('…and the clicker is built again with them', posted.slice(before).some((m) => m.type === 'buildClicker' && JSON.stringify(m.params.switches) === layout), `${posted.length - before} requests`);
+  finish(unmount);
+}
+
+{
+  // The rail's Left / right, Up / down and Turn rows, and the loop's two.
+  const unmount = await fresh();
+  ui().onSwitchAdd();
+  await clock.advance(200);
+  const before = JSON.stringify(seen.state?.switches[0]);
+  ui().onActiveSwitch(1);
+  ui().onSwitchMove(1, { x: 6 });
+  ui().onSwitchMove(1, { rotation: 30 });
+  ui().onImageOffset(2, -3);
+  ui().onDesignRotation(45);
+  ui().onKeychainToggle(true);
+  ui().onKeychainAngle(-90);
+  ui().onKeychainOffsetSet(40);
+  await clock.advance(300);
+  const s = seen.state!;
+  const last = [...posted].reverse().find((m) => m.type === 'buildClicker');
+  check('the rail moves the switch picked, and only the axis it moved', s.activeSwitchIndex === 1 && s.switches[1].x === 6 && s.switches[1].rotation === 30 && JSON.stringify(s.switches[0]) === before, JSON.stringify(s.switches));
+  check('…the picture on its base, and its turn', s.imageOffset.x === 2 && s.imageOffset.y === -3 && s.designRotation === 45, `${JSON.stringify(s.imageOffset)} ${s.designRotation}°`);
+  check('…and the loop: its bearing taken round to 0-360°, its slide held to ±15 mm', s.keychain.angleDeg === 270 && s.keychain.offsetMm === 15, JSON.stringify(s.keychain));
+  check('…all of it in the build that goes out', !!last && last.params.switches[1].x === 6 && last.params.imageOffset.x === 2 && last.params.designRotation === 45 && last.params.keychain.angleDeg === 270,
+    last ? JSON.stringify({ sw: last.params.switches, at: last.params.imageOffset, turn: last.params.designRotation, kc: last.params.keychain }) : 'no build');
+
+  // Lettering's per-line rows: the line picked under Line, and only that one.
+  ui().onWordAdd();
+  ui().onWordAdd();
+  await clock.advance(200);
+  const [w1, w2] = seen.state!.words;
+  ui().onActiveWord(w2.id);
+  ui().onWordSize(10);
+  ui().onWordMove(w2.id, { x: 4, rotation: -20 });
+  await clock.advance(300);
+  const words = seen.state!.words;
+  check('Lettering sizes and moves the line picked, and only that line', words[1].heightMm === 10 && words[1].x === 4 && words[1].rotation === -20 && words[0].heightMm === w1.heightMm && words[0].x === w1.x,
+    JSON.stringify(words));
+  finish(unmount);
+}
+
+{
+  // Text size used to size the clicker too: a project saved then opens at the size it was made.
+  const unmount = await fresh();
+  const project = { version: 3, settings: { importMode: 'text', currentText: 'Big', currentFontId: 'helvetiker-regular', baseShape: 'outline', capWidthMm: 40, textScale: 1.5 } };
+  ui().onLoadProject(new File([JSON.stringify(project)], 'clicker-project.json'));
+  await clock.advance(600);
+  check('a text clicker saved with Text size 150% on an Outline base opens 60 mm wide, Text size back to 100%', seen.state?.capWidthMm === 60 && seen.state?.textScale === 1 && onScreen() === 'built:text:Big:font=helvetiker-regular|w=60|st=0',
+    `Size ${seen.state?.capWidthMm}, Text size ${seen.state?.textScale}; ${shown(onScreen())}`);
   finish(unmount);
 }
 

@@ -147,8 +147,11 @@ export interface BuildParams {
   componentHeights: Record<string, number>;
   /** Edge modifications (fillet / chamfer) for body and cap edges. */
   edgeSettings: EdgeSetting[];
-  /** Global toggle: chamfer the top edge of every raised (extruded) color part. */
+  /** Global toggle: chamfer the top edge of every raised (extruded) color part, 0.5 mm. */
   extrudeChamfer: boolean;
+  /** How far that chamfer goes, mm (Relief's Bevelled edges); 0 leaves them sharp. Given, it wins
+   *  over `extrudeChamfer`. Capped at about half the part's height, as every inlay bevel is. */
+  extrudeChamferMm?: number;
   /** Hollow the body's underside, leaving walls and a floor instead of a solid block.
    *  Off by default: it changes what an existing saved design renders as, and the walls
    *  want a print before anyone's default moves. */
@@ -165,6 +168,14 @@ export interface BuildParams {
    *  Ignored when the base follows the outline: there the shape and the artwork are the same
    *  thing, so shrinking one is meaningless. */
   designScale?: number;
+  /** Turn the artwork, degrees counter-clockwise. Absent or 0 = as drawn, byte for byte.
+   *
+   *  On a preset base the picture turns about its own centre inside the shape, and the shape
+   *  keeps the size it has: whatever the turn pushes past the frame is cropped by the image
+   *  area, the same rule as moving it or zooming in. On an outline base the picture IS the base,
+   *  so the outline turns with it and the whole silhouette turns. Words placed on the design
+   *  (`BuildRegion.mm`) never turn with the picture. */
+  designRotation?: number;
   /** Pin the BODY's outer footprint to this rectangle (mm) instead of sizing it from the
    *  artwork, and fit the artwork inside it. Absent = the body follows the design, which is
    *  what every clicker generated before this did.
@@ -208,7 +219,9 @@ export interface BuildParams {
   /** A wall between every key (the original blocks), or one open well round them all, like a
    *  keyboard. Absent = 'walls'. */
   blockStyle?: BlockStyle;
-  /** The outside of the block body. Absent = 'smooth'. */
+  /** The outside of the body: the letter blocks', and the flat clicker's too, so a texture
+   *  survives switching source. Absent = 'smooth', which on the flat clicker is the extruded
+   *  wall every clicker had before textures, byte for byte. */
   blockTexture?: BlockTexture;
   /** How far the block body's rim is raised above the standard body, mm, hiding more of each
    *  keycap. Absent = 0, the standard body. */
@@ -226,6 +239,9 @@ export interface BuildParams {
   /** Text mode: outward offset applied to every glyph outline before it is carved, mm —
    *  the "boldness" control. Absent/0 = the outline exactly as the font drew it. */
   textBold?: number;
+  /** Said with the warnings when the frame cuts the artwork off: Text mode's letters, which are
+   *  read. Absent, a cropped picture says nothing, as Design size above 100% intends. */
+  artCutNote?: string;
   /** Which side of the block set the keyring loop hangs off (blocks mode). */
   keychainEnd?: KeychainSide;
   /** Slide the keyring loop ALONG that side, mm. 0 = where it has always sat.
@@ -295,7 +311,9 @@ export interface ClickerPart extends MeshData {
   objectLabel?: string;
   /** Print this `top` piece the way it stands rather than flipped face-down. A cap made from an
    *  uploaded model has no flat face on top; it stands on the flat face under it instead (Model
-   *  mode — src/model/switchKit.ts, rule 1). Absent = the group's usual orientation. */
+   *  mode — src/model/switchKit.ts, rule 1). A cap with a colour raised above its face has no
+   *  flat face either; it stands on its skirt and stem (buildClicker). Absent = the group's
+   *  usual orientation. */
   printUpright?: boolean;
 }
 
@@ -307,6 +325,42 @@ export interface BuildRegion {
   partName: string;
   /** Letter blocks: this legend's own size and offset (a symbol's inspector). */
   legend?: LegendLook;
+  /** The rings are already in cap millimetres — words placed on the design — not normalised
+   *  artwork: no scale, offset or rotation is applied to them. They are still clipped to the
+   *  image area and carved in the same priority loop; give them coverage 0 and they win at
+   *  every boundary, so words cut through the picture. On an outline base the base grows round
+   *  them. */
+  mm?: boolean;
+  /** This region's boldness, mm (an outward offset of its outline), in place of
+   *  `BuildParams.textBold`, which never applies to an `mm` region. */
+  boldMm?: number;
+}
+
+/** Where the parts of a flat clicker sit seen from above, in millimetres, for a 2D view of the
+ *  design: drawn from the build's own outlines, so the view shows what was built. */
+export interface DesignLayout {
+  /** The cap plate's outline. */
+  cap: Ring[];
+  /** Where the artwork is clipped: the cap less its frame. */
+  imageArea: Ring[];
+  /** The body's footprint, before any texture. */
+  body: Ring[];
+  /** The well the cap rides in. */
+  well: Ring[];
+  /** How a normalised artwork point (x, y) was placed: turned by `rotation` degrees
+   *  counter-clockwise about the origin, multiplied by `scale`, then moved by (offX, offY).
+   *  `scale` is the final one, after the design scale. */
+  art: { scale: number; offX: number; offY: number; rotation: number };
+  /** The box every switch centre is clamped into. Where `lo` passes `hi` on an axis, a switch
+   *  is held at the middle of the two. */
+  switchBox: { loX: number; hiX: number; loY: number; hiY: number };
+  /** The keyring loop, when it is on: its hole's centre, and the loop's and hole's radii. */
+  loop?: { x: number; y: number; outerR: number; holeR: number };
+  /** With the loop on, the body as it is seen from above: `body` with the loop's tab and the
+   *  bridge that welds it on, less the hole. What a 2D view draws; `body` stays the body proper. */
+  silhouette?: Ring[];
+  /** How far a texture's crests stand outside `body`, mm; 0 when the wall is smooth. */
+  textureMm: number;
 }
 
 // ---- Worker messages ----
@@ -369,9 +423,12 @@ export type GeometryResponse =
   // `warnings` surfaces non-fatal build notes (e.g. switches pulled together, no room
   // for the keychain hole) for the status line.
   // `modelMeta` only on a Model-mode build: slider ranges and where the cut and switch landed.
+  // `blocking` and `layout` only on a flat clicker's build. `blocking` holds what will not
+  // print (Export refuses while it is not empty) and is NOT repeated in `warnings`, so show
+  // both. `layout` is the design seen from above, for the 2D view.
   | {
     type: 'parts'; parts: ClickerPart[]; switchPlacements: SwitchPlacement[]; warnings: string[];
-    requestId?: string; modelMeta?: ModelMeta;
+    requestId?: string; modelMeta?: ModelMeta; blocking?: string[]; layout?: DesignLayout;
   }
   | { type: 'modelInfo'; info: ModelInfo }
   // `request` and `requestId` name the request that failed, so what Export waits for

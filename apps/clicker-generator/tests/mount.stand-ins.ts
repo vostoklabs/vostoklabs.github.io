@@ -34,6 +34,8 @@ export const seen = {
   state: null as any,
   /** createModelPanel's options: Model mode's own controls. */
   modelPanel: null as any,
+  /** createDesignView's options: what a drag on the Design view calls. */
+  designView: null as any,
   /** Every artifact set handed to the MakerLab host. */
   sdkExports: [] as any[],
   /** The seams handed to the paid panel, in the MakerWorld build. */
@@ -164,6 +166,11 @@ export function createUi(_left: unknown, _right: unknown, _status: unknown, call
 export function createModelPanel(options: any) {
   seen.modelPanel = options;
   return quiet({ right: quiet({}), parts: { cut: quiet({}), model: quiet({}), colours: quiet({}) } });
+}
+/** The Design view draws SVG on the stage; a scenario reaches its edits through `seen.designView`. */
+export function createDesignView(options: any) {
+  seen.designView = options;
+  return quiet({});
 }
 
 /* ------------------------------------------------------------ @vostok/trace, the wizard */
