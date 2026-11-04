@@ -23,6 +23,10 @@ import { mount } from '../src/mount';
 installDom();
 const clock = installClock();
 installWorker();
+/* Saving a project draws its picture into a canvas through `ImageData`, which node lacks. */
+(globalThis as Record<string, unknown>).ImageData ??= class {
+  constructor(readonly data: Uint8ClampedArray, readonly width: number, readonly height: number) {}
+};
 
 /* What the app logs goes here rather than to the terminal; a failing check prints the tail. */
 const logged: string[] = [];
@@ -68,6 +72,14 @@ const worker = {
   silentIf: null as null | ((msg: any) => boolean),
   /** Requests that cannot even be posted to it, as one holding something uncloneable. */
   refuseIf: null as null | ((msg: any) => boolean),
+  /** Clicker builds send back the outlines the Design view draws. */
+  layout: false,
+};
+/** A clicker seen from above, as small as the Design view will draw. */
+const square = (h: number) => [[[-h, -h], [h, -h], [h, h], [-h, h]]];
+const LAYOUT = {
+  cap: square(10), imageArea: square(8), body: square(13), well: square(10.5),
+  art: { scale: 16, offX: 0, offY: 0, rotation: 0 }, switchBox: { loX: -1, hiX: 1, loY: -1, hiY: 1 }, textureMm: 0,
 };
 const inbox: { w: FakeWorker; msg: any }[] = [];
 /** Every request posted to the worker since the clicker was mounted, in order. */
@@ -85,7 +97,7 @@ function answer(msg: any): unknown {
     case 'init':
       return { type: 'initDone', socketInfo: '', stemInfo: '', switchInfo: '', switchMesh: { vertProperties: new Float32Array(0), triVerts: new Uint32Array(0), numProp: 3 }, switchColumnMm: 17 };
     case 'buildClicker':
-      return { type: 'parts', parts: partsNamed(`built:${traceOf(msg)}|w=${msg.params.capWidthMm}|st=${msg.params.stemFitMm}`), switchPlacements: [], warnings: [], requestId: msg.requestId };
+      return { type: 'parts', parts: partsNamed(`built:${traceOf(msg)}|w=${msg.params.capWidthMm}|st=${msg.params.stemFitMm}`), switchPlacements: [], warnings: [], requestId: msg.requestId, ...(worker.layout ? { layout: LAYOUT } : {}) };
     case 'buildBlocks':
       return { type: 'parts', parts: partsNamed(`blocks:${traceOf(msg)}|w=${msg.params.capWidthMm}`), switchPlacements: [], warnings: [], requestId: msg.requestId };
     case 'importModel':
@@ -153,7 +165,7 @@ async function fresh(prepare?: () => void, host?: object) {
   FakeWorker.reset();
   inbox.length = 0;
   working = false;
-  Object.assign(worker, { ms: 5, failIf: null, crashIf: null, silentIf: null, refuseIf: null });
+  Object.assign(worker, { ms: 5, failIf: null, crashIf: null, silentIf: null, refuseIf: null, layout: false });
   net.ms = {};
   net.fails = new Set();
   clock.errors.length = 0;
@@ -961,6 +973,185 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   await clock.advance(50);
   check('a batch row whose build fails: the batch is told, rather than left waiting', row.done && row.error?.message === 'RangeError: Invalid array length', row.done ? row.error?.message ?? 'answered' : 'still waiting');
   check('…and the design\'s status line is left alone', status() === before, `"${status()}", was "${before}"`);
+  finish(unmount);
+}
+
+/* ================================================================= Blank */
+
+/** The last request of a kind the worker was sent. */
+const lastSent = (type: string) => [...posted].reverse().find((m) => m.type === type);
+const regionNames = (msg: any) => (msg ? msg.regions.map((r: any) => r.partName).join(', ') || 'none' : 'no build');
+
+{
+  // Image mode: the picture's shapes go, the words stay, and the outline is what it was.
+  const unmount = await fresh();
+  ui().onWordAdd();
+  await clock.advance(300);
+  const off = lastSent('buildClicker');
+  ui().onBlank(true);
+  await clock.advance(300);
+  const on = lastSent('buildClicker');
+  check('Blank in Image mode: the build gets the words and none of the picture',
+    !!off && !!on && off !== on && off.regions.some((r: any) => !r.mm) && on.regions.length === 1 && on.regions.every((r: any) => r.mm),
+    `${regionNames(off)} → ${regionNames(on)}`);
+  check('…on the outline the picture gives it, so the base keeps its shape and size',
+    !!on && JSON.stringify(on.outline) === JSON.stringify(off?.outline), on ? JSON.stringify(on.outline) : 'no build');
+  check('…said to the build, which a clicker with its picture never is', on?.params.blank === true && off?.params.blank === undefined,
+    `${off?.params.blank} → ${on?.params.blank}`);
+  check('…and the button is the picture\'s ink, not the body\'s colour', JSON.stringify(on?.params.baseFilamentRgb) === '[10,20,30]'
+    && JSON.stringify(on?.params.bodyColorRgb) === '[240,240,240]', `button ${JSON.stringify(on?.params.baseFilamentRgb)}, body ${JSON.stringify(on?.params.bodyColorRgb)}`);
+
+  // The Design view: the words and the switch are there to move, the picture is not.
+  worker.layout = true;
+  ui().onDesignView(true);
+  await clock.advance(300);
+  const blankView = seen.designInput;
+  check('…the Design view draws no picture, and is told so', !!blankView && blankView.art.length === 0 && blankView.blank === true && blankView.words.length === 1,
+    blankView ? `${blankView.art.length} colours, blank ${blankView.blank}, ${blankView.words.length} words` : 'not drawn');
+  ui().onBlank(false);
+  await clock.advance(300);
+  const back = seen.designInput;
+  check('…and draws it again once Blank is off', !!back && back.art.length === 1 && back.blank === false && lastSent('buildClicker')?.regions.some((r: any) => !r.mm),
+    back ? `${back.art.length} colours, blank ${back.blank}` : 'not drawn');
+  finish(unmount);
+}
+
+{
+  // Blocks: every key, in the same layout, each a plain cap.
+  const unmount = await fresh();
+  ui().onImportMode('blocks');
+  await clock.advance(300);
+  const off = lastSent('buildBlocks');
+  ui().onBlank(true);
+  await clock.advance(300);
+  const on = lastSent('buildBlocks');
+  check('Blank in Blocks: every key is built, each with nothing on it',
+    !!off && !!on && off !== on && on.regions.length === off.regions.length && off.regions.some((r: any) => r.rings.length)
+      && on.regions.every((r: any) => r.rings.length === 0) && JSON.stringify(on.params.blockKeys) === JSON.stringify(off.params.blockKeys),
+    `${off?.regions.length} keys → ${on?.regions.length}, keys ${JSON.stringify(on?.params.blockKeys)}`);
+  check('…and the caps are the letters\' colour, not the body\'s: two colours', JSON.stringify(off?.params.baseFilamentRgb) === '[240,240,240]'
+    && JSON.stringify(on?.params.baseFilamentRgb) === '[10,20,30]', `caps ${JSON.stringify(off?.params.baseFilamentRgb)} → ${JSON.stringify(on?.params.baseFilamentRgb)}`);
+  ui().onBlockLine(0, 'AB');
+  await clock.advance(400);
+  check('…typing on the keys leaves Blank on', seen.state?.blank === true && lastSent('buildBlocks')?.regions.every((r: any) => r.rings.length === 0), String(seen.state?.blank));
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onBlank(true);
+  ui().onImportMode('model');
+  await clock.advance(300);
+  check('Model mode ignores Blank: the model is cut as ever', onScreen() === 'model:slice|size=40|st=0' && lastSent('buildModel')?.params.blank === undefined, shown(onScreen()));
+  const exp = press();
+  await clock.advance(100);
+  check('…and its file is not called blank', exp.done && !!seen.downloads[0] && !seen.downloads[0].name.includes('blank'), String(seen.downloads[0]?.name));
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh();
+  ui().onBlank(true);
+  await clock.advance(300);
+  const exp = press();
+  await clock.advance(100);
+  check('Export of a blank: its file says so', exp.done && seen.downloads[0]?.name === 'clicker-vostok-labs-blank.3mf', String(seen.downloads[0]?.name));
+  finish(unmount);
+}
+
+{
+  const unmount = await fresh(() => (knobs.makerlab = true));
+  ui().onBlank(true);
+  await clock.advance(300);
+  const exp = press();
+  await clock.advance(300);
+  const art = seen.sdkExports[0]?.artifacts?.[0];
+  check('in MakerLab, a blank: not called multi-colour, and named as blank', exp.done && art?.description === 'Clicker, made with the Clicker Generator.' && art?.fileName === 'clicker-vostok-labs-blank.obj',
+    `${art?.fileName}: ${art?.description}`);
+  finish(unmount);
+}
+
+{
+  // Saved, opened again; and a project from before Blank.
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(300);
+  ui().onBlank(true);
+  await clock.advance(300);
+  ui().onSaveProject();
+  const saved = seen.files.find((f) => f.name === 'clicker-project.json');
+  const settings = saved ? JSON.parse(String(saved.data)).settings : null;
+  check('Save writes Blank into the project', settings?.blank === true, JSON.stringify(settings?.blank));
+  ui().onBlank(false);
+  await clock.advance(300);
+  ui().onLoadProject(new File([String(saved?.data)], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  const loaded = lastSent('buildClicker');
+  check('…and opening it brings Blank back, built without the picture', seen.state?.blank === true && loaded?.params.blank === true && loaded?.regions.length === 0,
+    `blank ${seen.state?.blank}; ${regionNames(loaded)}`);
+  ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'text', currentText: 'Old' } })], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('a project saved before Blank opens with its picture', seen.state?.blank === false && lastSent('buildClicker')?.regions.length === 1, `blank ${seen.state?.blank}`);
+  finish(unmount);
+}
+
+{
+  // Undo and redo carry it, and rebuild with it.
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(800); // traced: its build is the undo baseline
+  ui().onBlank(true);
+  await clock.advance(800); // built, and recorded 350 ms after
+  ui().onUndo();
+  await clock.advance(300);
+  check('Undo after Blank: the picture is back, in the state and in the build', seen.state?.blank === false && lastSent('buildClicker')?.regions.length === 1,
+    `blank ${seen.state?.blank}; ${regionNames(lastSent('buildClicker'))}`);
+  ui().onRedo();
+  await clock.advance(300);
+  check('…and Redo leaves it off again', seen.state?.blank === true && lastSent('buildClicker')?.regions.length === 0, `blank ${seen.state?.blank}`);
+  finish(unmount);
+}
+
+{
+  // A new picture is a request to see it; typing is not.
+  const unmount = await fresh();
+  ui().onBlank(true);
+  await clock.advance(300);
+  ui().onUpload(new File([new Uint8Array(8)], 'cat.png', { type: 'image/png' }));
+  await clock.advance(300);
+  check('a picture uploaded while Blank is on: Blank goes off, and the picture is built', seen.state?.blank === false && lastSent('buildClicker')?.regions.length === 1,
+    `blank ${seen.state?.blank}; ${regionNames(lastSent('buildClicker'))}`);
+  ui().onBlank(true);
+  await clock.advance(300);
+  ui().onSample(async () => ({ width: 4, height: 4, data: new Uint8ClampedArray(64) }), 'Vostok Labs');
+  await clock.advance(300);
+  check('…a sample picked: off too', seen.state?.blank === false, String(seen.state?.blank));
+  ui().onBlank(true);
+  ui().onAdjustImage();
+  await clock.advance(300);
+  check('…but Adjust image, the same picture, leaves it on', seen.state?.blank === true, String(seen.state?.blank));
+  ui().onImportMode('icon');
+  await clock.advance(300);
+  ui().onSelectIcon('<svg/>', 'star');
+  await clock.advance(300);
+  check('…an icon picked: off', seen.state?.blank === false, String(seen.state?.blank));
+  ui().onImportMode('svg');
+  ui().onBlank(true);
+  ui().onSelectSvg('logo', 'logo.svg');
+  await clock.advance(300);
+  check('…an SVG picked: off', seen.state?.blank === false, String(seen.state?.blank));
+  ui().onBlank(true);
+  ui().onSelectSvg('logo', 'logo.svg'); // a project opening selects its own SVG again
+  await clock.advance(300);
+  check('…but the SVG already loaded, picked again, leaves it on', seen.state?.blank === true, String(seen.state?.blank));
+  ui().onImportMode('text');
+  await clock.advance(300);
+  ui().onTextChange('Hi');
+  await clock.advance(400);
+  check('…and typing in Text mode leaves it on, built with no letters', seen.state?.blank === true && lastSent('buildClicker')?.regions.length === 0,
+    `blank ${seen.state?.blank}; ${regionNames(lastSent('buildClicker'))}`);
   finish(unmount);
 }
 

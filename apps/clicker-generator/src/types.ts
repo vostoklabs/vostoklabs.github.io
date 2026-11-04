@@ -242,6 +242,10 @@ export interface BuildParams {
   /** Said with the warnings when the frame cuts the artwork off: Text mode's letters, which are
    *  read. Absent, a cropped picture says nothing, as Design size above 100% intends. */
   artCutNote?: string;
+  /** The top prints blank: the picture is left off (words placed on it still print), and the
+   *  outline still sizes and shapes the base. Quiets the notes about the picture, which would
+   *  talk about a design that is not there. Absent = false. */
+  blank?: boolean;
   /** Which side of the block set the keyring loop hangs off (blocks mode). */
   keychainEnd?: KeychainSide;
   /** Slide the keyring loop ALONG that side, mm. 0 = where it has always sat.

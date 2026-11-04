@@ -67,12 +67,9 @@ import { lucideImg, ringsSvg } from './symbols';
 import { symbolLines, type LineSpec } from './symbolLines';
 import { fmtSignedMm, readSigned } from './signedReadout';
 import { RELIEF_MAX, RELIEF_MIN, reliefLevelOf, reliefMm } from '../relief';
-import { wordsColour } from '../words';
-import { capColourOf } from '../frame';
+import { wordsColourOf } from '../words';
+import { capColourOf, isBlank } from '../frame';
 import type { MappedColour } from './wizard';
-
-/** Fallback swatch for the keycap row before the build derives a contrasting frame. */
-const DEFAULT_CAP_RGB: RGB = [240, 240, 240];
 
 /** The left panel's categories, in rail order. Which ones a mode shows: `RAIL_FOR_MODE`. */
 type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'body' | 'colors' | 'relief' | 'switch' | 'keychain' | 'fit' | 'seller';
@@ -230,6 +227,10 @@ export interface UiState {
   /** 'blocks' = the letter-block chain (one block + switch + keycap per letter).
    *  'model' = an uploaded 3D model, cut round a switch (src/model/). */
   importMode: 'image' | 'svg' | 'icon' | 'text' | 'blocks' | 'model';
+  /** Blank: the clicker prints without its picture, the button in one colour (frame.ts), keeping
+   *  the picture's shape and size; words on it still print. Blocks print every key with nothing
+   *  on it. Kept across modes; a cut model has no picture and ignores it. */
+  blank: boolean;
   /** Model mode: how the model is cut. Undoable and saved, like every design field. */
   modelCut: ModelCutParams;
   /** Model mode: what the import made of the file, or null before one is loaded. */
@@ -480,6 +481,8 @@ export interface UiCallbacks {
   onExtrudeChamferMm(mm: number): void;
   /** Text mode: toggle splitting the word into per-letter parts. */
   onSeparateLetters(on: boolean): void;
+  /** Print the clicker blank, without its picture (or the keys without their letters). */
+  onBlank(on: boolean): void;
   onLineSpacing(v: number): void;
   onLetterSpacing(v: number): void;
   onTextBold(mm: number): void;
@@ -698,6 +701,7 @@ export function createUi(
       <div class="prow-stacked"><div id="hollowMount"></div></div>
     </div>
     <div data-rail="colors">
+      <div id="blankMount"></div>
       <div class="field" id="colorCountField">
         <div id="ccountMount"></div>
         <p class="vl-hint">Most AMS units hold 4 filaments; more colors means manual swaps.</p>
@@ -717,7 +721,7 @@ export function createUi(
         <div class="cg-relief-rows" id="reliefRowsMount"></div>
       </div>
       <div id="reliefBevelMount"></div>
-      <div class="prow-stacked"><div id="imgdepthMount"></div></div>
+      <div class="prow-stacked" id="imgdepthRow"><div id="imgdepthMount"></div></div>
     </div>
     <div data-rail="fit">
       <div class="prow-stacked"><div id="gapTolMount"></div></div>
@@ -1867,6 +1871,27 @@ export function createUi(
   });
   $('separateLettersMount').append(separateLettersToggle);
 
+  /* Blank: the clicker without its picture, or the keys without their letters. What it leaves
+     off depends on the mode, and its help says which, so the switch is made again for the mode's
+     words when they change. Not for a cut model, which has no picture. */
+  const blankHelpFor = (mode: UiState['importMode']) =>
+    mode === 'blocks' ? 'Prints the keys with no letters on them.'
+    : mode === 'text' ? 'Prints the button in one colour, with no letters on it.'
+    : 'Prints the button in one colour, with no picture on it. Text you add still prints.';
+  let blankHelp = '';
+  let blankToggle: ReturnType<typeof toggleSwitch> | null = null;
+  function placeBlankToggle(mode: UiState['importMode'], on: boolean) {
+    const help = blankHelpFor(mode);
+    if (blankToggle && help === blankHelp) {
+      blankToggle.setValue(on);
+      return;
+    }
+    blankHelp = help;
+    blankToggle = toggleSwitch({ label: 'Blank', help, checked: on, onChange: (v) => cb.onBlank(v) });
+    $('blankMount').replaceChildren(blankToggle);
+  }
+  placeBlankToggle(initial.importMode, initial.blank);
+
   // --- Relief ---
   /* How far each colour stands above the top, one row per filament, in the millimetres it prints
      (the geometry still counts in 0.6 mm steps). A click on a shape on the model sets that one
@@ -1886,8 +1911,10 @@ export function createUi(
   let reliefKey = '';
   let reliefRows: ValueRow<number>[] = [];
   let reliefWordsRow: ValueRow<number> | null = null;
-  function renderReliefRows(state: UiState, words: RGB | null) {
-    const key = [...state.palette.map((p) => rgbHex(p.filamentRgb)), words ? `text:${rgbHex(words)}` : ''].join();
+  /** `colours`: the picture's colours print, so each has a row (not on a blank). */
+  function renderReliefRows(state: UiState, words: RGB | null, colours: boolean) {
+    const palette = colours ? state.palette : [];
+    const key = [...palette.map((p) => rgbHex(p.filamentRgb)), words ? `text:${rgbHex(words)}` : ''].join();
     if (key !== reliefKey) {
       reliefKey = key;
       const levelRow = (label: string, rgb: RGB, value: number, onInput: (level: number) => void) => stepperRow({
@@ -1899,7 +1926,7 @@ export function createUi(
         parse: (typed, raw) => reliefLevelOf(readSigned(typed, raw)),
         onInput,
       });
-      reliefRows = state.palette.map((p, i) =>
+      reliefRows = palette.map((p, i) =>
         levelRow(getFilamentNameAndHex(p.filamentRgb)[0], p.filamentRgb, state.colourLevels[i] ?? 0, (level) => cb.onColourLevel(i, level)));
       // The words, when a picture has them: their own row, under the picture's colours.
       reliefWordsRow = words ? levelRow('Text', words, state.wordsLevel, (level) => cb.onWordsLevel(level)) : null;
@@ -2570,7 +2597,8 @@ export function createUi(
     bodyColorRgb: RGB,
     colorMode?: UiState['colorMode'],
     limitedColors?: RGB[],
-    blocks?: { capRgb: RGB },
+    /** Letter blocks: the caps' colour, and whether their letters print (not on a blank). */
+    blocks?: { capRgb: RGB; letters: boolean },
     recolored = 0,
     customColors: RGB[] = [],
     /** The words on a picture, when it has some: their own row, after the picture's colours. */
@@ -2580,6 +2608,8 @@ export function createUi(
     mapped: MappedColour[] = [],
     /** An image: its colours are chosen in the import window, which a button here reopens. */
     picture = false,
+    /** A blank's button: its row stands in for the picture's, which print nothing. */
+    blankButton: RGB | null = null,
   ) {
     const pal = $('palette');
     pal.replaceChildren();
@@ -2620,13 +2650,22 @@ export function createUi(
     if (blocks) {
       pal.append(row('Body', rgbHex(bodyColorRgb), (hex) => cb.onBodyColor(hex)));
       pal.append(row('Caps', rgbHex(blocks.capRgb), (hex) => cb.onCapColor(hex)));
-      pal.append(row('Letters', rgbHex(palette[0]?.filamentRgb ?? [247, 247, 245]), (hex) => cb.onFilament(0, hex)));
-      appendTip('Tip: click a block, a cap or a letter on the 3D model to recolor it.');
+      if (blocks.letters) {
+        pal.append(row('Letters', rgbHex(palette[0]?.filamentRgb ?? [247, 247, 245]), (hex) => cb.onFilament(0, hex)));
+      }
+      appendTip(blocks.letters ? 'Tip: click a block, a cap or a letter on the 3D model to recolor it.' : 'Tip: click a block or a cap on the 3D model to recolor it.');
       return;
     }
 
     // ALWAYS render the Clicker Body row.
     pal.append(row('Body', rgbHex(bodyColorRgb), (hex) => cb.onBodyColor(hex)));
+
+    // A blank: the body, the button, and the words on it. Its picture's colours print nothing.
+    if (blankButton) {
+      pal.append(row('Button', rgbHex(blankButton), (hex) => cb.onCapColor(hex)));
+      if (wordsRgb) pal.append(row('Text', rgbHex(wordsRgb), (hex) => cb.onWordsColor(hex)));
+      return;
+    }
 
     if (palette.length === 0) {
       const hint = document.createElement('div');
@@ -2707,7 +2746,10 @@ export function createUi(
     /** The three sources a picture comes from, and whether this one has words on it. */
     const pictureMode = state.importMode === 'image' || state.importMode === 'svg' || state.importMode === 'icon';
     const hasWords = pictureMode && state.words.length > 0;
-    const wordsRgb = hasWords ? wordsColour(state.palette, state.wordsColorRgb, capColourOf(state)) : null;
+    const wordsRgb = hasWords ? wordsColourOf(state) : null;
+    /** Printed without its picture (a cut model never is). What only moves, sizes or colours the
+     *  picture goes, rather than sit there doing nothing. */
+    const blank = isBlank(state);
     statusSpinner.style.display = state.building ? '' : 'none';
     statusText.data = (state.building ? ' ' : '') + state.status;
     // Nothing to say: no empty pill on the stage.
@@ -2741,16 +2783,23 @@ export function createUi(
     topthickRow.setValue(state.topThickness);
     imgdepthRow.setValue(state.imageDepth);
     // How deep the colours go into the top, in Relief beside how far they rise: the letters in
-    // Text mode, the colours everywhere else.
-    imgdepthRow.setBounds(0.2, 3, state.importMode === 'text' ? 'Letter depth' : 'Colour depth');
-    renderReliefRows(state, wordsRgb);
+    // Text mode, the colours everywhere else, and on a blank the words, the only colour it has.
+    imgdepthRow.setBounds(0.2, 3, state.importMode === 'text' ? 'Letter depth' : blank ? 'Text depth' : 'Colour depth');
+    $('imgdepthRow').hidden = blank && !hasWords;
+    renderReliefRows(state, wordsRgb, !blank);
+    // A blank's Relief is its words' row alone, or nothing (and the category goes with it).
+    $('reliefLevelsField').hidden = blank && !wordsRgb;
     // A bevel has an edge to bevel only once something stands above the face.
-    const raised = state.colourLevels.some((l) => l > 0) || state.wordsLevel > 0
-      || Object.values(state.componentHeights).some((l) => l > 0);
+    const raised = blank
+      ? hasWords && (state.wordsLevel > 0 || Object.entries(state.componentHeights).some(([name, l]) => name.startsWith('text-') && l > 0))
+      : state.colourLevels.some((l) => l > 0) || state.wordsLevel > 0
+        || Object.values(state.componentHeights).some((l) => l > 0);
     $('reliefBevelMount').hidden = !raised;
     reliefBevelRow.setValue(state.extrudeChamferMm);
     separateLettersToggle.setValue(state.separateLetters);
-    $('separateLettersMount').hidden = state.importMode !== 'text';
+    $('separateLettersMount').hidden = state.importMode !== 'text' || blank;
+    $('blankMount').hidden = state.importMode === 'model';
+    placeBlankToggle(state.importMode, state.blank);
     capProudRow.setValue(RIM_SPAN - state.capProud);
     hollowToggle.setValue(state.hollowBase);
     lastBuiltBody = state.builtBodyMm;
@@ -2758,11 +2807,14 @@ export function createUi(
     // An outline base ignores it, so it goes away there rather than sitting greyed out. In Text
     // mode "Text size" is the same knob under a name that means something there, so this one
     // goes away too rather than being a second control fighting it.
-    designScaleRow.hidden = state.importMode === 'text' || isOutlineBase(state);
+    // A blank has no picture to size.
+    designScaleRow.hidden = state.importMode === 'text' || isOutlineBase(state) || blank;
     paintShapeKnobs(state);
-    // The picture's place: on an Outline base the picture is the base, so it only turns.
-    $('artMoveXRow').hidden = isOutlineBase(state);
-    $('artMoveYRow').hidden = isOutlineBase(state);
+    // The picture's place: on an Outline base the picture is the base, so it only turns. A blank
+    // has no picture to place, but on an Outline base turning it still turns the base.
+    $('artMoveXRow').hidden = isOutlineBase(state) || blank;
+    $('artMoveYRow').hidden = isOutlineBase(state) || blank;
+    $('artTurnRow').hidden = blank && !isOutlineBase(state);
     artMove.x.setValue(state.imageOffset.x);
     artMove.y.setValue(state.imageOffset.y);
     artMove.turn.setValue(wrapTurn(state.designRotation));
@@ -2831,15 +2883,19 @@ export function createUi(
     $('wordsField').hidden = !pictureMode;
     // The font goes in with a picture's words, under them, once there are some.
     placeFontBlock(pictureMode);
-    fontBlock.hidden = pictureMode && !hasWords;
+    // A blank block set prints no letters, so the face they are set in goes (and Font with it).
+    fontBlock.hidden = (pictureMode && !hasWords) || (isBlockMode && blank);
     renderWords(state);
     // Lettering holds every mode's rows; each shows only where it means something. A picture's
     // words share Text mode's Boldness and Letter spacing, and size by the line (Text size, mm).
-    for (const id of ['legendSizeRow', 'legendBoldRow']) $(id).hidden = !isBlockMode;
+    // A blank's keys and letters print nothing: what sizes or bolds them goes. Spacing still moves
+    // the letters, and so a blank text clicker's outline, so it stays.
+    for (const id of ['legendSizeRow', 'legendBoldRow']) $(id).hidden = !isBlockMode || blank;
     // On an Outline base the letters are the shape, so Size (in Shape) is their size.
-    $('textScaleRow').hidden = state.importMode !== 'text' || isOutlineBase(state);
+    $('textScaleRow').hidden = state.importMode !== 'text' || isOutlineBase(state) || blank;
     $('lineSpacingRow').hidden = state.importMode !== 'text';
-    for (const id of ['textBoldRow', 'letterSpacingRow']) $(id).hidden = state.importMode !== 'text' && !hasWords;
+    $('textBoldRow').hidden = (state.importMode !== 'text' || blank) && !hasWords;
+    $('letterSpacingRow').hidden = state.importMode !== 'text' && !hasWords;
     // A line of words at a time: its size and its place, under Line with two or three of them.
     for (const id of ['wordSizeRow', 'wordMoveXRow', 'wordMoveYRow', 'wordTurnRow']) $(id).hidden = !hasWords;
     $('wordPickMount').hidden = !hasWords || state.words.length < 2;
@@ -2896,7 +2952,7 @@ export function createUi(
     // An image's count and smoothing: only for one whose colours were never mapped (a project
     // saved before the import window mapped them). A mapped picture's colours, and how smooth
     // its outlines are, are chosen in the window, which "Edit picture colours…" reopens.
-    const showSmoothingAndBg = state.importMode === 'image' && state.colorMode !== 'mapped';
+    const showSmoothingAndBg = state.importMode === 'image' && state.colorMode !== 'mapped' && !blank;
     // Named `...Wrap`, not `ccountField` — that name is the selectField() control itself now
     // (declared above, outside `update()`); this is only the wrapper div around its mount.
     const ccountFieldWrap = $('colorCountField');
@@ -3036,12 +3092,15 @@ export function createUi(
       state.bodyColorRgb,
       state.colorMode,
       state.limitedColors,
-      isBlockMode ? { capRgb: state.baseColorOverride ?? DEFAULT_CAP_RGB } : undefined,
-      Object.keys(state.partOverrides ?? {}).length,
+      isBlockMode ? { capRgb: capColourOf(state), letters: !blank } : undefined,
+      // A blank's shapes are each recoloured through their own row (Button, Caps, Text), which
+      // also clears them, and a picture's left-over ones would count what is not printed.
+      blank ? 0 : Object.keys(state.partOverrides ?? {}).length,
       state.customColors ?? [],
       wordsRgb,
       state.mappedColors,
       state.importMode === 'image',
+      blank && !isBlockMode ? capColourOf(state) : null,
     );
 
     // Highlight the active icon in the Lucide gallery

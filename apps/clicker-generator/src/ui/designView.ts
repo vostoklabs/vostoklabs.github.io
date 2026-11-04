@@ -56,6 +56,9 @@ export interface DesignInput {
   art: DesignArtRegion[];
   /** The picture's normalised box (longest side 1). */
   artBox: { w: number; h: number };
+  /** The clicker prints blank: there is no picture to move. On an Outline base its silhouette is
+   *  still the base, so that one handle stays, as the base's. Absent = false. */
+  blank?: boolean;
   imageOffset: { x: number; y: number };
   designScale: number;
   designRotation: number;
@@ -504,14 +507,16 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
       });
     }
     const t = artTransform(i);
-    out.push({
-      id: 'art',
-      label: i.outlineBase ? 'Picture and base' : 'Picture',
-      box: { cx: t.ox, cy: t.oy, w: i.artBox.w * t.s, h: i.artBox.h * t.s, rotation: t.r },
-      resize: 'uniform',
-      rotate: true,
-      z: 1,
-    });
+    if (!i.blank || i.outlineBase) {
+      out.push({
+        id: 'art',
+        label: i.outlineBase ? (i.blank ? 'Base' : 'Picture and base') : 'Picture',
+        box: { cx: t.ox, cy: t.oy, w: i.artBox.w * t.s, h: i.artBox.h * t.s, rotation: t.r },
+        resize: 'uniform',
+        rotate: true,
+        z: 1,
+      });
+    }
     for (const w of i.words) {
       out.push({
         id: `word:${w.id}`,

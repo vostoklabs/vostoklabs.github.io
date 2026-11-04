@@ -2,7 +2,7 @@
  * Words on a picture: the rules both the rail (ui.ts) and the build (mount.ts) need, so the two
  * cannot disagree about what colour the words are.
  */
-import { relLuminance } from './frame';
+import { capColourOf, isBlank, relLuminance, type FrameSource } from './frame';
 import type { PaletteEntry, RGB, Ring } from './types';
 
 /**
@@ -24,6 +24,16 @@ export function wordsColour(palette: PaletteEntry[], picked: RGB | null, cap: RG
   // plainest ink that does.
   if (!best || bestD < 40) return capL > 128 ? [22, 22, 22] : [245, 245, 245];
   return best;
+}
+
+/**
+ * The words' filament for a design, on the cap it is built with. A blank prints none of the
+ * picture's filaments, only the body's and the button's, so its words take the body's where that
+ * reads on the button, and the clicker stays in two colours.
+ */
+export function wordsColourOf(s: FrameSource & { wordsColorRgb: RGB | null; bodyColorRgb: RGB }): RGB {
+  const printed: PaletteEntry[] = isBlank(s) ? [{ quantRgb: s.bodyColorRgb, filamentRgb: s.bodyColorRgb, coverage: 1 }] : s.palette;
+  return wordsColour(printed, s.wordsColorRgb, capColourOf(s));
 }
 
 /** Where a level line at height `y` crosses the rings: the stretch holding x = 0, else the widest

@@ -36,8 +36,8 @@ import {
   createDesignView, type DesignArtRegion, type DesignEdit, type DesignInput, type DesignTarget,
   type DesignView, type DesignWord,
 } from './ui/designView';
-import { lowestFit, wordsColour } from './words';
-import { capColourOf, deriveFrameColor } from './frame';
+import { lowestFit, wordsColourOf } from './words';
+import { capColourOf, deriveFrameColor, isBlank } from './frame';
 import { clampLevel, RELIEF_MAX, RELIEF_MIN, reliefLevelOf, reliefMm } from './relief';
 import { readSigned } from './ui/signedReadout';
 import { loadFileToImage, parseSvg, processImage, type RgbaImage, type SvgOptions } from '@vostok/trace';
@@ -330,7 +330,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    */
   function wordRegions(s: UiState): BuildRegion[] {
     if (!pictureSource(s.importMode)) return [];
-    const base = wordsColour(s.palette, s.wordsColorRgb, capColourOf(s));
+    const base = wordsColourOf(s);
     const out: BuildRegion[] = [];
     for (const w of s.words) {
       const g = wordGlyphs(w);
@@ -405,6 +405,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     sectionAxis: 'y' as SectionAxis,
     sectionPos: 0,
     importMode: 'image', // Land on the Image tab by default
+    blank: false,
     // Model mode (src/model/): how an uploaded 3D model is cut, what the import made of it,
     // and what the last build reported. Only `modelCut` is a design field (undo, save).
     modelCut: DEFAULT_MODEL_CUT,
@@ -648,7 +649,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         break;
     }
     const slug = slugify(label);
-    return slug ? `clicker-${slug}` : 'clicker';
+    // A blank of a design is a different file from the design, and says so.
+    const blank = isBlank(s) ? '-blank' : '';
+    return (slug ? `clicker-${slug}` : 'clicker') + blank;
   }
 
   /** A clicker cut from an uploaded model says whose shape it is (threemfExport's `sourceModel`).
@@ -675,11 +678,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   interface Exportable extends Shown {
     fileBase: string;
     source: { sourceModel?: string };
+    /** A design printed blank, which a multi-colour description would not describe. */
+    blank: boolean;
   }
   function exportable(shown: Shown): Exportable {
     return {
       ...shown,
       fileBase: shown.fitTest ? 'clicker-stem-fit-test' : designFileBase(),
+      blank: !shown.fitTest && isBlank(store.get()),
       // Read with the parts, not after the cover is drawn: a mode switch meanwhile must not
       // strip a cut model's credit from the file.
       source: shown.fitTest ? {} : modelExportOpts(),
@@ -825,7 +831,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         return;
       }
       if (store.get().importMode !== 'image') return;
-      void openWizard(() => Promise.resolve(base));
+      void openWizard(() => Promise.resolve(base), false);
     },
     onColorCount: (n) => {
       // The count the design already has is not a choice: the select reports one whenever a
@@ -1096,8 +1102,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           },
           async () => {
             // The same framed cover the downloaded 3MF gets, not whatever the viewport shows.
-            const { parts, fitTest, fileBase, source, png } = await withCover(file);
+            const { parts, fitTest, fileBase, source, png, blank } = await withCover(file);
             const { objs, mtl } = clickerObjPlates(parts, source);
+            const what = blank ? 'Clicker, made with the Clicker Generator.' : 'Multi-color clicker, made with the Clicker Generator.';
             return modelExport({
               fileName: `${fileBase}.obj`,
               obj: objs.length === 1 ? objs[0]! : objs,
@@ -1106,8 +1113,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
               description: fitTest
                 ? 'Switch stem fit test tiles, made with the Clicker Generator.'
                 : objs.length > 1
-                  ? 'Multi-color clicker, made with the Clicker Generator. Top on plate 1, body on plate 2.'
-                  : 'Multi-color clicker, made with the Clicker Generator.',
+                  ? `${what} Top on plate 1, body on plate 2.`
+                  : what,
             });
           },
           { what: file.fitTest ? 'the fit test' : 'the clicker' },
@@ -1248,6 +1255,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       void openSvgPreview(svgText, name, store.get().removeBg).then((result) => {
         if (!result) return;
         pendingReframe = true;
+        // A new picture is a request to see it. The SVG already loaded is not new: opening a
+        // project selects its SVG again, and must not undo the project's Blank.
+        if (svgText !== currentSvgText) store.set({ blank: false });
         currentSvgText = svgText;
         currentSvgName = name;
         currentSvgOptions = result.options;
@@ -1258,7 +1268,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       pendingReframe = true;
       currentIconText = svgText;
       currentIconName = name;
-      store.set({ currentIconName: name });
+      // An icon picked is a request to see it.
+      store.set({ currentIconName: name, blank: false });
       reprocess();
     },
     onTextChange: (text) => {
@@ -1359,6 +1370,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           viewer.setPartColor(i, rgb);
         }
       });
+      syncBlankColours();
     },
     onKeychainEnd: (side) => {
       // Moving the loop to a different face resets the slide. The slide is measured along the
@@ -1491,6 +1503,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ separateLetters: on, selectedParts: [] });
       reprocess();
     },
+    onBlank: (on) => {
+      // The picture's shapes go or come back, so a selection of them would name nothing.
+      store.set({ blank: on, selectedParts: [] });
+      debouncedRebuild();
+    },
     onUndo: () => undo(),
     onRedo: () => redo(),
     onRefresh: () => refreshDesign(),
@@ -1559,6 +1576,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   /** The picture's colours as the view draws them, rebuilt only when the trace or a colour
    *  changes. One entry per shape, so a shape recoloured on its own shows its own colour. */
   let artCache: { set: RegionSet; key: string; art: DesignArtRegion[]; box: { w: number; h: number } } | null = null;
+  /** A blank's picture: one array, so the view does not redraw it on every render. */
+  const NO_ART: DesignArtRegion[] = [];
   function designArt(s: UiState, set: RegionSet) {
     const key = JSON.stringify([s.palette.map((p) => p.filamentRgb), s.partOverrides ?? {}]);
     if (artCache && artCache.set === set && artCache.key === key) return artCache;
@@ -1583,7 +1602,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     if (!latestLayout || !regionSet || !hasDesignView(s.importMode)) return null;
     const L = latestLayout;
     const { art, box } = designArt(s, regionSet);
-    const wordRgb = wordsColour(s.palette, s.wordsColorRgb, capColourOf(s));
+    const blank = isBlank(s);
+    const wordRgb = wordsColourOf(s);
     const words: DesignWord[] = [];
     if (pictureSource(s.importMode)) {
       for (const w of s.words) {
@@ -1599,8 +1619,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       builtDesignScale: layoutBuiltAt.designScale,
       builtCapWidthMm: layoutBuiltAt.capWidthMm,
       outlineBase: s.baseShape === 'outline' && !s.fixedSize && s.importMode !== 'icon',
-      art,
+      // A blank prints none of the picture, so none of it is drawn.
+      art: blank ? NO_ART : art,
       artBox: box,
+      blank,
       imageOffset: s.imageOffset,
       designScale: artScaleOf(s),
       designRotation: s.designRotation,
@@ -1611,7 +1633,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       keychain: { enabled: s.keychain.enabled, angleDeg: s.keychain.angleDeg },
       freeAspect: s.baseShape === 'rect' || s.baseShape === 'capsule',
       bodyRgb: s.bodyColorRgb,
-      capRgb: s.baseColorOverride ?? deriveFrameColor(s),
+      capRgb: capColourOf(s),
       // As buildParamsFor and wordRegions pass Boldness on: Text mode's letters, a picture's words.
       artBold: s.importMode === 'text' ? s.textBold : 0,
       wordBold: s.textBold,
@@ -1704,6 +1726,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     'colourLevels', 'imageOffset', 'designRotation', 'mappedFilaments',
     // Words on a picture: what they say, where they sit, their colour and height.
     'words', 'wordsColorRgb', 'wordsLevel',
+    // Whether the picture prints at all.
+    'blank',
     'modelCut',
     // Blocks: the look. What is ON the keys (layout, lines) re-traces, which starts a new
     // baseline the way typing does in Text mode, so it is not in here.
@@ -2037,7 +2061,26 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         }
       });
       store.set(target.kind === 'body' ? { bodyColorRgb: rgb } : { baseColorOverride: rgb });
+      syncBlankColours();
     }
+  }
+
+  /** A blank's button follows the body, and its words follow both (frame.ts, words.ts): after
+   *  either is recoloured, the ones nobody picked are repainted to match, live. */
+  function syncBlankColours() {
+    const s = store.get();
+    if (!isBlank(s)) return;
+    const cap = capColourOf(s);
+    const words = wordsColourOf(s);
+    latestParts.forEach((p, i) => {
+      const own = s.partOverrides?.[p.name];
+      const rgb = p.name === 'top-base' || /^cap-\d+$/.test(p.name) ? own ?? cap
+        : p.name.startsWith('text-') ? own ?? words
+        : null;
+      if (!rgb) return;
+      latestParts[i] = { ...p, colorRgb: rgb };
+      viewer.setPartColor(i, rgb);
+    });
   }
 
   // ---- Cap frame / backing color (the rule itself: frame.ts) ----
@@ -2467,7 +2510,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }
 
   // ---- Pipeline ----
-  async function openWizard(getter: () => Promise<RgbaImage>) {
+  /** `newPicture`: an upload or a sample, which, once confirmed, is a request to see it (Blank
+   *  off). False for Adjust image, which is the picture already loaded. */
+  async function openWizard(getter: () => Promise<RgbaImage>, newPicture = true) {
     /* Two try blocks, because two different things can fail and the user needs to be told
        which. Decoding the file is the one the friendly "try a PNG" line is about. Everything
        after it — opening the wizard, the store update it triggers, the sidebar repaint — is
@@ -2540,6 +2585,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             // a raised colour would come back on whatever fills its slot in the new picture.
             componentHeights: {},
             colourLevels: [],
+            ...(newPicture ? { blank: false } : {}),
           });
           reprocess();
         },
@@ -2646,9 +2692,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // A fresh trace means fresh regions, so start a new undo baseline and drop any
     // pinned frame color so it re-derives. Blocks are the exception: their three colours
     // (bodies / caps / legends) are chosen deliberately and must survive editing the chain
-    // — otherwise adding a symbol repaints the caps out from under you.
+    // — otherwise adding a symbol repaints the caps out from under you. So is a blank's button,
+    // which its own Colors row picks: typing a blank text clicker must not repaint it.
     pendingHistoryReset = true;
-    if (store.get().importMode !== 'blocks') store.set({ baseColorOverride: null });
+    if (store.get().importMode !== 'blocks' && !isBlank(store.get())) store.set({ baseColorOverride: null });
     const s = store.get();
 
     if (s.importMode === 'image') {
@@ -2844,6 +2891,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       textBold: s.importMode === 'text' ? s.textBold : 0,
       // Letters a frame cuts off are worth a word: Text size above 100% on a shape base.
       ...(isTextMode ? { artCutNote: 'Letters past the edge are cut off.' } : {}),
+      // Only when on, so a clicker with its picture sends what it always sent.
+      ...(isBlank(s) ? { blank: true } : {}),
       keychainEnd: s.keychainEnd,
       keychainSlideMm: s.keychainSlideMm,
       partOverrides: s.partOverrides,
@@ -2861,7 +2910,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    */
   function reliefHeights(s: UiState): Record<string, number> {
     const fromRows: Record<string, number> = {};
-    if (regionSet && s.importMode !== 'blocks' && s.importMode !== 'model') {
+    // A blank builds none of the picture's shapes, so their heights are left out with them.
+    const blank = isBlank(s);
+    if (regionSet && s.importMode !== 'blocks' && s.importMode !== 'model' && !blank) {
       regionSet.regions.forEach((r, i) => {
         const level = s.colourLevels[i] ?? 0;
         if (level) r.components.forEach((_, j) => { fromRows[`top-color-${i}-${j}`] = level; });
@@ -2871,7 +2922,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     if (s.wordsLevel && pictureSource(s.importMode)) {
       for (const w of s.words) fromRows[`text-${w.id}`] = s.wordsLevel;
     }
-    return { ...fromRows, ...s.componentHeights };
+    const own = blank
+      ? Object.fromEntries(Object.entries(s.componentHeights).filter(([name]) => !name.startsWith('top-color-')))
+      : s.componentHeights;
+    return { ...fromRows, ...own };
   }
 
   function rebuild(quiet = false) {
@@ -2934,20 +2988,26 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const s = store.get();
 
     const blocksMode = s.importMode === 'blocks';
+    /* Blank: the picture's shapes are left out and its outline is sent as it is, so the base keeps
+       the shape and size the picture gives it. A block set keeps every key, each with nothing on
+       it: a key with no rings is a blank cap, and which cells are keys travels in `blockKeys`. */
+    const blank = isBlank(s);
     const regions: BuildRegion[] = [];
-    regionSet.regions.forEach((r, i) => {
-      // Every legend in a block chain shares palette slot 0 (one filament for all letters).
-      const baseColor = (blocksMode ? s.palette[0] : s.palette[i])?.filamentRgb ?? r.quantRgb;
-      r.components.forEach((comp, j) => {
-        const partName = `top-color-${i}-${j}`;
-        regions.push({
-          filamentRgb: s.partOverrides?.[partName] ?? baseColor,
-          coverage: r.coverage, // Use the parent coverage for priority
-          rings: comp.rings,
-          partName,
+    if (!blank || blocksMode) {
+      regionSet.regions.forEach((r, i) => {
+        // Every legend in a block chain shares palette slot 0 (one filament for all letters).
+        const baseColor = (blocksMode ? s.palette[0] : s.palette[i])?.filamentRgb ?? r.quantRgb;
+        r.components.forEach((comp, j) => {
+          const partName = `top-color-${i}-${j}`;
+          regions.push({
+            filamentRgb: s.partOverrides?.[partName] ?? baseColor,
+            coverage: r.coverage, // Use the parent coverage for priority
+            rings: blank ? [] : comp.rings,
+            partName,
+          });
         });
       });
-    });
+    }
 
     // A picture's words, carved first so they cut through it.
     regions.push(...wordRegions(s));
@@ -3116,6 +3176,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         words: s.words,
         wordsColorRgb: s.wordsColorRgb,
         wordsLevel: s.wordsLevel,
+        blank: s.blank,
         // Blocks mode: the arrangement, what is on the keys, the look, and the keyring.
         blockLayout: s.blockLayout,
         blockGridRows: s.blockGridRows,
@@ -3369,6 +3430,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         words: loadedWords(set.words),
         wordsColorRgb: Array.isArray(set.wordsColorRgb) ? set.wordsColorRgb : null,
         wordsLevel: clampLevel(Number(set.wordsLevel) || 0),
+        // Absent before Blank existed: the picture prints.
+        blank: set.blank === true,
         keychainEnd: set.keychainEnd ?? 'left',
         keychainSlideMm: set.keychainSlideMm ?? 0,
         // A project from before the rim could be raised has the standard body.

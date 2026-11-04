@@ -36,6 +36,10 @@ export const seen = {
   modelPanel: null as any,
   /** createDesignView's options: what a drag on the Design view calls. */
   designView: null as any,
+  /** What the Design view was last asked to draw. */
+  designInput: null as any,
+  /** Every other file the browser path saved (a project, a render): what was in it, and its name. */
+  files: [] as { data: unknown; name: string }[],
   /** Every artifact set handed to the MakerLab host. */
   sdkExports: [] as any[],
   /** The seams handed to the paid panel, in the MakerWorld build. */
@@ -79,6 +83,8 @@ export function reset() {
   seen.ui = null;
   seen.state = null;
   seen.modelPanel = null;
+  seen.designInput = null;
+  seen.files.length = 0;
   seen.sdkExports.length = 0;
   seen.pro = null;
   seen.popovers.length = 0;
@@ -153,7 +159,7 @@ export function createViewer() {
     },
   });
 }
-export const mountPlatePicker = noop;
+export const mountPlatePicker = () => quiet({ root: { hidden: false } });
 
 /* ------------------------------------------------------- the sidebars and Model mode's panel */
 
@@ -175,7 +181,11 @@ export function createModelPanel(options: any) {
 /** The Design view draws SVG on the stage; a scenario reaches its edits through `seen.designView`. */
 export function createDesignView(options: any) {
   seen.designView = options;
-  return quiet({});
+  return quiet({
+    render(input: unknown) {
+      seen.designInput = input;
+    },
+  });
 }
 
 /* ------------------------------------------------------------ @vostok/trace, the wizard */
@@ -221,7 +231,9 @@ export function clickerObjPlates(parts: ClickerPart[], opts: Record<string, unkn
   return { objs: [''], mtl: '' };
 }
 export const textToArrayBuffer = () => new ArrayBuffer(0);
-export const downloadFile = noop;
+export function downloadFile(data: unknown, name: string) {
+  seen.files.push({ data, name });
+}
 export const assemblyMinZ = () => 0;
 export const groupBBox = () => ({ minX: 0, maxX: 10, minY: 0, maxY: 10 });
 export const plateWarnings = () => [] as string[];

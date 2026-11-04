@@ -687,12 +687,13 @@ function buildTracked(
     sR = Math.max(0.5, lo);
     imgW = nW * sR;
     imgH = nH * sR;
-    if (lo < 0.5) {
+    // A blank has no design to fit inside the base, so neither note has anything to say.
+    if (!params.blank && lo < 0.5) {
       warnings.push(
         `A ${fixed.w.toFixed(0)} × ${fixed.h.toFixed(0)} mm base leaves no room for the design `
         + 'once the frame is taken off it. Increase the fixed size.',
       );
-    } else if (sR < imageScale * 0.995) {
+    } else if (!params.blank && sR < imageScale * 0.995) {
       warnings.push(
         `Design scaled down to fit the fixed ${fixed.w.toFixed(0)} × ${fixed.h.toFixed(0)} mm `
         + 'base. Size does nothing while a fixed size is set.',
@@ -1272,8 +1273,9 @@ function buildTracked(
         // Running the fill to `slabTopZ` puts it on the PRINTED FACE: a blank base-colour lobe
         // appended to the user's artwork. It is load-bearing (the skirt needs something solid
         // above it) so it is not simply removable here, but it is the thing people screenshot,
-        // and silently altering someone's picture is worse than explaining it.
-        if (sectionArea(skirtExtension) > 2) {
+        // and silently altering someone's picture is worse than explaining it. A blank has no
+        // picture for the patch to show on: the whole top is that colour.
+        if (!params.blank && sectionArea(skirtExtension) > 2) {
           warnings.push(
             'The top was widened around the switch, so a plain patch shows on the design. Increase Size, or move the switch, to clear it.',
           );

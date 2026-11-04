@@ -40,6 +40,7 @@ const TIMEOUT_S = Number(process.env.CLICKER_SUITE_TIMEOUT_S) || 15 * 60;
 
 /** Suite name (tests/<name>.test.ts) -> what its bundle needs. */
 const SUITES = {
+  'blank-clicker': ['manifold'],
   'block-layout': [],
   'blocks-body': ['manifold'],
   'blocks-fit': ['manifold'],
@@ -47,6 +48,7 @@ const SUITES = {
   'design-layout': ['manifold'],
   'fit-controls': ['manifold'],
   'font-fallback': ['fonts'],
+  frame: [],
   'model-cut': ['manifold', 'env'],
   'obj-plates': [],
   packs: ['manifold', 'xmldom'],
