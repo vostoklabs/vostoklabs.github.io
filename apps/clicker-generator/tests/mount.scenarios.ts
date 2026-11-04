@@ -1155,6 +1155,45 @@ const regionNames = (msg: any) => (msg ? msg.regions.map((r: any) => r.partName)
   finish(unmount);
 }
 
+/* ================================================================= Design size */
+
+{
+  // The slider's value reaches the build as it is, down to the floor.
+  const unmount = await fresh();
+  ui().onDesignScale(0.1);
+  await clock.advance(300);
+  check('Design size at 10 %: the build is sent 10 %', lastSent('buildClicker')?.params.designScale === 0.1,
+    String(lastSent('buildClicker')?.params.designScale));
+  // A project holds whatever was written into it; it opens inside the range.
+  for (const [saved, opens] of [[0.01, 0.1], [5, 2]] as const) {
+    ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'image', baseShape: 'circle', designScale: saved } })], 'clicker-project.json'));
+    await until(() => status() === 'Loading project…');
+    await clock.advance(600);
+    check(`a project saved with Design size ${saved * 100} % opens at ${opens * 100} %, and builds there`,
+      seen.state?.designScale === opens && lastSent('buildClicker')?.params.designScale === opens,
+      `state ${seen.state?.designScale}, build ${lastSent('buildClicker')?.params.designScale}`);
+  }
+  // The Design view's corner: a picture's stops at Design size's floor, Text mode's at Text size's.
+  worker.layout = true;
+  ui().onDesignView(true);
+  await clock.advance(300);
+  const picture = seen.designInput;
+  seen.designView.onEdit({ kind: 'art', offset: { x: 0, y: 0 }, designScale: 0.1, rotation: 0 });
+  await clock.advance(300);
+  check('the Design view\'s corner on a picture: no floor of its own, and 10 % reaches the build',
+    !!picture && picture.designScaleMin === undefined && lastSent('buildClicker')?.params.designScale === 0.1,
+    `floor ${picture?.designScaleMin}, build ${lastSent('buildClicker')?.params.designScale}`);
+  ui().onImportMode('text');
+  await clock.advance(300);
+  const letters = seen.designInput;
+  seen.designView.onEdit({ kind: 'art', offset: { x: 0, y: 0 }, designScale: 0.1, rotation: 0 });
+  await clock.advance(300);
+  check('…on Text mode\'s letters it stops at Text size\'s 50 %, as Text size does',
+    letters?.designScaleMin === 0.5 && seen.state?.textScale === 0.5,
+    `floor ${letters?.designScaleMin}, Text size ${seen.state?.textScale}`);
+  finish(unmount);
+}
+
 /* ---------------------------------------------------------------- */
 
 print(failures ? `\n${failures} FAILED` : '\nExport writes the build on screen, whatever happened before it was pressed');

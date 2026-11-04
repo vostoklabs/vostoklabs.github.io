@@ -47,6 +47,7 @@ import { shownBuild, type Shown } from './export/shownBuild';
 import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
 import { clickerObjPlates } from './export/objExport';
 import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from './geometry/stemFit';
+import { clampDesignScale, TEXT_SCALE_MIN } from './geometry/sizeLimits';
 import { FIT_TEST_FONT_ID, FIT_TEST_STEP_MM, fitTestLabel, fitTestLadder } from './geometry/fitStrip';
 import { openSvgPreview } from './ui/svgPreview';
 import { allShapes, findShape, loadPackShapes } from './shapes/directory';
@@ -1625,6 +1626,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       blank,
       imageOffset: s.imageOffset,
       designScale: artScaleOf(s),
+      designScaleMin: s.importMode === 'text' ? TEXT_SCALE_MIN : undefined,
       designRotation: s.designRotation,
       capWidthMm: s.capWidthMm,
       words,
@@ -1650,7 +1652,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       case 'art':
         // Text mode sizes its letters with Text size, not Design size: the corner drives that.
         if (s.importMode === 'text') {
-          store.set({ imageOffset: edit.offset, textScale: Math.max(0.5, Math.min(2, Math.round(edit.designScale * 100) / 100)), designRotation: edit.rotation });
+          store.set({ imageOffset: edit.offset, textScale: Math.max(TEXT_SCALE_MIN, Math.min(2, Math.round(edit.designScale * 100) / 100)), designRotation: edit.rotation });
         } else {
           store.set({ imageOffset: edit.offset, designScale: edit.designScale, designRotation: edit.rotation });
         }
@@ -3365,7 +3367,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // so an old project keeps rendering at exactly the size it always did.
         fixedSize: set.fixedSize ?? null,
         // Absent means 1 — every project saved before this control existed renders unchanged.
-        designScale: set.designScale ?? 1,
+        // Held in the range, as the slider holds it.
+        designScale: Number.isFinite(set.designScale) ? clampDesignScale(set.designScale) : 1,
         // Absent before the picture could be turned: as drawn.
         designRotation: typeof set.designRotation === 'number' ? set.designRotation : 0,
         /* Per-shape, not a flat 6.

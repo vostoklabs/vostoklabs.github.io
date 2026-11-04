@@ -57,6 +57,7 @@ const SUITES = {
   'rebuild-heap': ['manifold', 'xmldom'],
   'seller-features': ['manifold'],
   shapes: ['manifold', 'env'],
+  'small-picture': ['manifold', 'env', 'seed'],
   'svg-bg-removal': ['xmldom'],
   'svg-coverage': ['xmldom'],
   'svg-import': ['xmldom'],

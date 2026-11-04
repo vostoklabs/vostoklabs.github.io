@@ -18,6 +18,7 @@ import {
   type DesignBox, type DesignChange, type DesignObject,
 } from '@vostok/ui-kit';
 import type { DesignLayout, RGB, Ring, SwitchPlacement } from '../types';
+import { DESIGN_SCALE_MAX, DESIGN_SCALE_MIN } from '../geometry/sizeLimits';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -61,6 +62,8 @@ export interface DesignInput {
   blank?: boolean;
   imageOffset: { x: number; y: number };
   designScale: number;
+  /** The smallest `designScale` the corner reaches. Absent = Design size's own floor. */
+  designScaleMin?: number;
   designRotation: number;
   capWidthMm: number;
   words: DesignWord[];
@@ -120,8 +123,6 @@ export interface DesignView {
 /* The ranges the controls those objects replace already enforced, so a drag cannot reach a value
    the rail could not. */
 const OFFSET_LIMIT = 25;
-const SCALE_MIN = 0.3;
-const SCALE_MAX = 2;
 const SIZE_MIN = 20;
 const SIZE_MAX = 70;
 const BASE_MIN = 24;
@@ -573,7 +574,7 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
         const [loX, hiX, loY, hiY] = outlineReach(i);
         return { ...box, cx: clamp(box.cx, loX, hiX), cy: clamp(box.cy, loY, hiY), w: w0 * k, h: i.artBox.h * t.s * k };
       }
-      k = clamp(i.designScale * k, SCALE_MIN, SCALE_MAX) / i.designScale;
+      k = clamp(i.designScale * k, i.designScaleMin ?? DESIGN_SCALE_MIN, DESIGN_SCALE_MAX) / i.designScale;
       return {
         ...box,
         cx: clamp(box.cx, -OFFSET_LIMIT, OFFSET_LIMIT),
@@ -637,7 +638,7 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
         opts.onEdit({
           kind: 'art',
           offset: { x: Math.round(box.cx * 10) / 10, y: Math.round(box.cy * 10) / 10 },
-          designScale: Math.round(clamp(i.designScale * k, SCALE_MIN, SCALE_MAX) * 100) / 100,
+          designScale: Math.round(clamp(i.designScale * k, i.designScaleMin ?? DESIGN_SCALE_MIN, DESIGN_SCALE_MAX) * 100) / 100,
           rotation: Math.round(wrapDeg(box.rotation)),
         });
       }

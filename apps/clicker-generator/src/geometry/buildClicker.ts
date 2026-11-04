@@ -23,6 +23,7 @@ import type { BuildParams, BuildRegion, ClickerPart, DesignLayout, EdgeSetting, 
 import { getMarkSeed, markVoids, hardcodedVoids } from './identityMark';
 import { texturedWall, texturePeakMm } from './skin';
 import { applyStemFit } from './stemFit';
+import { clampDesignScale, DESIGN_SCALE_CHECKED_BELOW } from './sizeLimits';
 import {
   archRing, capsuleRing, crossRing, eggRing, heartRing, ngonRing, shieldRing,
   squircleRing, switchSpotOf, tagRing,
@@ -76,6 +77,18 @@ const SIZE_TRIES = 6;
 const NOZZLE_MM = 0.4;
 const WORD_KEEPS_MIN = 0.75;
 const WORD_THICKEN_MM = 0.15;
+
+/*
+  A picture smaller than Design size once went (DESIGN_SCALE_CHECKED_BELOW) is checked the same
+  way, by a looser rule: a line in a picture is one colour beside others, so one nozzle line
+  draws it. Opening each shape by half a nozzle takes out every line under 0.4 mm, which would
+  print as a stray thread or not at all. Losing more than PICTURE_LOSS_SAID of the picture's area
+  that way is said; keeping less than PICTURE_KEEPS_MIN refuses the export, because what is left
+  is no longer the picture.
+*/
+const PICTURE_OPEN_MM = NOZZLE_MM / 2;
+const PICTURE_LOSS_SAID = 0.05;
+const PICTURE_KEEPS_MIN = 0.5;
 
 /** The thinnest bevel a textured wall is built with, mm. The skin starts its pattern above the
  *  bottom bevel and stops below the top one, so it needs both; the app's default is 0.5. */
@@ -318,7 +331,7 @@ function buildTracked(
      base colour — which is not a smaller design, it is a mistake. */
   // Up to 2: past 1 the artwork is larger than the frame and `imageArea` crops it, which is
   // how "zoom in on the middle of the picture" is expressed. The base never grows for it.
-  const designScale = isOutline ? 1 : Math.min(2, Math.max(0.3, params.designScale ?? 1));
+  const designScale = isOutline ? 1 : clampDesignScale(params.designScale ?? 1);
   /* The turn `placeRings` applies: a preset base's. An outline base turned its rings when they
      arrived, so turning them here as well would turn them twice. */
   const artTurn = isOutline ? 0 : turnDeg;
@@ -399,6 +412,11 @@ function buildTracked(
     return sectionIsEmpty(r) ? fb : r;
   };
 
+  /** `cs` shrunk by `r` and grown back: every stroke narrower than 2r is gone, and the rest keeps
+   *  its shape bar its sharpest corners. The words' check, and a small picture's (the carve loop). */
+  const openBy = (cs: Section, r: number): Section =>
+    track(track(cs.offset(-r, 'Round', 2.0, 24)).offset(r, 'Round', 2.0, 24));
+
   /* Words placed on the design (`mm` regions): their outlines, decided once, before anything is
      sized, because an outline base grows round them and the carve loop below cuts them.
 
@@ -414,8 +432,7 @@ function buildTracked(
     const printed = grow(cs, params.colorBleed);
     const area = sectionArea(printed);
     if (!(area > 0)) return false;
-    const opened = track(track(printed.offset(-NOZZLE_MM, 'Round', 2.0, 24)).offset(NOZZLE_MM, 'Round', 2.0, 24));
-    return sectionArea(opened) < WORD_KEEPS_MIN * area;
+    return sectionArea(openBy(printed, NOZZLE_MM)) < WORD_KEEPS_MIN * area;
   };
   const words = new Map<BuildRegion, Section>();
   let wordsThickened = false;
@@ -1123,6 +1140,11 @@ function buildTracked(
   let artCut = false;
   /** Some shape stands above the face, so the top cannot print face-down (see the return). */
   let raised = false;
+  /** A small picture's area as it prints, and what is left once its thin lines are out (see
+   *  PICTURE_OPEN_MM). Every size reachable before stays unchecked, so it builds as it did. */
+  const checkLines = designScale < DESIGN_SCALE_CHECKED_BELOW;
+  let pictureMm2 = 0;
+  let pictureKeptMm2 = 0;
 
   for (const { r } of ordered) {
     let cs: Section;
@@ -1141,6 +1163,14 @@ function buildTracked(
       if (Math.abs(textBold) > 0.005) cs = track(cs.offset(textBold, 'Round', 2.0, 24));
     }
     if (params.colorBleed > 0.001) cs = grow(cs, params.colorBleed);
+    if (checkLines && !r.mm) {
+      const drawn = sectionArea(cs);
+      cs = openBy(cs, PICTURE_OPEN_MM);
+      pictureMm2 += drawn;
+      pictureKeptMm2 += sectionArea(cs);
+      // Said once below, as the picture's loss, rather than as a colour too small to print.
+      if (drawn > 0 && sectionIsEmpty(cs)) continue;
+    }
     const clipped = track(cs.intersect(imageArea));
     // Half a square millimetre: where a frame's edge runs along a word's, the round offsets'
     // polygons still shave slivers off it, and a sliver is not a word cut off.
@@ -1226,6 +1256,11 @@ function buildTracked(
   }
   if (wordsCut) warnings.push('Words past the edge are cut off.');
   if (artCut && params.artCutNote) warnings.push(params.artCutNote);
+  if (pictureMm2 > 0) {
+    const kept = pictureKeptMm2 / pictureMm2;
+    if (kept < PICTURE_KEEPS_MIN) blocking.push('The picture is too small to print. Make it bigger.');
+    else if (kept < 1 - PICTURE_LOSS_SAID) warnings.push('Lines thinner than 0.4 mm were left out of the picture.');
+  }
 
   // Base-color cap = plate − holes, then ∪ stem ∪ perimeter skirt.
   let base: Solid = cap;

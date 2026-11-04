@@ -57,6 +57,7 @@ import { designUrl, inSeason, loadDesignImage, orderedDesignPacks } from '../pac
 import { openShapePicker } from './shapePicker';
 import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from '../geometry/stemFit';
 import { FIT_TEST_STEP_OPTIONS } from '../geometry/fitStrip';
+import { DESIGN_SCALE_MAX, DESIGN_SCALE_MIN, TEXT_SCALE_MIN } from '../geometry/sizeLimits';
 import type { ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
 import { modelFormatOf } from '@vostok/export/read';
 import { arrangeBlocks, GRID_MAX, isLineLayout, keysPerRow, RIM_RAISE_MAX_MM, type BlockArrangement, type BlockLayout, type BlockSymbol } from '../geometry/blockLayout';
@@ -161,7 +162,7 @@ export interface UiState {
   /** Lock the finished base to this outer size (mm), fitting the design inside it. Null =
    *  the base follows the design, which is what the generator has always done. */
   fixedSize: { w: number; h: number } | null;
-  /** How much of the room inside the frame the artwork takes, 0.3-1. 1 = fills it. */
+  /** How much of the room inside the frame the artwork takes (geometry/sizeLimits). 1 = fills it. */
   designScale: number;
   /** The picture turned on its base, degrees counter-clockwise (the Design view's grip). On an
    *  Outline base the whole silhouette turns. 0 = as drawn. */
@@ -355,7 +356,7 @@ export interface UiCallbacks {
   onHollowBase(on: boolean): void;
   /** Lock the base to a size, or let it follow the design again (null). */
   onFixedSize(size: { w: number; h: number } | null): void;
-  /** Artwork size as a fraction of the room inside the frame (0.3-1). */
+  /** Artwork size as a fraction of the room inside the frame (geometry/sizeLimits). */
   onDesignScale(v: number): void;
   /** Pick a base shape from the directory, by its `ShapeEntry` id. */
   onShapePick(id: string): void;
@@ -1461,7 +1462,7 @@ export function createUi(
   const textScaleRow = sliderRow({
     label: 'Text size',
     help: 'How big the letters print. Above 100% the clicker grows with them rather than the letters being squeezed in — a bigger part prints more reliably than a smaller one. On a preset base shape, below 100% shrinks the letters inside a base that stays the size you set.',
-    min: 50, max: 200, step: 5, value: Math.round(initial.textScale * 100), unit: '%',
+    min: Math.round(TEXT_SCALE_MIN * 100), max: 200, step: 5, value: Math.round(initial.textScale * 100), unit: '%',
     onInput: (v) => cb.onTextScale(v / 100),
   });
   $('textScaleMount').append(textScaleRow);
@@ -2100,7 +2101,8 @@ export function createUi(
   const designScaleRow = sliderRow({
     label: 'Design size',
     help: 'How much of the base your design fills. The base stays exactly the size you set: lower leaves a wider plain frame around the artwork, and above 100% the artwork is cropped by the frame. Does nothing when the base follows your design’s outline, because there the shape and the artwork are the same thing.',
-    min: 30, max: 200, step: 5, value: Math.round((initial.designScale ?? 1) * 100), unit: '%',
+    min: Math.round(DESIGN_SCALE_MIN * 100), max: Math.round(DESIGN_SCALE_MAX * 100), step: 5,
+    value: Math.round((initial.designScale ?? 1) * 100), unit: '%',
     onInput: (v) => cb.onDesignScale(v / 100),
   });
   $('designScaleMount').append(designScaleRow);
