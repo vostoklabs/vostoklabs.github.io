@@ -1,0 +1,18 @@
+{
+  "name": "@vostok/keycaps",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Keycap trim: how far an MX keycap can be cut shorter from below (cap height, stem recess, wall height), the clamp that keeps a setting inside that, and the cut itself on any Manifold-like solid. Millimetres, no DOM, no mesh library.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "esbuild tests/trim.test.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/trim.test.mjs --log-level=error && node node_modules/.cache/trim.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

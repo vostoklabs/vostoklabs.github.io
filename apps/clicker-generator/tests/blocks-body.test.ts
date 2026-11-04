@@ -13,7 +13,10 @@
    - 'open' really has no wall between keys, and 'walls' really has one;
    - a texture only ever ADDS material: the wall is never thinner than the plain one;
    - Body rim height only raises the rim: the caps, switches and underside stay put, the caps
-     stay free in their wells, and the rim always stops 2 mm below the cap tops.
+     stay free in their wells, and the rim always stops 2 mm below the cap tops;
+   - the keycap: Standard as it always was; cut shorter, only its top comes down; Low profile and
+     Thocky sit where the switch really holds them, grip it as Standard does, and stand proud of
+     any rim the slider offers.
 
   Run from the repo root:
 
@@ -28,8 +31,10 @@ import Module from 'manifold-3d';
 import { readModel } from '@vostok/export/read';
 import { buildBlocks, BLOCK_POCKET_MM, MIN_CAP_PROUD_MM } from '../src/geometry/buildBlocks.ts';
 import { RIM_RAISE_MAX_MM } from '../src/geometry/blockLayout.ts';
+import { BLOCK_KEYCAP_IDS, BLOCK_KEYCAPS, CAP_LOWER_MAX_MM, MX_SEAT, rimRaiseMax } from '../src/geometry/blockKeycaps.ts';
 import { BODY_DIMS, buildKeyBody, keyPitch, wellSize, type KeyCell } from '../src/geometry/keyBody.ts';
-import type { BlockStyle, BlockTexture, BuildParams, BuildRegion, ClickerPart } from '../src/types.ts';
+import { measurePostSeat } from '../src/model/switchKit.ts';
+import type { BlockKeycap, BlockStyle, BlockTexture, BuildParams, BuildRegion, ClickerPart } from '../src/types.ts';
 
 const A = (p: string) =>
   readFileSync(join(process.cwd(), 'apps/clicker-generator/public/assets', p)).buffer as ArrayBuffer;
@@ -310,6 +315,222 @@ check('even a textured 3x3 builds quickly', slowest < 3000, `slowest ${slowest.t
   const textured = run(R(9), { blockOrientation: 'grid', blockColumns: 3, blockTexture: 'knurl', blockRimRaiseMm: RIM_RAISE_MAX_MM });
   check('a knurled 3x3 with the rim all the way up is still one closed body',
     bodyOf(textured.parts).length === 1 && closed(bodyOf(textured.parts)[0]), `${(bodyOf(textured.parts)[0].triVerts.length / 3)} tris`);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The keycap: Standard, Standard cut shorter, Low profile and Thocky.
+// ---------------------------------------------------------------------------------------------
+{
+  const capFile = (file: string) => {
+    const j = JSON.parse(readFileSync(join(process.cwd(), 'apps/clicker-generator/public', file), 'utf-8'));
+    return { shell: { positions: j.positions, indices: j.indices }, stem: j.stem ?? null, meta: j.meta };
+  };
+  const caps = Object.fromEntries(BLOCK_KEYCAP_IDS.map((id) => [id, capFile(BLOCK_KEYCAPS[id].file)]));
+
+  // The switch as the worker seats it at init: on the stem's axis, the underside of its widest
+  // section on Z 0. What it measures there is what the worker hands the build.
+  const seat = (() => {
+    const post = readModel(A('switch/mx/mx-stem.3mf'), 'mx-stem.3mf').positions;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i < post.length; i += 3) {
+      x0 = Math.min(x0, post[i]); x1 = Math.max(x1, post[i]); y0 = Math.min(y0, post[i + 1]); y1 = Math.max(y1, post[i + 1]);
+    }
+    const sw = readModel(A('switch/mx/mx-switch.3mf'), 'mx-switch.3mf');
+    const v = sw.positions;
+    let widest = 0;
+    for (let i = 0; i < v.length; i += 3) {
+      v[i] -= (x0 + x1) / 2;
+      v[i + 1] -= (y0 + y1) / 2;
+      widest = Math.max(widest, Math.abs(v[i]), Math.abs(v[i + 1]));
+    }
+    let seatZ = Infinity;
+    for (let i = 0; i < v.length; i += 3) {
+      if (Math.max(Math.abs(v[i]), Math.abs(v[i + 1])) >= widest * 0.96 && v[i + 2] < seatZ) seatZ = v[i + 2];
+    }
+    let tip = -Infinity;
+    for (let i = 0; i < v.length; i += 3) tip = Math.max(tip, (v[i + 2] -= seatZ));
+    return { slider: measurePostSeat(v, sw.indices) ?? NaN, tip };
+  })();
+  check('the switch the rail and a loaded project assume is the one the worker measures',
+    Math.abs(seat.slider - MX_SEAT.slider) < 0.01 && Math.abs(seat.tip - MX_SEAT.tip) < 0.01,
+    `slider ${seat.slider.toFixed(3)}, cross tip ${seat.tip.toFixed(3)} mm; assumed ${MX_SEAT.slider}, ${MX_SEAT.tip}`);
+
+  // What mount.ts sends: a travel of 4 mm.
+  const build = (regions: BuildRegion[], p: Partial<BuildParams>) =>
+    buildBlocks(wasm, socket, caps as never, regions, { ...base, travel: 4, ...p }, seat);
+  const isCap = (n: string) => /^cap-\d+$/.test(n);
+  const isInk = (n: string) => n.startsWith('top-color-');
+  const zOf = (parts: ClickerPart[], is: (name: string) => boolean) => {
+    let lo = Infinity, hi = -Infinity;
+    for (const p of parts) {
+      if (!is(p.name)) continue;
+      for (let i = 2; i < p.vertProperties.length; i += p.numProp) {
+        lo = Math.min(lo, p.vertProperties[i]);
+        hi = Math.max(hi, p.vertProperties[i]);
+      }
+    }
+    return { lo, hi };
+  };
+  const same = (a: ClickerPart[], b: ClickerPart[]) => a.length === b.length && a.every((p, i) =>
+    p.name === b[i].name && p.vertProperties.length === b[i].vertProperties.length
+      && p.vertProperties.every((v, k) => v === b[i].vertProperties[k])
+      && p.triVerts.length === b[i].triVerts.length && p.triVerts.every((v, k) => v === b[i].triVerts[k]));
+  /** How much of the keycaps is inside the body: none, when every cap is free in its well. */
+  const capsInBody = (parts: ClickerPart[]) => {
+    const body = solidOfPart(bodyOf(parts)[0]);
+    let v = 0;
+    for (const p of parts.filter((q) => isCap(q.name))) {
+      const cap = solidOfPart(p);
+      const hit = cap.intersect(body);
+      v += hit.volume();
+      hit.delete();
+      cap.delete();
+    }
+    body.delete();
+    return v;
+  };
+  /** The widths of the rings a slice of a cap cuts near the switch's axis: the skirt's, the
+   *  stem's and its cross hole's. */
+  const ringsAt = (part: ClickerPart, z: number) => {
+    const s = solidOfPart(part);
+    const cs = s.slice(z);
+    const widths = cs.toPolygons().map((r: number[][]) => bboxOfRings([r]).w).sort((a: number, b: number) => a - b);
+    cs.delete();
+    s.delete();
+    return widths as number[];
+  };
+  /** The cross hole's width half way up a stem: the smallest ring there. */
+  const crossHole = (part: ClickerPart, z: number) => ringsAt(part, z)[0];
+
+  // Standard, as it always was.
+  const plain = run(R(2), {});
+  const picked = buildBlocks(wasm, socket, caps as never, R(2), { ...base, blockKeycap: 'standard', blockCapLowerMm: 0 }, seat);
+  check('Standard picked from the three, cut by 0: the standard block, vertex for vertex', same(plain.parts, picked.parts),
+    `${plain.parts.length} parts`);
+
+  // Cut shorter: the top comes down, nothing else moves.
+  const uncut = build(R(2), {});
+  const cut = build(R(2), { blockCapLowerMm: 3 });
+  const [u, c] = [zOf(uncut.parts, isCap), zOf(cut.parts, isCap)];
+  check('Keycap height 3 mm lower: the keycaps\' tops come down 3 mm', Math.abs(u.hi - 3 - c.hi) < 1e-3,
+    `cap ${(u.hi - u.lo).toFixed(2)} → ${(c.hi - c.lo).toFixed(2)} mm tall`);
+  const capU = uncut.parts.find((p) => p.name === 'cap-0')!;
+  const capC = cut.parts.find((p) => p.name === 'cap-0')!;
+  const stemU = ringsAt(capU, u.lo + 0.05).filter((w) => w < 10);
+  const stemC = ringsAt(capC, c.lo + 0.05).filter((w) => w < 10);
+  check('…their skirts and stems still stand on the same seat',
+    Math.abs(u.lo - c.lo) < 1e-3 && stemU.length >= 2 && stemU.length === stemC.length && stemU.every((w, i) => Math.abs(w - stemC[i]) < 1e-3)
+      && ringsAt(capC, c.lo + 0.05).some((w) => w > 14),
+    `bottom ${u.lo.toFixed(3)} → ${c.lo.toFixed(3)} mm; stem rings ${stemU.map((w) => w.toFixed(2)).join(', ')} → ${stemC.map((w) => w.toFixed(2)).join(', ')}`);
+  check('…the body, the switches and the rim do not move', same(bodyOf(uncut.parts), bodyOf(cut.parts))
+    && cut.switchPlacements.every((s, i) => s.z === uncut.switchPlacements[i].z), '');
+  const cutInBody = capsInBody(cut.parts);
+  check('…and the shorter caps are closed and free in their wells',
+    cut.parts.filter((p) => isCap(p.name)).every(closed) && closed(bodyOf(cut.parts)[0]) && cutInBody < 1e-3,
+    `${cutInBody.toFixed(4)} mm³ of cap inside the body`);
+  const limit = zOf(build(R(2), { blockCapLowerMm: 9 }).parts, isCap);
+  check(`a cut asked past ${CAP_LOWER_MAX_MM} mm stops there: 7.3 mm tall`,
+    Math.abs(u.hi - CAP_LOWER_MAX_MM - limit.hi) < 1e-3 && (limit.hi - limit.lo).toFixed(1) === '7.3',
+    `${(limit.hi - limit.lo).toFixed(3)} mm tall`);
+  const shortRim = build(R(2), { blockCapLowerMm: CAP_LOWER_MAX_MM, blockRimRaiseMm: 6 });
+  const shortTop = zOf(shortRim.parts, isCap).hi;
+  const shortRimZ = zOf(shortRim.parts, (n) => n.startsWith('block-')).hi;
+  check('the shortest cap with the rim all the way up: the rim stops 2 mm below the caps, and says so',
+    Math.abs(shortTop - shortRimZ - MIN_CAP_PROUD_MM) < 1e-3 && shortRim.warnings.some((w) => w.includes('rim stops')),
+    `cap ${(shortTop - shortRimZ).toFixed(3)} mm proud; ${shortRim.warnings.join(' | ')}`);
+  for (const lower of [0, 3, CAP_LOWER_MAX_MM]) {
+    const max = rimRaiseMax('standard', lower);
+    const out = build(R(2), { blockCapLowerMm: lower, blockRimRaiseMm: max });
+    check(`Standard cut ${lower} mm: the highest rim the slider offers (${max} mm up) builds as asked`,
+      Math.abs(zOf(out.parts, (n) => n.startsWith('block-')).hi - (BODY_DIMS.rimZ + max)) < 1e-3 && !out.warnings.length,
+      out.warnings.join(' | ') || 'no warnings');
+  }
+
+  // Low profile and Thocky.
+  const twoLayouts = [layouts[0], layouts[2]];
+  const drawn = (profile: BlockKeycap) => caps[profile].meta as { stemBbox: { min: number[]; max: number[] } };
+  for (const profile of ['low', 'thocky'] as const) {
+    const sb = drawn(profile).stemBbox;
+    const socketMm = sb.max[2] - sb.min[2];
+    // Where the switch really holds it: on the slider, or on the cross when the socket is too
+    // shallow to reach the slider.
+    const seatZ = BODY_DIMS.floorZ + Math.max(seat.slider, seat.tip - socketMm);
+    for (const lay of twoLayouts) {
+      const out = build(lay.regions, { ...lay.params, blockKeycap: profile, stemFitMm: 0.1 });
+      const bodies = bodyOf(out.parts);
+      const capParts = out.parts.filter((p) => isCap(p.name));
+      const inks = out.parts.filter((p) => isInk(p.name));
+      const z = zOf(out.parts, isCap);
+      const rim = zOf(out.parts, (n) => n.startsWith('block-')).hi;
+      const inBody = capsInBody(out.parts);
+      check(`${profile}, ${lay.name}: one closed body, a switch, a cap and a letter per key`,
+        bodies.length === 1 && closed(bodies[0]) && capParts.every(closed) && out.switchPlacements.length === lay.keys
+          && capParts.length === lay.keys && inks.length === lay.keys,
+        `${bodies.length} body, ${out.switchPlacements.length} switches, ${capParts.length} caps, ${inks.length} letters`);
+      check(`${profile}, ${lay.name}: seated where the switch holds it, free in its well and ${MIN_CAP_PROUD_MM} mm or more proud`,
+        Math.abs(z.lo - seatZ) < 1e-3 && inBody < 1e-3 && z.hi - rim >= MIN_CAP_PROUD_MM - 1e-3,
+        `stem on ${(z.lo - BODY_DIMS.floorZ).toFixed(3)} mm (switch holds it at ${(seatZ - BODY_DIMS.floorZ).toFixed(3)}), top ${z.hi.toFixed(2)}, ${(z.hi - rim).toFixed(2)} mm proud, ${inBody.toFixed(4)} mm³ in the body`);
+      check(`${profile}, ${lay.name}: Stem fit is applied, and every letter is 0.8 mm of ink`,
+        !out.warnings.some((w) => /stem fit/i.test(w)) && inks.every((p) => Math.abs(zOf([p], () => true).hi - zOf([p], () => true).lo - 0.8) < 0.01),
+        `${out.warnings.join(' | ') || 'no warnings'}; ink ${inks.map((p) => (zOf([p], () => true).hi - zOf([p], () => true).lo).toFixed(3)).join(', ')} mm`);
+    }
+    const max = rimRaiseMax(profile);
+    const top = build(R(2), { blockKeycap: profile, blockRimRaiseMm: max });
+    const topZ = zOf(top.parts, isCap).hi;
+    const topRim = zOf(top.parts, (n) => n.startsWith('block-')).hi;
+    check(`${profile}: the highest rim the slider offers (${max} mm up) builds as asked, the caps still ${MIN_CAP_PROUD_MM} mm proud`,
+      Math.abs(topRim - (BODY_DIMS.rimZ + max)) < 1e-3 && topZ - topRim >= MIN_CAP_PROUD_MM - 1e-3 && !top.warnings.length,
+      `${(topZ - topRim).toFixed(2)} mm proud; ${top.warnings.join(' | ') || 'no warnings'}`);
+    const over = build(R(2), { blockKeycap: profile, blockRimRaiseMm: RIM_RAISE_MAX_MM });
+    const overTop = zOf(over.parts, isCap).hi;
+    const overRim = zOf(over.parts, (n) => n.startsWith('block-')).hi;
+    check(`${profile}: a rim asked higher still stops ${MIN_CAP_PROUD_MM} mm below the caps, and says so`,
+      Math.abs(overTop - overRim - MIN_CAP_PROUD_MM) < 1e-3 && over.warnings.some((w) => w.includes('rim stops')),
+      `${(overTop - overRim).toFixed(3)} mm proud`);
+    const blanks = build([hole(0), hole(1)], { blockKeycap: profile, blockKeys: [true, true] });
+    check(`${profile}: a blank set wears it too`,
+      blanks.parts.filter((p) => isCap(p.name)).length === 2 && !blanks.parts.some((p) => isInk(p.name))
+        && Math.abs(zOf(blanks.parts, isCap).hi - zOf(top.parts, isCap).hi) < 1e-3,
+      `${blanks.parts.filter((p) => isCap(p.name)).length} plain caps, top ${zOf(blanks.parts, isCap).hi.toFixed(2)} mm`);
+  }
+
+  // One Stem fit, one grip: Thocky's cross hole is drawn looser, so it is built 0.2 mm tighter.
+  for (const profile of BLOCK_KEYCAP_IDS) {
+    const one = build([region(0)], { blockKeycap: profile });
+    const z = zOf(one.parts, isCap);
+    const sb = drawn(profile).stemBbox;
+    const mid = (sb.max[2] - sb.min[2]) / 2;
+    const raw = caps[profile];
+    const stem = (() => {
+      const mesh = new wasm.Mesh({ numProp: 3, vertProperties: new Float32Array(raw.stem.positions), triVerts: new Uint32Array(raw.stem.indices) });
+      mesh.merge();
+      const s = wasm.Manifold.ofMesh(mesh);
+      const [cx, cy] = raw.meta.center;
+      const moved = s.translate([-cx, -cy, 0]);
+      s.delete();
+      return moved;
+    })();
+    const asDrawn = (() => {
+      const cs = stem.slice(sb.min[2] + mid);
+      const w = cs.toPolygons().map((r: number[][]) => bboxOfRings([r]).w).sort((a: number, b: number) => a - b)[0];
+      cs.delete();
+      return w as number;
+    })();
+    stem.delete();
+    const built = crossHole(one.parts.find((p) => p.name === 'cap-0')!, z.lo + mid);
+    const want = -BLOCK_KEYCAPS[profile].stemFitMm;
+    check(`${profile}: at Stem fit 0 the cross hole is ${want ? `${want} mm tighter than drawn` : 'as drawn'}`,
+      Math.abs(asDrawn - built - want) < 0.01, `${asDrawn.toFixed(3)} → ${built.toFixed(3)} mm`);
+  }
+
+  // Low profile's cap has Standard's footprint, so its body is Standard's.
+  const lowBody = bodyOf(build(R(3), { blockKeycap: 'low' }).parts)[0];
+  const stdBody = bodyOf(build(R(3), {}).parts)[0];
+  let drift = lowBody.vertProperties.length === stdBody.vertProperties.length ? 0 : Infinity;
+  for (let i = 0; drift < Infinity && i < lowBody.vertProperties.length; i++) {
+    drift = Math.max(drift, Math.abs(lowBody.vertProperties[i] - stdBody.vertProperties[i]));
+  }
+  check('Low profile sits in the Standard body', drift < 1e-4, `${drift} mm apart at most`);
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nthe generated block body holds');

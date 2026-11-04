@@ -17,6 +17,8 @@ import { readModel } from '@vostok/export/read';
 import { parseSvg } from '@vostok/trace';
 import { captureHeaps, heapInUse } from '../../../packages/laser/tests/heap-probe.mjs';
 import { buildClicker } from '../src/geometry/buildClicker';
+import { buildBlocks } from '../src/geometry/buildBlocks';
+import { BLOCK_KEYCAP_IDS, BLOCK_KEYCAPS } from '../src/geometry/blockKeycaps';
 import { buildFitStrip, FIT_TEST_STEP_MM, fitTestLadder } from '../src/geometry/fitStrip';
 import { applyStemFit } from '../src/geometry/stemFit';
 import type { BuildParams, BuildRegion, Ring, RGB } from '../src/types';
@@ -82,6 +84,15 @@ const GLYPH: Ring[] = [[[0, 0], [6, 0], [6, 10], [0, 10]], [[2, 2], [2, 8], [4, 
 const labels = fitTestLadder(0, FIT_TEST_STEP_MM).map((fitMm) => ({ fitMm, rings: GLYPH }));
 
 const clicker = (over: Partial<BuildParams>, w = wasm) => () => void buildClicker(w, socket, stem, regions, art.outline, { ...DEFAULTS, ...over });
+
+// Letter blocks: two keys, each with the glyph on it, on each keycap.
+const keycaps = Object.fromEntries(BLOCK_KEYCAP_IDS.map((id) => {
+  const j = JSON.parse(readFileSync(join(process.cwd(), 'apps/clicker-generator/public', BLOCK_KEYCAPS[id].file), 'utf-8'));
+  return [id, { shell: { positions: j.positions, indices: j.indices }, stem: j.stem ?? null, meta: j.meta }];
+}));
+const keys: BuildRegion[] = [0, 1].map((k) => ({ filamentRgb: [20, 20, 20], coverage: 1, rings: GLYPH, partName: `top-color-${k}-0` }));
+const blocks = (over: Partial<BuildParams>) => () =>
+  void buildBlocks(wasm, socket, keycaps as never, keys, { ...DEFAULTS, blockOrientation: 'horizontal', ...over });
 /** Each colour part's own top edge chamfered, as Edges mode sets it. */
 const INLAYS_CHAMFERED = {
   edgeSettings: [...DEFAULTS.edgeSettings, ...regions.map((r) => ({ target: r.partName, style: 'chamfer', radius: 0.4 }))],
@@ -104,6 +115,10 @@ const KINDS: [string, () => void][] = [
   ['the fit test strip', () => void buildFitStrip(wasm, stem, { labels, colorRgb: WHITE })],
   ['stem fit +0.1 on its own', () => applyStemFit(wasm, stem, 0.1).solid.delete()],
   ['stem fit -0.1 on its own', () => applyStemFit(wasm, stem, -0.1).solid.delete()],
+  ['letter blocks, Standard keycaps', blocks({})],
+  ['letter blocks, Standard keycaps cut 3 mm shorter, the rim raised', blocks({ blockCapLowerMm: 3, blockRimRaiseMm: 2 })],
+  ['letter blocks, Low profile keycaps', blocks({ blockKeycap: 'low' })],
+  ['letter blocks, Thocky keycaps, stem fit +0.1', blocks({ blockKeycap: 'thocky', stemFitMm: 0.1 })],
 ];
 
 // The chamfered kind really cuts: its first colour part comes out with more triangles.

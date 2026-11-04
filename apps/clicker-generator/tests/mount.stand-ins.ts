@@ -18,6 +18,8 @@ import type { ClickerPart, RegionSet } from '../src/types';
 export const seen = {
   /** The parts the viewer was last given: what is on screen. */
   screen: [] as ClickerPart[],
+  /** Whether the viewer was told to keep its camera where it was when it was last given parts. */
+  keptCamera: undefined as boolean | undefined,
   /** Every 3MF the browser path wrote: its parts, its file name and its options (cover, credit). */
   downloads: [] as { parts: ClickerPart[]; name: string; opts: Record<string, unknown> }[],
   /** Every 3MF made in memory for a desktop host: its parts and options. */
@@ -75,6 +77,7 @@ export const traces: string[] = [];
 
 export function reset() {
   seen.screen = [];
+  seen.keptCamera = undefined;
   seen.downloads.length = 0;
   seen.built.length = 0;
   seen.objs.length = 0;
@@ -143,8 +146,9 @@ export const openShapeEditor = async () => null;
 
 export function createViewer() {
   return quiet({
-    setParts(parts: ClickerPart[]) {
+    setParts(parts: ClickerPart[], keepCamera?: boolean) {
       seen.screen = parts;
+      seen.keptCamera = keepCamera;
     },
     async renderCoverPng() {
       if (knobs.coverMs) await wait(knobs.coverMs);

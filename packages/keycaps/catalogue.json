@@ -1,0 +1,6 @@
+{
+  "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
+  "blocks": [
+    { "name": "Keycap trim", "category": "engine", "use": ["capTrimLimits", "clampCapTrim", "cutFromBelow"], "with": ["MIN_SOCKET_MM", "MAX_RECESS_MM", "SAFE_RECESS_MM"], "for": "How far an MX keycap can be cut shorter from below (Cap height, Stem recess, Wall height) before it rests on the switch's cross, the clamp that keeps settings inside that, and the cut itself (keep what is above a height, move it down) on any Manifold-like solid. A keycap generator's Cap height and the clicker's Keycap height are this." }
+  ]
+}

@@ -19,6 +19,7 @@ import { FakeWorker, installWorker } from '../../../packages/ui-kit/tests/suppor
 import { kit, resetKit } from '../../../packages/ui-kit/tests/support/kit';
 import { knobs, reset, seen, setMakerlab, traces } from './mount.stand-ins';
 import { mount } from '../src/mount';
+import { BLOCK_KEYCAP_IDS, BLOCK_KEYCAPS, BLOCK_TRAVEL_MM, CAP_LOWER_MAX_MM, rimRaiseMax } from '../src/geometry/blockKeycaps';
 
 installDom();
 const clock = installClock();
@@ -54,6 +55,8 @@ const net = { ms: {} as Record<string, number>, fails: new Set<string>() };
     json: async () =>
       u.includes('default-clicker')
         ? [{ kind: 'cap', group: 'top', colorRgb: [1, 2, 3], name: 'default-sample', numProp: 3, vertProperties: [0, 0, 0, 1, 0, 0, 0, 1, 0], triVerts: [0, 1, 2] }]
+        // A keycap file says which file it is, so a check can tell the worker was handed each one.
+        : u.includes('keycap') ? { file: u }
         : {},
   };
 };
@@ -92,14 +95,27 @@ const partsNamed = (name: string) => [
 /** The design a build was traced from, by the index its first point carries. */
 const traceOf = (msg: any) => traces[msg.regions?.[0]?.rings?.[0]?.[0]?.[0]] ?? '?';
 
+/** The keycaps the worker was handed at init, by profile: as the real one, it builds no other. */
+let keycapsHeld: Record<string, unknown> = {};
+
 function answer(msg: any): unknown {
   switch (msg.type) {
     case 'init':
+      keycapsHeld = msg.keycaps ?? {};
       return { type: 'initDone', socketInfo: '', stemInfo: '', switchInfo: '', switchMesh: { vertProperties: new Float32Array(0), triVerts: new Uint32Array(0), numProp: 3 }, switchColumnMm: 17 };
     case 'buildClicker':
       return { type: 'parts', parts: partsNamed(`built:${traceOf(msg)}|w=${msg.params.capWidthMm}|st=${msg.params.stemFitMm}`), switchPlacements: [], warnings: [], requestId: msg.requestId, ...(worker.layout ? { layout: LAYOUT } : {}) };
     case 'buildBlocks':
-      return { type: 'parts', parts: partsNamed(`blocks:${traceOf(msg)}|w=${msg.params.capWidthMm}`), switchPlacements: [], warnings: [], requestId: msg.requestId };
+      if (!keycapsHeld[msg.params.blockKeycap ?? 'standard']) {
+        return { type: 'error', message: `The ${msg.params.blockKeycap} keycap is not loaded.`, request: msg.type, requestId: msg.requestId };
+      }
+      return {
+        type: 'parts',
+        parts: partsNamed(`blocks:${traceOf(msg)}|w=${msg.params.capWidthMm}|cap=${msg.params.blockKeycap}-${msg.params.blockCapLowerMm}|rim=${msg.params.blockRimRaiseMm}`),
+        switchPlacements: [],
+        warnings: [],
+        requestId: msg.requestId,
+      };
     case 'importModel':
       // The samples are 40 mm; anything uploaded is 60 mm, so its cut is told apart from theirs.
       return { type: 'modelInfo', info: { name: msg.name, fileTriangles: 1, triangles: 1, sizeMm: msg.name.startsWith('skull') ? [40, 40, 40] : [60, 60, 60], notes: [] } };
@@ -165,6 +181,7 @@ async function fresh(prepare?: () => void, host?: object) {
   FakeWorker.reset();
   inbox.length = 0;
   working = false;
+  keycapsHeld = {};
   Object.assign(worker, { ms: 5, failIf: null, crashIf: null, silentIf: null, refuseIf: null, layout: false });
   net.ms = {};
   net.fails = new Set();
@@ -1191,6 +1208,148 @@ const regionNames = (msg: any) => (msg ? msg.regions.map((r: any) => r.partName)
   check('…on Text mode\'s letters it stops at Text size\'s 50 %, as Text size does',
     letters?.designScaleMin === 0.5 && seen.state?.textScale === 0.5,
     `floor ${letters?.designScaleMin}, Text size ${seen.state?.textScale}`);
+  finish(unmount);
+}
+
+/* ================================================================= Blocks: the keycap */
+
+{
+  // Every profile is in the worker from the start, so a pick builds at once.
+  const unmount = await fresh();
+  const init = posted.find((m) => m.type === 'init');
+  const files = Object.fromEntries(Object.entries(init?.keycaps ?? {}).map(([id, f]) => [id, (f as { file?: string })?.file]));
+  check('startup: the worker is handed the three keycaps, each its own file',
+    Object.keys(files).join() === BLOCK_KEYCAP_IDS.join() && BLOCK_KEYCAP_IDS.every((id) => String(files[id]).endsWith(BLOCK_KEYCAPS[id].file)),
+    JSON.stringify(files));
+  ui().onImportMode('blocks');
+  await clock.advance(300);
+  const first = lastSent('buildBlocks');
+  check('Blocks start on the Standard keycap as drawn, at the travel the keycaps\' limits assume',
+    first?.params.blockKeycap === 'standard' && first?.params.blockCapLowerMm === 0 && first?.params.travel === BLOCK_TRAVEL_MM,
+    `${first?.params.blockKeycap}, cut ${first?.params.blockCapLowerMm}, travel ${first?.params.travel}`);
+
+  ui().onBlockRimRaise(5);
+  await clock.advance(300);
+  ui().onBlockKeycap('low');
+  await clock.advance(300);
+  const low = lastSent('buildBlocks');
+  check('Low profile picked: the next build carries it', low?.params.blockKeycap === 'low' && onScreen()?.includes('cap=low-0'),
+    `${low?.params.blockKeycap}; screen ${shown(onScreen())}`);
+  check('…with the rim brought down to the highest that cap allows, in the state and in the build',
+    seen.state?.blockRimRaiseMm === rimRaiseMax('low') && low?.params.blockRimRaiseMm === rimRaiseMax('low'),
+    `state ${seen.state?.blockRimRaiseMm}, build ${low?.params.blockRimRaiseMm}, cap allows ${rimRaiseMax('low')}`);
+  check('…and the camera stays where it was', seen.keptCamera === true, String(seen.keptCamera));
+  ui().onBlockCapLower(3);
+  await clock.advance(300);
+  check('a cap that cannot be cut shorter is not', seen.state?.blockCapLowerMm === 0 && lastSent('buildBlocks')?.params.blockCapLowerMm === 0,
+    String(seen.state?.blockCapLowerMm));
+
+  ui().onBlockKeycap('standard');
+  ui().onBlockRimRaise(6);
+  ui().onBlockCapLower(9);
+  await clock.advance(300);
+  const cut = lastSent('buildBlocks');
+  check(`Standard cut as far as it goes (${CAP_LOWER_MAX_MM} mm): the rim comes down with it`,
+    cut?.params.blockKeycap === 'standard' && cut?.params.blockCapLowerMm === CAP_LOWER_MAX_MM && cut?.params.blockRimRaiseMm === rimRaiseMax('standard', CAP_LOWER_MAX_MM),
+    `cut ${cut?.params.blockCapLowerMm}, rim ${cut?.params.blockRimRaiseMm}`);
+  const exp = press();
+  await clock.advance(100);
+  check('…and Export writes that build', exp.done && written()[0] === `blocks:blocks:font=helvetiker-regular|w=35|cap=standard-${CAP_LOWER_MAX_MM}|rim=${rimRaiseMax('standard', CAP_LOWER_MAX_MM)}`,
+    describe(exp));
+  finish(unmount);
+}
+
+{
+  // Saved, opened again; and a project from before the keycap could be picked.
+  const unmount = await fresh();
+  ui().onImportMode('blocks');
+  await clock.advance(300);
+  ui().onBlockKeycap('thocky');
+  ui().onBlockRimRaise(4);
+  await clock.advance(300);
+  ui().onSaveProject();
+  const saved = seen.files.find((f) => f.name === 'clicker-project.json');
+  const settings = saved ? JSON.parse(String(saved.data)).settings : null;
+  check('Save writes the keycap into the project', settings?.blockKeycap === 'thocky' && settings?.blockCapLowerMm === 0 && settings?.blockRimRaiseMm === 4,
+    `${settings?.blockKeycap}, cut ${settings?.blockCapLowerMm}, rim ${settings?.blockRimRaiseMm}`);
+  ui().onBlockKeycap('standard');
+  ui().onBlockCapLower(2);
+  await clock.advance(300);
+  ui().onLoadProject(new File([String(saved?.data)], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  const back = lastSent('buildBlocks');
+  check('…and opening it brings it back, built that way',
+    seen.state?.blockKeycap === 'thocky' && seen.state?.blockCapLowerMm === 0 && seen.state?.blockRimRaiseMm === 4
+      && back?.params.blockKeycap === 'thocky' && back?.params.blockCapLowerMm === 0 && back?.params.blockRimRaiseMm === 4,
+    `state ${seen.state?.blockKeycap}/${seen.state?.blockCapLowerMm}/${seen.state?.blockRimRaiseMm}, build ${back?.params.blockKeycap}/${back?.params.blockCapLowerMm}/${back?.params.blockRimRaiseMm}`);
+
+  ui().onBlockKeycap('standard');
+  ui().onBlockCapLower(2.5);
+  await clock.advance(300);
+  ui().onSaveProject();
+  const cutFile = seen.files.filter((f) => f.name === 'clicker-project.json').at(-1);
+  ui().onBlockCapLower(0);
+  await clock.advance(300);
+  ui().onLoadProject(new File([String(cutFile?.data)], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('a Standard keycap saved cut shorter opens cut as much', seen.state?.blockKeycap === 'standard' && seen.state?.blockCapLowerMm === 2.5
+    && lastSent('buildBlocks')?.params.blockCapLowerMm === 2.5, `cut ${seen.state?.blockCapLowerMm}`);
+
+  ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'blocks', blockLines: ['Old'], blockRimRaiseMm: 3 } })], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  const old = lastSent('buildBlocks');
+  check('a block set saved before the keycap could be picked opens on the Standard keycap as drawn, its rim as saved',
+    seen.state?.blockKeycap === 'standard' && seen.state?.blockCapLowerMm === 0 && seen.state?.blockRimRaiseMm === 3
+      && old?.params.blockKeycap === 'standard' && old?.params.blockCapLowerMm === 0,
+    `${seen.state?.blockKeycap}, cut ${seen.state?.blockCapLowerMm}, rim ${seen.state?.blockRimRaiseMm}`);
+  finish(unmount);
+}
+
+{
+  // Undo and redo carry the keycap, and the rim with it.
+  const unmount = await fresh();
+  ui().onImportMode('blocks');
+  await clock.advance(800); // built: the undo baseline
+  ui().onBlockRimRaise(5);
+  await clock.advance(800); // built, and recorded 350 ms after
+  ui().onBlockKeycap('low');
+  await clock.advance(800);
+  const lowRim = seen.state?.blockRimRaiseMm;
+  ui().onUndo();
+  await clock.advance(300);
+  const undone = lastSent('buildBlocks');
+  check('Undo after picking Low profile: Standard again, with the rim it had, in the state and in the build',
+    seen.state?.blockKeycap === 'standard' && seen.state?.blockRimRaiseMm === 5 && undone?.params.blockKeycap === 'standard' && undone?.params.blockRimRaiseMm === 5,
+    `${seen.state?.blockKeycap}, rim ${seen.state?.blockRimRaiseMm}; built ${undone?.params.blockKeycap}, rim ${undone?.params.blockRimRaiseMm}`);
+  ui().onRedo();
+  await clock.advance(300);
+  check('…and Redo brings Low profile back with its lower rim', seen.state?.blockKeycap === 'low' && seen.state?.blockRimRaiseMm === lowRim
+    && lowRim === rimRaiseMax('low') && lastSent('buildBlocks')?.params.blockKeycap === 'low',
+    `${seen.state?.blockKeycap}, rim ${seen.state?.blockRimRaiseMm}`);
+  ui().onBlockKeycap('standard');
+  ui().onBlockCapLower(1.2);
+  await clock.advance(800);
+  ui().onUndo();
+  await clock.advance(300);
+  check('Undo after a Keycap height change: the cap as it was', seen.state?.blockKeycap === 'low' && seen.state?.blockCapLowerMm === 0,
+    `${seen.state?.blockKeycap}, cut ${seen.state?.blockCapLowerMm}`);
+  finish(unmount);
+}
+
+{
+  // A blank block set wears the keycap too.
+  const unmount = await fresh();
+  ui().onImportMode('blocks');
+  await clock.advance(300);
+  ui().onBlank(true);
+  ui().onBlockKeycap('thocky');
+  await clock.advance(300);
+  const blank = lastSent('buildBlocks');
+  check('Blank on Thocky keycaps: plain Thocky caps', blank?.params.blockKeycap === 'thocky' && blank?.regions.every((r: any) => r.rings.length === 0),
+    `${blank?.params.blockKeycap}, ${regionNames(blank)}`);
   finish(unmount);
 }
 

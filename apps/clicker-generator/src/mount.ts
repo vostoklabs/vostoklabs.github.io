@@ -61,9 +61,10 @@ import {
   importFontFile,
 } from './image/letter';
 import {
-  arrangeBlocks, blockBuildParams, changeLayout, gridFor, isSymbolChar, lineSymbols, loadedBlocks, loadedSymbols,
+  arrangeBlocks, blockBuildParams, changeLayout, clampBlockCap, gridFor, isSymbolChar, lineSymbols, loadedBlocks, loadedSymbols,
   presetText, pruneSymbols, resizeCells, toggleKey, tracedSymbols,
 } from './geometry/blockLayout';
+import { BLOCK_KEYCAP_IDS, BLOCK_KEYCAPS } from './geometry/blockKeycaps';
 import { LUCIDE_ICONS, buildSvg } from './image/lucideIcons';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the host
 // glue in the MakerWorld build (`--mode makerworld`) — see vite.config.ts.
@@ -81,6 +82,7 @@ import {
   sdkToast,
 } from 'virtual:makerlab';
 import type {
+  BlockKeycap,
   BuildParams,
   BuildRegion,
   ClickerPart,
@@ -173,8 +175,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     fetch(base + 'assets/switch/mx/mx-socket.3mf').then((r) => r.arrayBuffer()),
     fetch(base + 'assets/switch/mx/mx-stem.3mf').then((r) => r.arrayBuffer()),
     fetch(base + 'assets/switch/mx/mx-switch.3mf').then((r) => r.arrayBuffer()),
-    // Letter blocks need only the keycap: their bodies are generated (geometry/keyBody.ts).
-    fetch(base + 'assets/keycap.json').then((r) => r.json()),
+    // Letter blocks need only their keycaps, all three profiles at once so a pick builds at once:
+    // their bodies are generated (geometry/keyBody.ts).
+    Promise.all(BLOCK_KEYCAP_IDS.map((id) => fetch(base + BLOCK_KEYCAPS[id].file).then((r) => r.json())))
+      .then((files) => Object.fromEntries(BLOCK_KEYCAP_IDS.map((id, i) => [id, files[i]])) as Record<BlockKeycap, unknown>),
   ]).catch((err) => {
     console.error('[assets] Pre-fetch failed:', err);
     throw err;
@@ -450,6 +454,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     blockStyle: 'walls',
     blockTexture: 'smooth',
     blockRimRaiseMm: 0,
+    blockKeycap: 'standard',
+    blockCapLowerMm: 0,
     legendScale: 1,
     legendBold: 0,
     keychainEnd: 'left',
@@ -1346,8 +1352,18 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       store.set({ blockTexture: texture });
       debouncedRebuild();
     },
+    // The keycap, its height and the rim hold each other in range (`clampBlockCap`): a shorter cap
+    // brings the highest rim down with it. The camera stays where it is.
+    onBlockKeycap: (profile) => {
+      store.set(clampBlockCap({ ...store.get(), blockKeycap: profile }));
+      debouncedRebuild();
+    },
+    onBlockCapLower: (mm) => {
+      store.set(clampBlockCap({ ...store.get(), blockCapLowerMm: mm }));
+      debouncedRebuild();
+    },
     onBlockRimRaise: (mm) => {
-      store.set({ blockRimRaiseMm: mm });
+      store.set(clampBlockCap({ ...store.get(), blockRimRaiseMm: mm }));
       debouncedRebuild();
     },
     onLegendScale: (v) => {
@@ -1733,7 +1749,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     'modelCut',
     // Blocks: the look. What is ON the keys (layout, lines) re-traces, which starts a new
     // baseline the way typing does in Text mode, so it is not in here.
-    'blockStyle', 'blockTexture', 'blockRimRaiseMm', 'legendScale', 'legendBold',
+    'blockStyle', 'blockTexture', 'blockRimRaiseMm', 'blockKeycap', 'blockCapLowerMm', 'legendScale', 'legendBold',
   ] as const;
   let history: string[] = [];
   let histIndex = -1;
@@ -1782,6 +1798,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   function applyHistorySnapshot(snap: string) {
     restoringHistory = true;
     store.set(JSON.parse(snap));
+    // The keycap, its height and the rim come back held to each other, as every control sets them.
+    store.set(clampBlockCap(store.get()));
     /* Re-derive the pack rings from the token the snapshot just restored.
        `packShapeRings` is a single variable outside the store, so after switching between two
        pack shapes it holds the LATER one — and undo would have brought back the earlier one's
@@ -2450,9 +2468,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   async function initAssets() {
     try {
-      const [socket, stem, sw, keycapJson] = await assetsPromise;
+      const [socket, stem, sw, keycaps] = await assetsPromise;
       send(
-        { type: 'init', socket, stem, switch: sw, keycapJson },
+        { type: 'init', socket, stem, switch: sw, keycaps },
         [socket, stem, sw],
       );
     } catch (err) {
@@ -3189,6 +3207,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         blockStyle: s.blockStyle,
         blockTexture: s.blockTexture,
         blockRimRaiseMm: s.blockRimRaiseMm,
+        blockKeycap: s.blockKeycap,
+        blockCapLowerMm: s.blockCapLowerMm,
         legendScale: s.legendScale,
         legendBold: s.legendBold,
         keychainEnd: s.keychainEnd,
@@ -3437,8 +3457,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         blank: set.blank === true,
         keychainEnd: set.keychainEnd ?? 'left',
         keychainSlideMm: set.keychainSlideMm ?? 0,
-        // A project from before the rim could be raised has the standard body.
+        // A project from before the rim could be raised has the standard body, and one from
+        // before the keycap could be picked has the Standard cap as drawn.
         blockRimRaiseMm: 0,
+        blockKeycap: 'standard',
+        blockCapLowerMm: 0,
         // Blocks: a project from before blocks were saved opens on the defaults.
         ...loadedBlocks(set),
         // Text mode's symbols; a project from before them has none.

@@ -49,6 +49,7 @@ const SUITES = {
   'fit-controls': ['manifold'],
   'font-fallback': ['fonts'],
   frame: [],
+  'keycap-profiles': [],
   'model-cut': ['manifold', 'env'],
   'obj-plates': [],
   packs: ['manifold', 'xmldom'],

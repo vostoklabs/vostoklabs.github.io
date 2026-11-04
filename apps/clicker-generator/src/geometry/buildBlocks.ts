@@ -1,6 +1,6 @@
-// Letter-block clickers: one key per letter — a real MX switch under a real (dished, 1u)
-// keycap with the letter debossed into its top as a separate colour body — in one printed body
-// that holds them all.
+// Letter-block clickers: one key per letter — a real MX switch under a real 1u keycap (one of
+// three profiles, blockKeycaps.ts) with the letter debossed into its top as a separate colour
+// body — in one printed body that holds them all.
 //
 // The body is generated from the layout (keyBody.ts): a wall between every key, or one open
 // well round them all like a keyboard; in a row, a column, a grid or any shape with holes in it,
@@ -9,15 +9,19 @@
 // clean grid. Its dimensions are the shells' own, measured: see BODY_DIMS.
 //
 // Frame (shared with buildClicker): Z = 0 is the switch-plate plane — the top of the MX socket
-// cut-out. The bundled keycap.json is authored in that same frame (its stem IS the mx-stem
-// asset, verified by cross-section), so a keycap only moves up by the height it rests at.
+// cut-out. The bundled keycaps are authored in that same frame (the Standard cap's stem IS the
+// mx-stem asset, verified by cross-section), so a keycap only moves up by the height it rests at.
 //
 // The arrangement runs along +X so text reads left-to-right in the viewer, rows running down.
 import { csOf, extrude } from '@vostok/manifold';
-import type { BuildParams, BuildRegion, ClickerPart, Ring, RGB, SwitchPlacement } from '../types';
+import { cutFromBelow } from '@vostok/keycaps';
+import type { BlockKeycap, BuildParams, BuildRegion, ClickerPart, Ring, RGB, SwitchPlacement } from '../types';
 import { hardcodedVoids, getMarkSeed, markVoids } from './identityMark';
 import { applyStemFit } from './stemFit';
 import { BODY_DIMS, buildKeyBody, wellSize, type KeyBodyDims, type KeyCell } from './keyBody';
+import { BLOCK_KEYCAPS, capSeat, clampCapLower, isBlockKeycap, MIN_CAP_PROUD_MM, MX_SEAT, type SwitchSeat } from './blockKeycaps';
+
+export { MIN_CAP_PROUD_MM };
 
 type Wasm = any;
 type Solid = any;
@@ -32,8 +36,16 @@ export interface KeycapAsset {
     center: [number, number];
     topExtent?: [number, number];
     bbox: { min: number[]; max: number[] };
+    /* The stem, as the shelf's Keycap trim reads it: its height is the socket the switch's
+       cross goes into, unless `socketDepthMM` says otherwise. */
+    hasStem?: boolean;
+    stemBbox?: { min: number[]; max: number[] };
+    socketDepthMM?: number;
   };
 }
+
+/** The keycaps a build can pick from, by profile. A single cap is the Standard one. */
+export type KeycapSet = Partial<Record<BlockKeycap, KeycapAsset>>;
 
 function meshToSolid(wasm: Wasm, positions: ArrayLike<number>, indices: ArrayLike<number>): Solid {
   const mesh = new wasm.Mesh({
@@ -66,10 +78,6 @@ function ringArea(ring: Ring): number {
   }
   return Math.abs(a / 2);
 }
-
-/** The keycap always stands at least this far above the rim at rest: the 2 mm an MX switch
- *  travels before it clicks, so a key clicks without the finger going into the well. */
-export const MIN_CAP_PROUD_MM = 2;
 
 /** The switch opening the CAD shells had, mm square. The socket asset's is 13.86 × 13.84. */
 export const BLOCK_POCKET_MM = 13.93;
@@ -104,26 +112,55 @@ export function blockPocket(
   return track(grown.add(riser));
 }
 
-/** Build the keycap shell (+ stem) once, centred on the switch axis. */
-function buildCapBlank(wasm: Wasm, keycap: KeycapAsset, stemFitMm: number, warnings: string[]): Solid {
-  const shell = meshToSolid(wasm, keycap.shell.positions, keycap.shell.indices);
+/**
+ * Build the keycap shell (+ stem) once, centred on the switch axis and `lowerMm` shorter. Every
+ * solid it makes goes to `track`, the cap included.
+ *
+ * Shorter is the shelf's Keycap trim: the walls and the stem each lose `lowerMm` at the bottom and
+ * come down by it, so their bottoms stay where they were and only the top drops.
+ */
+function buildCapBlank(
+  wasm: Wasm,
+  keycap: KeycapAsset,
+  stemFitMm: number,
+  lowerMm: number,
+  warnings: string[],
+  track: <T extends { delete(): void }>(o: T) => T,
+): Solid {
   const [ccx, ccy] = keycap.meta.center;
-  const centredShell = shell.translate([-ccx, -ccy, 0]);
-  shell.delete();
-  if (!keycap.stem) return centredShell;
+  const part = (mesh: { positions: number[]; indices: number[] }): Solid => {
+    const centred = track(track(meshToSolid(wasm, mesh.positions, mesh.indices)).translate([-ccx, -ccy, 0]));
+    return lowerMm > 0 ? track(cutFromBelow(centred, centred.boundingBox().min[2] + lowerMm, lowerMm)) : centred;
+  };
+  const shell = part(keycap.shell);
+  if (!keycap.stem) return shell;
 
-  const stemRaw = meshToSolid(wasm, keycap.stem.positions, keycap.stem.indices);
-  const authored = stemRaw.translate([-ccx, -ccy, 0]);
-  stemRaw.delete();
   // The same exact offset of the cross hole as the flat clicker cap (stemFit.ts). The outer
   // post and Z are untouched, so the cap's rest height never moves.
-  const fit = applyStemFit(wasm, authored, stemFitMm);
-  authored.delete();
+  const fit = applyStemFit(wasm, part(keycap.stem), stemFitMm);
+  track(fit.solid);
   if (!fit.applied) warnings.push('Switch stem fit could not be applied. The stem prints as designed.');
-  const cap = centredShell.add(fit.solid);
-  centredShell.delete();
-  fit.solid.delete();
-  return cap;
+  return track(shell.add(fit.solid));
+}
+
+/** A cap's metadata once it is cut `lowerMm` shorter: its top comes down by that. */
+function shortened(meta: KeycapAsset['meta'], lowerMm: number): KeycapAsset['meta'] {
+  if (!(lowerMm > 0)) return meta;
+  const [x, y, z] = meta.bbox.max;
+  return {
+    ...meta,
+    topZ: meta.topZ - lowerMm,
+    dishBottomZ: (meta.dishBottomZ ?? meta.topZ - 2) - lowerMm,
+    bbox: { min: meta.bbox.min, max: [x, y, z - lowerMm] },
+  };
+}
+
+/** How far the switch's cross can go into the cap's stem as drawn: its socket, which runs the
+ *  stem's height unless the cap says otherwise. A cap that does not describe its stem keeps the
+ *  app's seat. */
+function socketOf(meta: KeycapAsset['meta']): number {
+  const sb = meta.stemBbox;
+  return meta.socketDepthMM ?? (sb ? sb.max[2] - sb.min[2] : Infinity);
 }
 
 /** Copy a mesh out of a solid, shifted in XY (cheap instancing for repeated caps). */
@@ -162,12 +199,17 @@ function capFootprint(keycap: KeycapAsset): number {
   return Number.isFinite(w) && w > 10 ? w : BODY_DIMS.cap;
 }
 
+/**
+ * `keycaps` is the caps by profile, or one cap, the Standard one. `sw` is where the switch holds a
+ * cap, as the worker measured it off the switch mesh.
+ */
 export function buildBlocks(
   wasm: Wasm,
   socket: Solid,
-  keycap: KeycapAsset,
+  keycaps: KeycapAsset | KeycapSet,
   regions: BuildRegion[],
   params: BuildParams,
+  sw: SwitchSeat = MX_SEAT,
 ): { parts: ClickerPart[]; switchPlacements: SwitchPlacement[]; warnings: string[] } {
   const { Manifold, CrossSection } = wasm;
   const trash: { delete(): void }[] = [];
@@ -202,17 +244,27 @@ export function buildBlocks(
     }
     const N = filled.length;
 
+    // ---------- The keycap ----------
+    // Which cap, and how much shorter: a cut the cap cannot take is held to what it can
+    // (blockKeycaps.ts). From here on `meta` is the cap as it is built.
+    const profile: BlockKeycap = isBlockKeycap(params.blockKeycap) ? params.blockKeycap : 'standard';
+    const keycap = 'shell' in keycaps ? (profile === 'standard' ? keycaps : undefined) : keycaps[profile];
+    if (!keycap) throw new Error(`The ${profile} keycap is not loaded.`);
+    const lowerMm = clampCapLower(keycap.meta, params.blockCapLowerMm);
+    const meta = shortened(keycap.meta, lowerMm);
+
     // ---------- The body ----------
     // Seat the cap AT REST on the switch stem: one full switch travel above the well floor.
     // The cap is carried by the stem, so if it rested on the floor the switch could never be
     // pressed. That leaves the cross fully engaged in the cap's stem tube, stopping `travel`
     // short of bottoming out on the tube's ceiling — which is exactly how far a keycap is
-    // pushed onto a real MX switch.
-    const capLift = BODY_DIMS.floorZ + Math.max(0, params.travel ?? 4);
+    // pushed onto a real MX switch. A cap whose tube is too short for that sits where the
+    // switch really holds it instead (`capSeat`).
+    const capLift = BODY_DIMS.floorZ + capSeat(socketOf(keycap.meta), params.travel ?? 4, sw);
     // The rim, raised by Body rim height to hide more of each keycap, but never past the
     // point where the cap stops standing MIN_CAP_PROUD_MM above it.
     const raise = Math.max(0, params.blockRimRaiseMm ?? 0);
-    const rimMax = Math.max(BODY_DIMS.rimZ, keycap.meta.topZ + capLift - MIN_CAP_PROUD_MM);
+    const rimMax = Math.max(BODY_DIMS.rimZ, meta.topZ + capLift - MIN_CAP_PROUD_MM);
     if (BODY_DIMS.rimZ + raise > rimMax + 0.01) {
       warnings.push(`The rim stops ${MIN_CAP_PROUD_MM} mm below the top of the keycaps, so they can still be pressed.`);
     }
@@ -429,14 +481,16 @@ export function buildBlocks(
     for (const [x, y] of centres) switchPlacements.push({ x, y, rotation: 0, z: dims.floorZ });
 
     // ---------- Keycaps + debossed letters ----------
-    const capBlank = track(buildCapBlank(wasm, keycap, params.stemFitMm ?? 0, warnings));
+    // Stem fit is the user's grip, the same on every profile: the profile's own offset makes it so.
+    const stemFitMm = (params.stemFitMm ?? 0) + BLOCK_KEYCAPS[profile].stemFitMm;
+    const capBlank = buildCapBlank(wasm, keycap, stemFitMm, lowerMm, warnings, track);
     const cap = capLift > 0.001 ? track(capBlank.translate([0, 0, capLift])) : capBlank;
 
-    const topZ = keycap.meta.topZ + capLift;
-    const dishBottomZ = (keycap.meta.dishBottomZ ?? keycap.meta.topZ - 2) + capLift;
+    const topZ = meta.topZ + capLift;
+    const dishBottomZ = (meta.dishBottomZ ?? meta.topZ - 2) + capLift;
     // Legend size: one scale for the whole word (so "i" isn't blown up to "W" size),
     // driven by the tallest/widest glyph and capped to the cap's flat top.
-    const capTop = keycap.meta.topExtent?.[0] ?? 15.2;
+    const capTop = meta.topExtent?.[0] ?? 15.2;
     const maxLegend = Math.max(6, capTop - 4.2); // keep the legend off the cap's shoulders
     let tallest = 0;
     let widest = 0;

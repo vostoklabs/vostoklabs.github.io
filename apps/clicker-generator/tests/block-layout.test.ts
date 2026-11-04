@@ -16,10 +16,11 @@
       && node apps/clicker-generator/.block-layout-test.mjs
 */
 import {
-  arrangeBlocks, arrangementOf, blockBuildParams, changeLayout, gridFor, keysPerRow, lineSymbols, loadedBlocks,
+  arrangeBlocks, arrangementOf, blockBuildParams, changeLayout, clampBlockCap, gridFor, keysPerRow, lineSymbols, loadedBlocks,
   loadedSymbols, pruneSymbols,
   presetText, resizeCells, RIM_RAISE_MAX_MM, toggleKey, type BlockState,
 } from '../src/geometry/blockLayout.ts';
+import { CAP_LOWER_MAX_MM, capLowerMax, rimRaiseMax } from '../src/geometry/blockKeycaps.ts';
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail: string) => {
@@ -113,12 +114,17 @@ const state = (over: Partial<BlockState>): BlockState => ({
 
 // --- the build's view ---------------------------------------------------------------------------
 {
-  const s = { ...state({ blockLayout: 'wasd', blockLines: ['W', 'ASD'] }), blockStyle: 'open' as const, blockTexture: 'knurl' as const, blockRimRaiseMm: 2.4 };
+  const s = {
+    ...state({ blockLayout: 'wasd', blockLines: ['W', 'ASD'] }), blockStyle: 'open' as const, blockTexture: 'knurl' as const, blockRimRaiseMm: 2.4,
+    blockKeycap: 'standard' as const, blockCapLowerMm: 1.5,
+  };
   const p = blockBuildParams(s);
-  check('the build gets the grid, its width and where the keys are',
+  check('the build gets the grid, its width, where the keys are and which keycap',
     p.blockOrientation === 'grid' && p.blockColumns === 3 && p.blockKeys.length === 6 && p.blockStyle === 'open' && p.blockTexture === 'knurl'
-      && p.blockRimRaiseMm === 2.4,
+      && p.blockRimRaiseMm === 2.4 && p.blockKeycap === 'standard' && p.blockCapLowerMm === 1.5,
     JSON.stringify(p));
+  const thocky = blockBuildParams({ ...s, blockKeycap: 'thocky', blockCapLowerMm: 0 });
+  check('…Thocky too', thocky.blockKeycap === 'thocky' && thocky.blockCapLowerMm === 0, JSON.stringify(thocky));
   const a = arrangeBlocks('grid', 2, 2, null, ['AB', 'CD'], {});
   check('slots, keys and characters stay the same length', a.slots.length === 4 && a.keys.length === 4 && a.chars.length === 4, `${a.slots.length}/${a.keys.length}/${a.chars.length}`);
 }
@@ -149,6 +155,50 @@ const state = (over: Partial<BlockState>): BlockState => ({
     loadedBlocks({ blockRimRaiseMm: 40 }).blockRimRaiseMm === RIM_RAISE_MAX_MM && loadedBlocks({ blockRimRaiseMm: -3 }).blockRimRaiseMm === 0,
     `${loadedBlocks({ blockRimRaiseMm: 40 }).blockRimRaiseMm}`);
   check('a project from before blocks were saved sets nothing', Object.keys(loadedBlocks({ importMode: 'image' })).length === 0, '{}');
+  const rimOnly = loadedBlocks({ blockStyle: 'walls', blockRimRaiseMm: 2.4 });
+  check('…and one from before the keycap could be picked sets no keycap and no cut', !('blockKeycap' in rimOnly) && !('blockCapLowerMm' in rimOnly)
+    && rimOnly.blockRimRaiseMm === 2.4, JSON.stringify(rimOnly));
+}
+
+// --- the keycap, its height and the rim ---------------------------------------------------------
+{
+  check('Standard can be cut 4.5 mm shorter; Low profile and Thocky cannot be cut at all',
+    capLowerMax('standard') === CAP_LOWER_MAX_MM && capLowerMax('low') === 0 && capLowerMax('thocky') === 0,
+    `${capLowerMax('standard')}, ${capLowerMax('low')}, ${capLowerMax('thocky')}`);
+  const max = { standard: rimRaiseMax('standard'), cut: rimRaiseMax('standard', CAP_LOWER_MAX_MM), low: rimRaiseMax('low'), thocky: rimRaiseMax('thocky') };
+  check('the rim rises as far as each cap allows: 6, 1.6 on the shortest Standard, 2.3 on Low profile, 5.7 on Thocky',
+    max.standard === RIM_RAISE_MAX_MM && max.cut === 1.6 && max.low === 2.3 && max.thocky === 5.7, JSON.stringify(max));
+
+  const saved = loadedBlocks({ blockKeycap: 'thocky', blockCapLowerMm: 0, blockRimRaiseMm: 2.4 });
+  check('a saved keycap reads back', saved.blockKeycap === 'thocky' && saved.blockCapLowerMm === 0 && saved.blockRimRaiseMm === 2.4, JSON.stringify(saved));
+  const unknown = loadedBlocks({ blockKeycap: 'sa-profile', blockCapLowerMm: 2, blockRimRaiseMm: 2.4 });
+  check('a keycap this build does not have is left out, so the cap is Standard and its cut stands',
+    !('blockKeycap' in unknown) && unknown.blockCapLowerMm === 2 && unknown.blockRimRaiseMm === 2.4, JSON.stringify(unknown));
+  const proto = loadedBlocks({ blockKeycap: 'toString' });
+  check('…a name every object answers to included', !('blockKeycap' in proto), JSON.stringify(proto));
+  const lowCut = loadedBlocks({ blockKeycap: 'low', blockCapLowerMm: 3 });
+  check('a cut on a cap that cannot be cut loads as none', lowCut.blockKeycap === 'low' && lowCut.blockCapLowerMm === 0, JSON.stringify(lowCut));
+  const deep = loadedBlocks({ blockCapLowerMm: 9, blockRimRaiseMm: -2 });
+  check('a cut past the limit loads at it, and a rim below the body at the body',
+    deep.blockCapLowerMm === CAP_LOWER_MAX_MM && deep.blockRimRaiseMm === 0, JSON.stringify(deep));
+  const lowRim = loadedBlocks({ blockKeycap: 'low', blockRimRaiseMm: 5 });
+  const cutRim = loadedBlocks({ blockCapLowerMm: 4.5, blockRimRaiseMm: 5 });
+  check('then the rim is held below the cap it has: Low profile\'s 2.3, the shortest Standard\'s 1.6',
+    lowRim.blockRimRaiseMm === 2.3 && cutRim.blockRimRaiseMm === 1.6, `${lowRim.blockRimRaiseMm}, ${cutRim.blockRimRaiseMm}`);
+  const junk = loadedBlocks({ blockKeycap: 3, blockCapLowerMm: 'short', blockRimRaiseMm: null });
+  check('nothing malformed gets in', Object.keys(junk).length === 0, JSON.stringify(junk));
+
+  // What every control, an undo and a load set through: one rule.
+  const toLow = clampBlockCap({ blockKeycap: 'low', blockCapLowerMm: 3, blockRimRaiseMm: 5 });
+  check('picking Low profile on a cut Standard with a high rim: no cut, and the rim comes down to 2.3',
+    toLow.blockKeycap === 'low' && toLow.blockCapLowerMm === 0 && toLow.blockRimRaiseMm === 2.3, JSON.stringify(toLow));
+  const shorter = clampBlockCap({ blockKeycap: 'standard', blockCapLowerMm: 4.5, blockRimRaiseMm: 6 });
+  check('cutting Standard shorter brings a high rim down with it', shorter.blockCapLowerMm === 4.5 && shorter.blockRimRaiseMm === 1.6, JSON.stringify(shorter));
+  const back = clampBlockCap({ blockKeycap: 'standard', blockCapLowerMm: 0, blockRimRaiseMm: 6 });
+  check('…and back at full height the rim goes all the way up again', back.blockRimRaiseMm === RIM_RAISE_MAX_MM, JSON.stringify(back));
+  const nothing = clampBlockCap({});
+  check('no fields at all: Standard as drawn, the standard body', nothing.blockKeycap === 'standard' && nothing.blockCapLowerMm === 0 && nothing.blockRimRaiseMm === 0,
+    JSON.stringify(nothing));
 }
 
 // --- symbols in the text: what the lines still hold, and what a project brings back ----------------

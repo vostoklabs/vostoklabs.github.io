@@ -38,58 +38,13 @@
  * No DOM. Takes the initialised Manifold module like stemClearance.js, so a node test runs it.
  */
 import * as THREE from 'three';
+import { capTrimLimits, clampCapTrim, cutFromBelow } from '@vostok/keycaps';
 import { weldPositions } from './meshUtils.js';
 import { buildShapeCap } from './shapes/index.js';
 
-/** The switch's cross plus a margin, in mm: a socket shallower than this would rest on the cross.
- *  Cherry MX's cross stands about 3.6 mm above the slider's shoulder. */
-export const MIN_SOCKET_MM = 4.0;
-/** How far the stem alone may be recessed above the rim. */
-export const MAX_RECESS_MM = 3.0;
-/** How far it may be recessed before the rim can touch the switch at full travel, for a cap that
- *  does not say (`meta.safeRecessMM`): the MX profiles' 15.67 mm skirt over the 15.6 mm flange. */
-export const SAFE_RECESS_MM = 1.1;
-/** Below this a trim range is not worth a control. */
-const MIN_RANGE_MM = 0.5;
-
-/**
- * How far this cap can be lowered and its stem recessed.
- *
- * Only a female socket counts (the MX stems). Choc's male stubs go INTO the switch, which is a
- * different thing to shorten, so a profile with stubs says so and gets no control.
- *
- * @param {object} meta  the cap's metadata (`stemBbox`, `hasStem`)
- * @param {{ stubs?: boolean }} [kind]  `stubs`: the stems are male stubs (Choc v1)
- * @returns {{ maxLower: number, maxRecess: number, safeRecess: number }} 0 means "no control";
- *          `safeRecess`: past it the rim may touch the switch when pressed (a warning, not a limit)
- */
-export function capTrimLimits(meta, { stubs = false } = {}) {
-  const sb = meta?.stemBbox;
-  if (!meta?.hasStem || !sb) return { maxLower: 0, maxRecess: 0, safeRecess: 0, minWall: 0 };
-  // The walls can come up as far as the ceiling, the stem's top, wherever the stem is a socket
-  // or a stub: the top plate is what is left.
-  const ceilingZ = sb.min[2] + (meta.socketDepthMM ?? sb.max[2] - sb.min[2]);
-  const minWall = Math.ceil(Math.max(0, meta.topZ - Math.min(ceilingZ, sb.max[2])) * 10) / 10;
-  if (stubs) return { maxLower: 0, maxRecess: 0, safeRecess: 0, minWall };
-  // The socket is a through-hole up the stem to the ceiling, so its depth is the stem's height;
-  // a generated cap whose stems run on into the top plate says its own (shapes/).
-  const room = (meta.socketDepthMM ?? sb.max[2] - sb.min[2]) - MIN_SOCKET_MM;
-  const maxLower = room >= MIN_RANGE_MM ? Math.floor(room * 10) / 10 : 0;
-  const maxRecess = maxLower ? Math.min(MAX_RECESS_MM, maxLower) : 0;
-  const safeRecess = Math.min(maxRecess, meta.safeRecessMM ?? SAFE_RECESS_MM);
-  return { maxLower, maxRecess, safeRecess, minWall };
-}
-
-/** Clamp the settings to a cap's limits: lower and recess together may not use more than the
- *  socket, and a wall is no shorter than the top plate (`top`: the cap's height after lowering;
- *  a wall that reaches it is no cut, null). */
-export function clampCapTrim({ lowerMM = 0, recessMM = 0, wallMM = null }, limits, top = Infinity) {
-  const lower = Math.min(Math.max(0, lowerMM), limits.maxLower);
-  const recess = Math.min(Math.max(0, recessMM), limits.maxRecess, Math.max(0, limits.maxLower - lower));
-  const full = top - lower;
-  const wall = wallMM == null || !limits.minWall || wallMM >= full - 0.05 ? null : Math.max(limits.minWall, wallMM);
-  return { lowerMM: lower, recessMM: recess, wallMM: wall };
-}
+// The limits, the clamp and the cut are the shelf's ("Keycap trim", @vostok/keycaps), shared with
+// the clicker's letter blocks; re-exported so the rest of the app keeps importing them from here.
+export { MIN_SOCKET_MM, MAX_RECESS_MM, SAFE_RECESS_MM, capTrimLimits, clampCapTrim } from '@vostok/keycaps';
 
 /** A loaded shell keeps the STEP tessellation's split vertices, so it is welded first, as the
  *  carve does (manifold.js `geomToManifold`). */
@@ -118,13 +73,12 @@ function toGeometry(man) {
   return g;
 }
 
-/** Keep what is above `cutZ`, then move it down by `dropZ`. Frees what it makes. */
-function cutFromBelow(api, geom, cutZ, dropZ) {
+/** Keep what is above `cutZ`, then move it down by `dropZ`, on a geometry. Frees what it makes. */
+function cutGeometryFromBelow(api, geom, cutZ, dropZ) {
   const whole = toManifold(api, geom);
-  const kept = whole.trimByPlane([0, 0, 1], cutZ);
-  const moved = kept.translate([0, 0, -dropZ]);
+  const moved = cutFromBelow(whole, cutZ, dropZ);
   const out = toGeometry(moved);
-  whole.delete(); kept.delete(); moved.delete();
+  whole.delete(); moved.delete();
   return out;
 }
 
@@ -155,8 +109,8 @@ export function trimCap(api, cap, settings, kind) {
   }
   const rimZ = cap.meta.bbox.min[2];
   const stemZ = cap.meta.stemBbox.min[2];
-  let shellGeometry = lowerMM ? cutFromBelow(api, cap.shellGeometry, rimZ + lowerMM, lowerMM) : cap.shellGeometry.clone();
-  const stemGeometry = cap.stemGeometry ? cutFromBelow(api, cap.stemGeometry, stemZ + lowerMM + recessMM, lowerMM) : null;
+  let shellGeometry = lowerMM ? cutGeometryFromBelow(api, cap.shellGeometry, rimZ + lowerMM, lowerMM) : cap.shellGeometry.clone();
+  const stemGeometry = cap.stemGeometry ? cutGeometryFromBelow(api, cap.stemGeometry, stemZ + lowerMM + recessMM, lowerMM) : null;
 
   const m = cap.meta;
   const down = (v) => [v[0], v[1], v[2] - lowerMM];
@@ -165,7 +119,7 @@ export function trimCap(api, cap, settings, kind) {
   // Short walls: the shell alone, cut where the walls now end. The stem is not touched.
   if (wallMM != null) {
     const cutZ = topZ - wallMM;
-    const cut = cutFromBelow(api, shellGeometry, cutZ, 0);
+    const cut = cutGeometryFromBelow(api, shellGeometry, cutZ, 0);
     shellGeometry.dispose();
     shellGeometry = cut;
     bboxMin = [m.bbox.min[0], m.bbox.min[1], cutZ];

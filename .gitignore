@@ -49,6 +49,7 @@ apps/*/
 packages/*/
 !packages/export/
 !packages/fonts/
+!packages/keycaps/
 !packages/laser/
 !packages/manifold/
 !packages/manifold-noeval/
@@ -126,6 +127,8 @@ apps/foldbox/tests/*
 !packages/patterns/tests/**
 !packages/shapes/tests/
 !packages/shapes/tests/**
+!packages/keycaps/tests/
+!packages/keycaps/tests/**
 !packages/laser/tests/
 !packages/laser/tests/**
 packages/laser/tests/silhouettes.test.mjs

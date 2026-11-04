@@ -226,6 +226,12 @@ export interface BuildParams {
   /** How far the block body's rim is raised above the standard body, mm, hiding more of each
    *  keycap. Absent = 0, the standard body. */
   blockRimRaiseMm?: number;
+  /** Which keycap every key wears (geometry/blockKeycaps.ts). Absent = 'standard', the cap every
+   *  block set had before there was a choice. */
+  blockKeycap?: BlockKeycap;
+  /** How far the keycap is cut shorter from below, mm: its top comes down by this and its seat on
+   *  the switch stays. Absent = 0, the cap as drawn. */
+  blockCapLowerMm?: number;
   /** Columns per row when the layout is 'grid'. */
   blockColumns?: number;
   /** Which cells hold a key, one per region in reading order. A key can have nothing printed
@@ -286,6 +292,8 @@ export type BlockOrientation = 'horizontal' | 'vertical' | 'grid';
 export type BlockStyle = 'walls' | 'open';
 /** Letter blocks: what the outside of the body looks like. */
 export type BlockTexture = 'smooth' | 'knurl' | 'ribs' | 'flutes' | 'dots' | 'chevron';
+/** Letter blocks: the keycap on every key, one of the Keycap generator's three MX 1u caps. */
+export type BlockKeycap = 'standard' | 'low' | 'thocky';
 
 /** Mesh payload (transferable). First 3 of each `numProp` stride are x,y,z. */
 export interface MeshData {
@@ -374,7 +382,8 @@ export type GeometryRequest =
       socket: ArrayBuffer; 
       stem: ArrayBuffer; 
       switch: ArrayBuffer;
-      keycapJson?: any;
+      /** Letter blocks' keycaps, each file as it was read, by profile. */
+      keycaps?: Partial<Record<BlockKeycap, unknown>>;
     }
   | {
       type: 'buildClicker';

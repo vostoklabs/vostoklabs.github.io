@@ -5,7 +5,8 @@ import wasmUrl from 'manifold-3d/manifold.wasm?url';
 import { readModel } from '@vostok/export/read';
 import { buildFitStrip } from '../geometry/fitStrip';
 import { buildClicker } from '../geometry/buildClicker';
-import { buildBlocks, type KeycapAsset } from '../geometry/buildBlocks';
+import { buildBlocks, type KeycapAsset, type KeycapSet } from '../geometry/buildBlocks';
+import { BLOCK_KEYCAP_IDS, MX_SEAT, type SwitchSeat } from '../geometry/blockKeycaps';
 import { prepareModel } from '../model/prepare';
 import { FALLBACK_POST_SEAT, makeSwitchKit, measurePostSeat, measureSwitchBands, seatPost, type EnvelopeBand } from '../model/switchKit';
 import { buildModelClicker } from '../model/buildModel';
@@ -16,8 +17,10 @@ type Wasm = Awaited<ReturnType<typeof Module>>;
 let modulePromise: Promise<Wasm> | null = null;
 let socket: any = null; // cached MX socket (negative), in mm
 let stem: any = null; // cached MX stem (positive), in mm
-// Letter blocks: the keycap. Their bodies are generated per build (geometry/keyBody.ts).
-let keycapAsset: KeycapAsset | null = null;
+// Letter blocks: the keycaps, by profile, and where the switch holds one, measured off the switch
+// mesh. Their bodies are generated per build (geometry/keyBody.ts).
+let keycapAssets: KeycapSet = {};
+let blockSeat: SwitchSeat = MX_SEAT;
 // Model mode: the switch's outer envelope, measured off the display mesh at init, and the
 // uploaded model as one prepared solid — cached, so a rebuild never re-sends or re-repairs it.
 let switchBands: EnvelopeBand[] = [];
@@ -59,9 +62,9 @@ function assetToSolid(wasm: any, buf: ArrayBuffer): { solid: any; info: string; 
   return { solid, info, xy: Math.max(size[0], size[1]) };
 }
 
-/** keycap.json (shared with the keycap generator): shell mesh at the top level, the MX
- *  stem as its own body, and metadata describing the dish. Authored in the same Z frame
- *  as the MX assets, so no re-anchoring is needed. */
+/** A keycap file (the keycap generator's own): shell mesh at the top level, the MX stem as its
+ *  own body, and metadata describing its top and its stem. Authored in the same Z frame as the
+ *  MX assets, so no re-anchoring is needed. */
 function toKeycapAsset(json: any): KeycapAsset | null {
   if (!json?.positions || !json?.indices || !json?.meta) return null;
   return {
@@ -101,7 +104,11 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       a.solid.delete();
       b.solid.delete();
 
-      if (msg.keycapJson) keycapAsset = toKeycapAsset(msg.keycapJson);
+      keycapAssets = {};
+      for (const id of BLOCK_KEYCAP_IDS) {
+        const asset = toKeycapAsset(msg.keycaps?.[id]);
+        if (asset) keycapAssets[id] = asset;
+      }
 
       // The switch is DISPLAY-ONLY (a preview toggle) — no CSG. Parse it raw and place
       // it in the assembly frame:
@@ -136,7 +143,11 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       // Measured here, before the buffers are handed to the main thread below.
       switchBands = measureSwitchBands(v, sw.indices);
       modelStem?.delete?.();
-      modelStem = seatPost(stem, measurePostSeat(v, sw.indices) ?? FALLBACK_POST_SEAT);
+      const slider = measurePostSeat(v, sw.indices) ?? FALLBACK_POST_SEAT;
+      modelStem = seatPost(stem, slider);
+      // A letter block's cap stands on the same slider, or on the cross: its tip is the top of the
+      // seated mesh.
+      blockSeat = { slider, tip: Number.isFinite(zmax) ? zmax : MX_SEAT.tip };
       const switchMesh = { vertProperties: v, triVerts: sw.indices, numProp: 3 as const };
       const switchInfo = `${(sw.indices.length / 3) | 0} tris, seated +${(-seatZ).toFixed(
         2,
@@ -179,13 +190,14 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
     }
 
     if (msg.type === 'buildBlocks') {
-      if (!socket || !keycapAsset) throw new Error('Block assets not initialized');
+      if (!socket || !keycapAssets.standard) throw new Error('Block assets not initialized');
       const { parts, switchPlacements, warnings } = buildBlocks(
         wasm,
         socket,
-        keycapAsset,
+        keycapAssets,
         msg.regions,
         msg.params,
+        blockSeat,
       );
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);

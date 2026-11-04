@@ -45,6 +45,7 @@ const LAYERS = [
   ['packages/patterns/src/ui/', 'ui'], // the pattern picker
   ['packages/patterns/', 'core'],
   ['packages/shapes/', 'core'], // shape maths: rings and islands in mm
+  ['packages/keycaps/', 'core'], // how far a keycap can be cut shorter, and the cut
   ['packages/fonts/', 'core'],
   ['packages/manifold/', 'core'],
   ['packages/manifold-noeval/', 'core'],

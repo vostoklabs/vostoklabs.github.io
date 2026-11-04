@@ -43,7 +43,7 @@ import {
   iconButton,
 } from '@vostok/ui-kit';
 import { MAKERLAB, SELLER_PACK, isUnlocked } from 'virtual:makerlab';
-import type { BaseShapeKind, BlockStyle, BlockTexture, KeychainSide, EdgeSetting, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB, Ring } from '../types';
+import type { BaseShapeKind, BlockKeycap, BlockStyle, BlockTexture, KeychainSide, EdgeSetting, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB, Ring } from '../types';
 import { FILAMENTS } from '../types';
 import type { SectionAxis } from '../viewer/viewer';
 import { SAMPLES } from '../image/sample';
@@ -61,6 +61,7 @@ import { DESIGN_SCALE_MAX, DESIGN_SCALE_MIN, TEXT_SCALE_MIN } from '../geometry/
 import type { ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
 import { modelFormatOf } from '@vostok/export/read';
 import { arrangeBlocks, GRID_MAX, isLineLayout, keysPerRow, RIM_RAISE_MAX_MM, type BlockArrangement, type BlockLayout, type BlockSymbol } from '../geometry/blockLayout';
+import { BLOCK_KEYCAPS, capLowerMax, CAP_LOWER_MAX_MM, rimRaiseMax } from '../geometry/blockKeycaps';
 import { BODY_HEIGHT_MM } from '../geometry/keyBody';
 import { assetUrl } from '../assets';
 import { lookOf, lookRings } from '../image/symbolRings';
@@ -73,7 +74,7 @@ import { capColourOf, isBlank } from '../frame';
 import type { MappedColour } from './wizard';
 
 /** The left panel's categories, in rail order. Which ones a mode shows: `RAIL_FOR_MODE`. */
-type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'body' | 'colors' | 'relief' | 'switch' | 'keychain' | 'fit' | 'seller';
+type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'keycap' | 'body' | 'colors' | 'relief' | 'switch' | 'keychain' | 'fit' | 'seller';
 
 /** The licence and the seller tools: a category of their own, set apart at the end of the rail
  *  in every mode. Only the MakerWorld build has anything to put in it. */
@@ -89,7 +90,7 @@ const RAIL_FOR_MODE: Record<UiState['importMode'], { show: RailId[]; first: Rail
   svg: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
   icon: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
   text: { show: ['shape', 'font', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
-  blocks: { show: ['layout', 'font', 'lettering', 'body', 'colors', 'keychain', 'fit', ...SELLER], first: 'layout' },
+  blocks: { show: ['layout', 'font', 'lettering', 'keycap', 'body', 'colors', 'keychain', 'fit', ...SELLER], first: 'layout' },
   model: { show: ['cut', 'model', 'colors', 'fit', ...SELLER], first: 'cut' },
 };
 
@@ -309,6 +310,10 @@ export interface UiState {
   blockTexture: BlockTexture;
   /** How far the block body's rim is raised above the standard body, mm. */
   blockRimRaiseMm: number;
+  /** The keycap on every key. */
+  blockKeycap: BlockKeycap;
+  /** How far that keycap is cut shorter, mm (Keycap height reads the height that leaves). */
+  blockCapLowerMm: number;
   /** Legend size multiplier on the keycap (1 = default fit). */
   legendScale: number;
   /** Legend outline offset in mm — "boldness". */
@@ -503,6 +508,10 @@ export interface UiCallbacks {
   onBlockStyle(style: BlockStyle): void;
   onBlockTexture(texture: BlockTexture): void;
   onBlockRimRaise(mm: number): void;
+  /** The keycap profile every key wears. */
+  onBlockKeycap(profile: BlockKeycap): void;
+  /** How far the keycap is cut shorter, mm. */
+  onBlockCapLower(mm: number): void;
   onLegendScale(v: number): void;
   onLegendBold(mm: number): void;
   /** Keycap colour (shared by every cap in the chain). */
@@ -694,6 +703,10 @@ export function createUi(
       <div class="prow-stacked" id="wordMoveYRow"><div id="wordMoveYMount"></div></div>
       <div class="prow-stacked" id="wordTurnRow"><div id="wordTurnMount"></div></div>
     </div>
+    <div data-rail="keycap">
+      <div id="blockKeycapMount"></div>
+      <div class="prow-stacked" id="blockCapHeightRow"><div id="blockCapHeightMount"></div></div>
+    </div>
     <div data-rail="body">
       <div id="blockTextureMount"></div>
       <div class="prow-stacked" id="blockRimRow"><div id="blockRimMount"></div></div>
@@ -778,6 +791,9 @@ export function createUi(
     { id: 'model', label: 'Model', icon: ICONS.box },
     { id: 'font', label: 'Font', icon: ICONS.text, fill: true },
     { id: 'lettering', label: 'Lettering', icon: ICONS.sliders },
+    // No heading: the first row is "Keycap", with its help, as Layout's is. The icon is a keycap
+    // seen from above, its skirt round its top.
+    { id: 'keycap', label: 'Keycap', icon: ICONS.frame, title: '' },
     { id: 'body', label: 'Body', icon: ICONS.pattern },
     { id: 'colors', label: 'Colors', icon: ICONS.droplet },
     { id: 'relief', label: 'Relief', icon: ICONS.mountain },
@@ -912,7 +928,7 @@ export function createUi(
           <div id="blockInspectorMount"></div>
         </div>
         ${MAKERLAB ? '' : `<p class="hint-text" id="blocksKeycapLink" hidden>
-          Want more keycap options, like profiles, sizes, or your own SVG or photo on the
+          Want more keycap options, like wider keys, or your own SVG or photo on the
           cap? Use the <a class="hint-link" href="${BRAND.urls.keycapApp}" target="_blank" rel="noopener">Vostok Labs Keycap Generator</a>.
         </p>`}
 
@@ -1653,6 +1669,41 @@ export function createUi(
     onInput: (v) => cb.onBlockRimRaise(v),
   });
   $('blockRimMount').append(blockRimRow);
+
+  /* Keycap: which of the Keycap generator's three MX caps every key wears, each drawn from the
+     side at its own height, and how tall the cap stands. The store keeps how far the cap is cut
+     shorter, 0 = as drawn; the row reads the height that leaves, and is there only for a cap that
+     can be cut (Standard). */
+  const capSide = (d: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+  const blockKeycapCtl = segmentedControl<BlockKeycap>({
+    label: 'Keycap',
+    help: 'The keycap on every key.',
+    variant: 'cards',
+    stacked: true,
+    columns: 3,
+    options: [
+      { value: 'standard', label: 'Standard', icon: capSide('M4 19 6.4 8.5h11.2L20 19z') },
+      { value: 'low', label: 'Low profile', icon: capSide('M4 19 5.8 14.4h12.4L20 19z') },
+      { value: 'thocky', label: 'Thocky', icon: capSide('M4 19c.6-5 1.6-8 4-8h8c2.4 0 3.4 3 4 8z') },
+    ],
+    value: initial.blockKeycap,
+    onChange: (v) => cb.onBlockKeycap(v),
+  });
+  $('blockKeycapMount').append(blockKeycapCtl);
+
+  /** The cap's top as drawn, mm: what Keycap height reads with nothing cut off. */
+  let capTopMm = BLOCK_KEYCAPS[initial.blockKeycap].topZ;
+  const blockCapHeightRow = sliderRow({
+    label: 'Keycap height',
+    help: 'How tall the keycap stands.',
+    // The track holds minus the cut, so right is taller, as the number says.
+    min: -CAP_LOWER_MAX_MM, max: 0, step: 0.1, value: -initial.blockCapLowerMm,
+    format: (v) => `${(capTopMm + v).toFixed(1)} mm`,
+    parse: (typed) => typed - capTopMm,
+    onInput: (v) => cb.onBlockCapLower(-v),
+  });
+  $('blockCapHeightMount').append(blockCapHeightRow);
 
   /* The right panel: what is printed on the keys. A row or a column is one line of up to 24
      keys; a grid has a line per row of keys, as long as the row. Rebuilt only when the rows
@@ -2943,6 +2994,15 @@ export function createUi(
         blockKeyMap.set(arr.grid.rows, arr.grid.cols, arr.grid.on, keyLegends(state, arr));
       }
       blockBordersToggle.setValue(state.blockStyle !== 'open');
+      // Keycap: the height is there only for a cap that can be cut shorter, and the rim's highest
+      // setting follows the cap as it is.
+      blockKeycapCtl.setValue(state.blockKeycap);
+      const lowerMax = capLowerMax(state.blockKeycap);
+      $('blockCapHeightRow').hidden = lowerMax === 0;
+      capTopMm = BLOCK_KEYCAPS[state.blockKeycap].topZ;
+      if (lowerMax > 0) blockCapHeightRow.setBounds(-lowerMax, 0);
+      blockCapHeightRow.setValue(-state.blockCapLowerMm);
+      blockRimRow.setBounds(0, rimRaiseMax(state.blockKeycap, state.blockCapLowerMm));
       blockRimRow.setValue(state.blockRimRaiseMm);
       renderBlockLines(state, arr);
       legendSizeRow.setValue(state.legendScale);

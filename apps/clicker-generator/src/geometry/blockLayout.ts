@@ -5,16 +5,18 @@
 // grid in reading order — a letter, a symbol, a key with nothing printed on it, or no key at all —
 // plus the grid's width. Pure, so it is tested without a browser (tests/block-layout.test.ts).
 import { isSymbolChar } from '@vostok/ui-kit/symbol-rules';
-import type { BlockOrientation, BlockSlot, BlockStyle, BlockTexture } from '../types';
+import type { BlockKeycap, BlockOrientation, BlockSlot, BlockStyle, BlockTexture } from '../types';
 import { lookOf, lookRings, type SymbolLook } from '../image/symbolRings';
+import { BLOCK_KEYCAPS, clampCapLower, isBlockKeycap, profileMeta, rimRaiseMax, RIM_RAISE_MAX_MM } from './blockKeycaps';
 
 export type BlockLayout = 'row' | 'column' | 'grid' | 'wasd' | 'arrows' | 'custom';
 
 /** The largest grid the Rows and Columns steppers offer. */
 export const GRID_MAX = 6;
 
-/** How far Body rim height can raise the rim above the standard block body, mm. */
-export const RIM_RAISE_MAX_MM = 6;
+/** How far Body rim height can raise the rim above the standard block body, mm (blockKeycaps.ts,
+ *  beside how far each keycap lets it). */
+export { RIM_RAISE_MAX_MM };
 
 /* A symbol stands in the text as one private-use character (plane 15/16), the way the rest of
    the house's symbol fields carry them, so a row of keys is still just a string. Which character
@@ -325,8 +327,10 @@ export function toggleKey(s: BlockState, index: number): Partial<BlockState> {
   };
 }
 
-/** The build's view of the blocks: where the keys are and how the body looks. */
-export function blockBuildParams(s: BlockState & { blockStyle: BlockStyle; blockTexture: BlockTexture; blockRimRaiseMm: number }) {
+/** The build's view of the blocks: where the keys are, how the body looks and which keycap. */
+export function blockBuildParams(s: BlockState & {
+  blockStyle: BlockStyle; blockTexture: BlockTexture; blockRimRaiseMm: number; blockKeycap?: BlockKeycap; blockCapLowerMm?: number;
+}) {
   const a = arrangementOf(s);
   return {
     blockOrientation: a.orientation,
@@ -335,7 +339,30 @@ export function blockBuildParams(s: BlockState & { blockStyle: BlockStyle; block
     blockStyle: s.blockStyle,
     blockTexture: s.blockTexture,
     blockRimRaiseMm: s.blockRimRaiseMm,
+    blockKeycap: s.blockKeycap,
+    blockCapLowerMm: s.blockCapLowerMm,
   };
+}
+
+/** The keycap fields of the app's state, which hold each other in range. */
+export interface BlockCapState {
+  blockKeycap: BlockKeycap;
+  blockCapLowerMm: number;
+  blockRimRaiseMm: number;
+}
+
+/**
+ * The keycap fields held together: a profile that is not one is Standard, the cut stays inside
+ * what that cap can take, and then the rim stays low enough for the cap it now has. A load, an
+ * undo and every control go through this one function, so none of them can leave a rim the
+ * slider cannot reach.
+ */
+export function clampBlockCap(s: { blockKeycap?: unknown; blockCapLowerMm?: unknown; blockRimRaiseMm?: unknown }): BlockCapState {
+  const blockKeycap: BlockKeycap = isBlockKeycap(s.blockKeycap) ? s.blockKeycap : 'standard';
+  const blockCapLowerMm = clampCapLower(profileMeta(BLOCK_KEYCAPS[blockKeycap]), s.blockCapLowerMm);
+  const rim = typeof s.blockRimRaiseMm === 'number' && Number.isFinite(s.blockRimRaiseMm) ? s.blockRimRaiseMm : 0;
+  const blockRimRaiseMm = Math.min(rimRaiseMax(blockKeycap, blockCapLowerMm), Math.max(0, rim));
+  return { blockKeycap, blockCapLowerMm, blockRimRaiseMm };
 }
 
 /** The traced symbols, by character, for `parseBlockChain`: their rings turned and mirrored
@@ -404,6 +431,8 @@ export type LoadedBlocks = Partial<BlockState & {
   blockStyle: BlockStyle;
   blockTexture: BlockTexture;
   blockRimRaiseMm: number;
+  blockKeycap: BlockKeycap;
+  blockCapLowerMm: number;
   legendScale: number;
   legendBold: number;
 }>;
@@ -428,8 +457,14 @@ export function loadedBlocks(set: Record<string, unknown>): LoadedBlocks {
   if (syms) out.blockSymbols = syms;
   if (STYLES.includes(set.blockStyle as BlockStyle)) out.blockStyle = set.blockStyle as BlockStyle;
   if (TEXTURES.includes(set.blockTexture as BlockTexture)) out.blockTexture = set.blockTexture as BlockTexture;
+  // The keycap, its cut and the rim, held to each other: a profile this build does not have is
+  // left out (so Standard), and a cut or a rim past what the cap allows loads at its limit.
   const rim = num(set.blockRimRaiseMm);
-  if (rim !== undefined) out.blockRimRaiseMm = Math.max(0, Math.min(RIM_RAISE_MAX_MM, rim));
+  const lower = num(set.blockCapLowerMm);
+  const cap = clampBlockCap({ blockKeycap: set.blockKeycap, blockCapLowerMm: lower, blockRimRaiseMm: rim });
+  if (isBlockKeycap(set.blockKeycap)) out.blockKeycap = cap.blockKeycap;
+  if (lower !== undefined) out.blockCapLowerMm = cap.blockCapLowerMm;
+  if (rim !== undefined) out.blockRimRaiseMm = cap.blockRimRaiseMm;
   const scale = num(set.legendScale);
   const bold = num(set.legendBold);
   if (scale !== undefined) out.legendScale = Math.max(0.4, Math.min(1.6, scale));

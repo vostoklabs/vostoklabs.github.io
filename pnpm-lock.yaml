@@ -133,6 +133,9 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@vostok/keycaps':
+        specifier: workspace:*
+        version: link:../../packages/keycaps
       '@vostok/manifold':
         specifier: workspace:*
         version: link:../../packages/manifold
@@ -339,6 +342,9 @@ importers:
       '@vostok/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@vostok/keycaps':
+        specifier: workspace:*
+        version: link:../../packages/keycaps
       '@vostok/laser':
         specifier: workspace:*
         version: link:../../packages/laser
@@ -786,6 +792,15 @@ importers:
       subset-font:
         specifier: ^2.7.0
         version: 2.7.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/keycaps:
+    devDependencies:
+      esbuild:
+        specifier: ^0.24.2
+        version: 0.24.2
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
