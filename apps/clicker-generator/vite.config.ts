@@ -85,7 +85,9 @@ function makerlabPlugin(enabled: boolean) {
           'export async function initMakerlab() { return null; }',
           'export const isReady = () => false;',
           'export const can = () => false;',
+          'export const needsUpdate = () => false;',
           'export async function sdkExport() { throw new Error("Not available in this build"); }',
+          'export const isExportCancelled = () => false;',
           'export async function sdkToast() {}',
           // The paid surface, hard-locked. Identical module shape so app code can import it
           // unconditionally, and a public build where every gate answers `false` and every

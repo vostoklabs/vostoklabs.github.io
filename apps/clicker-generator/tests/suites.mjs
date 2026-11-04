@@ -48,6 +48,7 @@ const SUITES = {
   'fit-controls': ['manifold'],
   'font-fallback': ['fonts'],
   'model-cut': ['manifold', 'env'],
+  'obj-plates': [],
   packs: ['manifold', 'xmldom'],
   plating: [],
   quantize: ['env'],

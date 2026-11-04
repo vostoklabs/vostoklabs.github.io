@@ -1,19 +1,23 @@
 declare module 'virtual:makerlab' {
+  import type { HostExportOptions, HostExportResult } from '@vostok/export/makerlab';
+
   export const MAKERLAB: boolean;
   export function isEmbedded(): boolean;
+  /** The handshake: one live SDK per iframe. A later call returns the handshake in flight or
+   *  connected; only a failed or dropped one is replaced, by one fresh attempt per call. */
   export function initMakerlab(hooks?: {
     onDisconnect?: () => void;
   }): Promise<object | null>;
   export function isReady(): boolean;
   export function can(capability: string): boolean;
-  export function sdkExport(options: unknown): Promise<{
-    success: boolean;
-    errorMessage?: string;
-    errorCode?: string;
-  }>;
+  /** True when the handshake failed because the host has outgrown this build's SDK. */
+  export function needsUpdate(): boolean;
+  export function sdkExport(options: HostExportOptions): Promise<HostExportResult>;
+  /** True when MakerLab's own export window ended the export: a choice, not a failure. */
+  export function isExportCancelled(outcome: unknown): boolean;
   export function sdkToast(options: {
     message: string;
-    type?: string;
+    type?: 'success' | 'info' | 'warning' | 'error';
   }): Promise<void>;
 
   // ---- paid features ----

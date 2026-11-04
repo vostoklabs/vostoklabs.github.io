@@ -9,7 +9,9 @@
 //    own, which is why the halves must already be apart in the coordinates handed over.
 //  - One material per colour, numbered as the 3MF numbers its filament slots.
 //  - The provenance mark in the header comment, the same mark the 3MF carries.
-import { buildObjMtl, type ObjMtl } from '@vostok/export';
+//  - Sent to MakerLab, a clicker's top and body go as two plates (`clickerObjPlates`), so each
+//    is an object of its own there.
+import { buildObjMtl, buildObjMtlPlates, type ObjMtl } from '@vostok/export';
 import type { PlateChoice } from '@vostok/plates';
 import type { ClickerPart } from '../types';
 import { assemblyMinZ, objectKeyOf, placed, plateLayout } from './plateLayout';
@@ -25,18 +27,47 @@ export interface ClickerObjOptions {
   sourceModel?: string;
 }
 
-/** One print plate as an OBJ and its MTL, from the parts the 3MF is written from. */
-export function clickerObjMtl(parts: ClickerPart[], opts: ClickerObjOptions = {}): ObjMtl {
+/** The parts as the shelf's OBJ writer takes them, laid out on one plate. */
+function objParts(parts: ClickerPart[], opts: ClickerObjOptions) {
   const minZ = assemblyMinZ(parts);
   const layout = plateLayout(parts, minZ, { plate: opts.plate });
-  return buildObjMtl(
-    parts.map((p) => ({
-      name: p.name,
-      group: p.group,
-      color: p.colorRgb,
-      positions: placed(p, minZ, layout.placementFor(objectKeyOf(p))),
-      indices: p.triVerts,
-    })),
-    { mtlFileName: opts.mtlFileName ?? 'clicker.mtl', provenance: clickerMark(opts.sourceModel) },
-  );
+  return parts.map((p) => ({
+    name: p.name,
+    group: p.group,
+    color: p.colorRgb,
+    positions: placed(p, minZ, layout.placementFor(objectKeyOf(p))),
+    indices: p.triVerts,
+  }));
+}
+
+const objOptions = (opts: ClickerObjOptions) =>
+  ({ mtlFileName: opts.mtlFileName ?? 'clicker.mtl', provenance: clickerMark(opts.sourceModel) });
+
+/** One print plate as an OBJ and its MTL, from the parts the 3MF is written from. */
+export function clickerObjMtl(parts: ClickerPart[], opts: ClickerObjOptions = {}): ObjMtl {
+  return buildObjMtl(objParts(parts, opts), objOptions(opts));
+}
+
+/** Whether a set of parts is one clicker with both a top and a body: a flat clicker, a set of
+ *  letter blocks or a cut model. The fit test's tiles and a batch run name their own objects
+ *  (`objectKey`) and are not. */
+export function splitsTopAndBody(parts: ClickerPart[]): boolean {
+  return parts.every((p) => !p.objectKey)
+    && parts.some((p) => p.group === 'top')
+    && parts.some((p) => p.group === 'base');
+}
+
+/** The print as the embedded export sends it: one OBJ per plate and one MTL for all of them.
+ *  A clicker with a top and a body goes as two plates, the top on plate 1 and the body on
+ *  plate 2, so each arrives as an object of its own; every part of the top stays in the top's
+ *  OBJ, so its colours stay registered. Anything else is the one plate `clickerObjMtl` writes,
+ *  text for text. */
+export function clickerObjPlates(parts: ClickerPart[], opts: ClickerObjOptions = {}): { objs: string[]; mtl: string } {
+  if (!splitsTopAndBody(parts)) {
+    const { obj, mtl } = clickerObjMtl(parts, opts);
+    return { objs: [obj], mtl };
+  }
+  const plated = objParts(parts, opts).map((p) => ({ ...p, plate: p.group === 'top' ? 1 : 2 }));
+  const { objs, mtl } = buildObjMtlPlates(plated, objOptions(opts));
+  return { objs, mtl };
 }

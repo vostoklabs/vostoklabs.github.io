@@ -553,6 +553,26 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   finish(unmount);
 }
 
+{
+  const unmount = await fresh(() => (knobs.makerlab = true));
+  const exp = press();
+  await clock.advance(300);
+  const call = seen.sdkExports[0];
+  const art = call?.artifacts?.[0];
+  check('in MakerLab: the clicker goes as a 3D model, one OBJ artifact with its MTL', exp.done && call?.printerType !== '2D' && call.artifacts.length === 1 && art?.format === 'obj' && typeof art.mtl === 'string', JSON.stringify(call && { printerType: call.printerType, format: art?.format }));
+  check('…and the status says it was sent', status() === 'Sent the clicker to MakerLab', status());
+  finish(unmount);
+}
+
+{
+  // MakerLab's own export window ended it: nothing loud.
+  const unmount = await fresh(() => { knobs.makerlab = true; knobs.sdkAnswer = { success: false, errorCode: 'EXPORT_USER_CANCELLED' }; });
+  const exp = press();
+  await clock.advance(300);
+  check('in MakerLab, the export window closed: a quiet status line, no failure', exp.done && status() === 'Export cancelled', status());
+  finish(unmount);
+}
+
 /* ===================================================== what the panel's controls call */
 
 {

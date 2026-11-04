@@ -29,7 +29,8 @@ import {
 import './style.css';
 import { createViewer, type SectionAxis } from './viewer/viewer';
 import { mountPlatePicker } from '@vostok/plates';
-import { downloadFile, textToArrayBuffer } from '@vostok/export';
+import { downloadFile } from '@vostok/export';
+import { BLANK_COVER, exportToHost, modelExport, type HostLink, type HostModelExportOptions } from '@vostok/export/makerlab';
 import { createUi, type UiState, type WordItem } from './ui/ui';
 import {
   createDesignView, type DesignArtRegion, type DesignEdit, type DesignInput, type DesignTarget,
@@ -44,7 +45,7 @@ import { runWizard } from './ui/wizard';
 import { clickerThreeMF, downloadClickerThreeMF } from './export/threemfExport';
 import { shownBuild, type Shown } from './export/shownBuild';
 import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
-import { clickerObjMtl } from './export/objExport';
+import { clickerObjPlates } from './export/objExport';
 import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from './geometry/stemFit';
 import { FIT_TEST_FONT_ID, FIT_TEST_STEP_MM, fitTestLabel, fitTestLadder } from './geometry/fitStrip';
 import { openSvgPreview } from './ui/svgPreview';
@@ -70,8 +71,11 @@ import {
   SELLER_PACK,
   ensureAccess,
   initMakerlab,
+  isEmbedded as mlEmbedded,
   isReady as mlReady,
   can as mlCan,
+  needsUpdate as mlNeedsUpdate,
+  isExportCancelled as mlCancelled,
   sdkExport,
   sdkToast,
 } from 'virtual:makerlab';
@@ -103,6 +107,14 @@ import { deflateSync, inflateSync } from 'fflate';
 /** A clicker project file: every one saved carries `version` and `settings` (see
  *  `buildProject`), so a file without them, or one another app saved, is refused on Load. */
 const PROJECT_FILE: ProjectShape = { app: 'clicker-generator', keys: ['version', 'settings'] };
+
+/** The host glue, as the shelf's `exportToHost` takes it (the stub's no-ops outside MakerLab). */
+const MAKERLAB_LINK: HostLink<HostModelExportOptions> = {
+  isEmbedded: mlEmbedded, isReady: mlReady, can: mlCan, isCancelled: mlCancelled, hostToast: sdkToast,
+  needsUpdate: mlNeedsUpdate,
+  connect: () => initMakerlab(),
+  send: (options) => sdkExport(options),
+};
 
 /**
  * Builds the generator into `container` and returns its teardown.
@@ -1071,44 +1083,35 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       const shown = await onScreen.settled();
       if (!shown) return;
       const file = exportable(shown);
-      if (MAKERLAB && mlReady() && mlCan('export')) {
-        // Embedded path: hand the host an OBJ (one `o` object per part) plus an MTL carrying
-        // their colours, with the provenance mark in the OBJ's header as the 3MF carries it.
-        const status = (msg: string) => store.set({ status: msg });
-        status('Sending to MakerLab…');
-        try {
-          // The same framed cover the downloaded 3MF gets. This used to be a bare
-          // `canvas.toDataURL()` with no render in front of it — it survived only because the
-          // renderer keeps its drawing buffer, and it handed MakerWorld the whole viewport:
-          // build plate, grid, and the model wherever the user had last dragged it.
-          const { parts, fitTest, fileBase, source, png } = await withCover(file);
-          const { obj, mtl } = clickerObjMtl(parts, source);
-          const coverImage = png ? 'data:image/png;base64,' + bytesToBase64(png) : '';
-          const result = await sdkExport({
-            artifacts: [
-              {
-                fileName: `${fileBase}.obj`,
-                format: 'obj',
-                buffer: textToArrayBuffer(obj),
-                mtl,
-                coverImage,
-                description: fitTest
-                  ? 'Switch stem fit test tiles, made with the Clicker Generator.'
+      if (MAKERLAB) {
+        // Embedded path, through the shelf's "MakerLab export": the OBJ (one per plate, the top
+        // and the body apart) plus an MTL carrying their colours, with the provenance mark in
+        // each OBJ's header as the 3MF carries it. Not connected, cancelled, failed or no
+        // answer are all the shelf's to say.
+        await exportToHost(
+          MAKERLAB_LINK,
+          {
+            status: (text) => store.set({ status: text }),
+            toast: (text, kind) => toast(text, { kind: kind === 'ok' ? 'ok' : 'error' }),
+          },
+          async () => {
+            // The same framed cover the downloaded 3MF gets, not whatever the viewport shows.
+            const { parts, fitTest, fileBase, source, png } = await withCover(file);
+            const { objs, mtl } = clickerObjPlates(parts, source);
+            return modelExport({
+              fileName: `${fileBase}.obj`,
+              obj: objs.length === 1 ? objs[0]! : objs,
+              mtl,
+              coverImage: png ? 'data:image/png;base64,' + bytesToBase64(png) : BLANK_COVER,
+              description: fitTest
+                ? 'Switch stem fit test tiles, made with the Clicker Generator.'
+                : objs.length > 1
+                  ? 'Multi-color clicker, made with the Clicker Generator. Top on plate 1, body on plate 2.'
                   : 'Multi-color clicker, made with the Clicker Generator.',
-              },
-            ],
-          });
-          if (result.success) {
-            status('Exported to MakerLab ✓');
-            sdkToast({ message: fitTest ? 'Fit test exported' : 'Clicker exported', type: 'success' });
-          } else {
-            status(`Export failed: ${result.errorMessage ?? result.errorCode}`);
-            sdkToast({ message: 'Export failed', type: 'error' });
-          }
-        } catch (err) {
-          status('Export error: ' + String(err));
-          console.error('[MakerLab export]', err);
-        }
+            });
+          },
+          { what: file.fitTest ? 'the fit test' : 'the clicker' },
+        );
       } else if (host) {
         // With a host the file goes to the host's own export path rather than the browser's
         // download bar.
@@ -1123,18 +1126,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         } catch (err) {
           store.set({ status: 'Export failed: ' + String(err) });
         }
-      } else if (MAKERLAB) {
-        /* Embedded, but the host is not answering.
-
-           The embedded build has no download path and no outbound links, so there is no
-           fallback download and no licence nudge here (the kit's modal guards on `isDesktop()`,
-           never on MAKERLAB). Say what is actually true instead. `initMakerlab` has no
-           reconnect, so once the handshake has failed this is the state for the rest of the
-           session — the message has to send the user somewhere, and a reload is the only thing
-           that re-runs it. */
-        store.set({
-          status: 'Not connected to MakerLab, so the file cannot be sent. Reload the page and try again.',
-        });
       } else {
         // Standalone / public path: direct browser download + license reminder.
         // The cover goes in the file, so a folder of orders shows what each one is instead of

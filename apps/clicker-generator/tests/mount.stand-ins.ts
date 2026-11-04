@@ -62,6 +62,8 @@ export const knobs = {
   fontsLoaded: new Set<string>(),
   /** Faces that cannot write the text typed into them. */
   cantWrite: new Set<string>(),
+  /** What the MakerLab host answers an export with. */
+  sdkAnswer: { success: true, format: '3mf' } as Record<string, unknown>,
 };
 
 /** Every trace made, so the worker can name a build after the design it came from. */
@@ -81,7 +83,7 @@ export function reset() {
   seen.pro = null;
   seen.popovers.length = 0;
   seen.partPick = null;
-  Object.assign(knobs, { makerlab: false, coverMs: 0, imageTraceThrows: null, svgTraceThrows: null, fontMs: {} });
+  Object.assign(knobs, { makerlab: false, coverMs: 0, imageTraceThrows: null, svgTraceThrows: null, fontMs: {}, sdkAnswer: { success: true, format: '3mf' } });
   knobs.fontFails = new Set();
   knobs.fontsLoaded = new Set(['helvetiker-regular', 'helvetiker-bold']);
   knobs.cantWrite = new Set();
@@ -115,12 +117,15 @@ export function setMakerlab(on: boolean) {
 export const SELLER_PACK = 'seller_pack';
 export const ensureAccess = async () => false;
 export const initMakerlab = async () => null;
+export const isEmbedded = () => knobs.makerlab;
 export const isReady = () => knobs.makerlab;
 export const can = () => knobs.makerlab;
+export const needsUpdate = () => false;
 export async function sdkExport(options: any) {
   seen.sdkExports.push(options);
-  return { success: true };
+  return knobs.sdkAnswer;
 }
+export const isExportCancelled = (o: any) => o?.errorCode === 'EXPORT_USER_CANCELLED' || o?.code === 'EXPORT_USER_CANCELLED';
 export const sdkToast = async () => {};
 export function mountProFeatures(deps: any) {
   seen.pro = deps;
@@ -210,10 +215,10 @@ export function clickerThreeMF(parts: ClickerPart[], opts: Record<string, unknow
 export function downloadClickerThreeMF(parts: ClickerPart[], name: string, opts: Record<string, unknown> = {}) {
   seen.downloads.push({ parts, name, opts });
 }
-export function clickerObjMtl(parts: ClickerPart[], opts: Record<string, unknown> = {}) {
+export function clickerObjPlates(parts: ClickerPart[], opts: Record<string, unknown> = {}) {
   seen.objs.push(parts);
   seen.objOpts.push(opts);
-  return { obj: '', mtl: '' };
+  return { objs: [''], mtl: '' };
 }
 export const textToArrayBuffer = () => new ArrayBuffer(0);
 export const downloadFile = noop;
