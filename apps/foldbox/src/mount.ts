@@ -82,6 +82,8 @@ import {
   sdkExport,
   sdkToast,
   isExportCancelled,
+  needsUpdate,
+  type MakerlabExportOptions,
 } from 'virtual:makerlab';
 import {
   BLANK_COVER,
@@ -91,7 +93,7 @@ import {
   printExport,
 } from './export/makerlabArtifacts';
 import { buildObjMtlPlates, bytesToArrayBuffer, downloadFile, textToArrayBuffer } from '@vostok/export';
-import { sendToMakerlab } from './export/makerlabSend';
+import { exportToHost, type HostLink, type HostReport } from '@vostok/export/makerlab';
 import {
   buildPrintable,
   buildPrintableFile,
@@ -1932,16 +1934,24 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   }
 
-  /** Hand artifacts to MakerLab and say what happened, on this screen's status line and toasts
-   *  (`export/makerlabSend.ts`). Resolves true on success, and never rejects. */
-  function toMakerlab(options: Parameters<typeof sdkExport>[0], what: string): Promise<boolean> {
-    return sendToMakerlab(
-      () => sdkExport(options),
-      { isCancelled: isExportCancelled, hostToast: sdkToast },
-      { status: (text, kind) => status.set(text, kind), toast: (text, kind) => toast(text, { kind }) },
-      what,
-    );
-  }
+  /** The glue, as the shelf's `exportToHost` takes it ("MakerLab export"). This app sends both
+   *  kinds, cut files and the printed sheet, so the link is typed by the glue's own options,
+   *  whose layer height is the host's list rather than any string. */
+  const makerlabLink: HostLink<MakerlabExportOptions> = {
+    isEmbedded: mlEmbedded,
+    isReady: mlReady,
+    can: mlCan,
+    connect: () => initMakerlab({ onDisconnect: makerlabDisconnected }),
+    send: (options) => sdkExport(options),
+    isCancelled: isExportCancelled,
+    hostToast: sdkToast,
+    needsUpdate,
+  };
+  /** Where `exportToHost` says what happened: this screen's status line and toasts. */
+  const makerlabReport: HostReport = {
+    status: (text, kind) => status.set(text, kind),
+    toast: (text, kind) => toast(text, { kind }),
+  };
 
   const footer = sidebarFooter({
     formats: EXPORT_FORMATS,
@@ -1966,52 +1976,41 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       const name = `${styleMeta(params.style).name} ${params.lengthMm}x${params.widthMm}x${params.heightMm}`;
 
       if (MAKERLAB) {
-        /* Embedded, but the host is not answering.
+        /* Sent to the host by the shelf's `exportToHost`: connected first, or nothing is made
+           (it waits for a handshake still in flight, or runs one fresh one), then sent, and
+           every answer said: sent, cancelled (quietly), failed, or no answer in a minute.
 
            No download attempt: the sandbox has `allowDownloads: false`, so it would vanish with
            no error. No licence modal either, which is the other half of what the clicker found
            this path doing: a subscription pitch through a dead link, on top of an export that
-           silently never happened.
-
-           One reconnect first. `initMakerlab` tears down the old SDK and runs the handshake
-           again, which costs a moment and can only help — the handshake is the thing that was
-           lost. Whether the host answers a second one has not been confirmed with MakerLab
-           (makerlab/README.md), so the message it falls back to names the whole MakerWorld
-           page: reloading only this panel re-runs the app inside a frame the host is no longer
-           talking to, which is a loop the old wording sent people round. */
-        if (!(mlReady() && mlCan('export'))) {
-          if (mlEmbedded()) {
-            status.set('Reconnecting to MakerLab…', 'idle');
-            await initMakerlab({ onDisconnect: makerlabDisconnected });
-          }
-          if (!(mlReady() && mlCan('export'))) {
-            const msg =
-              'Not connected to MakerLab, so the file cannot be sent. Reload the whole MakerWorld page, not just this panel, and try again.';
-            status.set(msg, 'error');
-            toast(msg, { kind: 'error' });
-            return;
-          }
-        }
+           silently never happened. Each `make` below notes its own success toast, which goes
+           up only once the host has the file. */
+        const built = result;
+        let doneToast = '';
 
         if (format === '3mf') {
           // The OBJ route: the host builds the 3MF from an OBJ and an MTL of colours. Never a
           // .3mf of our own inside a zip, which the SDK guide forbids and MakerWorld's review
           // made the clicker and the keycap generator stop doing.
           const baseName = `${params.style}-${params.lengthMm}x${params.widthMm}x${params.heightMm}-printable`;
-          const { parts, stats } = buildPrintable(result.net, params, result);
-          if (!parts.length) throw new Error('There is no geometry to print at this size.');
-          // One OBJ per plate: the host makes a plate of each.
-          const { objs, mtl } = buildObjMtlPlates(parts, {
-            mtlFileName: `${baseName}.mtl`,
-            provenance: {
-              title: name,
-              generator: 'foldbox',
-              application: `${BRAND.name} Fold-Up Box Generator`,
-              buildId: import.meta.env.VITE_BUILD_ID,
-            },
-          });
-          const sent = await toMakerlab(
-            printExport({
+          const sent = await exportToHost(makerlabLink, makerlabReport, async () => {
+            const { parts, stats } = buildPrintable(built.net, params, built);
+            if (!parts.length) throw new Error('There is no geometry to print at this size.');
+            // One OBJ per plate: the host makes a plate of each.
+            const { objs, mtl } = buildObjMtlPlates(parts, {
+              mtlFileName: `${baseName}.mtl`,
+              provenance: {
+                title: name,
+                generator: 'foldbox',
+                application: `${BRAND.name} Fold-Up Box Generator`,
+                buildId: import.meta.env.VITE_BUILD_ID,
+              },
+            });
+            const logo = stats.logoRings ? ' The logo is a second colour in the first layer.' : '';
+            doneToast =
+              `Exported to MakerLab: ${stats.sheetMm.toFixed(2)} mm sheet, ${stats.hingeMm.toFixed(2)} mm hinges.${onPlates}${logo} ` +
+              'Free for personal use; selling prints needs a commercial licence.';
+            return printExport({
               fileName: `${baseName}.obj`,
               buffer: objs.length === 1 ? textToArrayBuffer(objs[0]!) : objs.map(textToArrayBuffer),
               mtl,
@@ -2020,44 +2019,32 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
                 `${name}, printed flat as a ${stats.sheetMm.toFixed(2)} mm sheet with ` +
                 `${stats.hingeMm.toFixed(2)} mm fold grooves.${onPlates} Print at 0.2 mm layers, no supports. ` +
                 LICENSE_NOTE,
-            }),
-            'the 3MF',
-          );
-          if (sent) {
-            const logo = stats.logoRings ? ' The logo is a second colour in the first layer.' : '';
-            toast(
-              `Exported to MakerLab: ${stats.sheetMm.toFixed(2)} mm sheet, ${stats.hingeMm.toFixed(2)} mm hinges.${onPlates}${logo} ` +
-                'Free for personal use; selling prints needs a commercial licence.',
-              { kind: 'ok' },
-            );
-          }
+            });
+          }, { what: 'the 3MF' });
+          if (sent) toast(doneToast, { kind: 'ok' });
           return;
         }
 
         if (format === 'zip') {
-          const files = buildCutFiles(result, {
-            title: name,
-            params,
-            buildId: import.meta.env.VITE_BUILD_ID,
-          });
           // A 2D export: the host goes straight to its download dialog instead of asking
           // which FDM printer a laser cut is for (see `cutExport`).
-          const sent = await toMakerlab(
-            cutExport({
+          const sent = await exportToHost(makerlabLink, makerlabReport, async () => {
+            const files = buildCutFiles(built, {
+              title: name,
+              params,
+              buildId: import.meta.env.VITE_BUILD_ID,
+            });
+            doneToast =
+              `Exported ${files.baseName}.zip to MakerLab: SVG, DXF and an assembly sheet. ` +
+              'Free for personal use; selling boxes needs a commercial licence.';
+            return cutExport({
               fileName: `${files.baseName}.zip`,
               buffer: bytesToArrayBuffer(files.zip),
               coverImage: await renderCoverDataUrl(),
               description: `${name}: cut files (SVG, DXF and a README with the settings). ${LICENSE_NOTE}`,
-            }),
-            'the cut files',
-          );
-          if (sent) {
-            toast(
-              `Exported ${files.baseName}.zip to MakerLab: SVG, DXF and an assembly sheet. ` +
-                'Free for personal use; selling boxes needs a commercial licence.',
-              { kind: 'ok' },
-            );
-          }
+            });
+          }, { what: 'the cut files' });
+          if (sent) toast(doneToast, { kind: 'ok' });
           return;
         }
 

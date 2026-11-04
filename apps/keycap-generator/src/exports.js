@@ -21,13 +21,14 @@
  *                              out of this module, whose node tests have no font library
  */
 import { BRAND } from '@vostok/brand';
-import { downloadFile, textToArrayBuffer } from '@vostok/export';
-import { BLANK_COVER, EXPORT_TIMEOUT_MS, settleExport } from '@vostok/export/makerlab';
+import { downloadFile } from '@vostok/export';
+import { BLANK_COVER, exportToHost, modelExport } from '@vostok/export/makerlab';
 import { captureCover, ExportBlockedError, licenseAfterExport, toast } from '@vostok/ui-kit';
 import { plateSize, loadPlateChoice } from '@vostok/plates';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
-import { MAKERLAB, isReady as mlReady, can as mlCan, sdkExport, sdkToast, isExportCancelled } from 'virtual:makerlab';
+import { MAKERLAB } from 'virtual:makerlab';
+import { HOST_LINK, hostReport } from './makerlabHost.js';
 import { buildBodies } from './geometry.js';
 import { FONT_OPTIONS, parseLetter } from './letter.js';
 import { keycapThreeMF } from './export3mf.js';
@@ -97,36 +98,13 @@ export function createExports(ctx) {
   }
 
   /**
-   * Say what became of one MakerLab export, and whether the file went out.
-   *
-   * A cancel ends in MakerLab's own export window, which has already told the customer what
-   * happened. It is not a failure, so it gets a quiet status line, no toast, no retry, and no
-   * licence nudge: nothing went out.
-   *
-   * @param {{ kind: 'sent' } | { kind: 'cancelled' } | { kind: 'failed', why: string }} outcome
-   * @param {string} what  what MakerLab's toast says was exported
-   */
-  function reportHost(outcome, what) {
-    if (outcome.kind === 'sent') {
-      setStatus('Exported to MakerLab ✓');
-      sdkToast({ message: `${what} exported to MakerLab`, type: 'success' });
-      nudgeLicense();
-      return true;
-    }
-    if (outcome.kind === 'cancelled') {
-      setStatus('Export cancelled');
-      return false;
-    }
-    setStatus(`Export failed: ${outcome.why}`, 'err');
-    sdkToast({ message: 'Export failed', type: 'error' });
-    return false;
-  }
-
-  /**
    * Deliver the finished keycap.
    *
    * In the MakerWorld build, when embedded, hand the host an OBJ (one `o` object per part)
-   * plus an MTL carrying the colours.
+   * plus an MTL carrying the colours, through the shelf's `exportToHost`: connected first (it
+   * waits for the handshake mount.js started), then sent, and every answer said. A cancel ends in
+   * MakerLab's own export window, which has already told the customer what happened, so it is a
+   * quiet status line with no toast and no licence nudge: nothing went out.
    *
    * Standalone (public site, or the built app opened outside the host) still downloads the
    * two-colour .3mf we build ourselves — unchanged.
@@ -134,41 +112,31 @@ export function createExports(ctx) {
    * @param {() => Array} makeParts  Deferred so the standalone path doesn't pay for OBJ work
    *                                 and the host path doesn't pay for 3MF zipping.
    * @param {{ cover?: string, what?: string }} [more]  `cover`: MakerLab's cover picture, the
-   *        stage's when left out; `what`: what MakerLab's toast says was exported
+   *        stage's when left out; `what`: what the MakerLab lines say was sent ("the keycap")
    * @returns {Promise<boolean>} whether the file went out
    */
-  async function deliverModel(makeParts, baseName, downloadMsg, description, { cover, what = 'Keycap' } = {}) {
-    if (MAKERLAB && mlReady() && mlCan('export')) {
-      setStatus('Sending to MakerLab…');
-      let request;
+  async function deliverModel(makeParts, baseName, downloadMsg, description, { cover, what = 'the keycap' } = {}) {
+    if (MAKERLAB && HOST_LINK.isEmbedded()) {
       try {
-        const { obj, mtl } = keycapObjMtl(makeParts(), { mtlFileName: `${baseName}.mtl` });
-        request = {
-          artifacts: [
-            {
-              fileName: `${baseName}.obj`,
-              format: 'obj',
-              buffer: textToArrayBuffer(obj),
-              mtl,
-              coverImage: cover ?? ctx.cover(),
-              description: `${description} ${LICENSE_NOTE}`,
-              printConfig: printConfig(),
-            },
-          ],
-        };
+        const sent = await exportToHost(HOST_LINK, hostReport(setStatus, toast), async () => {
+          const { obj, mtl } = keycapObjMtl(makeParts(), { mtlFileName: `${baseName}.mtl` });
+          return modelExport({
+            fileName: `${baseName}.obj`,
+            obj,
+            mtl,
+            coverImage: cover ?? ctx.cover(),
+            description: `${description} ${LICENSE_NOTE}`,
+            printConfig: printConfig(),
+          });
+        }, { what });
+        if (sent) nudgeLicense();
+        return sent;
       } catch (err) {
+        // Only building the file can throw here: `exportToHost` itself never rejects.
         console.error(err);
         setStatus(`Export failed: ${err.message || err}`, 'err');
         return false;
       }
-      // The shelf reads the host's answer: a cancel is a cancel whether it comes back as an
-      // answer or as a throw, and a host that never answers is said so after a minute rather than
-      // leaving the export waiting for good. A late answer still reports.
-      const first = await settleExport(() => sdkExport(request), isExportCancelled, EXPORT_TIMEOUT_MS);
-      if (first.kind !== 'timeout') return reportHost(first, what);
-      void first.late.then((late) => reportHost(late, what));
-      setStatus('MakerLab has not answered. Check MakerLab’s own export window, or reload the MakerWorld page and try again.', 'err');
-      return false;
     }
 
     const blob = keycapThreeMF(makeParts(), { process: projectProcess() });
@@ -218,6 +186,7 @@ export function createExports(ctx) {
       fitTestFileName(profileTag),
       `Exported fit test 3MF ✓  ${n} piece${n === 1 ? '' : 's'} to test-fit, one filament.`,
       `Keycap stem fit test (${n} piece${n === 1 ? '' : 's'}), made with the Keycap Legend Generator.`,
+      { what: 'the fit test' },
     );
   }
 
@@ -464,7 +433,7 @@ export function createExports(ctx) {
               alphabetFileName(fontName, profileTag, letterCase),
               `Exported full alphabet set ✓  26 keycaps (${range}) on one plate. Open it in your slicer and assign ${count} filament${filaments === 1 ? '' : 's'}.`,
               `Full alphabet set (${range}): 26 keycaps on one print plate, made with the Keycap Legend Generator.`,
-              { cover, what: 'Alphabet set' },
+              { cover, what: 'the alphabet set' },
             );
             exported ||= ok;
             return ok;
@@ -521,7 +490,7 @@ export function createExports(ctx) {
         session,
         fontName: session.fontName,
         writes: session.writes,
-        toHost: !!(MAKERLAB && mlReady() && mlCan('export')),
+        toHost: !!(MAKERLAB && HOST_LINK.isEmbedded()),
       });
     } catch (err) {
       console.error(err);

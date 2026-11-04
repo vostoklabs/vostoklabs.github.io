@@ -75,8 +75,11 @@ const edges = {
       contents: [
         'export let MAKERLAB = false;',
         'export function setMakerlab(on) { MAKERLAB = on; }',
+        'export const isEmbedded = () => MAKERLAB;',
+        'export async function initMakerlab() { return MAKERLAB ? {} : null; }',
         'export const isReady = () => MAKERLAB;',
         'export const can = () => MAKERLAB;',
+        'export const needsUpdate = () => false;',
         'export async function sdkExport(request) {',
         '  (globalThis.__sdkExports ??= []).push(request);',
         '  return globalThis.__sdkAnswer ? globalThis.__sdkAnswer(request) : { success: true };',

@@ -41,7 +41,8 @@ declare module 'virtual:makerlab' {
     format: 'obj';
     /** One `ArrayBuffer` per plate; a single one is a single plate. */
     buffer: ArrayBuffer | ArrayBuffer[];
-    mtl?: string;
+    /** The colours. Always sent, so these options are also the shelf's `HostExportOptions`. */
+    mtl: string;
     /** Force every mesh on a plate into one object. Force-enable only: `false` is the same
      *  as omitting it, and the host merges by itself only above 500 meshes. */
     mergeObj?: boolean;
@@ -69,6 +70,9 @@ declare module 'virtual:makerlab' {
    *  MakerLab's own window, which has told the customer why. The SDK's codes stay behind the
    *  glue; the stub answers false. */
   export function isExportCancelled(outcome: unknown): boolean;
+  /** True when the handshake failed because the host has outgrown this build's SDK, which only
+   *  a new build fixes. The stub answers false. */
+  export function needsUpdate(): boolean;
   export function sdkToast(options: {
     message: string;
     type?: 'success' | 'info' | 'warning' | 'error';

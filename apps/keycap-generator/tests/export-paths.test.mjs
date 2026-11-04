@@ -229,18 +229,20 @@ check('MakerLab answers a cancel: a quiet "Export cancelled", no error, no toast
 const thrown = await hostAnswering(() => { throw Object.assign(new Error('cancelled'), { code: CANCEL }); });
 check('MakerLab throws a cancel: the same, quiet', quiet(thrown), told(thrown));
 
-const failed = await hostAnswering(() => ({ success: false, errorCode: 'EXPORT_FAILED', errorMessage: 'the host could not build the 3MF' }));
-check('MakerLab answers a real failure: said on the status line and in the host\'s error toast, no nudge',
+const failed = await hostAnswering(() => ({ success: false, errorCode: 'HOST_ERROR', errorMessage: 'the host could not build the 3MF' }));
+check('MakerLab answers a real failure: said on the status line, in the host\'s error toast and ours, no nudge',
   failed.statuses.at(-1) === 'err:Export failed: the host could not build the 3MF'
-    && failed.sdkToasts.length === 1 && failed.sdkToasts[0].type === 'error' && !failed.nudges,
+    && failed.sdkToasts.length === 1 && failed.sdkToasts[0].type === 'error'
+    && failed.toasts.length === 1 && failed.toasts[0].kind === 'error' && !failed.nudges,
   told(failed));
 const broke = await hostAnswering(() => { throw new Error('MakerLab SDK not ready'); });
 check('MakerLab throws anything else: a failure too, never an unhandled rejection',
   broke.statuses.at(-1) === 'err:Export failed: MakerLab SDK not ready' && !broke.nudges, told(broke));
 
 const sent = await hostAnswering(() => ({ success: true, format: 'obj' }));
-check('MakerLab answers sent: "Exported to MakerLab ✓", the host\'s success toast and the licence nudge',
-  sent.statuses.at(-1) === ':Exported to MakerLab ✓' && sent.sdkToasts.length === 1 && sent.sdkToasts[0].type === 'success' && sent.nudges === 1,
+check('MakerLab answers sent: "Sent the keycap to MakerLab", the host\'s success toast and the licence nudge',
+  sent.statuses.at(-1) === ':Sent the keycap to MakerLab' && sent.sdkToasts.length === 1
+    && sent.sdkToasts[0].type === 'success' && sent.sdkToasts[0].message === 'Exported the keycap' && sent.nudges === 1,
   told(sent));
 
 loop.dispose();

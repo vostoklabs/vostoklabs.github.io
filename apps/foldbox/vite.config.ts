@@ -96,6 +96,7 @@ function makerlabPlugin(enabled: boolean) {
         'export const can = () => false;',
         'export async function sdkExport() { throw new Error("MakerLab SDK not available in this build"); }',
         'export const isExportCancelled = () => false;',
+        'export const needsUpdate = () => false;',
         'export async function sdkToast() {}',
       ].join('\n');
     },

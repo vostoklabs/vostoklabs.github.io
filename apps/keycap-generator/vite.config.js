@@ -117,6 +117,7 @@ function makerlabPlugin(enabled) {
           'export const can = () => false;',
           'export async function sdkExport() { throw new Error("Not available in this build"); }',
           'export const isExportCancelled = () => false;',
+          'export const needsUpdate = () => false;',
           'export async function sdkToast() {}',
           // Paid features are MakerWorld-only: the public build never mounts their UI (it is
           // fenced behind MAKERLAB), so these exist purely to keep the module shape identical
