@@ -81,6 +81,7 @@ import {
   can as mlCan,
   sdkExport,
   sdkToast,
+  isExportCancelled,
 } from 'virtual:makerlab';
 import {
   BLANK_COVER,
@@ -90,9 +91,7 @@ import {
   printExport,
 } from './export/makerlabArtifacts';
 import { buildObjMtlPlates, bytesToArrayBuffer, downloadFile, textToArrayBuffer } from '@vostok/export';
-// How long to wait for the host before the UI admits it does not know: the shelf's, one figure
-// for every MakerLab app.
-import { EXPORT_TIMEOUT_MS } from '@vostok/export/makerlab';
+import { sendToMakerlab } from './export/makerlabSend';
 import {
   buildPrintable,
   buildPrintableFile,
@@ -1897,7 +1896,6 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
    *  big enough to read on a model page, small enough that the data URL stays tens of
    *  kilobytes rather than megabytes. */
   const COVER_EDGE_PX = 512;
-  const TIMED_OUT = Symbol('makerlab export timeout');
 
   /** A real render of the box for the host's cover image, as a PNG data URL.
    *
@@ -1934,56 +1932,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
   }
 
-  /** Hand artifacts to MakerLab and say what happened. Resolves true on success.
-   *
-   *  `sdk.export` has no timeout of its own — the developer guide says so outright: it waits
-   *  for the host for ever. The kit's export panel re-enables its buttons in a `finally`, so a
-   *  host that never answers leaves BOTH buttons greyed with a spinner on them and nothing but
-   *  a reload to fix it. Hence the race: at a minute the UI comes back and says honestly that
-   *  it does not know. The original promise is still listened to, because the host may simply
-   *  be slow and a late success should still be reported rather than contradicted. */
-  async function sendToMakerlab(
-    options: Parameters<typeof sdkExport>[0],
-    what: string,
-  ): Promise<boolean> {
-    status.set('Sending to MakerLab…', 'idle');
-    const pending = sdkExport(options);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timedOut = new Promise<typeof TIMED_OUT>((resolve) => {
-      timer = setTimeout(() => resolve(TIMED_OUT), EXPORT_TIMEOUT_MS);
-    });
-    const res = await Promise.race([pending, timedOut]);
-    clearTimeout(timer);
-
-    if (res === TIMED_OUT) {
-      void pending.then(
-        (late) => {
-          if (late.success) {
-            status.set(`Exported ${what} to MakerLab`, 'idle');
-            toast(`MakerLab answered after all: exported ${what}.`, { kind: 'ok' });
-          } else {
-            status.set(`Export failed: ${late.errorMessage ?? late.errorCode}`, 'error');
-          }
-        },
-        (err: unknown) => status.set(`Export failed: ${(err as Error).message}`, 'error'),
-      );
-      const msg =
-        'MakerLab has not answered. Check MakerLab’s own export window, or reload the MakerWorld page and try again.';
-      status.set(msg, 'error');
-      toast(msg, { kind: 'error' });
-      return false;
-    }
-
-    if (res.success) {
-      status.set(`Exported ${what} to MakerLab`, 'idle');
-      void sdkToast({ message: `Exported ${what}`, type: 'success' });
-      return true;
-    }
-    const why = res.errorMessage ?? res.errorCode;
-    status.set(`Export failed: ${why}`, 'error');
-    void sdkToast({ message: 'Export failed', type: 'error' });
-    toast(`Export failed: ${why}`, { kind: 'error' });
-    return false;
+  /** Hand artifacts to MakerLab and say what happened, on this screen's status line and toasts
+   *  (`export/makerlabSend.ts`). Resolves true on success, and never rejects. */
+  function toMakerlab(options: Parameters<typeof sdkExport>[0], what: string): Promise<boolean> {
+    return sendToMakerlab(
+      () => sdkExport(options),
+      { isCancelled: isExportCancelled, hostToast: sdkToast },
+      { status: (text, kind) => status.set(text, kind), toast: (text, kind) => toast(text, { kind }) },
+      what,
+    );
   }
 
   const footer = sidebarFooter({
@@ -2053,7 +2010,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
               buildId: import.meta.env.VITE_BUILD_ID,
             },
           });
-          const sent = await sendToMakerlab(
+          const sent = await toMakerlab(
             printExport({
               fileName: `${baseName}.obj`,
               buffer: objs.length === 1 ? textToArrayBuffer(objs[0]!) : objs.map(textToArrayBuffer),
@@ -2085,7 +2042,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           });
           // A 2D export: the host goes straight to its download dialog instead of asking
           // which FDM printer a laser cut is for (see `cutExport`).
-          const sent = await sendToMakerlab(
+          const sent = await toMakerlab(
             cutExport({
               fileName: `${files.baseName}.zip`,
               buffer: bytesToArrayBuffer(files.zip),

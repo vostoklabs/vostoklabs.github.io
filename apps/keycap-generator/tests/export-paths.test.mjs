@@ -14,7 +14,8 @@
 
   Both deliveries are run: the browser's download (a 3MF), and the MakerLab export (the OBJ, its
   MTL and the cover handed to the host). Only the browser's and the host's edges are stood in for
-  (support/app-bundle.mjs).
+  (support/app-bundle.mjs). Last, what the screen says when MakerLab answers anything but "sent":
+  a cancel is quiet, a failure is not.
 */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -193,6 +194,54 @@ panel.fitTest = app.buildFitTestRow(
 );
 await bothWays('Fit test, a Standard 1u', () => exportsApi.runPrimaryExport(), 'S-1u-fit-test', 'keycap-fit-test-standard-profile');
 panel.fitTest = null;
+
+// ------------------------------------------------------------------ MakerLab's other answers
+// A cancel ends in MakerLab's own export window, which has already told the customer what
+// happened. It is not a failure. The SDK can answer it or throw it, so both are run, and neither
+// may leave an error on the status line, a toast (ours or the host's), or a licence nudge:
+// nothing went out. 'CANCEL' is the stand-in's code (support/app-bundle.mjs).
+const CANCEL = 'CANCEL';
+/** Press Export blank keycap with the host answering `answer`; what the screen said. */
+async function hostAnswering(answer) {
+  const from = {
+    statuses: statuses.length, exports: globalThis.__sdkExports.length,
+    sdkToasts: (globalThis.__sdkToasts ??= []).length, toasts: (globalThis.__toasts ??= []).length, nudges: globalThis.__nudges ?? 0,
+  };
+  globalThis.__sdkAnswer = answer;
+  app.setMakerlab(true);
+  await exportsApi.exportBlank();
+  app.setMakerlab(false);
+  globalThis.__sdkAnswer = undefined;
+  return {
+    asked: globalThis.__sdkExports.length - from.exports,
+    statuses: statuses.slice(from.statuses),
+    sdkToasts: globalThis.__sdkToasts.slice(from.sdkToasts),
+    toasts: globalThis.__toasts.slice(from.toasts),
+    nudges: (globalThis.__nudges ?? 0) - from.nudges,
+  };
+}
+const quiet = (said) => said.asked === 1 && said.statuses.at(-1) === ':Export cancelled'
+  && !said.statuses.some((s) => s.startsWith('err:')) && !said.sdkToasts.length && !said.toasts.length && !said.nudges;
+const told = (said) => `${said.statuses.join(' | ')}; host toasts ${JSON.stringify(said.sdkToasts)}; toasts ${said.toasts.length}; nudges ${said.nudges}`;
+
+const answered = await hostAnswering(() => ({ success: false, errorCode: CANCEL, errorMessage: 'cancelled' }));
+check('MakerLab answers a cancel: a quiet "Export cancelled", no error, no toast, no nudge', quiet(answered), told(answered));
+const thrown = await hostAnswering(() => { throw Object.assign(new Error('cancelled'), { code: CANCEL }); });
+check('MakerLab throws a cancel: the same, quiet', quiet(thrown), told(thrown));
+
+const failed = await hostAnswering(() => ({ success: false, errorCode: 'EXPORT_FAILED', errorMessage: 'the host could not build the 3MF' }));
+check('MakerLab answers a real failure: said on the status line and in the host\'s error toast, no nudge',
+  failed.statuses.at(-1) === 'err:Export failed: the host could not build the 3MF'
+    && failed.sdkToasts.length === 1 && failed.sdkToasts[0].type === 'error' && !failed.nudges,
+  told(failed));
+const broke = await hostAnswering(() => { throw new Error('MakerLab SDK not ready'); });
+check('MakerLab throws anything else: a failure too, never an unhandled rejection',
+  broke.statuses.at(-1) === 'err:Export failed: MakerLab SDK not ready' && !broke.nudges, told(broke));
+
+const sent = await hostAnswering(() => ({ success: true, format: 'obj' }));
+check('MakerLab answers sent: "Exported to MakerLab ✓", the host\'s success toast and the licence nudge',
+  sent.statuses.at(-1) === ':Exported to MakerLab ✓' && sent.sdkToasts.length === 1 && sent.sdkToasts[0].type === 'success' && sent.nudges === 1,
+  told(sent));
 
 loop.dispose();
 console.log(failures ? `\n${failures} FAILED, ${passes} passed` : `\nall ${passes} export path checks pass: every button writes the golden's files, under their names`);

@@ -111,6 +111,7 @@ apps/foldbox/tests/*
 !apps/foldbox/tests/flat.mts
 !apps/foldbox/tests/fold.mts
 !apps/foldbox/tests/hang.mts
+!apps/foldbox/tests/makerlab-send.mts
 !apps/foldbox/tests/net.mts
 !apps/foldbox/tests/poly.mts
 !apps/foldbox/tests/print.mts

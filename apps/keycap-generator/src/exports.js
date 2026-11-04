@@ -22,12 +22,12 @@
  */
 import { BRAND } from '@vostok/brand';
 import { downloadFile, textToArrayBuffer } from '@vostok/export';
-import { BLANK_COVER } from '@vostok/export/makerlab';
+import { BLANK_COVER, EXPORT_TIMEOUT_MS, settleExport } from '@vostok/export/makerlab';
 import { captureCover, ExportBlockedError, licenseAfterExport, toast } from '@vostok/ui-kit';
 import { plateSize, loadPlateChoice } from '@vostok/plates';
 // MakerLab integration seam. Resolves to a no-op stub in the public build and to the real
 // host glue in the MakerWorld build (`--mode makerworld`) — see vite.config.js.
-import { MAKERLAB, isReady as mlReady, can as mlCan, sdkExport, sdkToast } from 'virtual:makerlab';
+import { MAKERLAB, isReady as mlReady, can as mlCan, sdkExport, sdkToast, isExportCancelled } from 'virtual:makerlab';
 import { buildBodies } from './geometry.js';
 import { FONT_OPTIONS, parseLetter } from './letter.js';
 import { keycapThreeMF } from './export3mf.js';
@@ -97,6 +97,32 @@ export function createExports(ctx) {
   }
 
   /**
+   * Say what became of one MakerLab export, and whether the file went out.
+   *
+   * A cancel ends in MakerLab's own export window, which has already told the customer what
+   * happened. It is not a failure, so it gets a quiet status line, no toast, no retry, and no
+   * licence nudge: nothing went out.
+   *
+   * @param {{ kind: 'sent' } | { kind: 'cancelled' } | { kind: 'failed', why: string }} outcome
+   * @param {string} what  what MakerLab's toast says was exported
+   */
+  function reportHost(outcome, what) {
+    if (outcome.kind === 'sent') {
+      setStatus('Exported to MakerLab ✓');
+      sdkToast({ message: `${what} exported to MakerLab`, type: 'success' });
+      nudgeLicense();
+      return true;
+    }
+    if (outcome.kind === 'cancelled') {
+      setStatus('Export cancelled');
+      return false;
+    }
+    setStatus(`Export failed: ${outcome.why}`, 'err');
+    sdkToast({ message: 'Export failed', type: 'error' });
+    return false;
+  }
+
+  /**
    * Deliver the finished keycap.
    *
    * In the MakerWorld build, when embedded, hand the host an OBJ (one `o` object per part)
@@ -114,9 +140,10 @@ export function createExports(ctx) {
   async function deliverModel(makeParts, baseName, downloadMsg, description, { cover, what = 'Keycap' } = {}) {
     if (MAKERLAB && mlReady() && mlCan('export')) {
       setStatus('Sending to MakerLab…');
+      let request;
       try {
         const { obj, mtl } = keycapObjMtl(makeParts(), { mtlFileName: `${baseName}.mtl` });
-        const result = await sdkExport({
+        request = {
           artifacts: [
             {
               fileName: `${baseName}.obj`,
@@ -128,19 +155,19 @@ export function createExports(ctx) {
               printConfig: printConfig(),
             },
           ],
-        });
-        if (result.success) {
-          setStatus('Exported to MakerLab ✓');
-          sdkToast({ message: `${what} exported to MakerLab`, type: 'success' });
-          nudgeLicense();
-          return true;
-        }
-        setStatus(`Export failed: ${result.errorMessage ?? result.errorCode}`, 'err');
-        sdkToast({ message: 'Export failed', type: 'error' });
+        };
       } catch (err) {
         console.error(err);
         setStatus(`Export failed: ${err.message || err}`, 'err');
+        return false;
       }
+      // The shelf reads the host's answer: a cancel is a cancel whether it comes back as an
+      // answer or as a throw, and a host that never answers is said so after a minute rather than
+      // leaving the export waiting for good. A late answer still reports.
+      const first = await settleExport(() => sdkExport(request), isExportCancelled, EXPORT_TIMEOUT_MS);
+      if (first.kind !== 'timeout') return reportHost(first, what);
+      void first.late.then((late) => reportHost(late, what));
+      setStatus('MakerLab has not answered. Check MakerLab’s own export window, or reload the MakerWorld page and try again.', 'err');
       return false;
     }
 

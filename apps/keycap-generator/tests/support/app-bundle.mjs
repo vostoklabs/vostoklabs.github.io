@@ -5,9 +5,13 @@
   - manifold-3d: npm's build, which node loads itself, and its WASM by path;
   - virtual:makerlab: the seam as the public build has it (no host) until a test calls
     `setMakerlab(true)`; then the MakerLab branch runs and each export it would hand the host is
-    kept in `globalThis.__sdkExports` (reported as sent);
-  - for src/exports.js only: the kit's toast and licence nudge as no-ops, and @vostok/export's
-    downloadFile keeping each file in `globalThis.__downloads` instead of saving it;
+    kept in `globalThis.__sdkExports`. The host answers "sent", or whatever
+    `globalThis.__sdkAnswer(request)` returns or throws; its toasts are kept in
+    `globalThis.__sdkToasts`, and `isExportCancelled` reads a stand-in code, 'CANCEL', the way the
+    glue reads the SDK's (answered as `errorCode`, or thrown as `code`);
+  - for src/exports.js only: the kit's toast and licence nudge kept in `globalThis.__toasts` and
+    `globalThis.__nudges` instead of shown, and @vostok/export's downloadFile keeping each file in
+    `globalThis.__downloads` instead of saving it;
   - in node itself: DOMParser and XMLSerializer (xmldom), localStorage, and a fetch that reads the
     app's public/ folder, as the page does.
 
@@ -73,13 +77,19 @@ const edges = {
         'export function setMakerlab(on) { MAKERLAB = on; }',
         'export const isReady = () => MAKERLAB;',
         'export const can = () => MAKERLAB;',
-        'export async function sdkExport(request) { (globalThis.__sdkExports ??= []).push(request); return { success: true }; }',
-        'export async function sdkToast() {}',
+        'export async function sdkExport(request) {',
+        '  (globalThis.__sdkExports ??= []).push(request);',
+        '  return globalThis.__sdkAnswer ? globalThis.__sdkAnswer(request) : { success: true };',
+        '}',
+        'export const isExportCancelled = (o) => !!o && typeof o === "object" && (o.code === "CANCEL" || o.errorCode === "CANCEL");',
+        'export async function sdkToast(options) { (globalThis.__sdkToasts ??= []).push(options); }',
       ].join('\n'),
       loader: 'js',
     }));
     b.onLoad({ filter: /^kit$/, namespace: 'edge' }, () => ({
-      contents: `export * from ${JSON.stringify(KIT_SRC)};\nexport const toast = () => {};\nexport const licenseAfterExport = () => {};`,
+      contents: `export * from ${JSON.stringify(KIT_SRC)};\n`
+        + 'export const toast = (message, opts) => { (globalThis.__toasts ??= []).push({ message, ...opts }); };\n'
+        + 'export const licenseAfterExport = () => { globalThis.__nudges = (globalThis.__nudges ?? 0) + 1; };',
       loader: 'js',
       resolveDir: APP,
     }));

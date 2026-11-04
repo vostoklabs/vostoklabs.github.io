@@ -65,6 +65,10 @@ declare module 'virtual:makerlab' {
     artifacts: (MakerlabZipArtifact | MakerlabObjArtifact)[];
   }
   export function sdkExport(options: MakerlabExportOptions): Promise<MakerlabExportResult>;
+  /** True when an export's answer, or what it threw, is the host's cancel: the export ended in
+   *  MakerLab's own window, which has told the customer why. The SDK's codes stay behind the
+   *  glue; the stub answers false. */
+  export function isExportCancelled(outcome: unknown): boolean;
   export function sdkToast(options: {
     message: string;
     type?: 'success' | 'info' | 'warning' | 'error';
