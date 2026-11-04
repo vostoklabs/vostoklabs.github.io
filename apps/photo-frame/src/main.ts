@@ -997,7 +997,19 @@ function setAnswers(next: Answers) {
 
 function openGallery(): Gallery {
   gallery ??= createGallery({
-    onPick: (d) => { location.hash = `#/t/${d.id}`; },
+    onPick: (d, o) => {
+      // The design opens the way up its card showed: a new one through `opening`, the one last
+      // edited by turning it where it was left.
+      pickedSize = { ...pickedSize, orientation: o };
+      if (editing === d.id && settings.orientation !== o) {
+        settings.orientation = o;
+        settings.kickstands = kickstandsFor(settings);
+        showSettings();
+      }
+      location.hash = `#/t/${d.id}`;
+    },
+    getOrientation: () => pickedSize.orientation ?? 'portrait',
+    setOrientation: (o) => { pickedSize = { ...pickedSize, orientation: o }; },
     onHelp: () =>
       openWalkthrough({
         start: answers,
@@ -1021,7 +1033,10 @@ function route() {
   if (!d) {
     if (location.hash && location.hash !== '#/') history.replaceState(null, '', '#/');
     document.title = 'Photo Frames Studio · Vostok Labs';
-    show(openGallery().root, galleryScroll);
+    // Back from the editor, the gallery takes what changed there (the way up, the answers).
+    const g = openGallery();
+    g.refresh();
+    show(g.root, galleryScroll);
     return;
   }
   show(editorRoot);

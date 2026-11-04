@@ -1,7 +1,9 @@
 // The front door: every design as a card, a real render of it with a sample photo in its window,
-// under the customer's word for what it is. A click opens the editor on it; "Help me choose"
-// opens the walkthrough. main.ts keeps this one node for the whole visit, so its scroll, its
-// category and the pictures it has drawn survive a trip into the editor and back.
+// under the customer's word for what it is, turned the way the Portrait | Landscape switch says.
+// The pictures are made before the page opens (cards.ts), so the page opens with them. A click
+// opens the editor on the design, that way up; "Help me choose" opens the walkthrough. main.ts
+// keeps this one node for the whole visit, so its scroll and its category survive a trip into
+// the editor and back.
 //
 // Laid out the way Laser Studio's gallery is (a rail of categories with their counts beside a
 // dense grid under headings), adapted here for portrait pictures and the walkthrough's answers.
@@ -13,6 +15,7 @@ import {
   galleryCard,
   galleryGrid,
   generatorHeader,
+  segmentedControl,
   sideNav,
   skeleton,
   themeToggleButton,
@@ -21,17 +24,24 @@ import {
 } from '@vostok/ui-kit';
 import { CATEGORIES, DESIGNS, settingsOf, type Category, type Design } from './designs';
 import { PHOTO_ANSWERS, PLACES, hasAnswers, matches, type Answers } from './choose';
+import { CARD_SHOT, cardPicture, cardSettings } from './cards';
 import { pictureOf } from './pictures';
+import type { Orientation } from './sizes';
 
-/** A card's picture: portrait, 4 by 5, drawn at about twice the size it shows. */
-export const CARD_SHOT = { width: 360, height: 450 };
+export { CARD_SHOT };
 
 export interface GalleryOptions {
-  onPick(design: Design): void;
+  /** A card was picked, with the way up the switch shows. */
+  onPick(design: Design, orientation: Orientation): void;
   onHelp(): void;
   /** The walkthrough's answers that stand, shown as chips; pressing one off drops it. */
   getAnswers(): Answers;
   setAnswers(answers: Answers): void;
+  /** The way up this visit: the switch, or the last one picked in the editor. */
+  getOrientation(): Orientation;
+  setOrientation(orientation: Orientation): void;
+  /** Kept out of the header in MakerLab, where the page is the host's. */
+  embedded?: boolean;
 }
 
 export interface Gallery {
@@ -64,16 +74,53 @@ function whenSeen(node: Element, start: () => void) {
   watcher.observe(node);
 }
 
-/** A card for a design, its picture drawn when it is first seen. */
-export function designCard(d: Design, onClick: () => void, picture: () => Promise<string | null> = () => pictureOf(settingsOf(d), CARD_SHOT)): GalleryCardHandle {
-  const card = galleryCard({ name: d.name, blurb: d.line, compact: true, thumb: skeleton({ width: '100%', height: '100%' }), onClick });
-  card.dataset.design = d.id;
+/** A picture already made (a URL), or one to make. */
+type Picture = string | (() => Promise<string | null>);
+
+const placeholder = () => skeleton({ width: '100%', height: '100%' });
+
+/** Show a picture on a card: a made one at once, one to make when the card is first seen. */
+function showPicture(card: GalleryCardHandle, picture: Picture) {
+  if (typeof picture === 'string') return card.setThumb(picture);
+  card.setThumb(placeholder());
   whenSeen(card, () => void picture().then((url) => url && card.setThumb(url)));
+}
+
+/** A card for a design, with its picture. */
+export function designCard(d: Design, onClick: () => void, picture: Picture = () => pictureOf(settingsOf(d), CARD_SHOT)): GalleryCardHandle {
+  const card = galleryCard({ name: d.name, blurb: d.line, compact: true, thumb: placeholder(), onClick });
+  card.dataset.design = d.id;
+  showPicture(card, picture);
   return card;
 }
 
+/** A design's card picture turned one way: the one made beforehand, else one made now. */
+const pictureFor = (d: Design, o: Orientation): Picture => cardPicture(d.id, o) ?? (() => pictureOf(cardSettings(d, o), CARD_SHOT));
+
 export function createGallery(opts: GalleryOptions): Gallery {
-  const entries = DESIGNS.map((d) => ({ d, card: designCard(d, () => opts.onPick(d)) }));
+  let orientation = opts.getOrientation();
+  const entries = DESIGNS.map((d) => ({ d, card: designCard(d, () => opts.onPick(d, orientation), pictureFor(d, orientation)) }));
+
+  /** Turn every card the new way. */
+  function turn(o: Orientation) {
+    if (o === orientation) return;
+    orientation = o;
+    for (const e of entries) showPicture(e.card, pictureFor(e.d, o));
+  }
+
+  const turnSwitch = segmentedControl<Orientation>({
+    ariaLabel: 'Orientation',
+    size: 'compact',
+    options: [
+      { value: 'portrait', label: 'Portrait' },
+      { value: 'landscape', label: 'Landscape' },
+    ],
+    value: orientation,
+    onChange: (v) => {
+      turn(v);
+      opts.setOrientation(v);
+    },
+  });
 
   const groups = CATEGORIES.map(({ id, label }) => {
     const members = entries.filter((e) => e.d.category === id);
@@ -132,6 +179,12 @@ export function createGallery(opts: GalleryOptions): Gallery {
   }
 
   function apply() {
+    // The editor may have turned the print since the gallery was last on screen.
+    const o = opts.getOrientation();
+    if (o !== orientation) {
+      turn(o);
+      turnSwitch.setValue(o);
+    }
     const a = opts.getAnswers();
     const kept = new Set(matches(a).map((d) => d.id));
     const counts: Record<string, number> = {};
@@ -188,9 +241,9 @@ export function createGallery(opts: GalleryOptions): Gallery {
   phone.addEventListener('change', placeTheme);
 
   const root = el('div', { className: 'pf-gallery' }, [
-    topbarLinks({ themeToggle: false }),
+    ...(opts.embedded ? [] : [topbarLinks({ themeToggle: false })]),
     el('div', { className: 'pf-gallery__page' }, [
-      el('header', { className: 'pf-gallery__header' }, [el('div', { className: 'pf-gallery__heading' }, [heading, headSlot]), el('div', { className: 'pf-gallery__tools' }, [help])]),
+      el('header', { className: 'pf-gallery__header' }, [el('div', { className: 'pf-gallery__heading' }, [heading, headSlot]), el('div', { className: 'pf-gallery__tools' }, [turnSwitch, help])]),
       el('aside', { className: 'pf-gallery__rail' }, [nav, railFoot]),
       main,
     ]),

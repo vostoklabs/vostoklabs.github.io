@@ -1,7 +1,7 @@
 // Every design as the gallery opens it, and as the walkthrough opens it: it keeps to the rules, its
 // words print at a size a 0.4 mm nozzle can make, and it builds with its words, its art and its
 // pattern exactly as the screen composes them. In node with manifold-3d and the real fonts.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import Module from 'manifold-3d';
@@ -10,6 +10,8 @@ import { buildModel, inkSection } from '../src/geometry/build';
 import { FIT, frameLayout } from '../src/geometry/layout';
 import { outlineRecipe } from '../src/geometry/outline';
 import { DESIGNS, kickstandsFor, settingsOf, type Design } from '../src/designs';
+import { CARD_FILES } from '../src/cardFiles';
+import { ORIENTATIONS, cardKey, cardSettings } from '../src/cards';
 import { PHOTO_ANSWERS, PLACES, matches, photoAnswersFor, takes, withAnswers, type Answers } from '../src/choose';
 import { composeInk, secondFaceOf, linesUnderFloor, type Faces } from '../src/ink';
 import { patternInk } from '../src/pattern';
@@ -288,6 +290,16 @@ for (const photo of ['mini', 'isq', 'iwide', '2x3', '3.5x5', '4x6', 'a6'] as con
 const placeless = DESIGNS.filter((d: Design) => !PLACES.some((p) => takes(d, { place: p.id, photo: null })));
 check(placeless.length === 0, `every design suits at least one place (${placeless.map((d) => d.id).join(', ')})`);
 check(PHOTO_ANSWERS.length === 5, 'five photo answers');
+
+// The gallery's made pictures: one each way up for every design, of the settings it opens with.
+const retake = 'ALLOW_CHROME=1 node scripts/render-photo-frame-cards.mjs';
+for (const d of DESIGNS) {
+  for (const o of ORIENTATIONS) {
+    const entry = CARD_FILES[d.id]?.[o];
+    check(!!entry && existsSync(join(process.cwd(), 'public', 'cards', entry.file)), `${d.id} ${o}: has a gallery picture (${retake})`);
+    check(!!entry && entry.key === cardKey(cardSettings(d, o)), `${d.id} ${o}: its gallery picture shows the settings it opens with (${retake})`);
+  }
+}
 
 console.log(`${checks - failures}/${checks} checks passed over ${builds} builds (${opened} from the walkthrough) in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 if (failures) process.exit(1);

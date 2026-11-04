@@ -61,7 +61,7 @@
   min-width: 0;
 }
 .pf-gallery__head-slot:empty { display: none; }
-.pf-gallery__tools { display: flex; flex: 0 0 auto; }
+.pf-gallery__tools { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-3); }
 
 /* The categories stay in reach down the page. */
 .pf-gallery__rail {
