@@ -1,9 +1,10 @@
-// A cut file sent to MakerLab instead of downloaded: the zip artifact, its cover, its name, and
-// the one call that hands it over and says what became of it.
+// A file sent to MakerLab instead of downloaded: the artifact, its cover, its name, and the one
+// call that hands it over and says what became of it.
 //
 // Every laser app with a MakerLab build sends the same thing — one zip holding the SVG and a
 // README of what each colour does, as a 2D export — so the shape of that call lives here, once.
-// The app keeps only what is its own: what goes in the README, and the words around its design.
+// A 3D model goes as OBJ text and its MTL, one OBJ a plate, and the host makes the 3MF from them.
+// The app keeps only what is its own: the geometry, the README, and the words around its design.
 //
 // The host itself stays behind each app's glue (`virtual:makerlab`), which this file never
 // imports: `exportToHost` takes the glue's functions as a `HostLink`, so the public build, which
@@ -23,10 +24,44 @@ export interface HostZipArtifact {
   description?: string;
 }
 
+/** Settings the host writes into the 3MF's project, every value a string (`layerHeight: '0.2'`);
+ *  `plates` sets them per plate, one entry a plate. */
+export interface HostPrintConfig {
+  [key: string]: string | Record<string, string>[] | undefined;
+  plates?: Record<string, string>[];
+}
+
+/** One 3D model, as the host takes it: OBJ text and its MTL, from which the host makes the 3MF.
+ *  `buffer` is one plate, or one per plate. */
+export interface HostObjArtifact {
+  fileName: string;
+  format: 'obj';
+  buffer: ArrayBuffer | ArrayBuffer[];
+  mtl: string;
+  /** A PNG or JPEG data URL. */
+  coverImage: string;
+  description?: string;
+  /** Every mesh on a plate made into one object. */
+  mergeObj?: boolean;
+  printConfig?: HostPrintConfig;
+}
+
+export type HostArtifact = HostZipArtifact | HostObjArtifact;
+
 /** The whole export call. `'2D'` is a cut file: no FDM printer to pick. */
 export interface HostExportOptions {
   printerType?: '2D' | '3D';
+  artifacts: HostArtifact[];
+}
+
+/** A cut file's export call: zip artifacts only. */
+export interface HostCutExportOptions extends HostExportOptions {
   artifacts: HostZipArtifact[];
+}
+
+/** A 3D model's export call: OBJ artifacts only. */
+export interface HostModelExportOptions extends HostExportOptions {
+  artifacts: HostObjArtifact[];
 }
 
 /** What the host answered. */
@@ -83,8 +118,38 @@ export function cutArtifact(input: {
 }
 
 /** The whole export call for a cut file. */
-export function cutExport(input: Parameters<typeof cutArtifact>[0]): HostExportOptions {
+export function cutExport(input: Parameters<typeof cutArtifact>[0]): HostCutExportOptions {
   return { printerType: '2D', artifacts: [cutArtifact(input)] };
+}
+
+/** A 3D model, as the host's OBJ artifact: the OBJ text (`buildObjMtl`), or one text a plate
+ *  (`buildObjMtlPlates`), with their one MTL. `mergeObj` goes out only when true, the one value
+ *  that changes anything. */
+export function modelArtifact(input: {
+  fileName: string;
+  obj: string | string[];
+  mtl: string;
+  coverImage: string;
+  description: string;
+  mergeObj?: boolean;
+  printConfig?: HostPrintConfig;
+}): HostObjArtifact {
+  const encode = (text: string) => bytesToArrayBuffer(new TextEncoder().encode(text));
+  return {
+    fileName: input.fileName,
+    format: 'obj',
+    buffer: Array.isArray(input.obj) ? input.obj.map(encode) : encode(input.obj),
+    mtl: input.mtl,
+    coverImage: input.coverImage,
+    description: clampDescription(input.description),
+    ...(input.mergeObj ? { mergeObj: true } : {}),
+    ...(input.printConfig ? { printConfig: input.printConfig } : {}),
+  };
+}
+
+/** The whole export call for a 3D model. No printer type: the host asks which printer. */
+export function modelExport(input: Parameters<typeof modelArtifact>[0]): HostModelExportOptions {
+  return { artifacts: [modelArtifact(input)] };
 }
 
 /** The zip the host receives: the cut file (or one file per sheet), plus the README. */
@@ -147,16 +212,21 @@ export async function settleExport(
   return first === TIMED_OUT ? { kind: 'timeout', late: outcome } : first;
 }
 
-/** The app's glue, as `exportToHost` needs it: `virtual:makerlab`'s functions, passed in. */
-export interface HostLink {
+/** The app's glue, as `exportToHost` needs it: `virtual:makerlab`'s functions, passed in.
+ *  `O` is what the app sends: cut files unless it says otherwise, `HostModelExportOptions` for a
+ *  3D model. */
+export interface HostLink<O extends HostExportOptions = HostCutExportOptions> {
   isEmbedded(): boolean;
   isReady(): boolean;
   can(capability: string): boolean;
   /** The glue's `initMakerlab`: the handshake in flight, or one fresh one if it failed. */
   connect(): Promise<unknown>;
-  send(options: HostExportOptions): Promise<HostExportResult>;
+  send(options: O): Promise<HostExportResult>;
   isCancelled(outcome: unknown): boolean;
   hostToast(options: { message: string; type?: 'success' | 'info' | 'warning' | 'error' }): Promise<void>;
+  /** True when the handshake failed because the host has outgrown this build's SDK: a reload
+   *  cannot fix that, only a new build can. Left out, a failed handshake asks for a reload. */
+  needsUpdate?(): boolean;
 }
 
 /** Where `exportToHost` says what happened: the app's status line and its toasts. */
@@ -185,10 +255,10 @@ export const HANDSHAKE_TIMEOUT_MS = 30_000;
  *  closing MakerLab's own export window, their choice, so it gets a quiet status line and no
  *  toast. On a timeout the status says honestly that it does not know, and a late answer still
  *  reports. `what` names the file in those lines ("the cut file"). */
-export async function exportToHost(
-  link: HostLink,
+export async function exportToHost<O extends HostExportOptions>(
+  link: HostLink<O>,
   report: HostReport,
-  make: () => Promise<HostExportOptions>,
+  make: () => Promise<O>,
   opts: { what?: string; timeoutMs?: number } = {},
 ): Promise<boolean> {
   const what = opts.what ?? 'the cut file';
@@ -199,7 +269,9 @@ export async function exportToHost(
       await link.connect();
     }
     if (!connected()) {
-      const msg = 'Not connected to MakerLab, so the file cannot be sent. Reload the whole MakerWorld page, not just this panel, and try again.';
+      const msg = link.needsUpdate?.()
+        ? 'This app needs an update from its maker before it can send files to MakerLab.'
+        : 'Not connected to MakerLab, so the file cannot be sent. Reload the whole MakerWorld page, not just this panel, and try again.';
       report.status(msg, 'error');
       report.toast(msg, 'error');
       return false;
