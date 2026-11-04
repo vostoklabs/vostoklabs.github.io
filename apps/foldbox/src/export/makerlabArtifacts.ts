@@ -48,13 +48,9 @@ export function exportNote(mode: 'cut' | 'print'): string {
 
 /** The printed sheet, as the host's OBJ artifact.
  *
- *  `mergeObj: true` because the blank is one physical part. The sheet, the panel slabs stacked
- *  on it and the logo inlay are separate `o` objects only because that is how an OBJ carries
- *  two colours; they meet on a face and print as one union. The guide's rule is exactly this
- *  case: merge when the meshes belong to one physical part that should be moved, oriented and
- *  sliced as one unit. Without it the host leaves two to four independently draggable objects
- *  on the plate, one drag away from a sheet with its panels somewhere else — the host only
- *  merges by itself above 500 meshes, which this never is. */
+ *  No `mergeObj`. The sheet, the panel slabs stacked on it and the logo inlay are separate `o`
+ *  objects because that is how an OBJ carries two colours, and merging would make the plate one
+ *  mesh on one filament: the logo would print in the sheet's colour. */
 export function printArtifact(input: {
   fileName: string;
   /** One per build plate: a tray and its lid that do not share a plate are two. */
@@ -70,7 +66,6 @@ export function printArtifact(input: {
     mtl: input.mtl,
     coverImage: input.coverImage,
     description: input.description,
-    mergeObj: true,
     printConfig: { layerHeight: MAKERLAB_LAYER_HEIGHT },
   };
 }
