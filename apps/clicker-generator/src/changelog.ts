@@ -30,6 +30,16 @@ import type { ChangelogEntry } from '@vostok/ui-kit';
 */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-11-04',
+    changes: [
+      { kind: 'added', text: 'Blank: print any clicker without its picture.' },
+      { kind: 'added', text: 'Blocks: Keycap height, for a shorter key.' },
+      { kind: 'added', text: 'Blocks: Low profile and Thocky keycaps.' },
+      { kind: 'changed', text: 'Design size goes down to 10%.' },
+      { kind: 'changed', text: 'On MakerLab the top and the body are separate objects.' },
+    ],
+  },
+  {
     date: '2026-10-11',
     changes: [
       { kind: 'added', text: 'Blocks: Body rim height, to hide more of each keycap.' },

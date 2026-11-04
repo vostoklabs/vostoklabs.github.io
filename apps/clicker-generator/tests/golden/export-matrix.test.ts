@@ -71,7 +71,7 @@ const { FALLBACK_POST_SEAT, makeSwitchKit, measurePostSeat, measureSwitchBands, 
 const { buildModelClicker } = await import('../../src/model/buildModel.ts');
 const { DEFAULT_MODEL_CUT } = await import('../../src/model/types.ts');
 const { clickerThreeMF } = await import('../../src/export/threemfExport.ts');
-const { clickerObjMtl } = await import('../../src/export/objExport.ts');
+const { clickerObjMtl, clickerObjPlates } = await import('../../src/export/objExport.ts');
 
 type BuildParams = import('../../src/types.ts').BuildParams;
 type BuildRegion = import('../../src/types.ts').BuildRegion;
@@ -138,6 +138,12 @@ const kit = makeSwitchKit(
 
 const keycapJson = JSON.parse(file('keycap.json').toString('utf-8'));
 const keycapAsset = { shell: { positions: keycapJson.positions, indices: keycapJson.indices }, stem: keycapJson.stem ?? null, meta: keycapJson.meta };
+/** Letter blocks' other keycaps, by profile, as the worker holds them. */
+const capAsset = (name: string) => {
+  const j = JSON.parse(file(`keycaps/${name}.json`).toString('utf-8'));
+  return { shell: { positions: j.positions, indices: j.indices }, stem: j.stem ?? null, meta: j.meta };
+};
+const keycapSet = { standard: keycapAsset, low: capAsset('low'), thocky: capAsset('thocky') };
 
 /* ------------------------------------------------------------------ inputs, as mount.ts makes them */
 
@@ -378,6 +384,30 @@ const DESIGNS: Record<string, () => Built> = {
   'Model mode: skull, sliced': () => sampleCut('skull'),
   'Model mode: pumpkin, button': () => sampleCut('pumpkin', { cutter: 'button' }),
   'Model mode: duck, on a stand': () => sampleCut('duck'),
+  'blank: the heart picture left off, its outline kept': () => {
+    const set = picture('media/images/heart.png', 4);
+    return buildClicker(wasm, socket, stem, [], set.outline, { ...DEFAULTS, blank: true, baseFilamentRgb: ORANGE });
+  },
+  'blank: ABCD blocks with nothing on the keys': () => {
+    const b = blocks({ blockLayout: 'row', blockLines: ['ABCD'] }, { blockStyle: 'walls', blockTexture: 'smooth' });
+    return buildBlocks(wasm, socket, keycapAsset as never, b.regions.map((r) => ({ ...r, rings: [] })), { ...b.params, blank: true });
+  },
+  'blocks: ABCD, Standard keycaps 3 mm shorter': () => {
+    const b = blocks({ blockLayout: 'row', blockLines: ['ABCD'] }, { blockStyle: 'walls', blockTexture: 'smooth' });
+    return buildBlocks(wasm, socket, keycapSet as never, b.regions, { ...b.params, blockCapLowerMm: 3 });
+  },
+  'blocks: ABCD on Low profile keycaps': () => {
+    const b = blocks({ blockLayout: 'row', blockLines: ['ABCD'] }, { blockStyle: 'walls', blockTexture: 'smooth' });
+    return buildBlocks(wasm, socket, keycapSet as never, b.regions, { ...b.params, blockKeycap: 'low' });
+  },
+  'blocks: ABCD on Thocky keycaps': () => {
+    const b = blocks({ blockLayout: 'row', blockLines: ['ABCD'] }, { blockStyle: 'walls', blockTexture: 'smooth' });
+    return buildBlocks(wasm, socket, keycapSet as never, b.regions, { ...b.params, blockKeycap: 'thocky' });
+  },
+  'SVG on a circle at Design size 10 %': () => {
+    const set = parseSvg(SVG, { removeBg: true, asPainted: true });
+    return buildClicker(wasm, socket, stem, regionsOf(set), set.outline, { ...DEFAULTS, baseShape: 'circle', designScale: 0.1 });
+  },
   'Halloween pack: pumpkin shape round a traced design': () => {
     const shape = parseSvg(readFileSync(join(APP, 'public/assets/packs/halloween/shapes/pumpkin.svg'), 'utf-8'), { removeBg: true, asPainted: true });
     const set = picture('packs/halloween/designs/pumpkin-happy.png', 3);
@@ -436,6 +466,8 @@ function record(built: Built) {
   const plate = built.plate ?? 'a1';
   const threeMF = unzipSync(clickerThreeMF(built.parts, { plate, ...(built.sourceModel ? { sourceModel: built.sourceModel } : {}) }));
   const { obj, mtl } = clickerObjMtl(built.parts, { plate, ...(built.sourceModel ? { sourceModel: built.sourceModel } : {}) });
+  // What the MakerLab build sends: the top and the body as plates of their own.
+  const plated = clickerObjPlates(built.parts, { plate, ...(built.sourceModel ? { sourceModel: built.sourceModel } : {}) });
   objTexts.set(built, obj);
   return {
     warnings: built.warnings,
@@ -446,6 +478,7 @@ function record(built: Built) {
     '3mf': Object.fromEntries(Object.entries(threeMF).map(([name, data]) => [name, hash(data)])),
     obj: hash(obj),
     mtl: hash(mtl),
+    objPlates: { objs: plated.objs.map((o) => hash(o)), mtl: hash(plated.mtl) },
   };
 }
 
