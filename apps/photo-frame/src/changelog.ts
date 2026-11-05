@@ -20,6 +20,14 @@ import type { ChangelogEntry } from '@vostok/ui-kit';
 */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-11-05',
+    title: 'A faster gallery',
+    changes: [
+      { kind: 'changed', text: 'The gallery opens with every design’s picture at once, instead of drawing them one by one while you wait.' },
+      { kind: 'added', text: 'A Portrait or Landscape switch over the designs turns every picture, and the design you pick opens that way up.' },
+    ],
+  },
+  {
     date: '2026-10-13',
     title: 'First release',
     changes: [
