@@ -33,9 +33,16 @@ export interface RgbaImage {
 */
 const TARGET = 1100;
 
+/*
+  No web worker. pica's default starts one from a `blob:` URL, and a page whose CSP says
+  `worker-src 'self'` (the policy our hosted builds declare) refuses it. The browser reports
+  that only as an error event on the worker, so the worker never answers and the first resize
+  waited for it forever: on MakerLab, every upload over the working size sat on "Reading
+  image…" for good. One resize per picture runs on the page instead (tests/decode.test.ts).
+*/
 let picaInstance: Pica | null = null;
 function getPica(): Pica {
-  if (!picaInstance) picaInstance = new Pica();
+  if (!picaInstance) picaInstance = new Pica({ features: ['js', 'wasm'] });
   return picaInstance;
 }
 
@@ -117,7 +124,7 @@ export async function drawToImageData(
     const img = dctx.getImageData(0, 0, w, h);
     return { data: img.data, width: w, height: h };
   } catch {
-    // Fallback to the browser's built-in scaler if pica fails (workers blocked, etc.).
+    // Fallback to the browser's built-in scaler if pica fails.
     const dctx = dstCanvas.getContext('2d', { willReadFrequently: true })!;
     dctx.imageSmoothingEnabled = true;
     dctx.imageSmoothingQuality = 'high';
