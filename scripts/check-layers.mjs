@@ -108,12 +108,15 @@ const KNOWN = new Set([
 /* Exceptions inside private files are listed privately (scripts/budgets.private.json,
    "layersKnown"), so no public file names a private one. */
 const PRIVATE_KNOWN = new Set(privateBudgets().layersKnown ?? []);
+/* A private package's layer is listed there too ("layers", as [prefix, layer] pairs like LAYERS),
+   for the same reason; it moves into LAYERS the day the package is published. */
+const ALL_LAYERS = [...LAYERS, ...(privateBudgets().layers ?? [])];
 
 function layerOf(relPath) {
   // Repo-level data beside the workspace, such as generators.json: readable from anywhere.
   if (!/^(apps|packages|config)\//.test(relPath)) return 'config';
   let best = null;
-  for (const [prefix, layer] of LAYERS) if (relPath.startsWith(prefix) && (!best || prefix.length > best[0].length)) best = [prefix, layer];
+  for (const [prefix, layer] of ALL_LAYERS) if (relPath.startsWith(prefix) && (!best || prefix.length > best[0].length)) best = [prefix, layer];
   return best?.[1] ?? null;
 }
 
@@ -166,7 +169,7 @@ const files = [...appSourceFiles().map((f) => f.file), ...packageSourceFiles().m
 for (const file of files) {
   const from = layerOf(file);
   if (!from) {
-    problems.push(`${file}: no layer. Add its package to LAYERS in scripts/check-layers.mjs.`);
+    problems.push(`${file}: no layer. Add its package to LAYERS in scripts/check-layers.mjs (a private one to "layers" in scripts/budgets.private.json).`);
     continue;
   }
   const src = blankComments(readFileSync(abs(file), 'utf8'));

@@ -13,6 +13,8 @@
    - a node test is followed through its relative imports the same way;
    - each finding is cleared by an exception written "<file> -> <import>", and the summary counts
      every worker.
+  And the private layers: a package LAYERS does not list fails, until scripts/budgets.private.json
+  gives it one ("layers", [prefix, layer] pairs like LAYERS); its imports are then judged by it.
 */
 
 import { spawnSync } from 'node:child_process';
@@ -102,6 +104,27 @@ try {
     second.stdout.includes('no font registry in 3 workers or 1 node test files'),
     `the summary counts every worker: ${second.stdout.trim().split('\n').pop()}`,
   );
+
+  // A package with no layer in LAYERS, given one privately.
+  write('packages/unlisted/package.json', JSON.stringify({ name: '@vostok/unlisted', exports: { '.': './src/index.ts' } }));
+  write('packages/unlisted/src/index.ts', lines("import { buildText } from '@vostok/laser';", 'export const t = buildText;'));
+  const budgets = (layers) => write('scripts/budgets.private.json', JSON.stringify({
+    layersKnown: [
+      'apps/demo/src/workers/relay.worker.ts -> ../engine/build',
+      'apps/demo/src/engine/plain.ts -> @vostok/fonts',
+      'apps/demo/tests/measure.test.ts -> ../src/engine/build',
+    ],
+    ...(layers ? { layers } : {}),
+  }));
+  budgets(null);
+  const unlisted = run();
+  ok(unlisted.status === 1 && unlisted.stderr.includes('packages/unlisted/src/index.ts: no layer'), `a package with no layer fails (exit ${unlisted.status})`);
+  budgets([['packages/unlisted/', 'core']]);
+  const asCore = run();
+  ok(asCore.status === 1 && asCore.stderr.includes('packages/unlisted/src/index.ts (core) imports'), `a private layer is the one its imports are judged by (exit ${asCore.status}) ${asCore.stderr.trim()}`);
+  budgets([['packages/unlisted/', 'connector']]);
+  const asConnector = run();
+  ok(asConnector.status === 0, `a private package on the right layer passes (exit ${asConnector.status}) ${asConnector.stderr.trim()}`);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }
