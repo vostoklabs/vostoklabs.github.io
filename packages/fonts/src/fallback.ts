@@ -5,7 +5,7 @@
 // plainest face of this library that writes all of it, and say so. The order they try is one
 // rule, kept here so every app falls back the same way: the app's own default faces, then the
 // plain face for each alphabet the text needs, then every other face that writes it.
-import { getRequiredSubsets } from './index';
+import { getRequiredSubsets, inThisBuild } from './index';
 
 /** The letters of a text, without its symbols: the private-use characters of the symbol font
  *  (U+F0000 and up), which no typeface has and no fallback should count as missing. */
@@ -14,7 +14,7 @@ export const lettersOnly = (text: string): string =>
 
 const ALPHABETS: Record<string, string> = {
   cyrillic: 'Cyrillic', greek: 'Greek', korean: 'Korean', kana: 'Japanese', japanese: 'Japanese',
-  'chinese-simplified': 'Chinese', 'latin-ext': 'accented',
+  'chinese-simplified': 'Chinese', han: 'Chinese', 'latin-ext': 'accented',
 };
 
 /** What `text` needs beyond plain Latin, as the library names it ('cyrillic', 'kana'…). */
@@ -30,17 +30,25 @@ export function alphabetOf(text: string): string | null {
 
 /** The plain face for each alphabet, most telling first: a text with kana in it is Japanese
  *  whatever else it holds, Hangul is Korean, a Han character with neither is Chinese. Gothic A1
- *  also writes Cyrillic and Greek, so a Korean name mixed with Russian still lands on one face. */
+ *  also writes Cyrillic and Greek, so a Korean name mixed with Russian still lands on one face.
+ *  A Han character past the common sets the cut faces hold goes to Source Han Sans CN, after Noto
+ *  Sans SC, so Chinese text Noto writes still starts on Noto. */
 const PLAIN_FACES: [need: string, face: string][] = [
   ['kana', 'm-plus-1p'],
   ['korean', 'gothic-a1'],
   ['chinese-simplified', 'noto-sans-sc'],
+  ['han', 'source-han-sans-cn-light'],
   ['greek', 'gothic-a1'],
   ['cyrillic', 'montserrat'],
   ['latin-ext', 'montserrat'],
 ];
 /** The plain faces, for a text that needs none of them by alphabet (accented Latin, say). */
 const PLAIN_ORDER = ['montserrat', 'gothic-a1', 'm-plus-1p', 'noto-sans-sc'];
+
+/** Faces kept for the characters no other face has. Source Han Sans CN holds every Han character
+ *  of the unified block and Extension A, where the cut faces hold the common sets, and its file is
+ *  8 MB, too heavy to offer for text a lighter face writes. */
+const RESERVES = new Set(['source-han-sans-cn-light']);
 
 /** The plain face ids for the alphabets `text` needs, most telling first, then the rest of the
  *  plain faces, each once. Not checked against the text: a caller keeps the ones that write it. */
@@ -55,11 +63,18 @@ export function plainFacesFor(text: string): string[] {
  * needs, then the rest of `faces` in their own order. Text in an alphabet the default lacks
  * therefore starts on a face that suits it, rather than on whichever display face comes first
  * alphabetically. `writes` is the app's own answer to "can this face draw this text".
+ *
+ * A reserve face (`RESERVES`) is in the list only when no other face writes the text: it is here
+ * for the characters the others lack, not as one more choice for text they already write.
  */
 export function fallbackFaces(
   text: string,
   opts: { faces: readonly string[]; writes: (id: string, text: string) => boolean; first?: readonly string[] },
 ): string[] {
-  const lead = [...new Set([...(opts.first ?? []), ...plainFacesFor(text)])].filter((id) => opts.writes(id, text));
-  return [...lead, ...opts.faces.filter((id) => !lead.includes(id) && opts.writes(id, text))];
+  // A face this build left out (`leaveOutFonts`) has no file to load, so it writes nothing here.
+  const can = (id: string) => inThisBuild(id) && opts.writes(id, text);
+  const lead = [...new Set([...(opts.first ?? []), ...plainFacesFor(text)])].filter(can);
+  const all = [...lead, ...opts.faces.filter((id) => !lead.includes(id) && can(id))];
+  const usual = all.filter((id) => !RESERVES.has(id));
+  return usual.length ? usual : all;
 }

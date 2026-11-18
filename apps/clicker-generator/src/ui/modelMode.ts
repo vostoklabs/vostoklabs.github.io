@@ -15,7 +15,7 @@ import { FILAMENTS, type ClickerPart, type GeometryRequest, type RGB } from '../
 import type { UiState } from './ui';
 import type { CutterOverlay, Viewer } from '../viewer/viewer';
 import { createModelPanel, type ModelPanel } from './modelPanel';
-import type { CutterKind, ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
+import { buttonCount, type CutterKind, type ModelCutParams, type ModelInfo, type ModelMeta } from '../model/types';
 import { FIRST_SAMPLE, sampleById, sampleFile, type SampleId } from '../model/samples';
 import { modelFormatOf } from '@vostok/export/read';
 import { assetUrl } from '../assets';
@@ -106,6 +106,7 @@ export function createModelMode(deps: ModelModeDeps) {
       store.set({ modelCut: next });
       deps.rebuildSoon(!!live);
     },
+    onSelect: () => sync(store.get()),
   });
 
   // ---- The stage: the cut's grip, on the model ----
@@ -116,15 +117,15 @@ export function createModelMode(deps: ModelModeDeps) {
   /** The parameters the worker cuts with: the mode's own settings plus the three fit controls
    *  it shares with every other mode (Body & fit), so "Switch stem fit" means one thing. */
   function params(s: UiState): ModelCutParams {
-    return { ...s.modelCut, tolerance: s.tolerance, stemFitMm: s.stemFitMm, socketFitPct: s.socketFitPct, travel: 4.0 };
+    return { ...s.modelCut, tolerance: s.tolerance, stemFitMm: s.stemFitMm, stemOuterMm: s.stemOuterMm, socketFitPct: s.socketFitPct, travel: 4.0 };
   }
 
   /** Everything a card's picture depends on: the model, how it is sized and turned, the fits,
    *  the colours, and that result's own settings — never another result's. */
   function pictureKey(cutter: CutterKind, s: UiState): string {
     const c = s.modelCut;
-    const own = cutter === 'slice' ? [c.slice, c.switchNudge] : cutter === 'stand' ? [c.stand] : [c.button, c.switchNudge.rotation];
-    return JSON.stringify([modelToken, c.sizeMm, c.rotation, c.flattenMm, c.colors, s.tolerance, s.stemFitMm, s.socketFitPct, own]);
+    const own = cutter === 'slice' ? [c.slice, c.switchNudge, c.buttons, c.more] : cutter === 'stand' ? [c.stand] : [c.button, c.switchNudge.rotation, c.buttons, c.more];
+    return JSON.stringify([modelToken, c.sizeMm, c.rotation, c.flattenMm, c.colors, s.tolerance, s.stemFitMm, s.stemOuterMm, s.socketFitPct, own]);
   }
 
   /** A new model: every card goes back to being made, and nothing built for the last one counts. */
@@ -259,6 +260,8 @@ export function createModelMode(deps: ModelModeDeps) {
         stand: preset?.stand ?? c.stand,
         button: { ...c.button, x: null, y: null },
         switchNudge: { x: 0, y: 0, rotation: 0 },
+        buttons: 1,
+        more: [],
       },
     });
     deps.reframeNext();
@@ -423,13 +426,17 @@ export function createModelMode(deps: ModelModeDeps) {
       return { kind: 'plane', z, minX: -w / 2, maxX: w / 2, minY: -d / 2, maxY: d / 2 };
     }
     if (c.cutter === 'button' && meta.buttonAt) {
+      // The button the controls act on. Its spot is the build's until a click moves it.
+      const i = Math.min(panel.selected(), Math.max(0, meta.buttonsAt.length - 1));
+      const e = i > 0 ? c.more?.[i - 1] : undefined;
+      const at = meta.buttonsAt[i] ?? meta.buttonAt;
       return {
         kind: 'column',
-        x: c.button.x ?? meta.buttonAt.x,
-        y: c.button.y ?? meta.buttonAt.y,
+        x: (i > 0 ? e?.x : c.button.x) ?? at.x,
+        y: (i > 0 ? e?.y : c.button.y) ?? at.y,
         shape: c.button.shape,
         size: c.button.sizeMm,
-        rotation: c.switchNudge.rotation,
+        rotation: i > 0 ? e?.rotation ?? 0 : c.switchNudge.rotation,
         z0: meta.switchAt.z - 8,
         z1: h + 2,
       };
@@ -452,7 +459,15 @@ export function createModelMode(deps: ModelModeDeps) {
   viewer.onSurfacePick((x, y) => {
     const s = store.get();
     if (s.importMode !== 'model' || s.modelCut.cutter !== 'button') return;
-    store.set({ modelCut: { ...s.modelCut, button: { ...s.modelCut.button, x, y } } });
+    const i = panel.selected();
+    if (i > 0) {
+      const more = Array.from({ length: buttonCount(s.modelCut) - 1 }, (_, k) =>
+        s.modelCut.more?.[k] ?? { x: null, y: null, nudgeX: 0, nudgeY: 0, rotation: 0 });
+      more[i - 1] = { ...more[i - 1], x, y };
+      store.set({ modelCut: { ...s.modelCut, more } });
+    } else {
+      store.set({ modelCut: { ...s.modelCut, button: { ...s.modelCut.button, x, y } } });
+    }
     deps.rebuildSoon(false);
   });
 

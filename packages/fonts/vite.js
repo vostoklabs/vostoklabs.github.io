@@ -2,11 +2,24 @@
 // vite.config.ts (`import { keepOnlyFonts } from '@vostok/fonts/vite'`). Plain JavaScript,
 // because Vite hands a config's bare imports to Node as they are. They rewrite this package's
 // own files on their way into a build, so they live beside them.
+import { existsSync } from 'node:fs';
+import { FONTS } from '@vostok/fonts/registry';
+
+/** The glob in src/index.ts, as written there: the TrueType faces and the OpenType ones. */
+const GLOB = "['./fonts/*.ttf', './fonts/*.otf']";
+
+/** The file a face is in: its .otf when it has one (a face shipped as its maker released it),
+ *  else its .ttf. */
+const fileOf = (id) => (existsSync(new URL(`./src/fonts/${id}.otf`, import.meta.url)) ? `${id}.otf` : `${id}.ttf`);
+
+/** Faces with no rule in fonts.css: each is declared from its own file once that has loaded
+ *  (`FontChoice.preview`), so a build keeping one finds no rule for it, rightly. */
+const declaredOnLoad = new Set(FONTS.filter((f) => f.preview).map((f) => f.id));
 
 /** Keep only the named fonts in a build.
  *
  *  `@vostok/fonts` ships every face and hands them out two ways: an eager
- *  `import.meta.glob` of `./fonts/*.ttf` (the URL map `getFont` reads) and one
+ *  `import.meta.glob` of `./fonts/*.ttf` and `*.otf` (the URL map `getFont` reads) and one
  *  `@font-face` rule per face in `fonts.css` (the HTML previews). Offline,
  *  `assetsInlineLimit` is Infinity — so BOTH become base64 and 25 MB of TTF lands
  *  in the page twice. The carabiner uses exactly one face and its first offline
@@ -33,7 +46,6 @@ export function keepOnlyFonts(keep, opts = {}) {
   const wantCss = opts.css !== false;
   if (!wanted.length) throw new Error('keepOnlyFonts: no fonts named');
   const norm = (id) => id.replace(/\\/g, '/').split('?')[0];
-  const GLOB = "'./fonts/*.ttf'";
   let hitIndex = false;
   let hitCss = false;
 
@@ -51,7 +63,7 @@ export function keepOnlyFonts(keep, opts = {}) {
           throw new Error(`keepOnlyFonts: ${GLOB} is not in fonts/src/index.ts — the glob moved`);
         }
         hitIndex = true;
-        return code.replace(GLOB, JSON.stringify(wanted.map((f) => `./fonts/${f}.ttf`)));
+        return code.replace(GLOB, JSON.stringify(wanted.map((f) => `./fonts/${fileOf(f)}`)));
       }
 
       // The @font-face rules — one per line, family `VL-<id>`.
@@ -64,7 +76,7 @@ export function keepOnlyFonts(keep, opts = {}) {
           seen.add(fam);
           return block;
         });
-        const missing = wanted.filter((f) => !seen.has(f));
+        const missing = wanted.filter((f) => !seen.has(f) && !declaredOnLoad.has(f));
         if (missing.length) throw new Error(`keepOnlyFonts: no @font-face for ${missing.join(', ')}`);
         hitCss = true;
         return out;
@@ -83,6 +95,58 @@ export function keepOnlyFonts(keep, opts = {}) {
       if (!wantCss && hitCss) {
         throw new Error('keepOnlyFonts: css: false, but fonts.css is in the graph — every face is inlined twice');
       }
+    },
+  };
+}
+
+/** The line in src/index.ts that `leaveOutFonts` rewrites, as written there. */
+const LEFT_OUT_LINE = 'const LEFT_OUT: readonly string[] = [];';
+
+/** Leave the named faces out of a build that keeps the rest of the library.
+ *
+ *  The opposite of `keepOnlyFonts`, for an app with a font picker whose package has to stay
+ *  small: the clicker's MakerLab build keeps a choice of faces rather than the whole library.
+ *  Unlike `keepOnlyFonts` it leaves every file it does not name, the symbol font included, and
+ *  the pickers keep working off `FONTS`. Three rewrites, at `enforce: 'pre'` like
+ *  `keepOnlyFonts`: the glob in src/index.ts gains a negative pattern per face, so the file is
+ *  never emitted; its `@font-face` rule, if it has one, leaves fonts.css; and `LEFT_OUT` in
+ *  src/index.ts names it, so `FONTS` and `fallbackFaces` stop offering a face whose file is not
+ *  there (offered, it would load nothing and the text would come out as "?").
+ */
+export function leaveOutFonts(drop) {
+  const ids = [...new Set(drop)];
+  if (!ids.length) throw new Error('leaveOutFonts: no fonts named');
+  const unknown = ids.filter((id) => !FONTS.some((f) => f.id === id));
+  if (unknown.length) throw new Error(`leaveOutFonts: not in the library: ${unknown.join(', ')}`);
+  const norm = (id) => id.replace(/\\/g, '/').split('?')[0];
+  let hitIndex = false;
+
+  return {
+    name: 'vostok:leave-out-fonts',
+    enforce: 'pre',
+
+    transform(code, id) {
+      const p = norm(id);
+      if (p.endsWith('packages/fonts/src/index.ts')) {
+        if (!code.includes(GLOB)) throw new Error(`leaveOutFonts: ${GLOB} is not in fonts/src/index.ts — the glob moved`);
+        if (!code.includes(LEFT_OUT_LINE)) throw new Error(`leaveOutFonts: "${LEFT_OUT_LINE}" is not in fonts/src/index.ts`);
+        hitIndex = true;
+        const glob = JSON.stringify(['./fonts/*.ttf', './fonts/*.otf', ...ids.map((f) => `!./fonts/${fileOf(f)}`)]);
+        return code
+          .replace(GLOB, glob)
+          .replace(LEFT_OUT_LINE, `const LEFT_OUT: readonly string[] = ${JSON.stringify(ids)};`);
+      }
+      if (p.endsWith('packages/fonts/src/fonts.css')) {
+        return code.replace(/@font-face\s*\{[^}]*\}/g, (block) => {
+          const fam = /font-family:\s*VL-([\w-]+)/.exec(block)?.[1];
+          return fam && ids.includes(fam) ? '' : block;
+        });
+      }
+      return null;
+    },
+
+    buildEnd() {
+      if (!hitIndex) throw new Error('leaveOutFonts: fonts/src/index.ts was never transformed');
     },
   };
 }

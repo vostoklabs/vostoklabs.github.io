@@ -631,13 +631,15 @@ export interface StepperRowOptions {
  * the call site, and nothing downstream (a sync pass, Load-project) can tell the
  * difference.
  */
-export function stepperRow(opts: StepperRowOptions): TaggedRow<number> {
+export function stepperRow(opts: StepperRowOptions): TaggedRow<number> & { setBounds(min: number, max: number): void } {
   const step = opts.step ?? 1;
   const fmt = opts.format ?? ((v: number) => (opts.unit ? `${v} ${opts.unit}` : String(v)));
+  let lo = opts.min;
+  let hi = opts.max;
 
-  const clamp = (v: number) => Math.min(opts.max, Math.max(opts.min, v));
+  const clamp = (v: number) => Math.min(hi, Math.max(lo, v));
   const snap = (v: number) => {
-    const snapped = Math.round((v - opts.min) / step) * step + opts.min;
+    const snapped = Math.round((v - lo) / step) * step + lo;
     return Number(clamp(snapped).toFixed(6));
   };
 
@@ -669,8 +671,8 @@ export function stepperRow(opts: StepperRowOptions): TaggedRow<number> {
     showValue(fmt(current));
     // The ends are shown, not just enforced: a button that still looks pressable and does
     // nothing reads as the control being broken.
-    minus.disabled = current <= opts.min + 1e-9;
-    plus.disabled = current >= opts.max - 1e-9;
+    minus.disabled = current <= lo + 1e-9;
+    plus.disabled = current >= hi - 1e-9;
     mark.sync(current);
     if (notify) opts.onInput?.(current);
   };
@@ -702,7 +704,7 @@ export function stepperRow(opts: StepperRowOptions): TaggedRow<number> {
   const row = el('div', { className: 'vl-slider-row' }, [
     head,
     el('div', { className: 'vl-stepper-bar' }, [minus, valFit, plus]),
-  ]) as unknown as TaggedRow<number>;
+  ]) as unknown as TaggedRow<number> & { setBounds(min: number, max: number): void };
   // The head holds only the caption here (the box is in the bar below), so the tag ends it.
   row.setTag = tagSetter((slot) => head.append(slot));
 
@@ -711,8 +713,16 @@ export function stepperRow(opts: StepperRowOptions): TaggedRow<number> {
      paths read instead. */
   let rowDisabled = false;
   const paintBounds = () => {
-    minus.disabled = rowDisabled || current <= opts.min + 1e-9;
-    plus.disabled = rowDisabled || current >= opts.max - 1e-9;
+    minus.disabled = rowDisabled || current <= lo + 1e-9;
+    plus.disabled = rowDisabled || current >= hi - 1e-9;
+  };
+  /** New ends, for a range only known later. The value is pulled inside them, silently. */
+  row.setBounds = (min, max) => {
+    lo = min;
+    hi = Math.max(min, max);
+    current = snap(current);
+    showValue(fmt(current));
+    paintBounds();
   };
 
   row.setValue = (value, notify = false) => {
@@ -1087,9 +1097,11 @@ export function segmentedControl<T extends string = string>(
     btn.style.display = visible ? '' : 'none';
     // Re-track the grid to the options that are actually showing, or the row keeps a dead
     // column and the indicator travels to a gap. A picture list is one card per row whatever
-    // shows, so its columns stay put.
+    // shows, so its columns stay put; and a row given its `columns` never grows past them
+    // (cards one to a line stay one to a line when an option comes or goes).
     const shown = opts.options.length - hidden.size;
-    if (!pictures) root.style.gridTemplateColumns = `repeat(${Math.max(1, shown)}, minmax(0, 1fr))`;
+    const across = Math.max(1, Math.min(opts.columns ?? shown, shown));
+    if (!pictures) root.style.gridTemplateColumns = `repeat(${across}, minmax(0, 1fr))`;
     syncTabStop();
     place(false);
   };

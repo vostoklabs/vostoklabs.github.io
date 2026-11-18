@@ -15,7 +15,16 @@ import { buildObjMtl, buildObjMtlPlates, type ObjMtl } from '@vostok/export';
 import type { PlateChoice } from '@vostok/plates';
 import type { ClickerPart } from '../types';
 import { assemblyMinZ, objectKeyOf, placed, plateLayout } from './plateLayout';
-import { clickerMark } from './threemfExport';
+import { FIRST_LAYER_INFILL_SPEED, FIRST_LAYER_SPEED, clickerMark } from './threemfExport';
+
+/** `CLICKER_PROCESS` in the terms MakerLab's export takes: the host writes these into the 3MF it
+ *  assembles. Every value a string, by the host's rule; a key it has no field for goes in as is. */
+export const CLICKER_HOST_PRINT: Record<string, string> = {
+  wallGenerator: 'arachne',
+  only_one_wall_first_layer: '1',
+  initial_layer_speed: FIRST_LAYER_SPEED,
+  initial_layer_infill_speed: FIRST_LAYER_INFILL_SPEED,
+};
 
 export interface ClickerObjOptions {
   /** The bed to lay the plate out on. Defaults to the plate picker's shared preference, as the
@@ -49,10 +58,10 @@ export function clickerObjMtl(parts: ClickerPart[], opts: ClickerObjOptions = {}
 }
 
 /** Whether a set of parts is one clicker with both a top and a body: a flat clicker, a set of
- *  letter blocks or a cut model. The fit test's tiles and a batch run name their own objects
- *  (`objectKey`) and are not. */
+ *  letter blocks or a cut model, however many buttons it has. The fit test's tiles and a batch
+ *  run name their own objects (`objectKey`) and are not. */
 export function splitsTopAndBody(parts: ClickerPart[]): boolean {
-  return parts.every((p) => !p.objectKey)
+  return parts.every((p) => !p.objectKey || p.objectKey.startsWith('button-'))
     && parts.some((p) => p.group === 'top')
     && parts.some((p) => p.group === 'base');
 }

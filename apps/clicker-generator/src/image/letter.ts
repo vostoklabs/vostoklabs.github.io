@@ -218,6 +218,14 @@ export function parseLetter(
 
     const lines = text.split('\n');
     let currentY = 0;
+    /** One side bearing of this face's "H", the space a capital keeps either side of its ink;
+     *  a twentieth of the size when the face has no "H". */
+    const bearing = (() => {
+      let lo = Infinity, hi = -Infinity;
+      for (const pts of font.rings('H', SIZE)) for (const [x] of pts) { lo = Math.min(lo, x); hi = Math.max(hi, x); }
+      const side = (font.advance('H', SIZE) - (hi - lo)) / 2;
+      return Number.isFinite(side) && side > 0 ? side : SIZE * 0.05;
+    })();
 
     for (const rawLine of lines) {
       const value = Array.from((rawLine || '').trim()).slice(0, maxLen);
@@ -233,19 +241,23 @@ export function parseLetter(
       // tracking can go between glyphs, and so a two-piece glyph like "i" stays ONE glyph
       // instead of a stem and a dot that select separately.
       let penX = 0;
+      /** Where the ink of the glyph before ends: past `penX` for a letter that overhangs its
+       *  advance (an "f"'s crossbar), so a symbol after it keeps clear of the ink. */
+      let inkRight = -Infinity;
       for (const ch of value) {
         const glyphRings: Ring[] = [];
         const sym = symbols[ch];
         if (sym) {
           // A symbol stands in the line like a capital letter: as tall as one by default,
-          // centred on the capitals' middle, as wide as its own drawing. Its inspector's size
-          // and offset are fractions of that height.
+          // centred on the capitals' middle, as wide as its own drawing, with a capital's side
+          // bearings either side. Its inspector's size and offset are fractions of that height.
           const S = SIZE * SYMBOL_HEIGHT * sym.look.scale;
           const rings = lookRings(normaliseRings(sym.rings), sym.look).map((r) => r.map(([x, y]) => [x * S, y * S] as [number, number]));
           let minX = Infinity, maxX = -Infinity;
           for (const r of rings) for (const [x] of r) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
           if (rings.length && Number.isFinite(minX)) {
-            const ox = penX - minX + sym.look.dx * S;
+            const left = Math.max(penX + bearing, inkRight + 2 * bearing);
+            const ox = left - minX + sym.look.dx * S;
             const oy = SIZE * SYMBOL_HEIGHT * 0.5 + sym.look.dy * S;
             for (const r of rings) {
               const ring: Ring = r.map(([x, y]) => [x + ox, y + oy] as [number, number]);
@@ -253,7 +265,8 @@ export function parseLetter(
               glyphRings.push(ring);
             }
             lineGlyphs.push(glyphRings);
-            penX += maxX - minX + SIZE * 0.08 + tracking;
+            inkRight = left + maxX - minX;
+            penX = inkRight + bearing + tracking;
           }
           continue;
         }
@@ -263,6 +276,7 @@ export function parseLetter(
             const x = px + penX;
             lineBox.expandByPoint(new THREE.Vector2(x, py));
             ring.push([x, py]);
+            if (x > inkRight) inkRight = x;
           }
           glyphRings.push(ring);
         }

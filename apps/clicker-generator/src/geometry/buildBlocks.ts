@@ -123,6 +123,7 @@ function buildCapBlank(
   wasm: Wasm,
   keycap: KeycapAsset,
   stemFitMm: number,
+  stemOuterMm: number,
   lowerMm: number,
   warnings: string[],
   track: <T extends { delete(): void }>(o: T) => T,
@@ -136,8 +137,9 @@ function buildCapBlank(
   if (!keycap.stem) return shell;
 
   // The same exact offset of the cross hole as the flat clicker cap (stemFit.ts). The outer
-  // post and Z are untouched, so the cap's rest height never moves.
-  const fit = applyStemFit(wasm, part(keycap.stem), stemFitMm);
+  // post and Z are untouched, so the cap's rest height never moves. A keycap's stem is fitted
+  // as its profile is drawn, so it takes no stock fit (that one is the clicker post's).
+  const fit = applyStemFit(wasm, part(keycap.stem), stemFitMm, stemOuterMm, 0);
   track(fit.solid);
   if (!fit.applied) warnings.push('Switch stem fit could not be applied. The stem prints as designed.');
   return track(shell.add(fit.solid));
@@ -483,7 +485,7 @@ export function buildBlocks(
     // ---------- Keycaps + debossed letters ----------
     // Stem fit is the user's grip, the same on every profile: the profile's own offset makes it so.
     const stemFitMm = (params.stemFitMm ?? 0) + BLOCK_KEYCAPS[profile].stemFitMm;
-    const capBlank = buildCapBlank(wasm, keycap, stemFitMm, lowerMm, warnings, track);
+    const capBlank = buildCapBlank(wasm, keycap, stemFitMm, params.stemOuterMm ?? 0, lowerMm, warnings, track);
     const cap = capLift > 0.001 ? track(capBlank.translate([0, 0, capLift])) : capBlank;
 
     const topZ = meta.topZ + capLift;

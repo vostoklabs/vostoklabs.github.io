@@ -612,6 +612,9 @@ details.vl-section--collapsible > summary:hover > .vl-section__detail { color: v
    that one decides what a click does, this one only what you see. */
 .vl-preview-bar {
   display: flex;
+  /* A stage too narrow for the whole bar takes the switches onto a second line, rather than
+     running them out under the panel beside it. */
+  flex-wrap: wrap;
   align-items: stretch;
   gap: 2px;
   padding: 4px;
@@ -858,6 +861,66 @@ details.vl-section--collapsible > summary:hover > .vl-section__detail { color: v
   bottom: auto;
   max-width: min(70ch, 60%);
 }
+
+/* `stageStatus(text, { folded: true })`: the message behind one round button, an "i" for news
+   and a "!" in the warning or error colour for a problem; a spinner alone while busy. The text
+   lives in `__said`, the live region, kept off the screen. Two classes, so the plain line's
+   padding, border and width (and the narrow-stage max-width in app-shell.css) do not apply. */
+.vl-stage-status.vl-stage-status--folded {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  max-width: none;
+  pointer-events: auto;
+}
+.vl-stage-status.vl-stage-status--folded[hidden] { display: none; }
+.vl-stage-status__said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.vl-stage-status__btn,
+.vl-stage-status__busy {
+  width: var(--icon-btn-size);
+  height: var(--icon-btn-size);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: var(--accent);
+}
+.vl-stage-status__btn svg { width: 20px; height: 20px; }
+.vl-stage-status__busy { display: grid; place-items: center; }
+.vl-stage-status__busy[hidden] { display: none; }
+.vl-stage-status--warn .vl-stage-status__btn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+}
+.vl-stage-status--error .vl-stage-status__btn {
+  color: var(--error-text);
+  border-color: color-mix(in srgb, var(--red) 55%, var(--line));
+}
+/* Beside a folded status the stage's hint and its bottom-centre panel keep clear of the button: on
+   a narrow stage the hint is cut short, and the panel narrows (its contents wrap) rather than
+   cover it. Both keep their usual size wherever there is room. */
+.vl-stage:has(> .vl-stage-status--folded) > .vl-stage__hint {
+  max-width: calc(100% - 2 * var(--space-4) - var(--icon-btn-size) - var(--space-2));
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vl-stage:has(> .vl-stage-status--folded:not([hidden]):not(.vl-stage-status--top)) > .vl-stage-panel {
+  min-width: min(300px, calc(100% - 2 * (var(--space-4) + var(--icon-btn-size) + var(--space-2))));
+  max-width: min(380px, calc(100% - 2 * (var(--space-4) + var(--icon-btn-size) + var(--space-2))));
+}
+/* What the button opens: one line for each part of the message. */
+.vl-stage-status__lines { display: flex; flex-direction: column; gap: var(--space-2); max-width: 46ch; }
+.vl-stage-status__lines > p { margin: 0; color: var(--text); font-size: var(--fs-caption); line-height: 1.45; }
 
 /* ------------------------------------------------------ stage overlay: zoom tools */
 /* `zoomControl()`: zoom out, the zoom, zoom in, fit, floating in the bottom-right corner of the

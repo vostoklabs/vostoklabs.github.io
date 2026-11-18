@@ -118,7 +118,7 @@ const NARROW = '(max-width: 900px)';
  * the drawer the left panel's settings move into, and the `sidebarFooter()` split for a narrow
  * screen and put back for a wide one.
  */
-function phoneLayout(left: PanelParts, right: PanelParts, keep: HTMLElement[] = []): void {
+function phoneLayout(left: PanelParts, right: PanelParts, keep: HTMLElement[] = []): () => void {
   let footer = right.footer;
   if (!footer) {
     // A footer for the button alone; app-shell.css hides it on a wide screen, where it holds nothing.
@@ -188,6 +188,35 @@ function phoneLayout(left: PanelParts, right: PanelParts, keep: HTMLElement[] = 
   };
   narrow.addEventListener('change', place);
   place();
+  return () => narrow.removeEventListener('change', place);
+}
+
+/** A panel an app stamped itself, for `phoneShell()`: the `.vl-panel`, its `.vl-panel__scroll`,
+ *  and its pinned `.vl-panel__footer` if it has one. */
+export interface ShellPanel {
+  panel: HTMLElement;
+  scroll: HTMLElement;
+  footer?: HTMLElement | null;
+}
+
+/**
+ * `appShell({ phone: true })` for a shell the app did not build with `appShell()` (one stamped
+ * from a template, so a host can mount it): the same narrow-screen layout over panels already in
+ * the page. `root` is the `.vl-app`. Under 900 px the picture comes first, then the right panel
+ * with its footer pinned, and the left panel's settings open from a Settings button in a drawer.
+ * Returns what stops it watching the window, for an app that is unmounted again.
+ */
+export function phoneShell(root: HTMLElement, left: ShellPanel, right: ShellPanel, keep?: HTMLElement[]): () => void {
+  root.classList.add('vl-app--phone');
+  const stop = phoneLayout(
+    { panel: left.panel, scroll: left.scroll, footer: left.footer ?? null },
+    { panel: right.panel, scroll: right.scroll, footer: right.footer ?? null },
+    keep,
+  );
+  return () => {
+    stop();
+    root.classList.remove('vl-app--phone');
+  };
 }
 
 /** Assemble the standard 3-column generator shell. */

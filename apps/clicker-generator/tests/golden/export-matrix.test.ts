@@ -67,7 +67,8 @@ const { parseLetter, parseBlockChain } = await import('../../src/image/letter.ts
 const { LUCIDE_ICONS, buildSvg } = await import('../../src/image/lucideIcons.ts');
 const { prepareModel } = await import('../../src/model/prepare.ts');
 const { MODEL_SAMPLES } = await import('../../src/model/samples.ts');
-const { FALLBACK_POST_SEAT, makeSwitchKit, measurePostSeat, measureSwitchBands, seatPost } = await import('../../src/model/switchKit.ts');
+const { makeSwitchKit, seatPost } = await import('../../src/model/switchKit.ts');
+const { MX_SEAT } = await import('../../src/geometry/blockKeycaps.ts');
 const { buildModelClicker } = await import('../../src/model/buildModel.ts');
 const { DEFAULT_MODEL_CUT } = await import('../../src/model/types.ts');
 const { clickerThreeMF } = await import('../../src/export/threemfExport.ts');
@@ -113,28 +114,9 @@ const stem = stemRaw.translate([-tcx, -tcy, 0]);
 socketRaw.delete();
 stemRaw.delete();
 
-// The display switch, seated on its shoulder: Model mode measures its envelope and the slider
-// the keycap post rests on.
-const sw = readModel(bytesOf(file('switch/mx/mx-switch.3mf')), 'mx-switch.3mf');
-{
-  const v = sw.positions;
-  let widest = 0;
-  for (let i = 0; i < v.length; i += 3) {
-    v[i] -= tcx;
-    v[i + 1] -= tcy;
-    widest = Math.max(widest, Math.abs(v[i]), Math.abs(v[i + 1]));
-  }
-  let seatZ = Infinity;
-  for (let i = 0; i < v.length; i += 3) {
-    if (Math.max(Math.abs(v[i]), Math.abs(v[i + 1])) >= widest * 0.96 && v[i + 2] < seatZ) seatZ = v[i + 2];
-  }
-  for (let i = 0; i < v.length; i += 3) v[i + 2] -= seatZ;
-}
-const kit = makeSwitchKit(
-  socket,
-  seatPost(stem, measurePostSeat(sw.positions, sw.indices) ?? FALLBACK_POST_SEAT),
-  measureSwitchBands(sw.positions, sw.indices),
-);
+// Model mode's switch, as the worker hands it over: the post raised onto the slider, and the
+// switch's sizes as written down (`MX_SEAT`, `MX_BANDS`).
+const kit = makeSwitchKit(socket, seatPost(stem, MX_SEAT.slider));
 
 const keycapJson = JSON.parse(file('keycap.json').toString('utf-8'));
 const keycapAsset = { shell: { positions: keycapJson.positions, indices: keycapJson.indices }, stem: keycapJson.stem ?? null, meta: keycapJson.meta };
@@ -177,7 +159,7 @@ function regionsOf(set: RegionSet, colours: (RGB | undefined)[] = []): BuildRegi
   const out: BuildRegion[] = [];
   set.regions.forEach((r, i) => {
     r.components.forEach((comp, j) => {
-      out.push({ filamentRgb: colours[i] ?? r.quantRgb, coverage: r.coverage, rings: comp.rings, partName: `top-color-${i}-${j}` });
+      out.push({ filamentRgb: colours[i] ?? r.quantRgb, coverage: r.coverage, rings: comp.rings, partName: `top-color-${i}-${j}`, ...(comp.layers ? { layers: comp.layers } : {}) });
     });
   });
   return out;
@@ -186,10 +168,12 @@ function regionsOf(set: RegionSet, colours: (RGB | undefined)[] = []): BuildRegi
 /** Text mode: the letters, and the size multipliers `buildParamsFor` applies to them. */
 function text(lines: string, fontId: string, typo: { lineSpacing?: number; letterSpacing?: number }, params: Partial<BuildParams> = {}) {
   const set = parseLetter(lines, fontId, 15, false, typo);
+  // On an outline base `buildParamsFor` sends Text mode's letters uncut (`outlineUncut`).
+  const uncut = (params.baseShape ?? DEFAULTS.baseShape) === 'outline' ? { outlineUncut: true } : {};
   return {
     regions: regionsOf(set, [BLACK]),
     outline: set.outline,
-    params: { ...DEFAULTS, ...LETTERING, ...params, capWidthMm: (params.capWidthMm ?? 35) * (set.sizeMul ?? 1) },
+    params: { ...DEFAULTS, ...LETTERING, ...uncut, ...params, capWidthMm: (params.capWidthMm ?? 35) * (set.sizeMul ?? 1) },
   };
 }
 

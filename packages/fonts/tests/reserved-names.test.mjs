@@ -93,12 +93,14 @@ const name = (font, key) => (font.names[key]?.en ?? '').replace(/\s+/g, ' ').tri
 const silent = [];
 const lost = [];
 let declared = 0;
-// The library's faces and the other weights beside them (fonts/weights/), every file that ships.
+// The library's faces (TrueType, and OpenType for a face shipped as its maker released it) and
+// the other weights beside them (fonts/weights/), every file that ships.
 const faces = [
-  ...readdirSync(DIR).filter((x) => x.endsWith('.ttf')),
+  ...readdirSync(DIR).filter((x) => /\.(?:ttf|otf)$/.test(x)),
   ...readdirSync(`${DIR}/weights`).filter((x) => x.endsWith('.ttf')).map((x) => `weights/${x}`),
 ];
 ok(faces.includes('weights/roboto-bold.ttf'), 'the other weights are read too');
+ok(faces.includes('source-han-sans-cn-light.otf'), 'and the OpenType faces');
 for (const f of faces) {
   const b = readFileSync(`${DIR}/${f}`);
   const font = opentype.parse(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));

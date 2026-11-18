@@ -5,16 +5,20 @@ import { contours } from 'd3-contour';
 import type { QuantizeResult } from './quantize';
 import type { RegionSet, Ring, RGB } from './types';
 
-export function traceRegions(
-  q: QuantizeResult,
-  smoothing = 0.5,
-  preserveDetail = true,
-  /** Longest side of the FINISHED part, mm. Sets the smallest feature worth keeping. */
-  designMm = 35,
-): RegionSet {
-  const { indices, soft, other, width, height, palette } = q;
+/** Where the artwork sits in the picture, in pixels: the box round every foreground pixel (`w` by
+ *  `h`), its centre and its longest side. A traced ring point is `((px - cx) / side,
+ *  -(py - cy) / side)`, so this is what turns a point on the traced result back into a pixel. */
+export interface TraceFrame {
+  cx: number;
+  cy: number;
+  side: number;
+  w: number;
+  h: number;
+}
 
-  // Foreground bbox (pixel space) for normalization.
+/** The frame `traceRegions` normalises by. Null when nothing is foreground. */
+export function frameOf(q: Pick<QuantizeResult, 'indices' | 'width' | 'height'>): TraceFrame | null {
+  const { indices, width, height } = q;
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -29,14 +33,27 @@ export function traceRegions(
       }
     }
   }
-  if (!isFinite(minX)) {
+  if (!isFinite(minX)) return null;
+  const w = maxX - minX + 1;
+  const h = maxY - minY + 1;
+  return { cx: (minX + maxX + 1) / 2, cy: (minY + maxY + 1) / 2, side: Math.max(w, h), w, h };
+}
+
+export function traceRegions(
+  q: QuantizeResult,
+  smoothing = 0.5,
+  preserveDetail = true,
+  /** Longest side of the FINISHED part, mm. Sets the smallest feature worth keeping. */
+  designMm = 35,
+): RegionSet {
+  const { indices, soft, other, width, height, palette } = q;
+
+  // Foreground bbox (pixel space) for normalization.
+  const frame = frameOf(q);
+  if (!frame) {
     return { regions: [], outline: [], aspect: 1 };
   }
-  const bw = maxX - minX + 1;
-  const bh = maxY - minY + 1;
-  const maxSide = Math.max(bw, bh);
-  const cx = (minX + maxX + 1) / 2;
-  const cy = (minY + maxY + 1) / 2;
+  const { cx, cy, side: maxSide, w: bw, h: bh } = frame;
 
   const norm = (p: [number, number]): [number, number] => [
     (p[0] - cx) / maxSide,

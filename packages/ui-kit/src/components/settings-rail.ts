@@ -51,6 +51,16 @@ export interface SettingsRailOptions {
    * as the clicker's does.
    */
   flush?: boolean;
+  /**
+   * Every category stays on screen whatever the window's height: a rail short of room gives up
+   * its buttons' height first, then the word under each icon (the tooltip and the accessible
+   * name keep it), and only below that does it scroll. The rail also stays standing beside its
+   * categories, with the panels at the window's height, down to the width where the generator's
+   * columns stack (761 px), and a call to action above it gives up padding on a short window.
+   * CSS only, so the resting state is right without a script. Default false: full-size buttons,
+   * and the rail scrolls when it runs out of room.
+   */
+  fitHeight?: boolean;
 }
 
 export type SettingsRailHandle = HTMLElement & {
@@ -105,7 +115,10 @@ export function settingsRail(opts: SettingsRailOptions): SettingsRailHandle {
   rail.root.setAttribute('aria-label', opts.label ?? 'Settings');
   for (const e of entries) rail.button(e.item.id)?.setAttribute('aria-controls', e.panel.id);
 
-  const root = el('div', { className: opts.flush ? 'vl-settings-rail vl-settings-rail--flush' : 'vl-settings-rail' }, [rail.root, panels]) as unknown as SettingsRailHandle;
+  const className = ['vl-settings-rail', opts.flush ? 'vl-settings-rail--flush' : '', opts.fitHeight ? 'vl-settings-rail--fit' : '']
+    .filter(Boolean)
+    .join(' ');
+  const root = el('div', { className }, [rail.root, panels]) as unknown as SettingsRailHandle;
   let current: string | null = null;
 
   const shown = (e: (typeof entries)[number]) =>

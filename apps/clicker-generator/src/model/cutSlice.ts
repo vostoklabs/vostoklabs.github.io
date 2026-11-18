@@ -16,13 +16,13 @@
 // wobble on the stem. On by default (Ian, 2026-10-01), so it is built wherever it fits and the cut
 // is a plain gap where it does not.
 import { extrude } from '@vostok/manifold';
-import type { ModelCutParams } from './types';
+import { buttonCount, MAX_BUTTONS, type ModelCutParams } from './types';
 import {
   HEAVY_TOP_GRAMS, MIN_WALL, SOCKET_FLOOR, SWITCH_CLEARANCE, buryIdentityVoidsPlan, gramsOf,
   movingPocket, place, pocketNeedMm, postSolid, socketCutter, socketNeedMm, switchBody,
   type Scope, type SwitchKit, type SwitchPose,
 } from './switchKit';
-import { commonSection, deepestPoint, overhangArea, sectionAt, squareAt } from './section';
+import { commonSection, deepestPoint, overhangArea, sectionAt, spreadSpots, squareAt } from './section';
 import type { CutOutput } from './buildModel';
 
 type Wasm = any;
@@ -149,6 +149,26 @@ function autoSeam(
   return best?.z ?? (lo + hi) / 2;
 }
 
+/** The part of the plane closer to one switch than to any other, kept `gap` clear of the lines
+ *  halfway between them: where that switch's button is. */
+function buttonCell(wasm: Wasm, sc: Scope, poses: SwitchPose[], i: number, gap: number): Section {
+  const L = 2000;
+  const me = poses[i];
+  let cell: Section = sc.keep(wasm.CrossSection.square([L, L], true));
+  poses.forEach((other, j) => {
+    if (j === i) return;
+    const dx = other.x - me.x;
+    const dy = other.y - me.y;
+    if (Math.hypot(dx, dy) < 1e-6) return;
+    const half: Section = sc.keep(sc.keep(sc.keep(wasm.CrossSection.square([L, L], true))
+      .translate([-L / 2 - gap / 2, 0]))
+      .rotate((Math.atan2(dy, dx) * 180) / Math.PI))
+      .translate([(me.x + other.x) / 2, (me.y + other.y) / 2]);
+    cell = sc.keep(cell.intersect(sc.keep(half)));
+  });
+  return cell;
+}
+
 /** Remembers automatic seam heights between builds: see `buildModelClicker`. */
 export interface SeamMemo {
   get(key: string): number | undefined;
@@ -241,19 +261,42 @@ export function cutSlice(
   }
 
   const collar = collarAt(seam);
-  const canHideSeam = collar.ok;
-  const hide = p.slice.hideSeam && canHideSeam;
+  let canHideSeam = collar.ok;
+  let hide = p.slice.hideSeam && canHideSeam;
   const hideSpot = collar.spot;
-  const g = hide ? collar.geo : sliceGeometry(sc, model, kit, seam, false, tol, drop);
+  let g = hide ? collar.geo : sliceGeometry(sc, model, kit, seam, false, tol, drop);
 
   // The switch goes where the model is deepest round the cut, then wherever the user nudged it.
-  const spot = (hide ? hideSpot : deepestPoint(sc, g.region)) ?? { x: 0, y: 0, clearance: 0 };
-  const pose: SwitchPose = {
-    x: spot.x + p.switchNudge.x,
-    y: spot.y + p.switchNudge.y,
-    z: g.switchPlate,
-    rotation: p.switchNudge.rotation,
+  // Several go along the model's longest side, each where the model is deepest in its share.
+  const count = buttonCount(p);
+  const nudgeOf = (i: number) => {
+    if (i === 0) return p.switchNudge;
+    const e = p.more?.[i - 1];
+    return { x: e?.nudgeX ?? 0, y: e?.nudgeY ?? 0, rotation: e?.rotation ?? 0 };
   };
+  const posesIn = (geo: SliceGeometry, collared: boolean): SwitchPose[] => {
+    const spots = count > 1
+      ? spreadSpots(wasm, sc, geo.region, count)
+      : [(collared ? hideSpot : deepestPoint(sc, geo.region)) ?? { x: 0, y: 0, clearance: 0 }];
+    return spots.map((s, i) => {
+      const n = nudgeOf(i);
+      return { x: s.x + n.x, y: s.y + n.y, z: geo.switchPlate, rotation: n.rotation };
+    });
+  };
+  const misfitsAt = (geo: SliceGeometry, q: SwitchPose) =>
+    misfit(wasm, sc, model, kit, seam, geo, q.x, q.y, q.rotation, p.socketFitPct);
+  let poses = posesIn(g, hide);
+  // A collar has room for one switch where it was chosen, not always for several: a plain cut
+  // can still hold them.
+  if (count > 1 && hide && poses.some((q) => { const m = misfitsAt(g, q); return m.socket > MISFIT_OK || m.pocket > MISFIT_OK; })) {
+    hide = false;
+    canHideSeam = false;
+    g = sliceGeometry(sc, model, kit, seam, false, tol, drop);
+    poses = posesIn(g, false);
+  }
+  const pose = poses[0];
+  // Centre to centre, so each button keeps a wall round its pocket on the side facing the next.
+  const minPitch = pocketNeedMm(kit) + 2 * tol;
 
   // ---- The cut ----
   const [upper, lower] = model.splitByPlane([0, 0, 1], seam).map((m: Solid) => sc.keep(m));
@@ -271,35 +314,44 @@ export function cutSlice(
   }
 
   // ---- The top: lifted onto the post, pocket cut, post added ----
-  const post = postSolid(wasm, sc, kit, p.stemFitMm);
+  const post = postSolid(wasm, sc, kit, p.stemFitMm, p.stemOuterMm);
   if (!post.applied) warnings.push('Switch stem fit could not be applied. The stem prints as designed.');
-  const top = sc.keep(
-    sc.keep(
-      sc.keep(topRaw.translate([0, 0, lift])).subtract(place(sc, movingPocket(wasm, sc, kit, p.travel), pose)),
-    ).add(place(sc, post.solid, pose)),
-  );
+  // Several buttons: the top is shared out between the switches, a gap between each pair. One
+  // button is the whole top, as it always was.
+  const tops: Solid[] = poses.map((q, i) => {
+    const share = count > 1
+      ? sc.keep(topRaw.intersect(sc.keep(sc.keep(extrude(wasm, buttonCell(wasm, sc, poses, i, 2 * tol), H + 40)).translate([0, 0, -20]))))
+      : topRaw;
+    return sc.keep(
+      sc.keep(
+        sc.keep(share.translate([0, 0, lift])).subtract(place(sc, movingPocket(wasm, sc, kit, p.travel), q)),
+      ).add(place(sc, post.solid, q)),
+    );
+  });
 
   // ---- The bottom: socket, the switch's room above it, identity voids, one boolean ----
   // The room matters because the switch's plate sits `drop` under the cut: its flange and the
-  // foot of its housing are inside the bottom piece.
-  const socket = place(sc, socketCutter(sc, kit, p.socketFitPct), pose);
-  const room = place(sc, switchBody(wasm, sc, kit), pose);
+  // foot of its housing are inside the bottom piece. The mark is one mark, round the first switch.
+  const seats = poses.flatMap((q) => [place(sc, socketCutter(sc, kit, p.socketFitPct), q), place(sc, switchBody(wasm, sc, kit), q)]);
   const marks = buryIdentityVoidsPlan(wasm, sc, bottomRaw, kit, p.socketFitPct, pose);
-  const bottom = sc.keep(bottomRaw.subtract(sc.keep(wasm.Manifold.union([socket, room, ...marks.voids]))));
+  const bottom = sc.keep(bottomRaw.subtract(sc.keep(wasm.Manifold.union([...seats, ...marks.voids]))));
 
   // ---- Checks ----
-  const m = misfit(wasm, sc, model, kit, seam, g, pose.x, pose.y, pose.rotation, p.socketFitPct);
-  if (m.socket > MISFIT_OK) {
+  const fits = poses.map((q) => misfitsAt(g, q));
+  if (fits.some((m) => m.socket > MISFIT_OK)) {
     warnings.push(
       'The bottom is too thin round the switch here — it would break through. '
       + 'Move the cut or the switch, make the model bigger, or use Stand.',
     );
   }
-  if (m.pocket > MISFIT_OK) {
+  if (fits.some((m) => m.pocket > MISFIT_OK)) {
     warnings.push(
       'The top is too thin round the switch here — the pocket would show through its side. '
       + 'Move the cut or the switch, or make the model bigger.',
     );
+  }
+  if (poses.some((q, i) => poses.some((r, j) => j > i && Math.hypot(q.x - r.x, q.y - r.y) < minPitch))) {
+    warnings.push('The buttons are too close together. Use fewer, or make the model bigger.');
   }
   if (marks.attempted > 0 && marks.voids.length < marks.attempted) {
     warnings.push(
@@ -308,8 +360,8 @@ export function cutSlice(
     );
   }
   // Loose bits: only possible when the seam cuts the model in more than one place.
-  if (sectionAt(sc, model, seam).numContour() > 1) {
-    const loose = looseCount(sc, top);
+  if (count > 1 || sectionAt(sc, model, seam).numContour() > 1) {
+    const loose = tops.reduce((sum, t) => sum + looseCount(sc, t), 0);
     if (loose > 0) {
       warnings.push(
         `The cut leaves ${loose === 1 ? 'a piece' : `${loose} pieces`} above it that ${loose === 1 ? 'is' : 'are'} `
@@ -317,7 +369,7 @@ export function cutSlice(
       );
     }
   }
-  const grams = gramsOf(top);
+  const grams = Math.max(...tops.map((t) => gramsOf(t)));
   if (grams > HEAVY_TOP_GRAMS) {
     warnings.push(
       `The top weighs about ${grams.toFixed(0)} g — a light switch may not push it back up. `
@@ -325,12 +377,25 @@ export function cutSlice(
     );
   }
 
+  const span = g.region.isEmpty() ? 0 : (() => {
+    const b = g.region.bounds();
+    return Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1]);
+  })();
+
   return {
     pieces: [
-      { solid: top, name: 'top-model', moving: true, color: p.colors.top },
+      ...tops.map((solid, i) => ({
+        solid,
+        name: i === 0 ? 'top-model' : `top-model-${i + 1}`,
+        moving: true,
+        color: p.colors.top,
+        ...(count > 1 ? { objectKey: `button-${i + 1}` } : {}),
+      })),
       { solid: bottom, name: 'base-body', moving: false, color: p.colors.body },
     ],
     pose,
+    poses,
+    maxButtons: Math.max(1, Math.min(MAX_BUTTONS, Math.floor(span / minPitch))),
     warnings,
     cutHeight: seam,
     cutRange: lo <= hi ? [lo, hi] : null,

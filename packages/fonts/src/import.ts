@@ -106,9 +106,13 @@ export async function importFontFiles(file: File): Promise<ImportedFonts> {
   return result;
 }
 
-/** A font as the kit's pickers take it, with the alphabets it writes for their Alphabet filter. */
+/** A font as the kit's pickers take it, with the alphabets it writes for their Alphabet filter.
+ *  A face with a stand-in (`preview`) is drawn in its own family once that is declared (when its
+ *  file has loaded), and in the stand-in's until then: its own family is in no stylesheet, so
+ *  drawing the row never fetches it. */
 export function toPickerFont(f: FontChoice): { id: string; label: string; family: string; category: string; scripts: string[] } {
-  return { id: f.id, label: f.label, family: fontFamilyFor(f.id), category: f.category, scripts: fontScripts(f) };
+  const family = f.preview ? `${fontFamilyFor(f.id)}, ${fontFamilyFor(f.preview)}` : fontFamilyFor(f.id);
+  return { id: f.id, label: f.label, family, category: f.category, scripts: fontScripts(f) };
 }
 
 /** Whether the font with this id has every character in `text`. An unknown id is not flagged. */

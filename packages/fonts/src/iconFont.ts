@@ -7,11 +7,13 @@
 // font once.
 import * as opentype from 'opentype.js';
 import { FALLBACK_FONT_ID, parsedFonts } from './cache';
+import { siteFontUrl } from './site';
 
 const files = (import.meta as any).glob('./fonts/icon-fallback.ttf', { eager: true, import: 'default' }) as Record<string, string>;
+const emitted: string | undefined = files['./fonts/icon-fallback.ttf'];
 
-/** The symbol font's file, as this build serves it. */
-export const iconFontUrl: string | undefined = files['./fonts/icon-fallback.ttf'];
+/** The symbol font's file, as this build serves it (on the website, the site's one copy). */
+export const iconFontUrl: string | undefined = emitted && siteFontUrl('./fonts/icon-fallback.ttf', emitted);
 
 let loading: Promise<any> | null = null;
 

@@ -17,8 +17,7 @@ import {
   setFieldOptions,
   panelCredit,
   sidebarFooter,
-  sampleGrid,
-  type SampleGridHandle,
+  phoneShell,
   sliderRow,
   stepperRow,
   makeCollapsible,
@@ -27,6 +26,8 @@ import {
   slider,
   stageRow,
   stageTools,
+  stagePanel,
+  stageStatus,
   fontChooser,
   type FontChooserHandle,
   type FontPickerFont,
@@ -41,23 +42,36 @@ import {
   listRow,
   type ListRowHandle,
   iconButton,
+  dpad,
+  dropZone,
+  buttonRow,
 } from '@vostok/ui-kit';
 import { MAKERLAB, SELLER_PACK, isUnlocked } from 'virtual:makerlab';
-import type { BaseShapeKind, BlockKeycap, BlockStyle, BlockTexture, KeychainSide, EdgeSetting, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB, Ring } from '../types';
+import type { BaseShapeKind, BlockKeycap, BlockStyle, BlockTexture, BottomPicture, KeychainSide, EdgeSetting, KeychainParams, PaletteEntry, SwitchPlacement, ViewMode, RGB, Ring } from '../types';
 import { FILAMENTS } from '../types';
+import { bottomPictureShown, showBottomPictureRows } from '../bottomArt';
+import { BOTTOM_PAD, BOTTOM_PLACE_LIMITS, DEFAULT_BOTTOM_PLACE, bottomPlaceReadout, nudgeBottomPlace, turnBottomPlace, type BottomPlace } from '../geometry/bottomPlace';
 import type { SectionAxis } from '../viewer/viewer';
-import { SAMPLES } from '../image/sample';
-import { srgbToOklab, type RgbaImage } from '@vostok/trace';
+import { type CropBox, type PictureEdit, type RgbaImage } from '@vostok/trace';
 import { facesThatWrite, fontWritesText, STANDARD_FONTS } from '../image/letter';
 import { FONTS, curatedFonts, getRequiredSubsets, toPickerFont } from '@vostok/fonts';
 import { LUCIDE_ICONS, buildSvg, svgDataUrl } from '../image/lucideIcons';
 import { CHANGELOG } from '../changelog';
 import { entryForState, findShape, loadPackShapes, type ShapeEntry } from '../shapes/directory';
-import { designUrl, inSeason, loadDesignImage, orderedDesignPacks } from '../packs';
+import { sampleGroups } from './sampleGroups';
 import { openShapePicker } from './shapePicker';
-import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from '../geometry/stemFit';
+import {
+  STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM, STEM_OUTER_MAX_MM, STEM_OUTER_MIN_MM, STEM_OUTER_STEP_MM,
+} from '../geometry/stemFit';
 import { FIT_TEST_STEP_OPTIONS } from '../geometry/fitStrip';
-import { DESIGN_SCALE_MAX, DESIGN_SCALE_MIN, TEXT_SCALE_MIN } from '../geometry/sizeLimits';
+import { FIT_TEST_LIVE, POCKET_FIT_PCT, TOP_FIT_MM } from './fitChoice';
+import { fitChoiceRow } from './fitChoiceRow';
+import { fitDiagram } from './fitDiagram';
+import { padPress, sliderReach, SWITCH_PAD_TURN_DEG, switchPadHasRoom, switchReach, turnSwitch } from './switchPad';
+import { holeAwaitsCut, holeNoRoomShown, holeSizeRange, keychainMoved, showKeychainStyleRows } from './keychainRows';
+import { DESIGN_SCALE_MAX, DESIGN_SCALE_MIN } from '../geometry/sizeLimits';
+import { SETTING_LIMITS } from '../settings';
+import { designSizeRows, isOutlineBase } from './designSizeRows';
 import type { ModelCutParams, ModelInfo, ModelMeta } from '../model/types';
 import { modelFormatOf } from '@vostok/export/read';
 import { arrangeBlocks, GRID_MAX, isLineLayout, keysPerRow, RIM_RAISE_MAX_MM, type BlockArrangement, type BlockLayout, type BlockSymbol } from '../geometry/blockLayout';
@@ -72,9 +86,11 @@ import { RELIEF_MAX, RELIEF_MIN, reliefLevelOf, reliefMm } from '../relief';
 import { wordsColourOf } from '../words';
 import { capColourOf, isBlank } from '../frame';
 import type { MappedColour } from './wizard';
+import { nearestFilament } from './filamentName';
+import { statusTone } from './statusTone';
 
 /** The left panel's categories, in rail order. Which ones a mode shows: `RAIL_FOR_MODE`. */
-type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'keycap' | 'body' | 'colors' | 'relief' | 'switch' | 'keychain' | 'fit' | 'seller';
+type RailId = 'layout' | 'shape' | 'cut' | 'model' | 'font' | 'lettering' | 'keycap' | 'body' | 'colors' | 'relief' | 'switch' | 'keychain' | 'bottom' | 'fit' | 'seller';
 
 /** The licence and the seller tools: a category of their own, set apart at the end of the rail
  *  in every mode. Only the MakerWorld build has anything to put in it. */
@@ -86,10 +102,10 @@ const SELLER: RailId[] = MAKERLAB ? ['seller'] : [];
 const RAIL_FOR_MODE: Record<UiState['importMode'], { show: RailId[]; first: RailId }> = {
   // A picture's words are its Lettering category, called Text there, with the font in it too
   // (see `update()`): Add text is always there, and the font and the rest come with the words.
-  image: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
-  svg: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
-  icon: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
-  text: { show: ['shape', 'font', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'fit', ...SELLER], first: 'shape' },
+  image: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'bottom', 'fit', ...SELLER], first: 'shape' },
+  svg: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'bottom', 'fit', ...SELLER], first: 'shape' },
+  icon: { show: ['shape', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'bottom', 'fit', ...SELLER], first: 'shape' },
+  text: { show: ['shape', 'font', 'lettering', 'body', 'colors', 'relief', 'switch', 'keychain', 'bottom', 'fit', ...SELLER], first: 'shape' },
   blocks: { show: ['layout', 'font', 'lettering', 'keycap', 'body', 'colors', 'keychain', 'fit', ...SELLER], first: 'layout' },
   model: { show: ['cut', 'model', 'colors', 'fit', ...SELLER], first: 'cut' },
 };
@@ -142,6 +158,10 @@ export interface WordItem {
 
 export interface UiState {
   status: string;
+  /** The status text the last build flagged as a warning ('' for none). The stage's message
+   *  button shows a warning while the status line still says exactly this, so a later message
+   *  (a save, a load) never inherits the warning's colour. */
+  statusWarnText: string;
   building: boolean;
   hasParts: boolean;
   /** Name of whichever sample or pack design tile is the one currently loaded — the same
@@ -165,6 +185,12 @@ export interface UiState {
   fixedSize: { w: number; h: number } | null;
   /** How much of the room inside the frame the artwork takes (geometry/sizeLimits). 1 = fills it. */
   designScale: number;
+  /** The picture's longest side while it keeps its size when the shape changes, mm
+   *  (geometry/pictureHold). Null = the picture follows the shape's size, as it always has. */
+  artMm: number | null;
+  /** What the LAST build said the picture would be at Design size 100 %, mm (`layout.art.fit`).
+   *  Read-only, like `builtBodyMm`; null before a build. Turns a held size into a Design size. */
+  artFitMm: number | null;
   /** The picture turned on its base, degrees counter-clockwise (the Design view's grip). On an
    *  Outline base the whole silhouette turns. 0 = as drawn. */
   designRotation: number;
@@ -201,6 +227,8 @@ export interface UiState {
   tolerance: number;
   /** Cap stem fit, mm of clearance on the cross hole that grips the switch. 0 = as authored. */
   stemFitMm: number;
+  /** How much wider across the cap's post is than drawn, mm. 0 = as drawn. */
+  stemOuterMm: number;
   /** The preview and Export show the printable stem fit test instead of the design. The
    *  design itself is untouched; its controls are locked until this goes false again. */
   fitTestActive: boolean;
@@ -214,11 +242,17 @@ export interface UiState {
   activeSwitchIndex: number;
   smoothing: number;
   keychain: KeychainParams;
+  /** The LAST build found no room for the keyring hole where it is (`DesignLayout.loop.noRoom`).
+   *  Read-only, like `switchBox`. */
+  holeNoRoom: boolean;
   removeBg: boolean;
   view: ViewMode;
   /** The stage shows the Design view rather than the 3D model. Viewport state, like `view`: not
    *  undone, not saved. */
   designView: boolean;
+  /** Which face the Design view lays out: the top, or the underside with its bottom picture.
+   *  Viewport state, like `designView`: not undone, not saved. */
+  designSide: 'top' | 'bottom';
   showSwitch: boolean;
   /** Whether the preview is cut open. Independent of `view`. */
   sectionOn: boolean;
@@ -249,6 +283,15 @@ export interface UiState {
   mappedColors: MappedColour[];
   /** 'mapped': each group's filament, by group. */
   mappedFilaments: RGB[];
+  /** The parts of the picture taken out or brought back in the picture window, in order, as
+   *  places in the picture the build traces. Applied on every trace. */
+  pictureEdits: PictureEdit[];
+  /** The crop set in the picture window, in the same space as `pictureEdits`; null = the whole
+   *  picture. What lies outside it is not traced. */
+  pictureCrop: CropBox | null;
+  /** The picture printed on the underside of the base, as its window confirmed it; null = none.
+   *  Its pixels are held beside the top picture's, not in the state. */
+  bottomPicture: BottomPicture | null;
   bodyColorRgb: RGB;
   paletteOverrides: RGB[];
   /** Explicit cap-backing/frame color set by clicking it on the model (else derived). */
@@ -343,6 +386,14 @@ export interface UiCallbacks {
   onSample(load: () => Promise<RgbaImage>, label?: string): void;
   /** Reopen the prepare-image wizard on the picture that is loaded. */
   onAdjustImage(): void;
+  /** A picture chosen for the underside of the base (a first one, or a replacement). */
+  onBottomPicture(file: File): void;
+  /** Reopen the picture window on the bottom picture. */
+  onBottomAdjust(): void;
+  /** Take the bottom picture off. */
+  onBottomRemove(): void;
+  /** Move, turn or size the bottom picture (the Bottom category's rows), seen from below. */
+  onBottomPlace(patch: Partial<BottomPlace>): void;
   /** A colour picked from the wheel, once the popover closes — the one moment a new colour
    *  has actually been chosen rather than dragged through. */
   onCustomColor(hex: string): void;
@@ -363,6 +414,8 @@ export interface UiCallbacks {
   onFixedSize(size: { w: number; h: number } | null): void;
   /** Artwork size as a fraction of the room inside the frame (geometry/sizeLimits). */
   onDesignScale(v: number): void;
+  /** The picture follows the shape's size (true), or keeps the size it has now (false). */
+  onFollowSize(follow: boolean): void;
   /** Pick a base shape from the directory, by its `ShapeEntry` id. */
   onShapePick(id: string): void;
   /* The three knobs of whichever parametric shape is picked. They fire from the picker,
@@ -384,6 +437,8 @@ export interface UiCallbacks {
   onGapTolerance(mm: number): void;
   /** Cap stem fit, absolute mm of clearance on the cross hole (+ looser, − tighter grip). */
   onStemFit(mm: number): void;
+  /** How much wider across the cap's post is than drawn, mm. */
+  onStemOuter(mm: number): void;
   /** Body switch-pocket fit, absolute % of the socket footprint (+ looser, − tighter). */
   onSocketFit(pct: number): void;
   /** Set the number of switches (1..3); replaces the layout with symmetric defaults. */
@@ -393,6 +448,8 @@ export interface UiCallbacks {
   onSwitchRemove(index: number): void;
   /** Reset every switch to the default layout. */
   onSwitchResetAll(): void;
+  /** One switch back to its own place in the default layout, its turn kept. */
+  onSwitchHome(index: number): void;
   /** Which switch the Switch sliders move. */
   onActiveSwitch(index: number): void;
   /** Move or turn one switch, absolute mm from the centre and degrees; what is absent stays. */
@@ -402,6 +459,12 @@ export interface UiCallbacks {
   /** The picture's turn, degrees. */
   onDesignRotation(deg: number): void;
   onKeychainToggle(on: boolean): void;
+  /** A loop out of the edge, or a hole through the base. */
+  onKeychainStyle(style: 'loop' | 'hole'): void;
+  /** Cut the placed keyring hole into the body. */
+  onKeychainCut(): void;
+  /** A rail category was opened (its id), so the preview can mark what that category moves. */
+  onCategory?(id: string): void;
   /** Change the keychain ring hole diameter by delta mm. */
   onKeychainSize(deltaMm: number): void;
   /** Where the loop sits round the edge, degrees (90 is the top). */
@@ -412,6 +475,8 @@ export interface UiCallbacks {
   onView(mode: ViewMode): void;
   /** The stage shows the Design view (the top at true scale) instead of the 3D model. */
   onDesignView(on: boolean): void;
+  /** The Design view lays out the top or the underside. */
+  onDesignSide(side: 'top' | 'bottom'): void;
   onShowSwitch(on: boolean): void;
   /** Turn the cut on or off. Separate from `onView` — the two are unrelated questions. */
   onSectionEnabled(on: boolean): void;
@@ -521,6 +586,8 @@ export interface UiCallbacks {
   onKeychainSlideSet(mm: number): void;
   /** Put the loop back to the middle of its side. */
   onKeychainSlideReset(): void;
+  /** The keyring back to where a new clicker has it: Position and Fine offset both. */
+  onKeychainPositionReset(): void;
   onUndo(): void;
   onRedo(): void;
   onRefresh(): void;
@@ -571,11 +638,6 @@ const hexRgb = (hex: string): [number, number, number] => [
   parseInt(hex.slice(3, 5), 16),
   parseInt(hex.slice(5, 7), 16),
 ];
-
-/** Whether the base reads as an outline. Icon line-art makes a broken outline body, so
- *  an icon design is always a solid shape whatever `baseShape` says. */
-const isOutlineBase = (s: Pick<UiState, 'baseShape' | 'importMode'>) =>
-  s.baseShape === 'outline' && s.importMode !== 'icon';
 
 export function createUi(
   sidebarLeft: HTMLElement,
@@ -675,12 +737,14 @@ export function createUi(
       <div id="shapePickMount"></div>
       <div class="prow-stacked"><div id="widthMount"></div></div>
       <div class="prow-stacked"><div id="designScaleMount"></div></div>
+      <div class="prow-stacked" id="followSizeRow"><div id="followSizeMount"></div></div>
       <div class="prow-stacked"><div id="fixedSizeMount"></div></div>
       <div id="fixedSizeFields" hidden>
         <div class="prow-stacked"><div id="fixedWMount"></div></div>
         <div class="prow-stacked"><div id="fixedHMount"></div></div>
         <div id="fixedSizePresetMount"></div>
       </div>
+      <p class="vl-label" id="artMoveLabel">Move the picture</p>
       <div class="prow-stacked" id="artMoveXRow"><div id="artMoveXMount"></div></div>
       <div class="prow-stacked" id="artMoveYRow"><div id="artMoveYMount"></div></div>
       <div class="prow-stacked" id="artTurnRow"><div id="artTurnMount"></div></div>
@@ -738,17 +802,23 @@ export function createUi(
       <div class="prow-stacked" id="imgdepthRow"><div id="imgdepthMount"></div></div>
     </div>
     <div data-rail="fit">
-      <div class="prow-stacked"><div id="gapTolMount"></div></div>
-      <div class="prow-stacked"><div id="stemFitMount"></div></div>
-      <div class="prow-stacked"><div id="socketFitMount"></div></div>
+      <div id="fitDiagramMount"></div>
+      <div class="prow-stacked"><div id="topFitMount"></div></div>
+      <div class="prow-stacked"><div id="pocketFitMount"></div></div>
       <div class="prow-stacked" id="fitTestBlock">
-        <p class="switch-pad-hint">Print a strip of test tiles, press each one onto a real switch, then set Switch stem fit to the number on the tile that fits.</p>
+        <p class="vl-hint" id="fitTestHint">Not sure what will work for you? Print a fit test.</p>
         <div id="fitTestMount"></div>
       </div>
+      <p class="vl-label" id="fitHandLabel">By hand</p>
+      <div class="prow-stacked"><div id="gapTolMount"></div></div>
+      <div class="prow-stacked"><div id="stemFitMount"></div></div>
+      <div class="prow-stacked"><div id="stemOuterMount"></div></div>
+      <div class="prow-stacked"><div id="socketFitMount"></div></div>
     </div>
     <div data-rail="switch">
       <div class="cg-switch-list" id="switchListMount"></div>
       <div id="switchAddMount"></div>
+      <div id="switchPadRow"></div>
       <div class="prow-stacked" id="switchMoveXRow"><div id="switchMoveXMount"></div></div>
       <div class="prow-stacked" id="switchMoveYRow"><div id="switchMoveYMount"></div></div>
       <div class="prow-stacked" id="switchTurnRow"><div id="switchTurnMount"></div></div>
@@ -757,8 +827,10 @@ export function createUi(
     <div data-rail="keychain">
       <div id="keychainMount"></div>
       <div id="keychainOpts" style="display:none;">
+        <div class="field" id="keychainStyleField"><div id="keychainStyleMount"></div></div>
         <div class="prow-stacked" id="keychainAngleRow"><div id="keychainAngleMount"></div></div>
         <div class="prow-stacked" id="keychainOffsetRow"><div id="keychainOffsetMount"></div></div>
+        <div id="keychainResetMount" hidden></div>
 
         <!-- Letter blocks: the loop welds onto an end block's outer face, so the choice is
              which side it hangs from and how far along that side it sits. -->
@@ -771,7 +843,16 @@ export function createUi(
         <div id="keychainBlockResetMount" style="display:none; margin-bottom: 12px;"></div>
 
         <div class="prow-stacked"><div id="keychainSizeMount"></div></div>
+        <div id="keychainCutMount" hidden></div>
+        <p class="vl-hint" id="keychainNoRoom" hidden>No room for a hole here. Drag it along the edge.</p>
       </div>
+    </div>
+    <div data-rail="bottom">
+      <div id="bottomZoneMount"></div>
+      <div id="bottomButtonsMount"></div>
+      <div id="bottomReplaceMount"></div>
+      <div class="prow-stacked" id="bottomScaleRow"><div id="bottomScaleMount"></div></div>
+      <div id="bottomPadRow"></div>
     </div>
     <div class="sidebar-sticky-footer cg-left-foot"><div id="historyControls"></div></div>
   `;
@@ -797,20 +878,26 @@ export function createUi(
     { id: 'body', label: 'Body', icon: ICONS.pattern },
     { id: 'colors', label: 'Colors', icon: ICONS.droplet },
     { id: 'relief', label: 'Relief', icon: ICONS.mountain },
-    { id: 'switch', label: 'Switch', icon: ICONS.target },
+    { id: 'switch', label: 'Clicker', icon: ICONS.target },
     { id: 'keychain', label: 'Keychain', icon: ICONS.link },
-    { id: 'fit', label: 'Fit', icon: ICONS.ruler },
+    // A picture printed on the underside: the icon is a thing turned over.
+    { id: 'bottom', label: 'Bottom', icon: ICONS.flipV, title: 'Bottom picture' },
+    { id: 'fit', label: 'Fit', icon: ICONS.joint },
     // Set apart by a hairline: selling, not the design. The label may break after the slash.
     { id: 'seller', label: 'Seller/\u200bLicense', title: 'Seller / License', icon: ICONS.license, divider: true },
   ];
   const settings = settingsRail({
     label: 'Clicker settings',
+    // Every category stays on screen on a short or narrow window.
+    fitHeight: true,
     items: RAIL_ITEMS.map((it) => {
       const holder = leftScroll.querySelector(`[data-rail="${it.id}"]`) as HTMLElement;
       const body = [...holder.children];
       holder.remove();
       return { ...it, body };
     }),
+    // The preview marks what the open category moves: the lit switch while Clicker is open.
+    onChange: (id) => cb.onCategory?.(id),
   });
   settings.classList.add('cg-rail');
   leftTop.after(settings);
@@ -826,10 +913,13 @@ export function createUi(
     leftTop.prepend(headerEl);
   }
   /** The licence: on top until it is bought, then the first thing in Seller/License. */
+  // Found once: on a narrow window the rail's contents live in the Settings drawer while it is
+  // open, out of `leftScroll`, and a lookup there would find nothing.
+  const licenceCta = leftScroll.querySelector<HTMLElement>('#licenceCtaMount')!;
+  const proTools = leftScroll.querySelector<HTMLElement>('#proMount')!;
   function placeLicence() {
-    // Not `$`: this first runs before that helper is declared further down.
-    const cta = leftScroll.querySelector<HTMLElement>('#licenceCtaMount')!;
-    const tools = leftScroll.querySelector<HTMLElement>('#proMount')!;
+    const cta = licenceCta;
+    const tools = proTools;
     if (MAKERLAB && isUnlocked(SELLER_PACK)) {
       if (cta.nextElementSibling !== tools) tools.before(cta);
     } else if (cta.parentElement !== leftTop) {
@@ -946,11 +1036,9 @@ export function createUi(
   resolveHelpTips(rightScroll);
 
   const rightFooter = sidebarFooter({
-    // Also true in the embedded build, where nobody owns them: the embedded build has no
-    // download path, so it has no Save or Load. The kit then draws only the theme toggle.
-    // This used to be done by removing "the first action row" after the fact, and when the
-    // kit folded its two rows into one that took Light mode with it.
-    hostOwnsProjects: MAKERLAB || cb.hostOwnsProjects,
+    // Only a host with its own project library. The embedded MakerLab build saves and opens a
+    // project file like the website does.
+    hostOwnsProjects: cb.hostOwnsProjects,
     formats: [{ id: '3mf', label: '3MF' }],
     onExport: () => cb.onExport(),
     onSave: () => cb.onSaveProject(),
@@ -962,7 +1050,23 @@ export function createUi(
     themeStorageKey: 'clicker_theme',
   });
 
-  sidebarRight.append(rightScroll, rightFooter);
+  // In the kit's pinned footer slot, which leaves the footer's own chrome as it was, so the narrow
+  // layout below can find Download and pin it beside Settings.
+  const rightPinned = document.createElement('div');
+  rightPinned.className = 'vl-panel__footer';
+  rightPinned.append(rightFooter);
+  sidebarRight.append(rightScroll, rightPinned);
+  // A narrow window (a phone, a slim browser): the picture first, then this panel with Download
+  // pinned, and the left rail's categories behind a Settings button. Three panels stacked into
+  // one screen left the 3D view 11 px tall.
+  const shellRoot = sidebarRight.parentElement;
+  if (shellRoot?.classList.contains('vl-app')) {
+    cleanups.push(phoneShell(
+      shellRoot,
+      { panel: sidebarLeft, scroll: leftScroll },
+      { panel: sidebarRight, scroll: rightScroll, footer: rightPinned },
+    ));
+  }
 
   // Global ID helper
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -1086,44 +1190,13 @@ export function createUi(
      sit in the Image panel and not behind a "Packs" tab because the source row above is
      image / SVG / icon / text / blocks, and those are FORMATS: a Packs tab would have to
      re-implement upload, remove-background and the wizard to arrive at the same call this
-     makes in one line — and it would split "where do I find artwork" in two. */
-  const sampleMount = $('sampleGridMount');
+     makes in one line — and it would split "where do I find artwork" in two.
+
+     The groups, their order and how each starts (open or folded) are `sampleGroups()`. */
   // Every sample/pack grid, so the loaded one can be marked regardless of which grid it lives
   // in — `mount.ts` knows only the id (audit #2), not which grid holds it.
-  const sampleGrids: SampleGridHandle[] = [];
-  /* Packs FIRST, samples after. The packs are the artwork people come for and the bundled
-     samples are a demo; with the samples on top, the pack sat below the fold of a 768px
-     screen and had to be scrolled to — "I need to scroll to see it". */
-  for (const pack of orderedDesignPacks()) {
-    const grid = sampleGrid({
-      // The chip is ordering made visible, never a gate — `inSeason` never hides a pack, so
-      // the heading has to explain why Halloween is at the top in October and lower in June.
-      heading: inSeason(pack) ? `${pack.name} · in season` : pack.name,
-      // Keyed by NAME rather than a `packId:designId` pair: `onSample`'s only channel back
-      // from `mount.ts` is the label it built the status line from (`design.name` /
-      // `s.name`, below), not an id, so the name is the one string both sides actually share.
-      items: pack.designs.map((d) => ({ id: d.name, src: designUrl(pack, d), label: d.name })),
-      onPick: (_item, index) => {
-        // By index into the same array `items` was built from, rather than re-finding the
-        // design by id — the two are already in lockstep (`items` is a 1:1 map of
-        // `pack.designs`).
-        const design = pack.designs[index];
-        // Straight down the sample path: one decode, the same colour wizard, the same
-        // quantiser and the same palette an uploaded PNG gets. A pack that imported its
-        // artwork its own way would be a second pipeline to keep in step with the first.
-        if (design) cb.onSample(() => loadDesignImage(pack, design), design.name);
-      },
-    });
-    sampleGrids.push(grid);
-    sampleMount.append(grid);
-  }
-  const bundledSampleGrid = sampleGrid({
-    heading: 'Choose a sample image',
-    items: SAMPLES.map((s) => ({ id: s.name, src: s.src, label: s.name })),
-    onPick: (_item, idx) => cb.onSample(SAMPLES[idx].load, SAMPLES[idx].name),
-  });
-  sampleGrids.push(bundledSampleGrid);
-  sampleMount.append(bundledSampleGrid);
+  const sampleGrids = sampleGroups((load, label) => cb.onSample(load, label));
+  $('sampleGridMount').append(...sampleGrids);
 
   /** Mark the tile for whatever is loaded — id `null` clears every grid, an id with no
    *  matching tile (an uploaded image) leaves all of them unmarked too, since only one grid
@@ -1173,6 +1246,41 @@ export function createUi(
       if (f) cb.onSvgUpload(f);
     },
   }));
+
+  /* --- Bottom picture ---------------------------------------------------------------------
+     The rail's Bottom category: the drop zone until there is a picture, then its buttons and the
+     rows that place it, seen from below. No picture means none is printed; the build picks its
+     size and place, and Size and the pad (move, turn) take it from there. The zone
+     takes its own drop, so a picture dropped here never also opens the top's window. Locked
+     with the rest of the rail while the fit test shows. */
+  const pickBottom = pickFile ? { pick: () => pickFile('image', ['png', 'jpg', 'jpeg', 'webp']) } : {};
+  const bottomZone = dropZone({
+    title: 'Add a picture',
+    text: 'Drop an image, or click to browse',
+    accept: 'image/*',
+    ...pickBottom,
+    onFiles: ([f]) => {
+      if (f) cb.onBottomPicture(f);
+    },
+  });
+  // Once there is a picture, the zone gives way to these two rows.
+  const bottomButtons = buttonRow(
+    button({ label: 'Adjust picture…', emphasis: 'secondary', onClick: () => cb.onBottomAdjust() }),
+    button({ label: 'Remove', emphasis: 'secondary', onClick: () => cb.onBottomRemove() }),
+  );
+  const bottomReplace = uploadCta({
+    label: 'Replace',
+    icon: ICONS.upload,
+    accept: 'image/*',
+    ...pickBottom,
+    onFiles: ([f]) => {
+      if (f) cb.onBottomPicture(f);
+    },
+  });
+  $('bottomZoneMount').replaceWith(bottomZone);
+  $('bottomButtonsMount').replaceWith(bottomButtons);
+  $('bottomReplaceMount').replaceWith(bottomReplace);
+  settings.panel('bottom')?.querySelector('.vl-label')?.append(' ', helpTip('Printed in colour on the underside of the base.'));
 
   const uploadGalleryEl = $('uploadGallery');
   let uploadEmptyEl: HTMLElement | null = null;
@@ -1478,27 +1586,27 @@ export function createUi(
   const textScaleRow = sliderRow({
     label: 'Text size',
     help: 'How big the letters print. Above 100% the clicker grows with them rather than the letters being squeezed in — a bigger part prints more reliably than a smaller one. On a preset base shape, below 100% shrinks the letters inside a base that stays the size you set.',
-    min: Math.round(TEXT_SCALE_MIN * 100), max: 200, step: 5, value: Math.round(initial.textScale * 100), unit: '%',
+    min: Math.round(SETTING_LIMITS.textScale[0] * 100), max: Math.round(SETTING_LIMITS.textScale[1] * 100), step: 5, value: Math.round(initial.textScale * 100), unit: '%',
     onInput: (v) => cb.onTextScale(v / 100),
   });
   $('textScaleMount').append(textScaleRow);
   const textBoldRow = sliderRow({
     label: 'Boldness', help: 'Fattens (or thins) the letter strokes, in mm.',
-    min: -0.3, max: 0.8, step: 0.05, value: initial.textBold,
+    min: SETTING_LIMITS.textBold[0], max: SETTING_LIMITS.textBold[1], step: 0.05, value: initial.textBold,
     format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)} mm`,
     onInput: (v) => cb.onTextBold(v),
   });
   $('textBoldMount').append(textBoldRow);
   const letterSpacingRow = sliderRow({
     label: 'Letter spacing', help: 'Squash letters together or spread them apart.',
-    min: -0.08, max: 0.4, step: 0.02, value: initial.letterSpacing,
+    min: SETTING_LIMITS.letterSpacing[0], max: SETTING_LIMITS.letterSpacing[1], step: 0.02, value: initial.letterSpacing,
     format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}`,
     onInput: (v) => cb.onLetterSpacing(v),
   });
   $('letterSpacingMount').append(letterSpacingRow);
   const lineSpacingRow = sliderRow({
     label: 'Line spacing', help: 'Gap between lines when the text has more than one.',
-    min: 0.5, max: 1.8, step: 0.05, value: initial.lineSpacing,
+    min: SETTING_LIMITS.lineSpacing[0], max: SETTING_LIMITS.lineSpacing[1], step: 0.05, value: initial.lineSpacing,
     format: (v) => `${Math.round(v * 100)}%`,
     parse: (typed) => typed / 100,
     onInput: (v) => cb.onLineSpacing(v),
@@ -1792,7 +1900,7 @@ export function createUi(
   const keychainSlideRow = stepperRow({
     label: 'Slide along side',
     help: 'Moves the loop along the side it is on, in millimetres. 0 is the middle of that side.',
-    min: -40, max: 40, step: 1, value: initial.keychainSlideMm, unit: 'mm',
+    min: SETTING_LIMITS.keychainSlideMm[0], max: SETTING_LIMITS.keychainSlideMm[1], step: 1, value: initial.keychainSlideMm, unit: 'mm',
     arrows: 'horizontal',
     onInput: (v) => cb.onKeychainSlideSet(v),
   });
@@ -1850,9 +1958,11 @@ export function createUi(
        raised, in mount.ts); Relief is a rail category. */
     const modeRow = stageRow([]);
     modeRow.id = 'stageModeRow';
-    const viewRow = stageRow([]);
+    // The rows under the first sit below the plate picker, so they may take the stage's width,
+    // and on a narrow stage the bar wraps instead of running under the right panel.
+    const viewRow = stageRow([], { wide: true });
     viewRow.id = 'stageViewRow';
-    const cutRow = stageRow([]);
+    const cutRow = stageRow([], { wide: true });
     cutRow.id = 'stageCutRow';
     cutRow.hidden = true;
     viewport.appendChild(stageTools([modeRow, viewRow, cutRow]));
@@ -1903,7 +2013,7 @@ export function createUi(
   $('ccountMount').append(ccountField);
   const smoothRow = sliderRow({
     label: 'Smoothing', help: 'Simplifies and smooths the traced outlines. Higher values give fewer, cleaner edges; lower keeps more fine detail.',
-    min: 0, max: 1, step: 0.05, value: initial.smoothing,
+    min: SETTING_LIMITS.smoothing[0], max: SETTING_LIMITS.smoothing[1], step: 0.05, value: initial.smoothing,
     // Stored 0-1, shown as a percentage: `parse` is what makes typing "50%" mean 0.5
     // rather than 50 clamped to the top of the range.
     format: (v) => `${Math.round(v * 100)}%`,
@@ -1953,7 +2063,7 @@ export function createUi(
   const reliefBevelRow = sliderRow({
     label: 'Bevelled edges',
     help: 'Bevels the top edge of every raised colour, so a step reads as a facet rather than a sharp ledge.',
-    min: 0, max: 1.2, step: 0.1, value: initial.extrudeChamferMm,
+    min: SETTING_LIMITS.extrudeChamferMm[0], max: SETTING_LIMITS.extrudeChamferMm[1], step: 0.1, value: initial.extrudeChamferMm,
     format: (v) => (v < 0.05 ? 'Off' : `${v.toFixed(1)} mm`),
     onInput: (v) => cb.onExtrudeChamferMm(v),
   });
@@ -2140,7 +2250,7 @@ export function createUi(
   // --- Size sliders ---
   const widthRow = sliderRow({
     label: 'Size', help: 'Overall size of the clicker (its longest side, in mm). This scales the whole model proportionally, not just the width.',
-    min: 20, max: 70, step: 1, value: initial.capWidthMm, unit: 'mm',
+    min: SETTING_LIMITS.capWidthMm[0], max: SETTING_LIMITS.capWidthMm[1], step: 1, value: initial.capWidthMm, unit: 'mm',
     onInput: (v) => cb.onWidth(v),
   });
   $('widthMount').append(widthRow);
@@ -2157,6 +2267,17 @@ export function createUi(
     onInput: (v) => cb.onDesignScale(v / 100),
   });
   $('designScaleMount').append(designScaleRow);
+
+  /* Picture follows size. On (the default) the picture is a share of the shape, so resizing the
+     shape resizes it. Off, it keeps its millimetres and the shape crops it or frames it. Turning
+     it back on is the reset: the picture fits the shape again. */
+  const followSizeToggle = toggleSwitch({
+    label: 'Picture follows size',
+    help: 'Off: the picture keeps its size when the shape changes, and the shape cuts it where it runs past.',
+    checked: initial.artMm == null,
+    onChange: (on) => cb.onFollowSize(on),
+  });
+  $('followSizeMount').append(followSizeToggle);
 
   /* --- Lock the base size -------------------------------------------------------------
      Free, and the fix for a control that reads as broken. On an outline base the build has
@@ -2191,13 +2312,13 @@ export function createUi(
   const fixedWRow = sliderRow({
     label: 'Base width',
     help: 'Outer width of the finished base, in mm — the number you would measure with calipers.',
-    min: 24, max: 120, step: 1, value: initial.fixedSize?.w ?? 40, unit: 'mm',
+    min: SETTING_LIMITS.fixedSizeMm[0], max: SETTING_LIMITS.fixedSizeMm[1], step: 1, value: initial.fixedSize?.w ?? 40, unit: 'mm',
     onInput: (v) => emitFixed(v, fixedHRow.getValue()),
   });
   const fixedHRow = sliderRow({
     label: 'Base height',
     help: 'Outer height of the finished base, in mm.',
-    min: 24, max: 120, step: 1, value: initial.fixedSize?.h ?? 40, unit: 'mm',
+    min: SETTING_LIMITS.fixedSizeMm[0], max: SETTING_LIMITS.fixedSizeMm[1], step: 1, value: initial.fixedSize?.h ?? 40, unit: 'mm',
     onInput: (v) => emitFixed(fixedWRow.getValue(), v),
   });
   $('fixedWMount').append(fixedWRow);
@@ -2205,7 +2326,7 @@ export function createUi(
 
   const topthickRow = sliderRow({
     label: 'Top thickness', help: 'Thickness of the solid top layer beneath the colored image, in mm.',
-    min: 1, max: 4, step: 0.1, value: initial.topThickness,
+    min: SETTING_LIMITS.topThickness[0], max: SETTING_LIMITS.topThickness[1], step: 0.1, value: initial.topThickness,
     format: (v) => `${v.toFixed(1)} mm`,
     onInput: (v) => cb.onTopThickness(v),
   });
@@ -2213,7 +2334,7 @@ export function createUi(
 
   const imgdepthRow = sliderRow({
     label: 'Image depth', help: 'How far the colored design is raised into the top surface, in mm.',
-    min: 0.2, max: 3, step: 0.1, value: initial.imageDepth,
+    min: SETTING_LIMITS.imageDepth[0], max: SETTING_LIMITS.imageDepth[1], step: 0.1, value: initial.imageDepth,
     format: (v) => `${v.toFixed(1)} mm`,
     onInput: (v) => cb.onImageDepth(v),
   });
@@ -2230,7 +2351,7 @@ export function createUi(
   const capProudRow = sliderRow({
     label: 'Body rim height',
     help: 'How far the body wall rises around the button. Higher hides more of the button; the button always stands at least a little proud so it can still be pressed. The build lowers the rim on its own if the border is too short for it.',
-    min: 0.4, max: 6, step: 0.2, value: RIM_SPAN - initial.capProud, unit: 'mm',
+    min: RIM_SPAN - SETTING_LIMITS.capProud[1], max: RIM_SPAN - SETTING_LIMITS.capProud[0], step: 0.2, value: RIM_SPAN - initial.capProud, unit: 'mm',
     onInput: (v) => cb.onCapProud(RIM_SPAN - v),
   });
   $('capProudMount').append(capProudRow);
@@ -2245,22 +2366,22 @@ export function createUi(
   });
   $('hollowMount').append(hollowToggle);
 
-  // The answer to "what number do I type". Ghost, and under the fit controls rather than
-  // beside Export, because it is a diagnostic you reach for once and then never again.
+  // The answer to "I am not sure which fit I need". Solid, under the two simple choices and over
+  // the steppers, so it is found before anyone types a number by hand.
   //
   // It does not download anything. The strip replaces the design in the preview and Export
-  // sends it, the way the keycap generator's fit test works: MakerLab's sandbox has no
-  // downloads, so a button that saved a file straight away did nothing at all in the embed.
+  // sends it, the way the keycap generator's fit test works, so the strip takes the same export
+  // path as the design (the MakerLab route, the provenance and the licence nudge).
   // Because the Export button then means something else, it asks first.
   const fitTestOpenBtn = button({
     label: 'Print a fit test',
-    emphasis: 'secondary',
+    emphasis: 'primary',
     icon: ICONS.target,
     block: true,
     onClick: () => {
       dialog({
         title: 'Print a fit test?',
-        content: 'Your clicker in the preview is swapped for a strip of five test tiles. While they are showing, Export sends the test tiles, not your clicker, and the other settings are locked. Your design is kept: press Back to my clicker to return to it.',
+        content: 'Your clicker in the preview is swapped for a strip of five test tiles. While they are showing, Export sends the test tiles, not your clicker, and the other settings are locked. Your design is kept: press Back to clicker mode to return to it.',
         actions: [
           { label: 'Cancel' },
           { label: 'Show the fit test', primary: true, onClick: () => { cb.onFitTest(); } },
@@ -2276,23 +2397,33 @@ export function createUi(
     onChange: (v) => cb.onFitTestStep(Number(v)),
   });
   const fitTestBackBtn = button({
-    label: 'Back to my clicker',
-    emphasis: 'secondary',
+    label: 'Back to clicker mode',
+    emphasis: 'primary',
     block: true,
     onClick: () => cb.onFitTestExit(),
   });
   $('fitTestMount').append(fitTestOpenBtn, fitTestStepRow, fitTestBackBtn);
+  /* The same way back on the preview itself, where the eye is while the tiles show: the stage's
+     panel for the mode that is on, at the bottom centre, clear of the model's middle. */
+  const fitTestStageBack = stagePanel({
+    title: 'Fit test',
+    titleHidden: true,
+    body: [button({ label: 'Back to clicker mode', emphasis: 'primary', icon: ICONS.arrowLeft, block: true, onClick: () => cb.onFitTestExit() })],
+  });
+  $('viewport')?.append(fitTestStageBack.root);
 
   /* Everything that shapes the DESIGN is locked while the fit test is showing, so nothing can
      change a model nobody can see. What stays live is what applies to the tiles too: the stem
-     fit, the fit test's own controls, the preview and view settings, and Export. `inert` is
-     what stops them; `.vl-control--disabled` only says so. `rebuild()` in mount.ts backs this
-     up: a design build that still gets requested takes the preview back to the design. */
+     fit (its simple choice and its two steppers), the fit test's own controls, the preview and
+     view settings, and Export. `inert` is what stops them; `.vl-control--disabled` only says
+     so. `rebuild()` in mount.ts backs this up: a design build that still gets requested takes
+     the preview back to the design. */
   const fitLockTargets = (): HTMLElement[] => {
+    // Each live one as the row it is: a mount's wrapper, or the caption and the block themselves.
     const keep = new Set<Element | null | undefined>([
-      $('stemFitMount')?.closest('.prow-stacked'), $('fitTestBlock'),
+      ...FIT_TEST_LIVE.map((id) => $(id)?.closest('.prow-stacked') ?? $(id)),
     ]);
-    // Every row of every category, except the two the test tiles still answer to. The rail
+    // Every row of every category, except the ones the test tiles still answer to. The rail
     // itself stays live, so the Fit category can always be reached.
     const rows = [...settings.querySelectorAll('.vl-settings-rail__panel > .vl-section__body > *')]
       .filter((n) => !keep.has(n));
@@ -2304,9 +2435,11 @@ export function createUi(
   };
   let fitLockOn = false;
   function syncFitTest(active: boolean) {
+    $('fitTestHint').hidden = active;
     fitTestOpenBtn.hidden = active;
     fitTestStepRow.hidden = !active;
     fitTestBackBtn.hidden = !active;
+    fitTestStageBack.setOpen(active);
     if (active === fitLockOn) return;
     fitLockOn = active;
     for (const node of fitLockTargets()) {
@@ -2332,7 +2465,7 @@ export function createUi(
   const gapTolRow = stepperRow({
     label: 'Top / base gap',
     help: 'Clearance between the top part and the base it presses into. Press + if the two halves are hard to fit together or the top scrapes, − if they feel loose. 0 = the default fit.',
-    min: 0.1, max: 1.0, step: 0.05, value: initial.tolerance,
+    min: SETTING_LIMITS.tolerance[0], max: SETTING_LIMITS.tolerance[1], step: 0.05, value: initial.tolerance,
     format: (v) => fmtSignedMm(v - BASE_SOCKET_TOL, 2),
     parse: (typed, raw) => readSigned(typed, raw) + BASE_SOCKET_TOL,
     onInput: (v) => cb.onGapTolerance(v),
@@ -2349,15 +2482,46 @@ export function createUi(
   });
   $('stemFitMount').append(stemFitRow);
 
+  const stemOuterRow = stepperRow({
+    label: 'Stem thickness (top part)',
+    help: 'Makes the post that grips the switch thicker and stronger. The opening in the switch stops it at +0.4 mm. 0 = as designed.',
+    min: STEM_OUTER_MIN_MM, max: STEM_OUTER_MAX_MM, step: STEM_OUTER_STEP_MM, value: initial.stemOuterMm,
+    format: (v) => fmtSignedMm(v, 1),
+    parse: readSigned,
+    onInput: (v) => cb.onStemOuter(v),
+  });
+  $('stemOuterMount').append(stemOuterRow);
+
   const socketFitRow = stepperRow({
     label: 'Switch pocket fit (base)',
     help: 'How tightly the switch itself sits in the base. Press + if the switch is hard to push in, − if it rattles or falls out. 0 = as designed.',
-    min: -5, max: 5, step: 0.5, value: initial.socketFitPct,
+    min: SETTING_LIMITS.socketFitPct[0], max: SETTING_LIMITS.socketFitPct[1], step: 0.5, value: initial.socketFitPct,
     format: pct,
     parse: readSigned,
     onInput: (v) => cb.onSocketFit(v),
   });
   $('socketFitMount').append(socketFitRow);
+
+  /* The simple choices over the steppers (fitChoiceRow.ts). Each one writes its stepper's number
+     through the same callback, and `update()` picks the tab from the number. */
+  // Numbered as the drawing over them numbers the two places, and each choice names its part.
+  $('fitDiagramMount').replaceWith(fitDiagram());
+  const topFitRow = fitChoiceRow(
+    '1 · Top part on the switch',
+    'Hard to push on, or it cracks: looser. Wobbles or falls off: tighter.',
+    TOP_FIT_MM,
+    { looser: 'Make top part looser', standard: 'Standard top part fit', snugger: 'Make top part tighter' },
+    (v) => cb.onStemFit(v),
+  );
+  $('topFitMount').append(topFitRow);
+  const pocketFitRow = fitChoiceRow(
+    '2 · Switch in the base',
+    'Switch hard to push in: looser. Rattles or falls out: tighter.',
+    POCKET_FIT_PCT,
+    { looser: 'Make switch hole looser', standard: 'Standard switch hole fit', snugger: 'Make switch hole tighter' },
+    (v) => cb.onSocketFit(v),
+  );
+  $('pocketFitMount').append(pocketFitRow);
 
   // --- The switches, and the way back to the default layout ---
   const switchResetAll = button({
@@ -2369,12 +2533,32 @@ export function createUi(
   $('switchResetAllMount').replaceWith(switchResetAll);
 
   const keychainToggle = toggleSwitch({
-    label: 'Keyring loop',
-    help: 'Adds a keyring attachment to the body so you can clip the clicker to a keychain.',
+    label: 'Add keychain',
+    help: 'Adds a place to clip the clicker to a keyring.',
     checked: initial.keychain.enabled,
     onChange: (v) => cb.onKeychainToggle(v),
   });
   $('keychainMount').append(keychainToggle);
+  // Loop or Hole. A hole is placed first, where it fits nearest Position, its cutter showing
+  // where it goes, then cut with Cut hole; once cut it follows Position and Fine offset as the
+  // loop does, and Undo takes it back.
+  const keychainStyleTabs = segmentedControl<'loop' | 'hole'>({
+    label: 'Style',
+    help: 'A loop sticks out of the edge; a hole runs through the base.',
+    options: [
+      { value: 'loop', label: 'Loop' },
+      { value: 'hole', label: 'Hole' },
+    ],
+    value: initial.keychain.style ?? 'loop',
+    onChange: (v) => cb.onKeychainStyle(v),
+  });
+  $('keychainStyleMount').append(keychainStyleTabs);
+  $('keychainCutMount').append(button({
+    label: 'Cut hole',
+    emphasis: 'primary',
+    block: true,
+    onClick: () => cb.onKeychainCut(),
+  }));
 
   // The picture on its base (on an Outline base the picture IS the base, so only Turn shows).
   const artMove = moveRows(
@@ -2386,6 +2570,29 @@ export function createUi(
   $('artMoveXMount').append(artMove.x);
   $('artMoveYMount').append(artMove.y);
   $('artTurnMount').append(artMove.turn);
+
+  // The bottom picture's place (the Bottom category). Size is a share of what the build picks;
+  // the pad moves it from the middle and turns it, seen from below, and its centre puts it back
+  // in the middle unturned (the size stays). The pad holds no value: each press reads the place
+  // from the state, and its readout line says where the picture is.
+  const bottomScaleRow = sliderRow({
+    label: 'Size',
+    min: BOTTOM_PLACE_LIMITS.scale[0] * 100, max: BOTTOM_PLACE_LIMITS.scale[1] * 100, step: 5, value: 100, defaultValue: 100, unit: '%',
+    onInput: (v) => cb.onBottomPlace({ scale: v / 100 }),
+  });
+  $('bottomScaleMount').append(bottomScaleRow);
+  const bottomPlaceNow = () => latestState?.bottomPicture?.place ?? DEFAULT_BOTTOM_PLACE;
+  const bottomPad = dpad({
+    rotateStep: BOTTOM_PAD.turnDeg,
+    readout: bottomPlaceReadout(DEFAULT_BOTTOM_PLACE),
+    onMove: (dir) => {
+      const { x, y } = nudgeBottomPlace(bottomPlaceNow(), dir);
+      cb.onBottomPlace({ x, y });
+    },
+    onRotate: (delta) => cb.onBottomPlace({ rotation: turnBottomPlace(bottomPlaceNow(), delta).rotation }),
+    onReset: () => cb.onBottomPlace({ x: 0, y: 0, rotation: 0 }),
+  });
+  $('bottomPadRow').append(bottomPad.root);
 
   /* The switches: a row each, numbered as the 2D view numbers them. Picking one is picking it in
      2D too, and the rows under the list move it; × takes it off and Add switch puts another on,
@@ -2436,13 +2643,32 @@ export function createUi(
   $('switchMoveXMount').append(switchMove.x);
   $('switchMoveYMount').append(switchMove.y);
   $('switchTurnMount').append(switchMove.turn);
+  /* The pad: the switch lit in the list, one step a press, held in the same box the sliders range
+     over and the 2D view draws in. It writes through onSwitchMove like the sliders, so the list,
+     the sliders and the 2D view follow from the state; it holds no value of its own. */
+  const switchPad = dpad({
+    rotateStep: SWITCH_PAD_TURN_DEG,
+    centreLabel: 'Back to its place',
+    onMove: (dir) => {
+      const press = latestState && padPress(latestState, dir);
+      if (press) cb.onSwitchMove(press.index, { x: press.x, y: press.y });
+    },
+    // The corners turn it as the Turn slider does (left is positive, the kit's and the slider's way).
+    onRotate: (delta) => {
+      const i = switchAt();
+      const sw = latestState?.switches[i];
+      if (sw) cb.onSwitchMove(i, { rotation: turnSwitch(sw.rotation, delta) });
+    },
+    onReset: () => cb.onSwitchHome(switchAt()),
+  });
+  $('switchPadRow').append(switchPad.root);
 
   /* The loop: a bearing round the body's edge (90° = top), then a small slide along the edge from
      there, for a shape where the ray from the centre lands awkwardly (a heart, a star). Both are
      absolute, so a row always reports the value it shows. */
   const keychainAngleRow = sliderRow({
-    label: 'Loop position',
-    help: 'Where the keyring loop sits around the edge. 90° is the top.',
+    label: 'Position',
+    help: 'Where the keyring sits around the edge. 90° is the top.',
     min: 0, max: 360, step: 5, value: initial.keychain.angleDeg, unit: '°',
     onInput: (v) => cb.onKeychainAngle(v),
   });
@@ -2451,12 +2677,19 @@ export function createUi(
   // swept quantity, so the arrows read the way the loop moves.
   const keychainOffsetRow = stepperRow({
     label: 'Fine offset',
-    help: 'Slides the loop along the edge from where Loop position puts it.',
-    min: -15, max: 15, step: 0.5, value: initial.keychain.offsetMm, unit: 'mm',
+    help: 'Slides it along the edge from where Position puts it.',
+    min: SETTING_LIMITS.keychainOffsetMm[0], max: SETTING_LIMITS.keychainOffsetMm[1], step: 0.5, value: initial.keychain.offsetMm, unit: 'mm',
     arrows: 'horizontal',
     onInput: (v) => cb.onKeychainOffsetSet(v),
   });
   $('keychainOffsetMount').append(keychainOffsetRow);
+  // Shown once either has moved off where a new clicker has it (update()).
+  $('keychainResetMount').append(button({
+    label: 'Reset position',
+    emphasis: 'secondary',
+    block: true,
+    onClick: () => cb.onKeychainPositionReset(),
+  }));
 
   /* Was a hand-built `keychainSizeMinus/Plus` button pair around a plain `<span>`
      readout. `onKeychainSize` takes a DELTA (mount.ts clamps the result to 3.0-8.0mm), while
@@ -2466,12 +2699,15 @@ export function createUi(
      `min: 3.2` rather than the true 3.0 floor: the row snaps whatever it shows to a
      `min + n*step` grid, and 3.0 is not on the same 0.4mm grid as the 5.2mm default — 3.2 is,
      so the default (and every value a click can reach) round-trips exactly instead of
-     display-snapping to the nearest 0.4 away from what is actually stored. */
+     display-snapping to the nearest 0.4 away from what is actually stored.
+     One row for both styles: the loop's hole, or the tunnel's width. Its range follows the style
+     (`holeSizeRange`, set again in `update()`), so a hole never shows a size it cannot make. */
   let keychainHoleLast = initial.keychain.holeDiameterMm;
+  const [holeMin0, holeMax0] = holeSizeRange(initial.importMode, initial.keychain.style);
   const keychainSizeRow = stepperRow({
     label: 'Hole size',
-    help: 'Diameter of the ring hole. Size it for a keyring, cord, or carabiner.',
-    min: 3.2, max: 8, step: 0.4, value: keychainHoleLast,
+    help: 'Width of the hole. Size it for a keyring or cord.',
+    min: holeMin0, max: holeMax0, step: 0.4, value: keychainHoleLast,
     format: (v) => `${v.toFixed(1)} mm`,
     onInput: (v) => {
       const delta = v - keychainHoleLast;
@@ -2539,6 +2775,21 @@ export function createUi(
   });
   document.getElementById('stageViewRow')?.append(viewTabs.root);
 
+  // In 2D, with a picture on the underside: which face is laid out. The same pill pair as 3D's
+  // arrangement, in the same place; opening Bottom turns it over, and it can be flipped any time.
+  const sideTabs = previewBar<'top' | 'bottom'>({
+    label: '2D side',
+    modes: {
+      options: [
+        { value: 'top', label: 'Top' },
+        { value: 'bottom', label: 'Bottom' },
+      ],
+      value: initial.designSide,
+      onChange: (v) => cb.onDesignSide(v),
+    },
+  });
+  document.getElementById('stageViewRow')?.append(sideTabs.root);
+
   /* The cut through the model: the bar's Cut it open, and its own settings on the row under
      it while it is on — which way the cut runs and how far along. A switch of its own rather
      than a third view, so either arrangement can be cut. Axis and position are viewport state,
@@ -2580,23 +2831,10 @@ export function createUi(
   // Help tooltips are the kit's `helpTip()` now (see `tip()` / `resolveHelpTips()` above) —
   // each marker owns its own bubble and positioning, so there is nothing left to wire here.
 
-  /** The shelf filament nearest a colour, as a person sees it (Oklab): a row is now named after
-   *  its filament, and by plain RGB distance a leaf green came out nearer Brown than Green. */
+  /** The shelf filament nearest a colour, as a person sees it: the picture window's own names
+   *  (`filamentName.ts`), so a colour is called the same in the window and on the rail. */
   function getFilamentNameAndHex(rgb: RGB): [string, string] {
-    let bestHex = rgbHex(rgb);
-    let bestName = 'Custom Color';
-    let bestD = Infinity;
-    const [l, a, b] = srgbToOklab(rgb);
-    for (const [name, hex] of FILAMENTS) {
-      const [fl, fa, fb] = srgbToOklab(hexRgb(hex));
-      const d = (l - fl) ** 2 + (a - fa) ** 2 + (b - fb) ** 2;
-      if (d < bestD) {
-        bestD = d;
-        bestHex = hex;
-        bestName = name;
-      }
-    }
-    return [bestName, bestHex];
+    return nearestFilament(rgb);
   }
 
   /** What the colour picker offers, each chip named for the shelf filament nearest to it. */
@@ -2610,13 +2848,26 @@ export function createUi(
     clientY: number,
     currentHex: string,
     options: RGB[],
-    handlers: { onSelect: (hex: string) => void; onClose?: () => void; footer?: HTMLElement }
+    handlers: {
+      onSelect: (hex: string) => void;
+      onClose?: () => void;
+      footer?: HTMLElement;
+      /** The colours the model already uses: their own row above the shelf, so a part is
+       *  recoloured to match another in one click. */
+      design?: RGB[];
+    }
   ) {
+    const design = handlers.design ?? [];
     colorPopover({
       x: clientX,
       y: clientY,
       value: currentHex,
-      options: offerOf(options),
+      ...(design.length
+        ? { groups: [
+            { label: 'In this design', options: offerOf(design) },
+            { label: 'Filaments', options: offerOf(options) },
+          ] }
+        : { options: offerOf(options) }),
       onSelect: handlers.onSelect,
       onCustom: (hex) => cb.onCustomColor(hex),
       onClose: handlers.onClose,
@@ -2777,7 +3028,8 @@ export function createUi(
       const onFirstPaletteClick = (e: MouseEvent) => {
         if (!(e.target as HTMLElement).closest('.vl-color-chip')) return;
         $('palette').removeEventListener('click', onFirstPaletteClick);
-        toast('Click a shape on the 3D model to recolor just that shape. A row above recolors its whole color.');
+        // On the stage's message button, not a toast over the model.
+        cb.onStatus('Click a shape on the 3D model to recolor just that shape. A row above recolors its whole color.');
         try { localStorage.setItem('clicker-recolor-tip', 'shown'); } catch {}
       };
       $('palette').addEventListener('click', onFirstPaletteClick);
@@ -2787,12 +3039,12 @@ export function createUi(
   /* The most recent state, for the handful of controls that need it at CLICK time rather
      than at sync time — the shape picker opens with the knobs the app has right now, and a
      drawer that opened on stale values would silently reset them on its first repaint. */
-  /* The status line is text, never markup: it carries file and project names. Built once and
-     updated in place, so the spinner's animation does not restart on every repaint. */
-  const statusSpinner = document.createElement('span');
-  statusSpinner.className = 'spinner';
-  const statusText = document.createTextNode('');
-  statusEl.replaceChildren(statusSpinner, statusText);
+  /* The status line, folded: a paragraph over the model is clutter nobody reads, so the message
+     sits behind one small button on the stage (an "i", or a "!" for a warning or an error) and a
+     build in progress is the spinner alone. Text, never markup: it carries file and project
+     names. Built once and updated in place, so the spinner does not restart on every repaint. */
+  const statusLine = stageStatus('', { folded: true });
+  statusEl.replaceWith(statusLine.root);
 
   function update(state: UiState) {
     latestState = state;
@@ -2803,10 +3055,7 @@ export function createUi(
     /** Printed without its picture (a cut model never is). What only moves, sizes or colours the
      *  picture goes, rather than sit there doing nothing. */
     const blank = isBlank(state);
-    statusSpinner.style.display = state.building ? '' : 'none';
-    statusText.data = (state.building ? ' ' : '') + state.status;
-    // Nothing to say: no empty pill on the stage.
-    statusEl.hidden = !state.building && !state.status;
+    statusLine.set(state.status, statusTone(state));
     markLoadedSample(state.loadedSampleId);
 
     // Limited mode can land on a count outside the fixed 2-12 list (a pack's own colour
@@ -2837,7 +3086,7 @@ export function createUi(
     imgdepthRow.setValue(state.imageDepth);
     // How deep the colours go into the top, in Relief beside how far they rise: the letters in
     // Text mode, the colours everywhere else, and on a blank the words, the only colour it has.
-    imgdepthRow.setBounds(0.2, 3, state.importMode === 'text' ? 'Letter depth' : blank ? 'Text depth' : 'Colour depth');
+    imgdepthRow.setBounds(SETTING_LIMITS.imageDepth[0], SETTING_LIMITS.imageDepth[1], state.importMode === 'text' ? 'Letter depth' : blank ? 'Text depth' : 'Colour depth');
     $('imgdepthRow').hidden = blank && !hasWords;
     renderReliefRows(state, wordsRgb, !blank);
     // A blank's Relief is its words' row alone, or nothing (and the category goes with it).
@@ -2856,18 +3105,25 @@ export function createUi(
     capProudRow.setValue(RIM_SPAN - state.capProud);
     hollowToggle.setValue(state.hollowBase);
     lastBuiltBody = state.builtBodyMm;
-    designScaleRow.setValue(Math.round((state.designScale ?? 1) * 100));
-    // An outline base ignores it, so it goes away there rather than sitting greyed out. In Text
-    // mode "Text size" is the same knob under a name that means something there, so this one
-    // goes away too rather than being a second control fighting it.
-    // A blank has no picture to size.
-    designScaleRow.hidden = state.importMode === 'text' || isOutlineBase(state) || blank;
+    // Design size, and the switch under it (designSizeRows.ts has the rules): a held picture
+    // shows the share it fills now. Each goes away where it does nothing, rather than sit greyed;
+    // in Text mode "Text size" is the same knob under a name that means something there.
+    const sizeRows = designSizeRows(state, blank);
+    designScaleRow.setValue(sizeRows.designSizePct);
+    designScaleRow.hidden = sizeRows.designSizeHidden;
+    followSizeToggle.setValue(sizeRows.follows);
+    // The row, not only the switch, so its spacing goes with it.
+    $('followSizeRow').hidden = sizeRows.followHidden;
     paintShapeKnobs(state);
     // The picture's place: on an Outline base the picture is the base, so it only turns. A blank
     // has no picture to place, but on an Outline base turning it still turns the base.
     $('artMoveXRow').hidden = isOutlineBase(state) || blank;
     $('artMoveYRow').hidden = isOutlineBase(state) || blank;
     $('artTurnRow').hidden = blank && !isOutlineBase(state);
+    // A caption over the three says what they move, in the mode's own word.
+    const movedThing = state.importMode === 'text' ? 'text' : state.importMode === 'icon' ? 'icon' : 'picture';
+    $('artMoveLabel').textContent = `${isOutlineBase(state) ? 'Turn' : 'Move'} the ${movedThing}`;
+    $('artMoveLabel').hidden = $('artTurnRow').hidden;
     artMove.x.setValue(state.imageOffset.x);
     artMove.y.setValue(state.imageOffset.y);
     artMove.turn.setValue(wrapTurn(state.designRotation));
@@ -2882,23 +3138,28 @@ export function createUi(
     widthRow.setDisabled(!!state.fixedSize);
     gapTolRow.setValue(state.tolerance);
     stemFitRow.setValue(state.stemFitMm);
+    stemOuterRow.setValue(state.stemOuterMm);
     fitTestStepRow.setValue(state.fitTestStepMm.toFixed(2));
     syncFitTest(state.fitTestActive);
+    // The stage's bottom centre is the fit test's way back while it shows; the mouse hint goes
+    // (it goes in 2D too, where it does not apply).
+    $('hint')?.toggleAttribute('hidden', state.fitTestActive || state.designView);
     socketFitRow.setValue(state.socketFitPct);
+    topFitRow.show(state.stemFitMm);
+    pocketFitRow.show(state.socketFitPct);
     const switchCountN = state.switches.length;
     switchResetAll.setLabel(switchCountN > 1 ? 'Reset switch positions' : 'Reset switch position');
     // The list, the one the rows move lit; then the rows, over the box the last build clamped the
     // switches into (before one, the base). An axis with no room is not offered.
     renderSwitchList(state);
     const switchIdx = Math.max(0, Math.min(state.activeSwitchIndex, switchCountN - 1));
-    const sb = state.switchBox;
-    const halfCap = onGrid(state.capWidthMm / 2, false);
-    const swRange: [number, number, number, number] = sb
-      ? [onGrid(sb.loX, true), onGrid(sb.hiX, false), onGrid(sb.loY, true), onGrid(sb.hiY, false)]
-      : [-halfCap, halfCap, -halfCap, halfCap];
+    const reach = sliderReach(switchReach(state.switchBox, state.capWidthMm));
+    const swRange: [number, number, number, number] = [reach.loX, reach.hiX, reach.loY, reach.hiY];
     const sw = state.switches[switchIdx];
     $('switchMoveXRow').hidden = swRange[0] >= swRange[1];
     $('switchMoveYRow').hidden = swRange[2] >= swRange[3];
+    // The pad goes with the sliders: where neither is offered, it has nothing to move either.
+    $('switchPadRow').hidden = !switchPadHasRoom(reach);
     if (swRange[0] < swRange[1]) switchMove.x.setBounds(swRange[0], swRange[1]);
     if (swRange[2] < swRange[3]) switchMove.y.setBounds(swRange[2], swRange[3]);
     if (sw) {
@@ -2912,6 +3173,14 @@ export function createUi(
     if (kcOpts) kcOpts.style.display = kc.enabled ? '' : 'none';
     keychainAngleRow.setValue(kc.angleDeg ?? 90);
     keychainOffsetRow.setValue(kc.offsetMm ?? 0);
+    $('keychainResetMount').hidden = !keychainMoved(kc);
+    // A block set always makes a loop, so Style hides there (the state keeps the choice).
+    keychainStyleTabs.setValue(kc.style ?? 'loop');
+    showKeychainStyleRows({ styleField: $('keychainStyleField'), sizeRow: keychainSizeRow }, state.importMode, kc.style);
+    // Where the hole has no room, Cut hole goes (it could not cut) and a line says why instead.
+    const noRoom = holeNoRoomShown(state.importMode, kc, state.holeNoRoom);
+    $('keychainCutMount').hidden = !holeAwaitsCut(state.importMode, kc) || noRoom;
+    $('keychainNoRoom').hidden = !noRoom;
 
     keychainHoleLast = kc.holeDiameterMm;
     keychainSizeRow.setValue(kc.holeDiameterMm);
@@ -2934,6 +3203,14 @@ export function createUi(
     blockUi.setSymbols(state.blockSymbols);
     // Words on a picture: the field under the picture's own controls.
     $('wordsField').hidden = !pictureMode;
+    // The bottom picture: only where there is a flat underside, the zone until there is one.
+    showBottomPictureRows({
+      zone: bottomZone, buttons: bottomButtons, replace: bottomReplace,
+      place: [$('bottomScaleRow'), $('bottomPadRow')],
+    }, state.importMode, !!state.bottomPicture);
+    const bottomPlace = state.bottomPicture?.place ?? DEFAULT_BOTTOM_PLACE;
+    bottomScaleRow.setValue(Math.round(bottomPlace.scale * 100));
+    bottomPad.setReadout(bottomPlaceReadout(bottomPlace));
     // The font goes in with a picture's words, under them, once there are some.
     placeFontBlock(pictureMode);
     // A blank block set prints no letters, so the face they are set in goes (and Font with it).
@@ -3078,6 +3355,7 @@ export function createUi(
     showForBlocks(document.getElementById('keychainBlockResetMount'));
     hideForBlocks(document.getElementById('keychainAngleRow'));
     hideForBlocks(document.getElementById('keychainOffsetRow'));
+    hideForBlocks(document.getElementById('keychainResetMount'));
 
     /* Model mode has its own sections (modelPanel.ts) for the cut, the switch, the size and the
        colours, so the image clicker's versions of those hide. What stays is what still means
@@ -3121,7 +3399,12 @@ export function createUi(
     const designable = pictureMode || state.importMode === 'text';
     $('stageModeRow').hidden = !designable;
     stageMode.setValue(state.designView ? '2d' : '3d');
-    $('stageViewRow').hidden = state.designView;
+    // In 2D the row holds the Top | Bottom switch instead, only while there is an underside picture.
+    const sides = state.designView && !!state.bottomPicture && bottomPictureShown(state.importMode);
+    $('stageViewRow').hidden = state.designView && !sides;
+    viewTabs.root.hidden = state.designView;
+    sideTabs.root.hidden = !sides;
+    sideTabs.setValue(state.designSide);
     viewTabs.setValue(state.view);
     viewTabs.setPressed('cut', state.sectionOn);
     const cutRowEl = document.getElementById('stageCutRow');
@@ -3210,7 +3493,7 @@ export function createUi(
       renderTextLines();
     },
     /** Open a rail category: the one that answers to what was picked on the Design view. */
-    openCategory: (id: 'shape' | 'lettering' | 'switch' | 'keychain') => settings.open(id),
+    openCategory: (id: 'shape' | 'lettering' | 'switch' | 'keychain' | 'bottom') => settings.open(id),
     /** The words selected on the Design view, which Lettering's Text size then sizes alone. */
     setActiveWord: (id: string | null) => {
       activeWordId = id;

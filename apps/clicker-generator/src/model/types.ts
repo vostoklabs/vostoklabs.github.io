@@ -12,6 +12,24 @@ export type CutterKind = 'slice' | 'stand' | 'button';
 export type ButtonShape = 'round' | 'square';
 export type PlateShape = 'circle' | 'square' | 'outline';
 
+/** The most buttons one model can have. */
+export const MAX_BUTTONS = 6;
+
+/** A button after the first. `x`/`y` place a Button-cutter button (null = let the build choose);
+ *  the nudges move a Split button's switch from where the build put it. */
+export interface ExtraButton {
+  x: number | null;
+  y: number | null;
+  nudgeX: number;
+  nudgeY: number;
+  rotation: number;
+}
+
+/** How many buttons a cut asks for: whole, at least one, at most `MAX_BUTTONS`. */
+export function buttonCount(p: Pick<ModelCutParams, 'buttons'>): number {
+  return Math.max(1, Math.min(MAX_BUTTONS, Math.round(p.buttons ?? 1)));
+}
+
 /** Everything the worker needs to cut the cached model. Millimetres and degrees. */
 export interface ModelCutParams {
   cutter: CutterKind;
@@ -50,9 +68,15 @@ export interface ModelCutParams {
   };
   /** Nudge of the switch from where the build put it (slice), and its turn. */
   switchNudge: { x: number; y: number; rotation: number };
+  /** Separate buttons, each on its own switch: Split and Button only. Absent (an old project) = 1. */
+  buttons?: number;
+  /** The buttons after the first, in order. Missing entries are left to the build. */
+  more?: ExtraButton[];
   /** Slip fit between a sliding piece and its bore, mm. The image clicker's "Top / base gap". */
   tolerance: number;
   stemFitMm: number;
+  /** The post's extra width, mm. Absent (an old project) or 0 = as drawn. */
+  stemOuterMm?: number;
   socketFitPct: number;
   /** Switch press travel, mm. */
   travel: number;
@@ -85,6 +109,10 @@ export interface ModelMeta {
   switchAt: { x: number; y: number; z: number; rotation: number };
   /** Button centre actually used (button). */
   buttonAt: { x: number; y: number } | null;
+  /** Every button's centre (button), in order. */
+  buttonsAt: { x: number; y: number }[];
+  /** How many buttons this model has room for at these settings. */
+  maxButtons: number;
   /** Estimated weight of the piece that moves, grams. */
   movingGrams: number;
   /** How much was shaved off the bottom, mm — the automatic amount when `flattenMm` is null. */
@@ -108,6 +136,8 @@ export const DEFAULT_MODEL_CUT: ModelCutParams = {
   stand: { shape: 'circle', marginMm: 2.5 },
   button: { shape: 'round', sizeMm: 24, raiseMm: 0, x: null, y: null },
   switchNudge: { x: 0, y: 0, rotation: 0 },
+  buttons: 1,
+  more: [],
   tolerance: 0.4,
   stemFitMm: 0,
   socketFitPct: 0,

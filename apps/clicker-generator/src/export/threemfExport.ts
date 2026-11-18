@@ -38,6 +38,22 @@ export interface ThreeMFOptions {
   sourceModel?: string;
 }
 
+/** The first layer's speed, mm/s, on walls and on infill: Bambu's own slow pair. */
+export const FIRST_LAYER_SPEED = '30';
+export const FIRST_LAYER_INFILL_SPEED = '60';
+
+/**
+ * How a clicker prints best, over the system process. The picture is printed face-down, so its
+ * first layer IS the picture: one wall leaves room for fine colour, a slower pass lays it clean,
+ * and Arachne keeps lines narrower than two walls from being dropped.
+ */
+export const CLICKER_PROCESS: Record<string, string | string[]> = {
+  wall_generator: 'arachne',
+  only_one_wall_first_layer: '1',
+  initial_layer_speed: [FIRST_LAYER_SPEED],
+  initial_layer_infill_speed: [FIRST_LAYER_INFILL_SPEED],
+};
+
 /** What a plate object is called in the slicer's object list. */
 function labelFor(parts: ClickerPart[], key: string): string {
   const p = parts.find((x) => objectKeyOf(x) === key);
@@ -91,6 +107,7 @@ export function clickerThreeMF(parts: ClickerPart[], opts: ThreeMFOptions = {}):
       plateSize: plateSize(layout.plate),
       cover: opts.coverPng,
       coverSmall: opts.coverSmallPng,
+      process: CLICKER_PROCESS,
     },
   );
 }

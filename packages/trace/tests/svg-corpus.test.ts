@@ -42,11 +42,11 @@ const PINNED = {
     ],
     'as painted': [
       '903abc3f71a7e2559a615fa22926c09c83d349108782b456f2e2c4bae2a9b40b',
-      'c111c4120e86db4e454f8a445f903827fd8b351ac9ca2878f040ae7b56a24142',
+      '605a6605646e1cc84f052f9fa465674389cf6884c2b456b55478f42dba30f257',
     ],
     'as painted, strokes filled': [
       '69a6d8dd5b4a16ae18b244e17baf4421d36432ecd77893421e0244a529e013d0',
-      '2b294f4379fe532cec918aab49ee7fd55305bb69aeec455005db8306db6a3bdf',
+      'bdcce81f49ec6f24bb6fd7be189d3cc2c9d7105a31f423186e36714f0b66dd2d',
     ],
     'background removed': [
       '4524b52084fd187e02d819c05a78a9dd4f497eaff38ecb23ac5ca445b7a8e17c',
@@ -57,8 +57,8 @@ const PINNED = {
       'cbb3323fcecf0e226e70d5a14bc60d26de3f94a1941de23d0624bd8a07d64b7d',
     ],
     'chosen, background removed, as painted': [
-      '4606f60fc3817ce6e16ea95fb0a861215df809722fe7b996deccb2e580a0a26a',
-      '115f5787e606523d6ecfe32883fc7dfd2f0fc89191a31f634ed71ab06dee8e47',
+      '4a940854cac17940991ee4d51bc80146301f88269aa5a7858108f816da0c6007',
+      '44ddb7a546198113eeefae8e200576b728b2ea970a1b8419dde48328083cb106',
     ],
   } as Record<string, [string, string]>,
   /** `describeSvg` over every icon and every drawing in `LEGEND_FILES`. */

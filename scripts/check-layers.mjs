@@ -90,6 +90,11 @@ const KNOWN = new Set([
   'packages/fonts/tests/import.test.mts -> ../src/import',
   'packages/fonts/tests/faces.test.mts -> ../src/index',
   'packages/fonts/tests/fallback.test.mts -> ../src/index',
+  // Its stand-in is a build's glob and env, website or not (packages/fonts/tests/vite-glob-site.mts).
+  'packages/fonts/tests/site-fonts-url.test.mts -> ../src/index',
+  'packages/fonts/tests/site-fonts-url.test.mts -> ../src/weights',
+  'packages/fonts/tests/leave-out-fonts.entry.mts -> ../src/index',
+  'packages/fonts/tests/leave-out-fonts.entry.mts -> ../src/fallback',
   // Meant: keycap's letter faces are the shelf's library read through the keycap's own text
   // engine, so the test reads the registry as letterFonts.js does; it puts its own glob
   // stand-in in place.
@@ -97,6 +102,11 @@ const KNOWN = new Set([
   // Meant too: tests/suites.mjs runs it with the glob stand-in in place. The command in its own
   // header leaves the stand-in out; font-fallback's header shows the command with it.
   'apps/clicker-generator/tests/text-sizing.test.ts -> ../src/image/letter.ts',
+  // Meant: it lays out a line of text with symbols in it, so it draws the letters through the
+  // code it tests; tests/suites.mjs runs it with the glob stand-in in place.
+  'apps/clicker-generator/tests/text-symbols.test.ts -> ../src/image/letter.ts',
+  // Meant, for the same reason: it builds a line of text with a symbol at its end.
+  'apps/clicker-generator/tests/text-symbol-outline.test.ts -> ../src/image/letter.ts',
   // Meant: the real-mount suite bundles mount.ts with './ui/ui' and the other heavy panels
   // swapped for stand-ins (mount.test.mjs, `replaced`), so the registry never loads in it.
   'apps/clicker-generator/tests/mount.scenarios.ts -> ../src/mount',

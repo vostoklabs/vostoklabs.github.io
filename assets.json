@@ -4952,6 +4952,26 @@
       "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
     },
     {
+      "id": "font/source-han-sans-cn-light",
+      "kind": "font",
+      "files": {
+        "packages/fonts/src/fonts/source-han-sans-cn-light.otf": "a4813b5cbc110539eded2719f8bd09f5c2ecbffc6625c949e71fbff8ddb5a7fd"
+      },
+      "licence": "Apache-2.0",
+      "copyright": "Copyright © 2014 Adobe Systems Incorporated. All Rights Reserved.",
+      "reservedNames": [],
+      "shipsAs": "original",
+      "source": {
+        "url": "https://github.com/adobe-fonts/source-han-sans/blob/cd3de5c749a4b739489317c4438cf0445adf3370/SubsetOTF/CN/SourceHanSansCN-Light.otf",
+        "commit": "cd3de5c749a4b739489317c4438cf0445adf3370"
+      },
+      "licenceUrl": "https://github.com/adobe-fonts/source-han-sans/blob/cd3de5c749a4b739489317c4438cf0445adf3370/LICENSE.txt",
+      "notice": [
+        "packages/fonts/src/fonts/LICENSE-APACHE-2.0.txt"
+      ],
+      "writtenBy": "packages/fonts/scripts/fetch-fonts.mjs"
+    },
+    {
       "id": "font/space-mono",
       "kind": "font",
       "files": {
@@ -5956,7 +5976,7 @@
       "id": "ui-icons/kit",
       "kind": "ui-icons",
       "files": {
-        "packages/ui-kit/src/icons.ts": "ab41de94c39c29194a9a386e84cc86768241e5760012dc942d1288083b5c5128"
+        "packages/ui-kit/src/icons.ts": "1d5c619b269825c69fe80cebb7bb8483b2dfa47eb65becd2276bc12c0ba6ff42"
       },
       "licence": "ISC AND MIT",
       "copyright": "Lucide Contributors; Cole Bemis (Feather); GitHub, Inc. (the GitHub mark, from Octicons)",

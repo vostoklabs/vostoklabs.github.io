@@ -489,8 +489,16 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
     return g;
   }
 
+  /** `asPainted` only: what the file paints, bottom first, one entry per run of one colour. */
+  const painted: { hex: string; rings: Ring[] }[] = [];
+
   function addRings(rgb: RGB, rings: Ring[]) {
     groupOf(rgb).rings.push(...rings);
+    if (!opts.asPainted) return;
+    const hex = rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+    const top = painted[painted.length - 1];
+    if (top?.hex === hex) top.rings.push(...rings);
+    else painted.push({ hex, rings: [...rings] });
   }
 
   /** Filled shapes as rings: outlines anticlockwise, holes clockwise. */
@@ -743,9 +751,14 @@ export function parseSvg(svgText: string, opts: SvgOptions = {}): RegionSet {
   const regions = Array.from(groups.values()).map(g => {
     const normRings = g.rings.map(normalizeRing);
     const cov = regionArea(g.rings) / totalArea;
+    // One colour cannot overlap another, so a one-colour drawing needs no order.
+    const hex = g.rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+    const layers = groups.size > 1
+      ? painted.flatMap((p, paint) => (p.hex === hex ? [{ rings: p.rings.map(normalizeRing), paint }] : []))
+      : [];
     return {
       quantRgb: g.rgb,
-      components: [{ rings: normRings, coverage: cov }],
+      components: [{ rings: normRings, coverage: cov, ...(layers.length ? { layers } : {}) }],
       coverage: cov,
       // In the same frame as the rings; only a colour that has some carries the field.
       ...(g.lines.length ? { lines: g.lines.map(normalizeRing) } : {}),

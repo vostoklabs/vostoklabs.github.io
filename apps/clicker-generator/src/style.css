@@ -44,6 +44,23 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
 }
 /* The keyring hole is a ring of the body's outline. */
 .cg-design__body { fill-rule: evenodd; }
+/* The body picked: its own outline in the accent, as well as the canvas's box round it. */
+.cg-design__body.is-picked { stroke: var(--accent); stroke-width: 2; }
+/* A keyring hole placed but not cut: the ring that will cut it, half in the wall. */
+.cg-design__cutter {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+  fill-rule: evenodd;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+/* …where the build found no room for it: the warning colour, as the 3D cutter. */
+.cg-design__cutter.is-no-room {
+  fill: color-mix(in srgb, var(--warn) 22%, transparent);
+  stroke: var(--warn);
+}
 /* A switch: the square it needs, faint so the picture under it still reads, and its number on a
    badge. Picked, the square is tinted and the canvas's dotted line goes round it. */
 .cg-design__switch rect {
@@ -75,6 +92,19 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
   line-height: 1;
 }
 
+/* The Fit category's drawing (fitDiagram.ts): the parts in the panel's own colours, the two
+   numbered places in the accent, as the switch badges are. */
+.cg-fit-diagram-row { margin-block-end: var(--space-2); }
+.cg-fit-diagram { display: block; inline-size: 100%; max-inline-size: 300px; block-size: auto; }
+.cg-fit-diagram__base { fill: var(--panel-2); stroke: var(--muted); stroke-width: 1.2; }
+.cg-fit-diagram__part { fill: var(--panel-2); stroke: var(--text); stroke-width: 1.2; }
+.cg-fit-diagram__switch { fill: color-mix(in srgb, var(--muted) 35%, transparent); stroke: var(--muted); stroke-width: 1.2; }
+.cg-fit-diagram__stem { fill: var(--muted); }
+.cg-fit-diagram__lead { fill: none; stroke: var(--muted); stroke-width: 1; }
+.cg-fit-diagram__name { fill: var(--text); font-size: 12px; font-family: var(--font-body); }
+.cg-fit-diagram__mark { fill: var(--accent); }
+.cg-fit-diagram__num { fill: var(--accent-text); font-size: 10px; font-weight: 700; text-anchor: middle; font-family: var(--font-body); }
+
 /* The keyring loop while it is dragged, before the build redraws the body round it. */
 .cg-design__loop-ghost circle {
   stroke: var(--accent);
@@ -82,6 +112,16 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
   vector-effect: non-scaling-stroke;
 }
 .cg-design__loop-ghost-hole { fill: var(--bg); }
+/* A keyring hole: its ghost is the ring it is cut with, and its tunnel a hidden line under the cap. */
+.cg-design__loop-ghost--ring circle { fill: none; }
+.cg-design__tunnel {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
 
 /* Theme button shows only the icon for the mode you'll switch to */
 #themeToggle svg { display: none; }
@@ -159,10 +199,20 @@ main.vl-app { min-height: 0; max-height: none; flex: 1 1 auto; }
 /* Text and Blocks: the heading, with Add symbol at its far end. */
 .cg-lines-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 #sidebar-left .cg-left-foot { position: static; margin: 0; padding: var(--space-3) var(--space-4); }
-@media (min-width: 901px) {
+/* Down to 761 px the columns stand side by side and the rail stays beside its category (the kit's
+   `fitHeight`), so the panel never scrolls as a whole. */
+@media (min-width: 761px) {
   /* `clip`, not `hidden`: hidden still scrolls when anything inside is focused or scrolled into
      view, which slid the rail's top out of sight. */
   #sidebar-left .cg-left { overflow: clip; }
+}
+/* A short window: the licence above the rail and undo below it give up padding, and the column
+   its gaps (the top's hairline already parts it from the rail), so the height goes to the rail's
+   categories. */
+@media (max-height: 820px) {
+  #sidebar-left .cg-left { gap: 0; }
+  .cg-left-top { padding: var(--space-3) var(--space-4) var(--space-2); }
+  #sidebar-left .cg-left-foot { padding: var(--space-2) var(--space-4); }
 }
 
 /* Grid alignments for controls — stacked layout */
@@ -368,23 +418,8 @@ button.primary:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
   transform: translateY(-2px);
 }
 
-#status {
-  /* Short of the stage's bottom-right corner, where the Design view keeps its zoom buttons. */
-  position: absolute; left: 18px; bottom: 15px; z-index: 5; max-width: min(70ch, calc(100% - 220px));
-  padding: 10px 15px; border-radius: 10px; background: color-mix(in srgb, var(--panel) 90%, transparent);
-  backdrop-filter: blur(4px); font-size: 15.5px; line-height: 1.4;
-  border: 1px solid var(--line); color: var(--text);
-  /* Was `pointer-events: none` — meant well (let a click sail through to the model behind it)
-     but took the whole line with it: a build warning worth reading twice, or worth pasting
-     into a bug report, could not be selected at all. `auto` only changes what happens INSIDE
-     this box; the 3D viewport everywhere else is untouched. */
-  pointer-events: auto;
-  user-select: text;
-}
+/* The status line is the kit's folded `stageStatus()`: a button on the stage, styled by the kit. */
 .hint { color: var(--muted); font-size: 14px; line-height: 1.4; margin-top: 8px; }
-.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--muted);
-  border-top-color: var(--accent); border-radius: 50%; animation: spin var(--dur-spin) var(--ease-linear) infinite; vertical-align: -1px; }
-@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- Wizard/Modal overlays ---------- */
 .wz-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.72);
@@ -444,8 +479,17 @@ button.primary:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
 .wz-stats { color: var(--muted); font-size: 14px; margin-left: auto; }
 .wz-stats.is-busy { color: var(--text); }
 /* No `max-height` here on purpose — the canvas fills whatever `.wz-canvas` gives it (see the
-   sizing comment above), and the zoom/pan transform is applied to this same element in JS. */
+   sizing comment above). The zoom/pan transform is applied to the stage round it in JS, so
+   whatever is drawn over the picture moves with it; the padding leaves room at the edges for
+   grips placed on the picture's border. */
+.wz-stage { position: relative; width: 100%; height: 100%; padding: 12px; box-sizing: border-box; }
 .wz-canvas canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* The crop box's box: placed in JS exactly over the picture as the canvas shows it. */
+.wz-crop-host { position: absolute; }
+/* Under the preview: one line, or the button for what is marked; Undo and "Put everything
+   back" at the right once something was changed. One height either way, so nothing jumps. */
+.wz-tools { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+.wz-tools-history { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 
 /* Read-only palette: the filaments the trace prints in, not a control. */
 .wz-palette { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-height: 18px; }

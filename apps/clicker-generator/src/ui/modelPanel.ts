@@ -17,6 +17,7 @@ import {
   section,
   segmentedControl,
   sliderRow,
+  stepperRow,
   thumbGrid,
   thumbTile,
   toggleSwitch,
@@ -24,7 +25,7 @@ import {
   type ThumbTileHandle,
 } from '@vostok/ui-kit';
 import type { UiState } from './ui';
-import type { ButtonShape, CutterKind, ModelCutParams, PlateShape } from '../model/types';
+import { MAX_BUTTONS, buttonCount, type ButtonShape, type CutterKind, type ExtraButton, type ModelCutParams, type PlateShape } from '../model/types';
 import { MODEL_SAMPLES, sampleById, samplePicture, type SampleId } from '../model/samples';
 import { BUTTON_MIN } from '../model/cutButton';
 import { assetUrl } from '../assets';
@@ -36,6 +37,8 @@ export interface ModelPanelDeps {
   onSample(id: SampleId): void;
   /** A new set of cut settings. `live` while a slider is still moving. */
   setCut(next: ModelCutParams, live?: boolean): void;
+  /** Another button was picked to move: what the viewport marks has changed. */
+  onSelect(): void;
 }
 
 export interface ModelPanel {
@@ -48,12 +51,24 @@ export interface ModelPanel {
   update(state: UiState, sample: SampleId | null): void;
   /** A result card's picture, or null while it is being made. */
   setPicture(cutter: CutterKind, src: string | null): void;
+  /** Which button the arrows move and a click on the model places, counted from 0. */
+  selected(): number;
 }
 
 export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
   let state = deps.initial;
+  let lastSample: SampleId | null = null;
   const cut = () => state.modelCut;
   const set = (patch: Partial<ModelCutParams>, live = false) => deps.setCut({ ...cut(), ...patch }, live);
+
+  /** The buttons after the first, one entry each, however many have been touched. */
+  const extras = (c: ModelCutParams = cut()): ExtraButton[] =>
+    Array.from({ length: buttonCount(c) - 1 }, (_, i) => c.more?.[i] ?? { x: null, y: null, nudgeX: 0, nudgeY: 0, rotation: 0 });
+  const setExtra = (i: number, patch: Partial<ExtraButton>) => {
+    const list = extras();
+    list[i] = { ...list[i], ...patch };
+    set({ more: list });
+  };
 
   // ---- Right: the upload ----
   // The big target while there is nothing of the user's own here (nothing yet, or a sample);
@@ -105,6 +120,27 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
     value: deps.initial.modelCut.cutter,
     onChange: (v) => set({ cutter: v }),
   });
+
+  // How many buttons. The build places them and keeps them apart; the arrows are for afterwards.
+  const countRow = stepperRow({
+    label: 'Buttons',
+    help: 'Separate buttons, each on its own switch. Bigger models have room for more.',
+    min: 1, max: MAX_BUTTONS, step: 1, value: buttonCount(deps.initial.modelCut),
+    onInput: (n) => set({ buttons: n, more: extras({ ...cut(), buttons: n }) }),
+  });
+  const pickRow = stepperRow({
+    label: 'Which button',
+    help: 'The one the arrows move and a click on the model places.',
+    min: 1, max: MAX_BUTTONS, step: 1, value: 1,
+    onInput: () => {
+      update(state, lastSample);
+      deps.onSelect();
+    },
+  });
+  const countWrap = el('div', { className: 'prow-stacked' }, [countRow]);
+  const pickWrap = el('div', { className: 'prow-stacked' }, [pickRow]);
+  /** The button the controls act on, counted from 0. */
+  const selected = () => Math.min(pickRow.getValue(), buttonCount(cut())) - 1;
 
   // Split: where it splits. The plane on the model has a grip for the same number.
   const heightRow = sliderRow({
@@ -190,13 +226,29 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
 
   // ---- Left: More, per result ----
   const nudge = (dx: number, dy: number) => {
+    const i = selected();
+    if (i > 0) {
+      const e = extras()[i - 1];
+      setExtra(i - 1, { nudgeX: e.nudgeX + dx, nudgeY: e.nudgeY + dy });
+      return;
+    }
     const n = cut().switchNudge;
     set({ switchNudge: { ...n, x: n.x + dx, y: n.y + dy } });
   };
+  /** Turn the switch of the button the controls act on. */
+  const turnSwitch = (deg: number) => {
+    const i = selected();
+    if (i > 0) setExtra(i - 1, { rotation: extras()[i - 1].rotation + deg });
+    else set({ switchNudge: { ...cut().switchNudge, rotation: cut().switchNudge.rotation + deg } });
+  };
   const switchPad = dpad({
     onMove: (d) => nudge(d === 'left' ? -1 : d === 'right' ? 1 : 0, d === 'up' ? 1 : d === 'down' ? -1 : 0),
-    onRotate: (deg) => set({ switchNudge: { ...cut().switchNudge, rotation: cut().switchNudge.rotation + deg } }),
-    onReset: () => set({ switchNudge: { x: 0, y: 0, rotation: 0 } }),
+    onRotate: turnSwitch,
+    onReset: () => {
+      const i = selected();
+      if (i > 0) setExtra(i - 1, { nudgeX: 0, nudgeY: 0, rotation: 0 });
+      else set({ switchNudge: { x: 0, y: 0, rotation: 0 } });
+    },
     rotateStep: 15,
     readout: 'Automatic',
   });
@@ -227,14 +279,24 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
     },
   });
   const buttonNudge = (dx: number, dy: number) => {
+    const i = selected();
+    const at = state.modelMeta?.buttonsAt[i] ?? { x: 0, y: 0 };
+    if (i > 0) {
+      const e = extras()[i - 1];
+      setExtra(i - 1, { x: (e.x ?? at.x) + dx, y: (e.y ?? at.y) + dy });
+      return;
+    }
     const b = cut().button;
-    const at = state.modelMeta?.buttonAt ?? { x: 0, y: 0 };
     set({ button: { ...b, x: (b.x ?? at.x) + dx, y: (b.y ?? at.y) + dy } });
   };
   const buttonPad = dpad({
     onMove: (d) => buttonNudge(d === 'left' ? -1 : d === 'right' ? 1 : 0, d === 'up' ? 1 : d === 'down' ? -1 : 0),
-    onRotate: (deg) => set({ switchNudge: { ...cut().switchNudge, rotation: cut().switchNudge.rotation + deg } }),
-    onReset: () => set({ button: { ...cut().button, x: null, y: null }, switchNudge: { x: 0, y: 0, rotation: 0 } }),
+    onRotate: turnSwitch,
+    onReset: () => {
+      const i = selected();
+      if (i > 0) setExtra(i - 1, { x: null, y: null, rotation: 0 });
+      else set({ button: { ...cut().button, x: null, y: null }, switchNudge: { x: 0, y: 0, rotation: 0 } });
+    },
     rotateStep: 15,
     readout: 'On top',
   });
@@ -252,7 +314,7 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
 
   const cutSection = section({
     title: '',
-    body: [el('div', { className: 'field' }, [cutterCards]), sliceKnob, standKnob, buttonKnob, more],
+    body: [el('div', { className: 'field' }, [cutterCards]), countWrap, pickWrap, sliceKnob, standKnob, buttonKnob, more],
   });
 
   // ---- Left: the model's size and turn — closed; a model that arrives the right size and
@@ -271,6 +333,7 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
       set({
         sizeMm: v,
         button: { ...b, x: b.x === null ? null : b.x * k, y: b.y === null ? null : b.y * k },
+        more: c.more?.map((e) => ({ ...e, x: e.x === null ? null : e.x * k, y: e.y === null ? null : e.y * k })),
         slice: { ...c.slice, heightMm: c.slice.heightMm === null ? null : c.slice.heightMm * k },
       }, true);
     },
@@ -285,6 +348,7 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
       slice: { ...c.slice, heightMm: null },
       button: { ...c.button, x: null, y: null },
       switchNudge: { x: 0, y: 0, rotation: 0 },
+      more: [],
     });
   };
   const turnGrid = buttonGrid({
@@ -303,6 +367,7 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
             slice: { ...c.slice, heightMm: null },
             button: { ...c.button, x: null, y: null },
             switchNudge: { x: 0, y: 0, rotation: 0 },
+            more: [],
           });
         },
       }),
@@ -352,9 +417,20 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
 
   function update(next: UiState, sample: SampleId | null) {
     state = next;
+    lastSample = sample;
     const c = next.modelCut;
     const meta = next.modelMeta;
     const info = next.modelInfo;
+
+    // A stand is one button by what it is. Otherwise as many as the model has room for, and
+    // never fewer than it has been given, so a count already chosen can always be come down from.
+    const count = buttonCount(c);
+    countWrap.hidden = c.cutter === 'stand';
+    countRow.setBounds(1, Math.max(count, meta?.maxButtons ?? MAX_BUTTONS));
+    countRow.setValue(count);
+    pickWrap.hidden = c.cutter === 'stand' || count <= 1;
+    pickRow.setBounds(1, count);
+    const sel = selected();
 
     // The file line: what is loaded, how big, and anything the import had to do to it.
     if (info) {
@@ -391,7 +467,8 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
     // whichever way the toggle is set, so it would be a switch that does nothing.
     seamRow.hidden = !meta?.canHideSeam;
     {
-      const n = c.switchNudge;
+      const e = sel > 0 ? extras(c)[sel - 1] : null;
+      const n = e ? { x: e.nudgeX, y: e.nudgeY, rotation: e.rotation } : c.switchNudge;
       const moved = Math.abs(n.x) >= 0.05 || Math.abs(n.y) >= 0.05;
       const bits: string[] = [];
       if (moved) bits.push(`X ${n.x > 0 ? '+' : ''}${n.x.toFixed(0)} · Y ${n.y > 0 ? '+' : ''}${n.y.toFixed(0)} mm`);
@@ -410,7 +487,7 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
     buttonTopTabs.setValue(raised ? 'raised' : 'flush');
     raiseWrap.hidden = !raised;
     if (raised) raiseRow.setValue(c.button.raiseMm);
-    buttonPad.setReadout(c.button.x === null ? 'On top' : 'Where you clicked');
+    buttonPad.setReadout((sel > 0 ? extras(c)[sel - 1].x : c.button.x) === null ? 'On top' : 'Where you clicked');
 
     sizeRow.setValue(c.sizeMm);
     topColour.setValue(hex(c.colors.top));
@@ -425,5 +502,6 @@ export function createModelPanel(deps: ModelPanelDeps): ModelPanel {
     parts: { cut: cutSection, model: modelSection, colours: colourSection },
     update,
     setPicture: (cutter, src) => cutterCards.setOptionImage(cutter, src),
+    selected,
   };
 }

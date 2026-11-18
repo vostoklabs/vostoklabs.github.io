@@ -2,10 +2,12 @@
 //
 // All three cutters build their switch parts in one frame, S: origin on the switch axis at the
 // plate plane (the socket's top face), +Z up. The MX assets already live there — the worker's
-// `init` normalises them into it — so every number below is MEASURED off those assets rather
-// than written down. The image clicker's buildClicker reads the same bounding boxes; a second
-// copy of "9.99" or "15.54" typed in here would agree today and drift the first time the socket
-// or the stem is re-cut.
+// `init` normalises them into it — so the socket's and the post's numbers are MEASURED off those
+// assets rather than written down. The image clicker's buildClicker reads the same bounding boxes;
+// a second copy of "9.99" or "15.54" typed in here would agree today and drift the first time the
+// socket or the stem is re-cut. The switch itself is the other way round: nothing is cut from it,
+// so its sizes are written down (`MX_BANDS`, and `MX_SEAT` in geometry/blockKeycaps), and the
+// switch model the preview draws is a picture only.
 //
 // Three rules follow from the frame, and every cutter keeps them:
 //  1. The moving piece's lowest plane is the post's bottom, so the moving piece prints upright
@@ -21,7 +23,7 @@ type Wasm = any;
 type Solid = any;
 
 /** One height band of the switch's outer envelope: a square of half-side `half`, from `z0`
- *  to `z1` in S. Measured off the display mesh; no clearance added. */
+ *  to `z1` in S. No clearance added. */
 export interface EnvelopeBand {
   z0: number;
   z1: number;
@@ -39,8 +41,8 @@ export interface SwitchKit {
    *  switch at rest — on the slider, `seatPost` — not where the asset was drawn. */
   postBottom: number;
   postTop: number;
-  /** The switch above the plate: flange, housing step, upper housing. */
-  bands: EnvelopeBand[];
+  /** The switch above the plate (`MX_BANDS`). */
+  bands: readonly EnvelopeBand[];
 }
 
 /** Clearance between the switch and anything the moving piece carries, per side, mm. */
@@ -53,119 +55,17 @@ export const MIN_WALL = 1.2;
 export const SOCKET_FLOOR = 1.6;
 
 /**
- * Measure the switch envelope off the display mesh, in S.
- *
- * The mesh is the one the viewer draws — already seated by the worker (XY on the stem's axis,
- * the flange's underside on Z 0). For every triangle we take its largest |x| or |y| and credit
- * it to every 0.1 mm of height it spans; that is the switch's square "radius" at each height.
- * Only the part above the plate and outside the stem's cross matters (the post is designed to
- * go round the cross), so heights where the radius has fallen to the cross are the top.
- *
- * Consecutive heights within 0.05 mm of each other are merged into bands, which for the MX asset
- * gives three: the flange (7.83 to 1.2), the housing step (7.38 to 2.6) and the upper housing
- * (6.76 to 6.2).
+ * The MX switch above the plate, in S: the flange, its chamfered edge, the housing step and the
+ * upper housing, each a square of half-side `half`. Written down, not read off the switch model
+ * the preview draws, so that model can be anything (a lighter one changes nothing that prints).
+ * Noted from the detailed MX model on 2026-11-17, to the thousandth of a millimetre.
  */
-export function measureSwitchBands(verts: Float32Array, tris: Uint32Array): EnvelopeBand[] {
-  const STEP = 0.1;
-  const radius = new Map<number, number>();
-  for (let t = 0; t < tris.length; t += 3) {
-    let z0 = Infinity;
-    let z1 = -Infinity;
-    let r = 0;
-    for (let k = 0; k < 3; k++) {
-      const o = tris[t + k] * 3;
-      const z = verts[o + 2];
-      if (z < z0) z0 = z;
-      if (z > z1) z1 = z;
-      r = Math.max(r, Math.abs(verts[o]), Math.abs(verts[o + 1]));
-    }
-    if (z1 < 0) continue;
-    for (let i = Math.max(0, Math.ceil(z0 / STEP)); i <= Math.floor(z1 / STEP); i++) {
-      if ((radius.get(i) ?? 0) < r) radius.set(i, r);
-    }
-  }
-  const idx = [...radius.keys()].sort((a, b) => a - b);
-  if (!idx.length) return FALLBACK_BANDS;
-  // The cross the post grips is the narrowest thing the mesh has above the housing; anything
-  // within a hair of it is the stem, not the switch body.
-  let crossR = Infinity;
-  for (const i of idx) crossR = Math.min(crossR, radius.get(i)!);
-  const bands: EnvelopeBand[] = [];
-  for (const i of idx) {
-    const r = radius.get(i)!;
-    if (r <= crossR * 1.8) break; // above the housing: the slider and the cross
-    const z = i * STEP;
-    const last = bands[bands.length - 1];
-    if (last && Math.abs(last.half - r) < 0.05 && z - last.z1 <= STEP * 1.5) {
-      last.z1 = z + STEP;
-    } else {
-      bands.push({ z0: last ? last.z1 : 0, z1: z + STEP, half: r });
-    }
-  }
-  return bands.length ? bands : FALLBACK_BANDS;
-}
-
-/** What the MX asset measured to on 2026-09-30, used only if the display mesh is unreadable —
- *  a pocket built from these is still the right pocket, it just stops following a re-cut asset. */
-const FALLBACK_BANDS: EnvelopeBand[] = [
-  { z0: 0, z1: 1.2, half: 7.83 },
-  { z0: 1.2, z1: 2.6, half: 7.38 },
-  { z0: 2.6, z1: 6.2, half: 6.76 },
+export const MX_BANDS: readonly EnvelopeBand[] = [
+  { z0: 0, z1: 1.1, half: 7.834 },
+  { z0: 1.1, z1: 1.2, half: 7.713 },
+  { z0: 1.2, z1: 2.6, half: 7.384 },
+  { z0: 2.6, z1: 6.2, half: 6.764 },
 ];
-
-/**
- * Where the keycap post really rests on the switch, in S: the highest point of the switch under
- * the post's bottom face, which is the top of the slider the cross stands on.
- *
- * Measured, because the post asset's own height is 1.95 mm too low. It was drawn with the stem's
- * tip touching the top of its cross hole, but the hole (5.6 mm) is deeper than the MX cross
- * (3.7 mm — Cherry's, and this mesh's), so a printed post stops on the slider first. Every moving
- * piece therefore stood 1.95 mm higher than its build said: Ian's pumpkin, 2026-10-01, a Flush
- * button that printed proud while pushed fully home.
- *
- * Rays straight down at the post's bottom ring — outside the cross's 2 mm arms, inside the post's
- * edge — onto the seated display mesh; the post lands on the highest thing they meet.
- */
-export function measurePostSeat(verts: Float32Array, tris: Uint32Array): number | null {
-  // Only triangles near the axis and above the plate can be under the ring.
-  const near: number[] = [];
-  for (let t = 0; t < tris.length; t += 3) {
-    let close = false;
-    let top = -Infinity;
-    for (let k = 0; k < 3; k++) {
-      const o = tris[t + k] * 3;
-      if (Math.abs(verts[o]) < 4.5 && Math.abs(verts[o + 1]) < 4.5) close = true;
-      if (verts[o + 2] > top) top = verts[o + 2];
-    }
-    if (close && top > 0) near.push(t);
-  }
-  let seat: number | null = null;
-  for (const r of [2.3, 2.6, 2.9]) {
-    for (let i = 0; i < 16; i++) {
-      const a = ((i + 0.5) / 16) * 2 * Math.PI;
-      const x = r * Math.cos(a);
-      const y = r * Math.sin(a);
-      for (const t of near) {
-        const ia = tris[t] * 3;
-        const ib = tris[t + 1] * 3;
-        const ic = tris[t + 2] * 3;
-        const d = (verts[ib + 1] - verts[ic + 1]) * (verts[ia] - verts[ic]) + (verts[ic] - verts[ib]) * (verts[ia + 1] - verts[ic + 1]);
-        if (Math.abs(d) < 1e-12) continue;
-        const l1 = ((verts[ib + 1] - verts[ic + 1]) * (x - verts[ic]) + (verts[ic] - verts[ib]) * (y - verts[ic + 1])) / d;
-        const l2 = ((verts[ic + 1] - verts[ia + 1]) * (x - verts[ic]) + (verts[ia] - verts[ic]) * (y - verts[ic + 1])) / d;
-        const l3 = 1 - l1 - l2;
-        if (l1 < 0 || l2 < 0 || l3 < 0) continue;
-        const z = l1 * verts[ia + 2] + l2 * verts[ib + 2] + l3 * verts[ic + 2];
-        if (seat === null || z > seat) seat = z;
-      }
-    }
-  }
-  return seat;
-}
-
-/** What `measurePostSeat` gave for the MX asset on 2026-10-01, used only if the display mesh is
- *  unreadable. */
-export const FALLBACK_POST_SEAT = 6.3;
 
 /** The keycap post raised onto its real seat — a new solid, which the caller owns. Never lowered:
  *  a post already clear of the slider stays where it was drawn. */
@@ -174,7 +74,7 @@ export function seatPost(stem: Solid, seat: number): Solid {
   return stem.translate([0, 0, lift]);
 }
 
-export function makeSwitchKit(socket: Solid, stem: Solid, bands: EnvelopeBand[]): SwitchKit {
+export function makeSwitchKit(socket: Solid, stem: Solid): SwitchKit {
   const sbb = socket.boundingBox();
   const tbb = stem.boundingBox();
   return {
@@ -184,7 +84,7 @@ export function makeSwitchKit(socket: Solid, stem: Solid, bands: EnvelopeBand[])
     socketDim: Math.max(sbb.max[0] - sbb.min[0], sbb.max[1] - sbb.min[1]),
     postBottom: tbb.min[2],
     postTop: tbb.max[2],
-    bands: bands.length ? bands : FALLBACK_BANDS,
+    bands: MX_BANDS,
   };
 }
 
@@ -245,8 +145,8 @@ export function socketCutter(sc: Scope, kit: SwitchKit, fitPct: number): Solid {
 }
 
 /** The keycap post with the stem fit applied, in S. */
-export function postSolid(wasm: Wasm, sc: Scope, kit: SwitchKit, stemFitMm: number): { solid: Solid; applied: boolean } {
-  const fit = applyStemFit(wasm, kit.stem, stemFitMm);
+export function postSolid(wasm: Wasm, sc: Scope, kit: SwitchKit, stemFitMm: number, stemOuterMm = 0): { solid: Solid; applied: boolean } {
+  const fit = applyStemFit(wasm, kit.stem, stemFitMm, stemOuterMm);
   return { solid: sc.keep(fit.solid), applied: fit.applied };
 }
 

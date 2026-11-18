@@ -17,13 +17,16 @@
 // small details stay crisp) and removed from the backing — clean even when flat.
 //
 // Frame: Z = 0 is the switch plate top. socket cuts downward; stem rises to +Z.
-import { chamferCutter, csOf, ringsOf, extrude, withScope, type Keep } from '@vostok/manifold';
+import { chamferCutter, csOf, ringsOf, extrude, revolve, withScope, type Keep } from '@vostok/manifold';
 import { placeShapes, ringBox } from '@vostok/shapes';
 import type { BuildParams, BuildRegion, ClickerPart, DesignLayout, EdgeSetting, EdgeStyle, PartGroup, Ring, RGB, SwitchPlacement } from '../types';
-import { getMarkSeed, markVoids, hardcodedVoids } from './identityMark';
+import { getMarkSeed, markVoids, hardcodedVoids, type MarkVoid } from './identityMark';
+import { HOLE, findHoleBearing, planHole, snapToEdge, type HoleVoid } from './keychainHole';
+import { bottomMarginMm, carveBottomPicture } from './bottomPicture';
 import { texturedWall, texturePeakMm } from './skin';
 import { applyStemFit } from './stemFit';
 import { clampDesignScale, DESIGN_SCALE_CHECKED_BELOW } from './sizeLimits';
+import { heldArtMm } from './pictureHold';
 import {
   archRing, capsuleRing, crossRing, eggRing, heartRing, ngonRing, shieldRing,
   squircleRing, switchSpotOf, tagRing,
@@ -183,6 +186,16 @@ function buildTracked(
     const sn = Math.abs(Math.sin(thetaRad));
     return sbbHalf / Math.max(c, sn, 1e-6) + d / 2 + 0.15;
   };
+  /** Where an identity void's centre lands in plan: out from switch 0 along its bearing, turned
+   *  with that switch, and pushed out only if the authored radius could not clear the pocket (a
+   *  void that already clears keeps its exact position, so models generated before this still
+   *  match). Both void tiers are cut here, and the keyring tunnel keeps clear of them. */
+  const placeVoid = (v: MarkVoid, sw0: SwitchPlacement): [number, number] => {
+    const rot0 = ((sw0.rotation ?? 0) * Math.PI) / 180;
+    const ang = (v.thetaDeg * Math.PI) / 180 + rot0;
+    const vr = Math.max(v.r, voidClearR(v.d, (v.thetaDeg * Math.PI) / 180));
+    return [sw0.x + vr * Math.cos(ang), sw0.y + vr * Math.sin(ang)];
+  };
   const stemBB = stem.boundingBox();
   const socketDim = Math.max(
     socketBB.max[0] - socketBB.min[0],
@@ -331,7 +344,8 @@ function buildTracked(
      base colour — which is not a smaller design, it is a mistake. */
   // Up to 2: past 1 the artwork is larger than the frame and `imageArea` crops it, which is
   // how "zoom in on the middle of the picture" is expressed. The base never grows for it.
-  const designScale = isOutline ? 1 : clampDesignScale(params.designScale ?? 1);
+  // A held picture (`artMm`) replaces it once the room is known, where `sR` is scaled below.
+  let designScale = isOutline ? 1 : clampDesignScale(params.designScale ?? 1);
   /* The turn `placeRings` applies: a preset base's. An outline base turned its rings when they
      arrived, so turning them here as well would turn them twice. */
   const artTurn = isOutline ? 0 : turnDeg;
@@ -865,8 +879,20 @@ function buildTracked(
 
      `sR *= 1` is exact identity in IEEE-754, and `params.designScale ?? 1` makes every project
      saved before this control existed take that branch — so the default is byte-identical to
-     what the app has always produced. */
-  sR *= designScale;
+     what the app has always produced.
+
+     A held picture (`artMm`) takes its size in millimetres here instead, at the same point and
+     for the same reason: the shape is already sized, so holding the picture cannot move it.
+     `sR` is set to the held size itself rather than multiplied by a ratio, so a size taken from
+     an earlier build gives back exactly that build's picture. `designScale` becomes the share it
+     amounts to, which the thin-line check below reads. Absent, nothing here runs. */
+  const fitMm = sR;
+  if (!isOutline && params.artMm !== undefined && params.artMm > 0) {
+    sR = heldArtMm(params.artMm, fitMm);
+    designScale = sR / fitMm;
+  } else {
+    sR *= designScale;
+  }
 
   const imageArea = shrink(plate, border, plate); // flat frame around the image
 
@@ -943,7 +969,7 @@ function buildTracked(
   // `slabBottomZ` / `skirtBottomZ`, stays valid and the cap's rest height cannot move. Why it
   // is an offset of the hole and not a scale of the post is written out in stemFit.ts.
   // Computed once and reused for every switch placement.
-  const stemFit = applyStemFit(wasm, stem, params.stemFitMm ?? 0);
+  const stemFit = applyStemFit(wasm, stem, params.stemFitMm ?? 0, params.stemOuterMm ?? 0);
   const stemSized: Solid = track(stemFit.solid);
   if (!stemFit.applied) warnings.push('Switch stem fit could not be applied. The stem prints as designed.');
 
@@ -1117,6 +1143,31 @@ function buildTracked(
   let placed2D: Section | null = null; // 2D union of inlays already carved (no overlap)
   const holesByLevel = new Map<number, Section>();
 
+  /* A drawing that says what is on top of what (an SVG): each colour's footprint is what the file
+     shows of it, worked out from the top of the drawing down. Coverage cannot answer this. A
+     blush smaller than the black it sits under won every overlap, so cheeks painted over eyes,
+     and the fills under a thin black line wiped the line out. Every layer is grown by the bleed
+     before anything takes from it, so an edge between two colours moves the same way along its
+     whole length and no shape ends in a step where a neighbour stops. */
+  const paintedFootprint = new Map<BuildRegion, Section>();
+  {
+    const layers = regions
+      .flatMap((r) => (r.layers ?? []).map((l) => ({ r, l })))
+      .sort((a, b) => b.l.paint - a.l.paint);
+    let above: Section | null = null;
+    for (const { r, l } of layers) {
+      const rings = placeRings(l.rings).filter((ring) => ring.length >= 3 && getRingArea(ring) > 0.001);
+      if (!rings.length) continue;
+      let cs: Section = simp(track(csOf(wasm, rings, 'NonZero')), 0.03);
+      if (params.colorBleed > 0.001) cs = grow(cs, params.colorBleed);
+      const shown: Section = above ? track(cs.subtract(above)) : cs;
+      above = above ? track(above.add(cs)) : cs;
+      if (sectionIsEmpty(shown)) continue;
+      const sofar = paintedFootprint.get(r);
+      paintedFootprint.set(r, sofar ? track(sofar.add(shown)) : shown);
+    }
+  }
+
   /* Two ways part of a design silently prints wrong, both collected here and reported once
      after the loop rather than per region — a four-colour trace can drop several slivers at
      once, and four near-identical warnings read as noise.
@@ -1153,6 +1204,12 @@ function buildTracked(
       const word = words.get(r);
       if (!word) continue;
       cs = word;
+    } else if (r.layers?.length) {
+      // Bled and clear of everything above it already. All of it hidden is a colour the file
+      // covers up, which is not one too small to print.
+      const shown = paintedFootprint.get(r);
+      if (!shown) continue;
+      cs = shown;
     } else {
       const validRings = placeRings(r.rings).filter(ring => ring.length >= 3 && getRingArea(ring) > 0.001);
       if (validRings.length === 0) continue;
@@ -1162,7 +1219,7 @@ function buildTracked(
       const textBold = params.textBold ?? 0;
       if (Math.abs(textBold) > 0.005) cs = track(cs.offset(textBold, 'Round', 2.0, 24));
     }
-    if (params.colorBleed > 0.001) cs = grow(cs, params.colorBleed);
+    if (params.colorBleed > 0.001 && !r.layers?.length) cs = grow(cs, params.colorBleed);
     if (checkLines && !r.mm) {
       const drawn = sectionArea(cs);
       cs = openBy(cs, PICTURE_OPEN_MM);
@@ -1171,7 +1228,10 @@ function buildTracked(
       // Said once below, as the picture's loss, rather than as a colour too small to print.
       if (drawn > 0 && sectionIsEmpty(cs)) continue;
     }
-    const clipped = track(cs.intersect(imageArea));
+    // `outlineUncut`: the frame was grown round this very outline, so the artwork is inside it
+    // already, and is left whole: cut, its outer edge would lose the bleed and the boldness its
+    // inner edges keep, and follow the frame's coarser outline instead of its own.
+    const clipped = isOutline && params.outlineUncut && !r.mm ? cs : track(cs.intersect(imageArea));
     // Half a square millimetre: where a frame's edge runs along a word's, the round offsets'
     // polygons still shave slivers off it, and a sliver is not a word cut off.
     if (r.mm && !isOutline && sectionArea(clipped) < sectionArea(cs) - 0.5) wordsCut = true;
@@ -1343,15 +1403,17 @@ function buildTracked(
   /** The prism the cuts are made in while the body is textured. */
   let cutStandIn: Solid | null = null;
   let textureMm = 0;
+  /** The body's bevel on these edges, mm, as `applyEdges` cuts it; 0 when none is set. */
+  const bodyBevelMm = (edges: Set<string>): number => {
+    let r = 0;
+    for (const es of params.edgeSettings ?? []) {
+      if (es.style === 'none' || es.radius < 0.05 || !edges.has(es.target)) continue;
+      r = Math.max(r, Math.min(es.radius, (bodyTopZ - bodyBottomZ) * 0.3, 2.5));
+    }
+    return r;
+  };
   if (texPeak > 0) {
-    const bevel = (edges: Set<string>): number => {
-      let r = 0;
-      for (const es of params.edgeSettings ?? []) {
-        if (es.style === 'none' || es.radius < 0.05 || !edges.has(es.target)) continue;
-        r = Math.max(r, Math.min(es.radius, (bodyTopZ - bodyBottomZ) * 0.3, 2.5));
-      }
-      return Math.max(MIN_SKIN_BEVEL_MM, r);
-    };
+    const bevel = (edges: Set<string>): number => Math.max(MIN_SKIN_BEVEL_MM, bodyBevelMm(edges));
     const wall = texturedWall(wasm, bodyFootprint, {
       bottomZ: bodyBottomZ,
       rimZ: bodyTopZ,
@@ -1394,9 +1456,14 @@ function buildTracked(
   let loopAt: DesignLayout['loop'];
   /** The body with the loop on it, seen from above, for the design layout. */
   let silhouette: Section | null = null;
-  /** The loop and its hole, which a textured skin is given at the finish. */
-  let loopSolids: { loop: Solid; hole: Solid } | null = null;
-  if (kc && kc.enabled) {
+  /** The loop and its hole, which a textured skin is given at the finish. A keyring hole has no
+   *  loop; its `hole` is the tunnel. */
+  let loopSolids: { loop: Solid | null; hole: Solid } | null = null;
+  /** With a keyring hole cut: the disc round it the hollow base leaves solid. */
+  let holeKeepOut: Section | null = null;
+  /** With a keyring hole cut: the tunnel seen from above, inside the body, for the layout. */
+  let tunnelFp: Section | null = null;
+  if (kc && kc.enabled && kc.style !== 'hole') {
     const holeR = Math.max(1.5, (kc.holeDiameterMm ?? 5.2) / 2);
     const th = Math.max(2.5, Math.min(4.0, (bodyTopZ - bodyBottomZ) * 0.35));
     const zb = bodyBottomZ;
@@ -1463,6 +1530,75 @@ function buildTracked(
     loopAt = { x: hcx, y: hcy, outerR: loopR, holeR };
     silhouette = track(track(bodyFootprint.add(loopFootprint)).subtract(holeCs));
     loopSolids = { loop, hole };
+  } else if (kc && kc.enabled) {
+    /* Hole style: a tunnel through the side wall (keychainHole.ts says why it has this shape).
+       Half a flat ring centred on the edge point, in the solid slab under the well floor. The
+       planner narrows the bore until it fits, or refuses: a clicker without the hole that was
+       asked for is a broken file, so no room is a blocking line, not a silent loop-less build. */
+    const bodyRings = ringsOf(bodyFootprint) as Ring[];
+    // Every identity void as the loops below place it; the tunnel keeps clear of them all.
+    const voids: HoleVoid[] = [];
+    if (applied.length > 0) {
+      const seed = getMarkSeed();
+      for (const v of [...(seed ? markVoids(seed) : []), ...hardcodedVoids()]) {
+        const [x, y] = placeVoid(v, applied[0]);
+        voids.push({ x, y, z: v.z, r: v.d / 2 });
+      }
+    }
+    const askedBore = kc.holeDiameterMm ?? 5.2;
+    // A hole being placed goes where it fits, nearest where Position points, with no Fine offset.
+    const found = params.holeFind
+      ? findHoleBearing({
+        rings: bodyRings, askedBore, bodyBottomZ, wellFloorZ, switches: applied, pocketHalf: sbbHalf, voids,
+        pointAt: (deg) => edgePointAt(bodyFootprint, deg).p, nearDeg: kc.angleDeg ?? 90,
+      })
+      : null;
+    const { p, dir } = edgePointAt(bodyFootprint, found ? found.deg : kc.angleDeg ?? 90);
+    // The same tangent slide as the loop's; on a curved edge it leaves the outline, so the point
+    // is put back on it.
+    const tangent: [number, number] = [dir[1], -dir[0]];
+    const offset = found ? 0 : kc.offsetMm ?? 0;
+    const site: [number, number] = Math.abs(offset) > 1e-9
+      ? snapToEdge(bodyRings, [p[0] + tangent[0] * offset, p[1] + tangent[1] * offset])
+      : p;
+    const plan = planHole({
+      rings: bodyRings, p: site, askedBore, bodyBottomZ, wellFloorZ,
+      switches: applied, pocketHalf: sbbHalf, voids,
+    });
+    if (kc.holeCut === false) {
+      /* Placed, not cut: the customer sets the hole where they want it, then presses Cut hole.
+         Nothing is taken out of the body; the layout says where the cutter is (and at what
+         height) so the preview can draw it there. No room is not a broken file yet, since
+         nothing is cut: it is said, not blocking. Room needs no line: Cut hole is on screen. */
+      const r = plan.ok ? plan.r : Math.min(HOLE.BORE_MAX, Math.max(HOLE.BORE_MIN, askedBore)) / 2;
+      const R = plan.ok ? plan.R : r + HOLE.BEND;
+      const z = plan.ok ? plan.zMid : bodyBottomZ + HOLE.FLOOR + r;
+      if (!plan.ok) warnings.push('No room for a keyring hole here. Move it, make the clicker larger, or use Loop.');
+      loopAt = {
+        x: site[0], y: site[1], outerR: R + r, holeR: r, style: 'hole', z, uncut: true,
+        ...(plan.ok ? {} : { noRoom: true }), ...(found ? { foundDeg: found.deg } : {}),
+      };
+    } else if (plan.ok) {
+      const tube = track(track(CrossSection.circle(plan.r, 32)).translate([plan.R, 0]));
+      const ring = track(revolve(wasm, tube, 64));
+      const cutter = track(ring.translate([site[0], site[1], plan.zMid]));
+      body = track(body.subtract(cutter));
+      loopSolids = { loop: null, hole: cutter };
+      holeKeepOut = track(track(CrossSection.circle(plan.R + plan.r + HOLE.WALL, 64)).translate(site));
+      const outerC = track(track(CrossSection.circle(plan.R + plan.r, 64)).translate(site));
+      const innerC = track(track(CrossSection.circle(plan.R - plan.r, 64)).translate(site));
+      tunnelFp = track(track(outerC.subtract(innerC)).intersect(bodyFootprint));
+      if (plan.narrowed) warnings.push(`Hole made ${plan.bore.toFixed(1)} mm to fit.`);
+      loopAt = {
+        x: site[0], y: site[1], outerR: plan.R + plan.r, holeR: plan.r, style: 'hole', z: plan.zMid,
+        ...(found ? { foundDeg: found.deg } : {}),
+      };
+    } else {
+      blocking.push('No room for a keyring hole here. Move it, make the clicker larger, or use Loop.');
+      const r = Math.min(HOLE.BORE_MAX, Math.max(HOLE.BORE_MIN, askedBore)) / 2;
+      // Its height too, so the preview can still hang its grip on it and it can be dragged clear.
+      loopAt = { x: site[0], y: site[1], outerR: r + HOLE.BEND + r, holeR: r, style: 'hole', z: bodyBottomZ + HOLE.FLOOR + r, noRoom: true };
+    }
   }
 
   // Subtract the well and every socket afterwards to ensure the interior cavity is clean
@@ -1503,7 +1639,8 @@ function buildTracked(
       - A ring around every switch. The socket is cut into the well floor and the switch bottoms
         out against it on every click; that column is the load path and hollowing it is how a
         clicker fails after a week rather than in the slicer.
-      - The keychain lobe, which is welded on further down and needs material to weld to.
+      - The keychain: the loop's lobe needs material to weld to, and a keyring hole's tunnel
+        keeps a solid disc round it (`holeKeepOut`), or the tunnel would open into the cavity.
       - The band the identity voids occupy. `voidClearR` already pushes them outboard of the
         pocket, so the inset alone does not protect them - the cavity's OUTER edge has to stay
         inboard of them too, which is what `voidBandInner` below is for.
@@ -1554,6 +1691,7 @@ function buildTracked(
         const keepOut = track(track(CrossSection.circle(columnR, 64)).translate([sw.x, sw.y]));
         cavityFp = track(cavityFp.subtract(keepOut));
       }
+      if (holeKeepOut) cavityFp = track(cavityFp.subtract(holeKeepOut));
       if (!sectionIsEmpty(cavityFp)) {
         /* 0.004, not the default 0.04 — the same number and the same reason as `wellFootprint`
            itself. `simplify(eps)` may move a boundary by up to eps in EITHER direction, and
@@ -1589,14 +1727,8 @@ function buildTracked(
   const markSeed = getMarkSeed();
   if (markSeed && applied.length > 0) {
     const sw0 = applied[0];
-    const rot0 = ((sw0.rotation ?? 0) * Math.PI) / 180;
     for (const v of markVoids(markSeed)) {
-      const ang = (v.thetaDeg * Math.PI) / 180 + rot0;
-      // Push out only if the authored radius could not clear the pocket. A void that already
-      // clears keeps its exact position, so models generated before this still match.
-      const vr = Math.max(v.r, voidClearR(v.d, (v.thetaDeg * Math.PI) / 180));
-      const cx = sw0.x + vr * Math.cos(ang);
-      const cy = sw0.y + vr * Math.sin(ang);
+      const [cx, cy] = placeVoid(v, sw0);
       const sphere = track(track(Manifold.sphere(v.d / 2, 16)).translate([cx, cy, v.z]));
       let buried = false;
       try {
@@ -1620,14 +1752,8 @@ function buildTracked(
   // proof that it was generated by this codebase.
   if (applied.length > 0) {
     const sw0 = applied[0];
-    const rot0 = ((sw0.rotation ?? 0) * Math.PI) / 180;
     for (const v of hardcodedVoids()) {
-      const ang = (v.thetaDeg * Math.PI) / 180 + rot0;
-      // Push out only if the authored radius could not clear the pocket. A void that already
-      // clears keeps its exact position, so models generated before this still match.
-      const vr = Math.max(v.r, voidClearR(v.d, (v.thetaDeg * Math.PI) / 180));
-      const cx = sw0.x + vr * Math.cos(ang);
-      const cy = sw0.y + vr * Math.sin(ang);
+      const [cx, cy] = placeVoid(v, sw0);
       const sphere = track(track(Manifold.sphere(v.d / 2, 16)).translate([cx, cy, v.z]));
       let buried = false;
       try {
@@ -1724,8 +1850,40 @@ function buildTracked(
      instead of twenty. */
   if (texturedBlock && cutStandIn) {
     let outer: Solid = texturedBlock;
-    if (loopSolids) outer = track(track(outer.add(loopSolids.loop)).subtract(loopSolids.hole));
+    // A keyring hole has no loop, but its tunnel is still cut through the skin: it was cut in
+    // the plain prism, and the crests would close its openings.
+    if (loopSolids) {
+      if (loopSolids.loop) outer = track(outer.add(loopSolids.loop));
+      outer = track(outer.subtract(loopSolids.hole));
+    }
     body = track(outer.subtract(track(cutStandIn.subtract(body))));
+  }
+
+  /* The bottom picture, inlaid into the underside (bottomPicture.ts). Last of the cuts, on the
+     finished body, textured or not: each colour is the body's own material under its footprint,
+     so a recess already there (the maker's mark) stays empty and the body loses exactly what the
+     colours take. Its 0.4 mm never reaches the internal cavities, the hollow or a keyring tunnel,
+     all at least a floor's thickness above the underside. */
+  let bottomInlays: { name: string; rgb: RGB; solid: Solid }[] = [];
+  /** Where the bottom picture could go, for the design layout. */
+  let bottomArea: { cx: number; cy: number; autoMm: number; safe: Section } | undefined;
+  if (params.bottomArt && params.bottomArt.regions.length > 0) {
+    let bevelMm = bodyBevelMm(BODY_BOTTOM_EDGES);
+    if (texturedBlock) bevelMm = Math.max(MIN_SKIN_BEVEL_MM, bevelMm);
+    const carved = carveBottomPicture(track, wasm, {
+      body,
+      footprint: bodyFootprint,
+      bottomZ: bodyBottomZ,
+      marginMm: bottomMarginMm(bevelMm),
+      art: params.bottomArt,
+      colorBleed: params.colorBleed,
+      lines: { openMm: PICTURE_OPEN_MM, lossSaid: PICTURE_LOSS_SAID, keepsMin: PICTURE_KEEPS_MIN },
+    });
+    body = carved.body;
+    bottomInlays = carved.inlays;
+    bottomArea = carved.area;
+    warnings.push(...carved.warnings);
+    blocking.push(...carved.blocking);
   }
 
   // Invariant #2: the provenance mark is never removed. It is the file's proof of origin, so a build
@@ -1748,6 +1906,8 @@ function buildTracked(
   if (!body.isEmpty()) {
     parts.push(toPart(body, 'body', 'base', params.bodyColorRgb, 'base-body'));
   }
+  // After the body, so no part before them moves and no filament slot is renumbered.
+  for (const inlay of bottomInlays) parts.push(toPart(inlay.solid, 'body', 'base', inlay.rgb, inlay.name));
 
   // --- Cap edge modifications. 'capTop' is the global cap-top edge; 'top-base' is
   //     the cap frame selected directly in Edges mode. Both round the cap's top rim. ---
@@ -1784,11 +1944,13 @@ function buildTracked(
     imageArea: drawn(imageArea),
     body: drawn(bodyFootprint),
     well: drawn(wellFootprint),
-    art: { scale: sR, offX, offY, rotation: turnDeg },
+    art: { scale: sR, fit: fitMm, offX, offY, rotation: turnDeg },
     switchBox: { loX, hiX, loY, hiY },
     ...(loopAt ? { loop: loopAt } : {}),
     ...(silhouette ? { silhouette: drawn(silhouette) } : {}),
+    ...(tunnelFp ? { tunnel: drawn(tunnelFp) } : {}),
     textureMm,
+    ...(bottomArea ? { bottom: { cx: bottomArea.cx, cy: bottomArea.cy, autoMm: bottomArea.autoMm, safe: drawn(bottomArea.safe) } } : {}),
   };
 
   return { parts, switchPlacements: applied, warnings, blocking, layout };

@@ -33,7 +33,6 @@ import { buildBlocks, BLOCK_POCKET_MM, MIN_CAP_PROUD_MM } from '../src/geometry/
 import { RIM_RAISE_MAX_MM } from '../src/geometry/blockLayout.ts';
 import { BLOCK_KEYCAP_IDS, BLOCK_KEYCAPS, CAP_LOWER_MAX_MM, MX_SEAT, rimRaiseMax } from '../src/geometry/blockKeycaps.ts';
 import { BODY_DIMS, buildKeyBody, keyPitch, wellSize, type KeyCell } from '../src/geometry/keyBody.ts';
-import { measurePostSeat } from '../src/model/switchKit.ts';
 import type { BlockKeycap, BlockStyle, BlockTexture, BuildParams, BuildRegion, ClickerPart } from '../src/types.ts';
 
 const A = (p: string) =>
@@ -327,33 +326,8 @@ check('even a textured 3x3 builds quickly', slowest < 3000, `slowest ${slowest.t
   };
   const caps = Object.fromEntries(BLOCK_KEYCAP_IDS.map((id) => [id, capFile(BLOCK_KEYCAPS[id].file)]));
 
-  // The switch as the worker seats it at init: on the stem's axis, the underside of its widest
-  // section on Z 0. What it measures there is what the worker hands the build.
-  const seat = (() => {
-    const post = readModel(A('switch/mx/mx-stem.3mf'), 'mx-stem.3mf').positions;
-    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (let i = 0; i < post.length; i += 3) {
-      x0 = Math.min(x0, post[i]); x1 = Math.max(x1, post[i]); y0 = Math.min(y0, post[i + 1]); y1 = Math.max(y1, post[i + 1]);
-    }
-    const sw = readModel(A('switch/mx/mx-switch.3mf'), 'mx-switch.3mf');
-    const v = sw.positions;
-    let widest = 0;
-    for (let i = 0; i < v.length; i += 3) {
-      v[i] -= (x0 + x1) / 2;
-      v[i + 1] -= (y0 + y1) / 2;
-      widest = Math.max(widest, Math.abs(v[i]), Math.abs(v[i + 1]));
-    }
-    let seatZ = Infinity;
-    for (let i = 0; i < v.length; i += 3) {
-      if (Math.max(Math.abs(v[i]), Math.abs(v[i + 1])) >= widest * 0.96 && v[i + 2] < seatZ) seatZ = v[i + 2];
-    }
-    let tip = -Infinity;
-    for (let i = 0; i < v.length; i += 3) tip = Math.max(tip, (v[i + 2] -= seatZ));
-    return { slider: measurePostSeat(v, sw.indices) ?? NaN, tip };
-  })();
-  check('the switch the rail and a loaded project assume is the one the worker measures',
-    Math.abs(seat.slider - MX_SEAT.slider) < 0.01 && Math.abs(seat.tip - MX_SEAT.tip) < 0.01,
-    `slider ${seat.slider.toFixed(3)}, cross tip ${seat.tip.toFixed(3)} mm; assumed ${MX_SEAT.slider}, ${MX_SEAT.tip}`);
+  // The switch as the worker hands it to the build: the sizes written down (`MX_SEAT`).
+  const seat = MX_SEAT;
 
   // What mount.ts sends: a travel of 4 mm.
   const build = (regions: BuildRegion[], p: Partial<BuildParams>) =>

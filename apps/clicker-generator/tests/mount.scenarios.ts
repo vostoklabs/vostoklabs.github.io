@@ -19,7 +19,12 @@ import { FakeWorker, installWorker } from '../../../packages/ui-kit/tests/suppor
 import { kit, resetKit } from '../../../packages/ui-kit/tests/support/kit';
 import { knobs, reset, seen, setMakerlab, traces } from './mount.stand-ins';
 import { mount } from '../src/mount';
+import { holeSizeRange, keychainStyleShown } from '../src/ui/keychainRows';
+import { bottomPictureShown, showBottomPictureRows } from '../src/bottomArt';
 import { BLOCK_KEYCAP_IDS, BLOCK_KEYCAPS, BLOCK_TRAVEL_MM, CAP_LOWER_MAX_MM, rimRaiseMax } from '../src/geometry/blockKeycaps';
+import { ART_MM_MAX, NOT_SAVED, SAVED_SETTINGS, SETTING_LIMITS } from '../src/settings';
+import projectFull from './fixtures/project-full.json';
+import projectOld from './fixtures/project-v3-2026-11-09.json';
 
 installDom();
 const clock = installClock();
@@ -77,13 +82,24 @@ const worker = {
   refuseIf: null as null | ((msg: any) => boolean),
   /** Clicker builds send back the outlines the Design view draws. */
   layout: false,
+  /** What a clicker build has to say, as the real one would: its warnings and what blocks Export,
+   *  and the outlines it sends back when they matter to the scenario. */
+  notes: null as null | ((msg: any) => { warnings?: string[]; blocking?: string[]; layout?: unknown }),
 };
 /** A clicker seen from above, as small as the Design view will draw. */
 const square = (h: number) => [[[-h, -h], [h, -h], [h, h], [-h, h]]];
 const LAYOUT = {
   cap: square(10), imageArea: square(8), body: square(13), well: square(10.5),
-  art: { scale: 16, offX: 0, offY: 0, rotation: 0 }, switchBox: { loX: -1, hiX: 1, loY: -1, hiY: 1 }, textureMm: 0,
+  art: { scale: 16, fit: 16, offX: 0, offY: 0, rotation: 0 }, switchBox: { loX: -1, hiX: 1, loY: -1, hiY: 1 }, textureMm: 0,
 };
+/** The layout a clicker build answers with. The picture is sized as the real build sizes it on a
+ *  free base: it would be Size less the 1.2 mm margins at Design size 100 % (`fit`), and is that
+ *  times Design size, or a held size in mm when the build is sent one. */
+function layoutFor(params: any) {
+  const fit = params.capWidthMm - 2.4;
+  const scale = params.artMm > 0 ? params.artMm : fit * (params.designScale ?? 1);
+  return { ...LAYOUT, art: { ...LAYOUT.art, scale, fit } };
+}
 const inbox: { w: FakeWorker; msg: any }[] = [];
 /** Every request posted to the worker since the clicker was mounted, in order. */
 const posted: any[] = [];
@@ -104,7 +120,7 @@ function answer(msg: any): unknown {
       keycapsHeld = msg.keycaps ?? {};
       return { type: 'initDone', socketInfo: '', stemInfo: '', switchInfo: '', switchMesh: { vertProperties: new Float32Array(0), triVerts: new Uint32Array(0), numProp: 3 }, switchColumnMm: 17 };
     case 'buildClicker':
-      return { type: 'parts', parts: partsNamed(`built:${traceOf(msg)}|w=${msg.params.capWidthMm}|st=${msg.params.stemFitMm}`), switchPlacements: [], warnings: [], requestId: msg.requestId, ...(worker.layout ? { layout: LAYOUT } : {}) };
+      return { type: 'parts', parts: partsNamed(`built:${traceOf(msg)}|w=${msg.params.capWidthMm}|st=${msg.params.stemFitMm}`), switchPlacements: [], warnings: [], requestId: msg.requestId, ...(worker.layout ? { layout: layoutFor(msg.params) } : {}), ...(worker.notes?.(msg) ?? {}) };
     case 'buildBlocks':
       if (!keycapsHeld[msg.params.blockKeycap ?? 'standard']) {
         return { type: 'error', message: `The ${msg.params.blockKeycap} keycap is not loaded.`, request: msg.type, requestId: msg.requestId };
@@ -182,7 +198,7 @@ async function fresh(prepare?: () => void, host?: object) {
   inbox.length = 0;
   working = false;
   keycapsHeld = {};
-  Object.assign(worker, { ms: 5, failIf: null, crashIf: null, silentIf: null, refuseIf: null, layout: false });
+  Object.assign(worker, { ms: 5, failIf: null, crashIf: null, silentIf: null, refuseIf: null, layout: false, notes: null });
   net.ms = {};
   net.fails = new Set();
   clock.errors.length = 0;
@@ -500,6 +516,24 @@ async function until(ready: () => boolean) {
   finish(unmount);
 }
 
+{
+  // The Fit category's simple choices call the steppers' own callbacks: Looser on the top part
+  // and Snugger on the switch cut-out land in the state and in the next build, as typed numbers do.
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(200);
+  ui().onStemFit(0.1);
+  ui().onSocketFit(-2);
+  await clock.advance(300);
+  const sent = [...posted].reverse().find((m) => m.type === 'buildClicker');
+  check(
+    'the fit choices: Looser on the top part and Snugger on the cut-out reach the state and the build',
+    seen.state?.stemFitMm === 0.1 && seen.state?.socketFitPct === -2 && sent?.params.stemFitMm === 0.1 && sent?.params.socketFitPct === -2,
+    `state ${seen.state?.stemFitMm} / ${seen.state?.socketFitPct}, build ${sent?.params.stemFitMm} / ${sent?.params.socketFitPct}`,
+  );
+  finish(unmount);
+}
+
 /* ================================================================= the cover */
 
 /* A cover is a picture of the viewer. Here it is taken when its drawing is done, `coverMs` after
@@ -674,6 +708,40 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
 }
 
 {
+  // The Switch d-pad's centre: the picked switch back to its own place and turn in the even
+  // layout, the others left where they are, in one Undo step.
+  const unmount = await fresh();
+  ui().onSwitchAdd();
+  await clock.advance(800); // built and recorded: the undo baseline
+  const even = seen.state!.switches.map((sw) => ({ ...sw }));
+  ui().onSwitchMove(0, { x: -3, y: 2 });
+  ui().onSwitchMove(1, { x: 4, y: -5, rotation: 30 });
+  await clock.advance(800);
+  const moved = JSON.stringify(seen.state!.switches);
+  const before = posted.length;
+  ui().onSwitchHome(1);
+  await clock.advance(800);
+  const s = seen.state!;
+  check('the pad\'s centre puts the picked switch back in its place and its turn',
+    s.switches[1].x === even[1].x && s.switches[1].y === even[1].y && s.switches[1].rotation === even[1].rotation && s.activeSwitchIndex === 1,
+    `${JSON.stringify(s.switches[1])}, home ${JSON.stringify(even[1])}, picked ${s.activeSwitchIndex}`);
+  check('…the other switch stays where it was put, turn and all', s.switches[0].x === -3 && s.switches[0].y === 2 && s.switches[0].rotation === even[0].rotation, JSON.stringify(s.switches[0]));
+  check('…and the clicker is built again with it', posted.slice(before).some((m) => m.type === 'buildClicker' && m.params.switches[1].x === even[1].x && m.params.switches[1].rotation === even[1].rotation),
+    `${posted.length - before} requests`);
+  ui().onUndo();
+  await clock.advance(300);
+  check('…one Undo brings back where it was and its turn together', JSON.stringify(seen.state!.switches) === moved, `${JSON.stringify(seen.state!.switches)}, was ${moved}`);
+  ui().onRedo();
+  await clock.advance(300);
+  const held = JSON.stringify(seen.state!.switches);
+  ui().onSwitchHome(9);
+  ui().onSwitchHome(-1);
+  await clock.advance(200);
+  check('…a switch that is not there changes nothing', JSON.stringify(seen.state!.switches) === held && seen.state!.activeSwitchIndex === 1, JSON.stringify(seen.state!.switches));
+  finish(unmount);
+}
+
+{
   // The rail's Left / right, Up / down and Turn rows, and the loop's two.
   const unmount = await fresh();
   ui().onSwitchAdd();
@@ -693,8 +761,28 @@ const coverIn = (png: unknown) => (png instanceof Uint8Array ? new TextDecoder()
   check('the rail moves the switch picked, and only the axis it moved', s.activeSwitchIndex === 1 && s.switches[1].x === 6 && s.switches[1].rotation === 30 && JSON.stringify(s.switches[0]) === before, JSON.stringify(s.switches));
   check('…the picture on its base, and its turn', s.imageOffset.x === 2 && s.imageOffset.y === -3 && s.designRotation === 45, `${JSON.stringify(s.imageOffset)} ${s.designRotation}°`);
   check('…and the loop: its bearing taken round to 0-360°, its slide held to ±15 mm', s.keychain.angleDeg === 270 && s.keychain.offsetMm === 15, JSON.stringify(s.keychain));
+  // The switch Clicker moves is outlined in the preview, where the state has it, and only there.
+  ui().onCategory('switch');
+  await clock.advance(50);
+  check('Clicker open: the lit switch is outlined in 3D, where it was moved, turned with it', seen.switchMark?.x === 6 && seen.switchMark?.rotation === 30, JSON.stringify(seen.switchMark));
+  ui().onActiveSwitch(0);
+  await clock.advance(50);
+  check('…picking the other switch outlines that one', seen.switchMark?.x === seen.state?.switches[0].x && seen.switchMark?.rotation === seen.state?.switches[0].rotation, JSON.stringify(seen.switchMark));
+  ui().onActiveSwitch(1);
+  ui().onCategory('shape');
+  await clock.advance(50);
+  check('…and another category takes the outline away', seen.switchMark === null, JSON.stringify(seen.switchMark));
   check('…all of it in the build that goes out', !!last && last.params.switches[1].x === 6 && last.params.imageOffset.x === 2 && last.params.designRotation === 45 && last.params.keychain.angleDeg === 270,
     last ? JSON.stringify({ sw: last.params.switches, at: last.params.imageOffset, turn: last.params.designRotation, kc: last.params.keychain }) : 'no build');
+  // Reset position: the loop's bearing and slide back to a new clicker's, the rest of it kept.
+  const kcBefore = seen.state!.keychain;
+  ui().onKeychainPositionReset();
+  await clock.advance(300);
+  const kcAfter = seen.state!.keychain;
+  const lastReset = [...posted].reverse().find((m) => m.type === 'buildClicker');
+  check('Reset position puts the loop back at 90° with no slide, keeping it on and its hole size',
+    kcAfter.angleDeg === 90 && kcAfter.offsetMm === 0 && kcAfter.enabled && kcAfter.holeDiameterMm === kcBefore.holeDiameterMm && lastReset?.params.keychain.angleDeg === 90,
+    JSON.stringify(kcAfter));
 
   // Lettering's per-line rows: the line picked under Line, and only that one.
   ui().onWordAdd();
@@ -1096,7 +1184,8 @@ const regionNames = (msg: any) => (msg ? msg.regions.map((r: any) => r.partName)
   ui().onBlank(true);
   await clock.advance(300);
   ui().onSaveProject();
-  const saved = seen.files.find((f) => f.name === 'clicker-project.json');
+  const saved = seen.files.find((f) => f.name.endsWith('-project.json'));
+  check('Save names the file after the design, as the 3MF is', saved?.name === 'clicker-vostok-labs-blank-project.json', String(saved?.name));
   const settings = saved ? JSON.parse(String(saved.data)).settings : null;
   check('Save writes Blank into the project', settings?.blank === true, JSON.stringify(settings?.blank));
   ui().onBlank(false);
@@ -1211,6 +1300,129 @@ const regionNames = (msg: any) => (msg ? msg.regions.map((r: any) => r.partName)
   finish(unmount);
 }
 
+/* ================================================================= Picture follows size */
+
+{
+  // The picture follows the shape's size unless it is told to keep its own.
+  const near = (a: unknown, b: number) => typeof a === 'number' && Math.abs(a - b) < 1e-6;
+  const builds = () => posted.filter((m) => m.type === 'buildClicker').length;
+  const open = async (settings: Record<string, unknown>) => {
+    ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'image', baseShape: 'circle', capWidthMm: 35, ...settings } })], 'clicker-project.json'));
+    await until(() => status() === 'Loading project…');
+    await clock.advance(600);
+  };
+  const unmount = await fresh();
+  worker.layout = true;
+  await open({});
+  const followed = lastSent('buildClicker');
+  check('a project from before the switch opens following: nothing held, and the build is sent no size',
+    seen.state?.artMm === null && !!followed && !('artMm' in followed.params) && near(seen.state?.artFitMm, 32.6),
+    `held ${seen.state?.artMm}, sent ${followed?.params.artMm}, fit ${seen.state?.artFitMm}`);
+
+  // Off: held at the size on screen, with nothing to rebuild.
+  const before = builds();
+  ui().onFollowSize(false);
+  await clock.advance(300);
+  check('switch off: the picture is held at the size the last build made, and nothing is rebuilt',
+    near(seen.state?.artMm, 32.6) && builds() === before, `held ${seen.state?.artMm}, ${builds() - before} builds`);
+
+  // Then the shape is resized: the picture's millimetres hold.
+  ui().onWidth(25);
+  await clock.advance(300);
+  let sent = lastSent('buildClicker');
+  check('…then Size 35 → 25: the picture keeps its 32.6 mm, in the state and in the build',
+    near(seen.state?.artMm, 32.6) && near(sent?.params.artMm, 32.6) && sent?.params.capWidthMm === 25,
+    `held ${seen.state?.artMm}, sent ${sent?.params.artMm} at Size ${sent?.params.capWidthMm}`);
+  ui().onDesignView(true);
+  await clock.advance(300);
+  const view = seen.designInput;
+  const drawnMm = view ? view.layout.art.scale * (view.designScale / view.builtDesignScale) : NaN;
+  check('…the Design view draws it at its millimetres, and its corner may run past the slider\'s top',
+    near(drawnMm, 32.6) && near(view?.designScale, 32.6 / 22.6) && view?.designScaleMax === 16,
+    `drawn ${drawnMm} mm, share ${view?.designScale}, top ${view?.designScaleMax}`);
+  seen.designView.onEdit({ kind: 'base', w: 30, h: 30 });
+  await clock.advance(300);
+  sent = lastSent('buildClicker');
+  check('…a base dragged to 30 mm in the Design view: the same',
+    near(sent?.params.artMm, 32.6) && sent?.params.bodySize?.w === 30, `sent ${sent?.params.artMm}, base ${JSON.stringify(sent?.params.bodySize)}`);
+
+  // A move hands back the share it was drawn at, rounded (32.6 / 22.6 = 144.25 % → 1.44, which
+  // is 32.54 mm): the size held must not creep to that.
+  seen.designView.onEdit({ kind: 'art', offset: { x: 2, y: 0 }, designScale: Math.round((32.6 / 22.6) * 100) / 100, rotation: 0 });
+  await clock.advance(300);
+  check('…the picture moved, not resized: its size does not creep', seen.state?.artMm === 32.6 && seen.state?.imageOffset.x === 2,
+    `held ${seen.state?.artMm}, offset ${JSON.stringify(seen.state?.imageOffset)}`);
+
+  // While held, Design size and the corner size the picture in mm; Design size itself stays.
+  ui().onDesignScale(0.5);
+  await clock.advance(300);
+  check('…Design size 50 % while held: half of what fits now (22.6 mm), and Design size is left as it was',
+    near(seen.state?.artMm, 11.3) && near(lastSent('buildClicker')?.params.artMm, 11.3) && seen.state?.designScale === 1,
+    `held ${seen.state?.artMm}, Design size ${seen.state?.designScale}`);
+  seen.designView.onEdit({ kind: 'art', offset: { x: 2, y: 0 }, designScale: 2.5, rotation: 0 });
+  await clock.advance(300);
+  check('…its corner dragged to 250 %: 56.5 mm, past where the slider stops',
+    near(seen.state?.artMm, 56.5) && near(lastSent('buildClicker')?.params.artMm, 56.5), `held ${seen.state?.artMm}`);
+
+  // The tracer: the held size while held.
+  ui().onAdjustImage();
+  await clock.advance(300);
+  check('…Adjust image traces it at the held size', near(seen.wizards.at(-1)?.designMm, 56.5) && near(seen.imageTraces.at(-1)?.designMm, 56.5),
+    `window ${seen.wizards.at(-1)?.designMm}, trace ${seen.imageTraces.at(-1)?.designMm}`);
+
+  // Saved and opened again.
+  ui().onSaveProject();
+  const saved = seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1);
+  check('Save writes the held size', near(saved ? JSON.parse(String(saved.data)).settings.artMm : null, 56.5));
+  await open({ artMm: null });
+  check('…(a project that follows opens following)', seen.state?.artMm === null && !('artMm' in (lastSent('buildClicker')?.params ?? {})));
+  ui().onLoadProject(new File([String(saved?.data)], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('…and opening it holds the picture at that size again', near(seen.state?.artMm, 56.5) && near(lastSent('buildClicker')?.params.artMm, 56.5),
+    `held ${seen.state?.artMm}, sent ${lastSent('buildClicker')?.params.artMm}`);
+
+  // On again is the reset; undo brings the held size back.
+  await clock.advance(800);
+  ui().onFollowSize(true);
+  await clock.advance(800);
+  sent = lastSent('buildClicker');
+  check('switch on: the picture fits the shape again, the build is sent no size', seen.state?.artMm === null && !('artMm' in sent.params),
+    `held ${seen.state?.artMm}, sent ${sent?.params.artMm}`);
+  ui().onUndo();
+  await clock.advance(300);
+  check('…and Undo holds it again', near(seen.state?.artMm, 56.5) && near(lastSent('buildClicker')?.params.artMm, 56.5),
+    `held ${seen.state?.artMm}`);
+
+  // A new picture follows.
+  ui().onUpload(new File([new Uint8Array(8)], 'cat.png', { type: 'image/png' }));
+  await clock.advance(300);
+  check('a new picture while one is held: it follows the shape, previewed and traced at Size times Design size',
+    seen.state?.artMm === null && !('artMm' in lastSent('buildClicker').params)
+      && seen.state?.capWidthMm === 25
+      && seen.wizards.at(-1)?.designMm === 25 * seen.state?.designScale && seen.imageTraces.at(-1)?.designMm === 25 * seen.state?.designScale,
+    `held ${seen.state?.artMm}, window ${seen.wizards.at(-1)?.designMm}, trace ${seen.imageTraces.at(-1)?.designMm}`);
+
+  // Where the picture is the shape, a held size means nothing.
+  await open({ baseShape: 'outline', artMm: 20 });
+  check('an Outline base with a held size in its file: the build is sent none, and the picture is traced as it follows',
+    !('artMm' in lastSent('buildClicker').params) && seen.imageTraces.at(-1)?.designMm === 35,
+    `sent ${lastSent('buildClicker')?.params.artMm}, trace ${seen.imageTraces.at(-1)?.designMm}`);
+
+  // The picture on screen is the last project's (32.6 mm); another project opens and the switch is
+  // turned off before its own build lands. The last project's size says nothing about this one.
+  await open({});
+  const lastMm = layoutFor(lastSent('buildClicker')?.params ?? {}).art.scale;
+  worker.silentIf = (m) => m.type === 'buildClicker';
+  await open({ capWidthMm: 50, designScale: 0.5 });
+  ui().onFollowSize(false);
+  check('switch off before an opened project\'s first build: held at its own Size and Design size, not the last project\'s picture',
+    near(seen.state?.artMm, (50 - 2.4) * 0.5) && near(lastMm, 32.6) && seen.state?.artFitMm === null,
+    `held ${seen.state?.artMm}, the last project's was ${lastMm}, fit ${seen.state?.artFitMm}`);
+  worker.silentIf = null;
+  finish(unmount);
+}
+
 /* ================================================================= Blocks: the keycap */
 
 {
@@ -1268,7 +1480,7 @@ const regionNames = (msg: any) => (msg ? msg.regions.map((r: any) => r.partName)
   ui().onBlockRimRaise(4);
   await clock.advance(300);
   ui().onSaveProject();
-  const saved = seen.files.find((f) => f.name === 'clicker-project.json');
+  const saved = seen.files.find((f) => f.name.endsWith('-project.json'));
   const settings = saved ? JSON.parse(String(saved.data)).settings : null;
   check('Save writes the keycap into the project', settings?.blockKeycap === 'thocky' && settings?.blockCapLowerMm === 0 && settings?.blockRimRaiseMm === 4,
     `${settings?.blockKeycap}, cut ${settings?.blockCapLowerMm}, rim ${settings?.blockRimRaiseMm}`);
@@ -1288,7 +1500,7 @@ const regionNames = (msg: any) => (msg ? msg.regions.map((r: any) => r.partName)
   ui().onBlockCapLower(2.5);
   await clock.advance(300);
   ui().onSaveProject();
-  const cutFile = seen.files.filter((f) => f.name === 'clicker-project.json').at(-1);
+  const cutFile = seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1);
   ui().onBlockCapLower(0);
   await clock.advance(300);
   ui().onLoadProject(new File([String(cutFile?.data)], 'clicker-project.json'));
@@ -1353,7 +1565,889 @@ const regionNames = (msg: any) => (msg ? msg.regions.map((r: any) => r.partName)
   finish(unmount);
 }
 
+/* ---------------------------------------------------------------- the keyring: a loop or a hole */
+
+{
+  // Picking Hole: it is built, the size row's range is the tunnel's, and what the build says is said.
+  const unmount = await fresh();
+  ui().onKeychainToggle(true);
+  await clock.advance(300);
+  const loopBuild = lastSent('buildClicker');
+  check('Keyring on: a loop, as before', loopBuild?.params.keychain.enabled === true && loopBuild?.params.keychain.style === 'loop',
+    JSON.stringify(loopBuild?.params.keychain));
+  check('…its Hole size runs 3.2 to 8 mm', JSON.stringify(holeSizeRange(seen.state.importMode, seen.state.keychain.style)) === '[3.2,8]');
+  ui().onKeychainStyle('hole');
+  await clock.advance(300);
+  check('Hole: the build that goes out makes a hole', seen.state?.keychain.style === 'hole' && lastSent('buildClicker')?.params.keychain.style === 'hole',
+    JSON.stringify(lastSent('buildClicker')?.params.keychain));
+  check('…and its Hole size runs 3.2 to 6 mm', JSON.stringify(holeSizeRange(seen.state.importMode, seen.state.keychain.style)) === '[3.2,6]');
+  ui().onKeychainSize(4);
+  await clock.advance(300);
+  check('…so a hole goes no wider than 6 mm, in the state and in the build',
+    seen.state?.keychain.holeDiameterMm === 6 && lastSent('buildClicker')?.params.keychain.holeDiameterMm === 6,
+    `${seen.state?.keychain.holeDiameterMm}, sent ${lastSent('buildClicker')?.params.keychain.holeDiameterMm}`);
+  ui().onKeychainStyle('loop');
+  ui().onKeychainSize(2);
+  await clock.advance(300);
+  check('…while a loop\'s still goes to 8', seen.state?.keychain.holeDiameterMm === 8 && lastSent('buildClicker')?.params.keychain.holeDiameterMm === 8,
+    String(seen.state?.keychain.holeDiameterMm));
+
+  // The engine narrows the hole to fit: the status line says so.
+  worker.notes = (msg) => (msg.params.keychain.style === 'hole' ? { warnings: ['Hole made 4.0 mm to fit.'] } : {});
+  ui().onKeychainStyle('hole');
+  await clock.advance(300);
+  check('a hole the engine narrowed: the status line says so', status().includes('Hole made 4.0 mm to fit.'), `"${status()}"`);
+  check('…and a loop at 8 mm, made a hole, is 6 mm in the state and the build, as the row shows',
+    seen.state?.keychain.holeDiameterMm === 6 && lastSent('buildClicker')?.params.keychain.holeDiameterMm === 6,
+    `${seen.state?.keychain.holeDiameterMm}, sent ${lastSent('buildClicker')?.params.keychain.holeDiameterMm}`);
+
+  // No room at all: Export refuses in the status line's words, until it is moved.
+  const noRoom = 'No room for a keyring hole here. Move it, make the clicker larger, or use Loop.';
+  worker.notes = (msg) => (msg.params.keychain.angleDeg === 90 && msg.params.keychain.style === 'hole' ? { blocking: [noRoom] } : {});
+  ui().onKeychainAngle(90);
+  ui().onWidth(26);
+  await clock.advance(300);
+  const before = seen.downloads.length;
+  const refused = press();
+  await clock.advance(300);
+  check('a hole with no room: Export refuses and the status line says why',
+    !!refused.error && status().includes(noRoom) && seen.downloads.length === before, `${describe(refused)}; status "${status()}"`);
+  ui().onKeychainAngle(45);
+  await clock.advance(300);
+  const exp = press();
+  await clock.advance(300);
+  check('…moved to where it fits, Export writes it', exp.done && !exp.error && seen.downloads.length === before + 1 && !status().includes(noRoom),
+    `${describe(exp)}; status "${status()}"`);
+  finish(unmount);
+}
+
+{
+  // A hole is placed first, then cut: Hole goes out uncut, Cut hole cuts it, it stays cut when
+  // moved, Undo takes the cut back, and choosing Hole again places a new one.
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(800); // the undo baseline
+  ui().onKeychainToggle(true);
+  ui().onKeychainStyle('hole');
+  await clock.advance(800);
+  const kcSent = () => lastSent('buildClicker')?.params.keychain;
+  check('Hole: placed, not cut, in the state and the build', seen.state?.keychain.holeCut === false && kcSent()?.holeCut === false,
+    JSON.stringify(kcSent()));
+  ui().onKeychainCut();
+  await clock.advance(800);
+  check('Cut hole: cut, in the state and the build', seen.state?.keychain.holeCut === true && kcSent()?.holeCut === true, JSON.stringify(kcSent()));
+  ui().onKeychainAngle(45);
+  await clock.advance(800);
+  check('…moved after the cut, it stays cut and goes where it was moved', kcSent()?.holeCut === true && kcSent()?.angleDeg === 45, JSON.stringify(kcSent()));
+  ui().onUndo();
+  await clock.advance(800);
+  ui().onUndo();
+  await clock.advance(800);
+  check('Undo, twice: the move and then the cut are taken back, the hole placed again', seen.state?.keychain.holeCut === false && kcSent()?.holeCut === false
+    && kcSent()?.angleDeg === 90, JSON.stringify(kcSent()));
+  ui().onKeychainCut();
+  ui().onKeychainStyle('loop');
+  ui().onKeychainStyle('hole');
+  await clock.advance(800);
+  check('…and a hole chosen again is placed afresh, not cut', kcSent()?.style === 'hole' && kcSent()?.holeCut === false, JSON.stringify(kcSent()));
+  finish(unmount);
+}
+
+{
+  /* A hole being placed finds its own place: the build after Hole is asked to find it, and the
+     bearing it found becomes Position, in the same Undo step as picking Hole. A move by hand is
+     never moved again. Where there is no room, the line under Cut hole says so, and Cut hole
+     cuts nothing; where there is room, it cuts. The stand-in worker: asked to find, it finds 75°;
+     at 90° there is no room. */
+  const unmount = await fresh();
+  worker.layout = true;
+  worker.notes = (msg) => {
+    const kc = msg.params.keychain;
+    if (!kc.enabled || kc.style !== 'hole') return {};
+    const noRoom = !msg.params.holeFind && kc.angleDeg === 90;
+    return {
+      layout: {
+        ...layoutFor(msg.params),
+        loop: {
+          x: 0, y: 12, outerR: 6.6, holeR: 2.6, style: 'hole', z: -5.2,
+          ...(kc.holeCut === false ? { uncut: true } : {}),
+          ...(noRoom ? { noRoom: true } : {}),
+          ...(msg.params.holeFind ? { foundDeg: 75 } : {}),
+        },
+      },
+      ...(noRoom ? { warnings: ['No room for a keyring hole here. Move it, make the clicker larger, or use Loop.'] } : {}),
+    };
+  };
+  const finds = () => posted.filter((m) => m.type === 'buildClicker' && m.params.holeFind).length;
+  const kcSent = () => lastSent('buildClicker')?.params.keychain;
+  ui().onWidth(40);
+  await clock.advance(800); // the undo baseline
+  ui().onKeychainToggle(true);
+  await clock.advance(800); // a loop, recorded
+  check('a loop switched on is not asked to find a place', finds() === 0, `${finds()} finds`);
+  const builds = () => posted.filter((m) => m.type === 'buildClicker').length;
+  const buildsBefore = builds();
+  ui().onKeychainStyle('hole');
+  await clock.advance(800);
+  const kc = seen.state?.keychain;
+  check('Hole: one build is asked to find the place, and Position goes there, Fine offset 0, still placed',
+    finds() === 1 && kc?.style === 'hole' && kc.angleDeg === 75 && kc.offsetMm === 0 && kc.holeCut === false,
+    `${finds()} finds; ${JSON.stringify(kc)}`);
+  check('…no status line, no line under Cut hole', status() === '' && seen.state?.holeNoRoom === false, `"${status()}", no room ${seen.state?.holeNoRoom}`);
+  check('…and that one build is the hole on screen: the place it found is not built again', builds() === buildsBefore + 1,
+    `${builds() - buildsBefore} builds since Hole`);
+  ui().onUndo();
+  await clock.advance(800);
+  check('Undo once: the loop at 90°, as before Hole (not a hole at 90°)',
+    seen.state?.keychain.style === 'loop' && seen.state?.keychain.angleDeg === 90 && kcSent()?.style === 'loop', JSON.stringify(seen.state?.keychain));
+  ui().onRedo();
+  await clock.advance(800);
+  check('…Redo: the hole where it was found', seen.state?.keychain.style === 'hole' && seen.state?.keychain.angleDeg === 75 && finds() === 1,
+    `${finds()} finds; ${JSON.stringify(seen.state?.keychain)}`);
+
+  // Moved by hand to where there is no room: it stays there, and says so.
+  ui().onKeychainAngle(90);
+  await clock.advance(800);
+  check('moved by hand to 90°, it stays at 90°; the build is not asked to find a place', seen.state?.keychain.angleDeg === 90 && finds() === 1,
+    `${finds()} finds; ${JSON.stringify(kcSent())}`);
+  check('…the line under Cut hole says there is no room', seen.state?.holeNoRoom === true);
+  ui().onKeychainCut();
+  await clock.advance(800);
+  check('…and Cut hole there cuts nothing', seen.state?.keychain.holeCut === false && kcSent()?.holeCut === false, JSON.stringify(kcSent()));
+  ui().onKeychainAngle(80);
+  await clock.advance(800);
+  ui().onKeychainCut();
+  await clock.advance(800);
+  check('moved to where it fits, Cut hole cuts', seen.state?.keychain.holeCut === true && kcSent()?.holeCut === true && seen.state?.holeNoRoom === false,
+    JSON.stringify(kcSent()));
+
+  // Switched off and on again as a Hole that has been moved: it stays where it was put.
+  ui().onKeychainStyle('loop');
+  ui().onKeychainStyle('hole');
+  ui().onKeychainAngle(120);
+  await clock.advance(800);
+  const before = finds();
+  ui().onKeychainToggle(false);
+  await clock.advance(300);
+  ui().onKeychainToggle(true);
+  await clock.advance(800);
+  check('a placed hole moved by hand, switched off and on: not moved', finds() === before && seen.state?.keychain.angleDeg === 120,
+    `${finds() - before} new finds; ${JSON.stringify(seen.state?.keychain)}`);
+  // Reset position on a hole: back where a new one goes, the place nearest the start that fits,
+  // not the start itself (here, no room at 90°).
+  ui().onKeychainPositionReset();
+  await clock.advance(800);
+  check('Reset position on a hole finds its place again', finds() === before + 1 && seen.state?.keychain.angleDeg === 75 && seen.state?.holeNoRoom === false,
+    `${finds() - before} new finds; ${JSON.stringify(seen.state?.keychain)}`);
+  // …and one still where a new one starts: switched on, it finds its place, as Hole does.
+  ui().onKeychainAngle(90);
+  await clock.advance(800);
+  ui().onKeychainToggle(false);
+  await clock.advance(300);
+  ui().onKeychainToggle(true);
+  await clock.advance(800);
+  check('a placed hole never moved, switched on: it finds its place', finds() === before + 2 && seen.state?.keychain.angleDeg === 75,
+    `${finds() - before} new finds; ${JSON.stringify(seen.state?.keychain)}`);
+  finish(unmount);
+}
+
+{
+  // Saved and opened again; a project from before the choice opens as a loop.
+  const unmount = await fresh();
+  ui().onKeychainToggle(true);
+  ui().onKeychainStyle('hole');
+  await clock.advance(300);
+  ui().onSaveProject();
+  const saved = seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1);
+  const kc = saved ? JSON.parse(String(saved.data)).settings.keychain : null;
+  check('Save writes the keyring\'s style', kc?.style === 'hole', JSON.stringify(kc));
+  ui().onKeychainStyle('loop');
+  await clock.advance(300);
+  ui().onLoadProject(new File([String(saved?.data)], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('…and opening it makes the hole again', seen.state?.keychain.style === 'hole' && lastSent('buildClicker')?.params.keychain.style === 'hole',
+    `${seen.state?.keychain.style}, sent ${lastSent('buildClicker')?.params.keychain.style}`);
+  for (const [what, keychain] of [
+    ['with no style', { enabled: true, angleDeg: 90, holeDiameterMm: 5.2 }],
+    ['with a style it does not know', { enabled: true, style: 'tunnel', angleDeg: 90, holeDiameterMm: 5.2 }],
+  ] as const) {
+    ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'text', currentText: 'Old', keychain } })], 'clicker-project.json'));
+    await until(() => status() === 'Loading project…');
+    await clock.advance(600);
+    check(`a project ${what} opens with a loop`, seen.state?.keychain.style === 'loop' && lastSent('buildClicker')?.params.keychain.style === 'loop',
+      `${seen.state?.keychain.style}, sent ${lastSent('buildClicker')?.params.keychain.style}`);
+  }
+  finish(unmount);
+}
+
+{
+  // Undo takes the choice back; a block set hides it and keeps its loop.
+  const unmount = await fresh();
+  ui().onKeychainToggle(true);
+  await clock.advance(800); // built, and recorded
+  ui().onKeychainStyle('hole');
+  await clock.advance(800);
+  ui().onUndo();
+  await clock.advance(300);
+  check('Undo after picking Hole: a loop again, in the state and in the build',
+    seen.state?.keychain.style === 'loop' && lastSent('buildClicker')?.params.keychain.style === 'loop',
+    `${seen.state?.keychain.style}, sent ${lastSent('buildClicker')?.params.keychain.style}`);
+  ui().onRedo();
+  await clock.advance(300);
+  check('…and Redo makes the hole again', seen.state?.keychain.style === 'hole' && lastSent('buildClicker')?.params.keychain.style === 'hole',
+    String(seen.state?.keychain.style));
+
+  ui().onImportMode('blocks');
+  await clock.advance(300);
+  const s = seen.state!;
+  check('a block set: no Style row, and Hole size is the loop\'s again',
+    !keychainStyleShown(s.importMode) && JSON.stringify(holeSizeRange(s.importMode, s.keychain.style)) === '[3.2,8]',
+    `${s.importMode}, ${s.keychain.style}`);
+  check('…the state keeps the hole for the clicker', s.keychain.style === 'hole');
+  ui().onImportMode('text');
+  await clock.advance(300);
+  check('…which shows it, and cuts it, again', keychainStyleShown(seen.state.importMode) && lastSent('buildClicker')?.params.keychain.style === 'hole',
+    String(lastSent('buildClicker')?.params.keychain.style));
+  finish(unmount);
+}
+
+/* ======================================== the rail's Colors count splits as the picture window does */
+
+{
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(200);
+  const rgbIs = (c: number[] | undefined, want: number[]) => c?.join() === want.join();
+  ui().onColorCount(3);
+  await clock.advance(300);
+  let s = seen.state!;
+  check('the rail\'s Colors count on a picture: split by the colour finder, kept as the window keeps it',
+    s.colorMode === 'mapped' && s.colorCount === 3 && s.mappedFilaments.length === 3 && s.mappedColors.length === 4,
+    `${s.colorMode}, count ${s.colorCount}, ${s.mappedFilaments.length} filaments, ${s.mappedColors.length} colours`);
+  check('…the closest pair (the two reds) prints as one filament, the bigger red',
+    s.mappedColors[2].group === s.mappedColors[3].group && rgbIs(s.mappedFilaments[s.mappedColors[2].group], [200, 30, 40]),
+    JSON.stringify(s.mappedColors));
+  const trace = seen.imageTraces.at(-1);
+  check('…the trace is given every colour and the group it prints in, and builds three filaments',
+    trace?.customColors?.length === 4 && trace?.mergeInto?.join() === s.mappedColors.map((c: { group: number }) => c.group).join()
+      && onScreen() === 'built:image:cc=3|w=40|st=0',
+    `${JSON.stringify(trace)}; ${shown(onScreen())}`);
+  check('…the finder took the background off as the rail says', seen.colourFinds.length > 0 && seen.colourFinds.every((f) => f.removeBg === s.removeBg),
+    JSON.stringify(seen.colourFinds));
+
+  ui().onColorCount(5);
+  await clock.advance(300);
+  s = seen.state!;
+  check('more than the picture opens with: a finer split is asked for, and every colour is its own filament',
+    seen.colourFinds.some((f) => f.detail === 1) && s.colorCount === 5 && new Set(s.mappedColors.map((c: { group: number }) => c.group)).size === 5
+      && rgbIs(s.mappedFilaments[4], [30, 120, 60]),
+    `${JSON.stringify(seen.colourFinds)}; count ${s.colorCount}`);
+
+  ui().onColorCount(8);
+  await clock.advance(300);
+  s = seen.state!;
+  check('more than the picture has: every colour it has, and the count shows that many',
+    s.colorCount === 5 && s.mappedFilaments.length === 5 && onScreen() === 'built:image:cc=5|w=40|st=0',
+    `count ${s.colorCount}; ${shown(onScreen())}`);
+  finish(unmount);
+}
+
+/* ======================================== parts taken out of the picture */
+
+{
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(300);
+  const taken = [{ op: 'remove', x: 0.25, y: 0.5 }, { op: 'dropColour', rgb: [200, 30, 40] }];
+  knobs.wizardEdits = taken;
+  ui().onUpload(new File([new Uint8Array(8)], 'splat.png', { type: 'image/png' }));
+  await clock.advance(300);
+  check('a new picture opens the window with nothing taken out', same(seen.wizards.at(-1)?.initialEdits, []),
+    JSON.stringify(seen.wizards.at(-1)?.initialEdits));
+  check('…what the window took out is kept, and the build traces the picture without it',
+    same(seen.state?.pictureEdits, taken) && same(seen.imageTraces.at(-1)?.edits, taken),
+    `state ${JSON.stringify(seen.state?.pictureEdits)}, trace ${JSON.stringify(seen.imageTraces.at(-1)?.edits)}`);
+
+  knobs.wizardEdits = null;
+  ui().onAdjustImage();
+  await clock.advance(300);
+  check('Adjust image opens the window on the same picture with them', same(seen.wizards.at(-1)?.initialEdits, taken),
+    JSON.stringify(seen.wizards.at(-1)?.initialEdits));
+  ui().onColorCount(3);
+  await clock.advance(300);
+  check('…the rail\'s Colors count finds the colours of the picture without them',
+    seen.colourFinds.length > 0 && same(seen.colourFinds.at(-1)?.picture?.edits, taken), JSON.stringify(seen.colourFinds.at(-1)?.picture));
+
+  ui().onSaveProject();
+  const saved = seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1);
+  check('Save writes them', same(saved ? JSON.parse(String(saved.data)).settings.pictureEdits : null, taken));
+
+  ui().onUpload(new File([new Uint8Array(8)], 'cat.png', { type: 'image/png' }));
+  await clock.advance(300);
+  const catBase = seen.wizards.at(-1)?.baseImage;
+  check('another picture starts with nothing taken out, in the window, the state and the trace',
+    same(seen.wizards.at(-1)?.initialEdits, []) && same(seen.state?.pictureEdits, []) && same(seen.imageTraces.at(-1)?.edits, []),
+    `window ${JSON.stringify(seen.wizards.at(-1)?.initialEdits)}, state ${JSON.stringify(seen.state?.pictureEdits)}`);
+
+  ui().onLoadProject(new File([String(saved?.data)], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('…opening the project brings them back, and the build traces without them',
+    same(seen.state?.pictureEdits, taken) && same(seen.imageTraces.at(-1)?.edits, taken),
+    `state ${JSON.stringify(seen.state?.pictureEdits)}, trace ${JSON.stringify(seen.imageTraces.at(-1)?.edits)}`);
+  ui().onAdjustImage();
+  await clock.advance(300);
+  check('…and Adjust image opens the project\'s picture, not the one before it, with them',
+    !!seen.wizards.at(-1)?.baseImage && seen.wizards.at(-1)?.baseImage !== catBase && same(seen.wizards.at(-1)?.initialEdits, taken),
+    JSON.stringify(seen.wizards.at(-1)?.initialEdits));
+
+  ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'image' } })], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('a project from before parts could be taken out opens with none', same(seen.state?.pictureEdits, []) && same(seen.imageTraces.at(-1)?.edits, []),
+    JSON.stringify(seen.state?.pictureEdits));
+  const junk = [{ op: 'remove', x: 'a', y: 0.2 }, { op: 'remove', x: 1.5, y: 0.2 }, { op: 'remove', x: 0.75, y: 0.2 }, { op: 'paint' }, null];
+  ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'image', pictureEdits: junk } })], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('…and one with broken edits keeps only the well-formed ones; a place outside the picture is dropped',
+    same(seen.state?.pictureEdits, [{ op: 'remove', x: 0.75, y: 0.2 }]), JSON.stringify(seen.state?.pictureEdits));
+  finish(unmount);
+}
+
+/* ======================================== the picture's crop */
+
+{
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(300);
+  const box = { x: 0.1, y: 0.2, w: 0.5, h: 0.6 };
+  knobs.wizardCrop = { crop: box };
+  ui().onUpload(new File([new Uint8Array(8)], 'wide.png', { type: 'image/png' }));
+  await clock.advance(300);
+  check('a new picture opens the window with no crop', seen.wizards.at(-1)?.initialCrop === null,
+    JSON.stringify(seen.wizards.at(-1)?.initialCrop));
+  check('…the crop the window confirms is kept, and the build traces only what is inside it',
+    same(seen.state?.pictureCrop, box) && same(seen.imageTraces.at(-1)?.crop, box),
+    `state ${JSON.stringify(seen.state?.pictureCrop)}, trace ${JSON.stringify(seen.imageTraces.at(-1)?.crop)}`);
+
+  knobs.wizardCrop = null;
+  ui().onAdjustImage();
+  await clock.advance(300);
+  check('Adjust image opens the window on the same picture with the box where it was', same(seen.wizards.at(-1)?.initialCrop, box),
+    JSON.stringify(seen.wizards.at(-1)?.initialCrop));
+  check('…and confirming it again keeps it, in the state and the trace',
+    same(seen.state?.pictureCrop, box) && same(seen.imageTraces.at(-1)?.crop, box), JSON.stringify(seen.state?.pictureCrop));
+  ui().onColorCount(3);
+  await clock.advance(300);
+  check('…the rail\'s Colors count finds only the colours inside it',
+    seen.colourFinds.length > 0 && same(seen.colourFinds.at(-1)?.picture?.crop, box), JSON.stringify(seen.colourFinds.at(-1)?.picture));
+
+  ui().onSaveProject();
+  const saved = seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1);
+  check('Save writes the crop', same(saved ? JSON.parse(String(saved.data)).settings.pictureCrop : null, box));
+
+  ui().onUpload(new File([new Uint8Array(8)], 'cat.png', { type: 'image/png' }));
+  await clock.advance(300);
+  check('another picture starts with no crop, in the window, the state and the trace',
+    seen.wizards.at(-1)?.initialCrop === null && seen.state?.pictureCrop === null && !seen.imageTraces.at(-1)?.crop,
+    `window ${JSON.stringify(seen.wizards.at(-1)?.initialCrop)}, state ${JSON.stringify(seen.state?.pictureCrop)}`);
+
+  ui().onLoadProject(new File([String(saved?.data)], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('…opening the project brings the crop back, and the build traces only inside it',
+    same(seen.state?.pictureCrop, box) && same(seen.imageTraces.at(-1)?.crop, box),
+    `state ${JSON.stringify(seen.state?.pictureCrop)}, trace ${JSON.stringify(seen.imageTraces.at(-1)?.crop)}`);
+  ui().onAdjustImage();
+  await clock.advance(300);
+  check('…and Adjust image shows the box where it was saved', same(seen.wizards.at(-1)?.initialCrop, box),
+    JSON.stringify(seen.wizards.at(-1)?.initialCrop));
+
+  ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'image' } })], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('a project from before the crop opens with none', seen.state?.pictureCrop === null, JSON.stringify(seen.state?.pictureCrop));
+  const loads: [unknown, unknown, string][] = [
+    [{ x: 'a', y: 0, w: 0.5, h: 0.5 }, null, 'a box that is not numbers'],
+    [{ x: 0, y: 0, w: 1, h: 1 }, null, 'the whole picture'],
+    [{ x: -0.2, y: 0.1, w: 0.7, h: 2 }, { x: 0, y: 0.1, w: 0.5, h: 0.9 }, 'a box past the picture\'s edges'],
+  ];
+  for (const [raw, want, what] of loads) {
+    ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'image', pictureCrop: raw } })], 'clicker-project.json'));
+    await until(() => status() === 'Loading project…');
+    await clock.advance(600);
+    check(`…and ${what} loads as ${want ? 'the part inside the picture' : 'no crop'}`, same(seen.state?.pictureCrop, want), JSON.stringify(seen.state?.pictureCrop));
+  }
+  finish(unmount);
+}
+
+/* ======================================== the bottom picture */
+
+{
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  check('a bottom picture has a place on image, SVG, icon and text clickers, and none on a block set or a cut model',
+    ['image', 'svg', 'icon', 'text'].every(bottomPictureShown) && !bottomPictureShown('blocks') && !bottomPictureShown('model'));
+  // What the rail's update does to the Bottom category's rows, with stand-ins for them: every row
+  // hidden takes the category off the rail.
+  const rowsAt = (mode: string, has: boolean) => {
+    const rows = { zone: { hidden: false }, buttons: { hidden: false }, replace: { hidden: false }, place: [{ hidden: false }, { hidden: false }] };
+    showBottomPictureRows(rows, mode, has);
+    return [rows.zone.hidden, rows.buttons.hidden, rows.replace.hidden, ...rows.place.map((r) => r.hidden)];
+  };
+  check('Bottom: the drop zone until there is a picture, then its buttons and the rows that place it; nothing on a block set or a cut model',
+    same(rowsAt('image', false), [false, true, true, true, true]) && same(rowsAt('text', true), [true, false, false, false, false])
+      && rowsAt('blocks', true).every(Boolean) && rowsAt('model', false).every(Boolean),
+    JSON.stringify([rowsAt('image', false), rowsAt('text', true), rowsAt('blocks', true), rowsAt('model', false)]));
+
+  const unmount = await fresh();
+  ui().onWidth(40);
+  await clock.advance(300);
+  check('a clicker with no bottom picture sends the build none',
+    seen.state?.bottomPicture === null && !!lastSent('buildClicker') && !('bottomArt' in lastSent('buildClicker').params));
+
+  // Chosen: the window opens on it under its own heading, fresh, and what it confirms is kept.
+  const box = { x: 0.1, y: 0.2, w: 0.5, h: 0.6 };
+  const edits = [{ op: 'remove', x: 0.4, y: 0.5 }];
+  const mapping = { colors: [{ rgb: [10, 20, 30], group: 0 }], filaments: [[200, 0, 0]] };
+  Object.assign(knobs, { wizardCrop: { crop: box }, wizardEdits: edits, wizardMapping: mapping });
+  const tracesBefore = seen.imageTraces.length;
+  ui().onBottomPicture(new File([new Uint8Array(8)], 'logo.png', { type: 'image/png' }));
+  await clock.advance(300);
+  Object.assign(knobs, { wizardCrop: null, wizardEdits: null, wizardMapping: null });
+  const opened = seen.wizards.at(-1);
+  check('Bottom picture: choosing one opens the picture window headed "Prepare bottom picture", with nothing removed or cropped',
+    opened?.title === 'Prepare bottom picture' && same(opened?.initialEdits, []) && opened?.initialCrop === null && opened?.initialRemoveBg === true,
+    `${opened?.title}, edits ${JSON.stringify(opened?.initialEdits)}, crop ${JSON.stringify(opened?.initialCrop)}`);
+  const kept = seen.state?.bottomPicture;
+  check('…what it confirms is kept: colours, filaments, what was removed and the crop',
+    same(kept?.mappedColors, mapping.colors) && same(kept?.mappedFilaments, mapping.filaments) && same(kept?.pictureEdits, edits) && same(kept?.pictureCrop, box),
+    JSON.stringify(kept));
+  check('…and the top picture is not touched by it', seen.state?.pictureCrop === null && same(seen.state?.pictureEdits, []));
+  const bottomTrace = seen.imageTraces.at(-1);
+  check('…it is traced once, with its own removals and crop',
+    seen.imageTraces.length === tracesBefore + 1 && same(bottomTrace?.crop, box) && same(bottomTrace?.edits, edits) && same(bottomTrace?.customColors, [[10, 20, 30]]),
+    `${seen.imageTraces.length - tracesBefore} traces, ${JSON.stringify(bottomTrace)}`);
+  const art = lastSent('buildClicker')?.params.bottomArt;
+  check('…and reaches the build as bottomArt: each shape named bottom-color-<colour>-<shape>, in its filament',
+    art?.regions?.length === 1 && art.regions[0].partName === 'bottom-color-0-0' && same(art.regions[0].filamentRgb, [200, 0, 0]) && Array.isArray(art.outline),
+    JSON.stringify(art?.regions?.map((r: any) => [r.partName, r.filamentRgb])));
+
+  ui().onWidth(42);
+  await clock.advance(300);
+  check('another edit sends it again without tracing it again',
+    seen.imageTraces.length === tracesBefore + 1 && lastSent('buildClicker')?.params.capWidthMm === 42 && !!lastSent('buildClicker')?.params.bottomArt,
+    `${seen.imageTraces.length - tracesBefore} traces`);
+
+  // Adjust: the same window on the same picture, with what it confirmed.
+  ui().onBottomAdjust();
+  await clock.advance(300);
+  const again = seen.wizards.at(-1);
+  check('Adjust picture reopens it with its removals, crop and colours',
+    again?.title === 'Prepare bottom picture' && same(again?.initialEdits, edits) && same(again?.initialCrop, box) && same(again?.initialMapping?.colors, mapping.colors),
+    JSON.stringify({ edits: again?.initialEdits, crop: again?.initialCrop, mapping: again?.initialMapping }));
+  check('…and confirming it keeps them', same(seen.state?.bottomPicture?.pictureCrop, box) && same(seen.state?.bottomPicture?.pictureEdits, edits));
+
+  // Placed: Size, Left / right, Up / down and Turn move it without tracing it again.
+  const ENGINE = { x: 0, y: 0, rotation: 0, scale: 1 };
+  check('a new bottom picture starts in the engine\'s place, and the build is told none',
+    same(seen.state?.bottomPicture?.place, ENGINE) && !('place' in (lastSent('buildClicker')?.params.bottomArt ?? {})),
+    JSON.stringify(seen.state?.bottomPicture?.place));
+  const tracesPlaced = seen.imageTraces.length;
+  ui().onBottomPlace({ x: 4, rotation: 30 });
+  ui().onBottomPlace({ scale: 9 });
+  await clock.advance(300);
+  const PLACED = { x: 4, y: 0, rotation: 30, scale: 2 };
+  check('Bottom: a move, a turn and a size reach the build as its place, held to the ranges, without tracing it again',
+    same(seen.state?.bottomPicture?.place, PLACED) && same(lastSent('buildClicker')?.params.bottomArt?.place, PLACED)
+      && seen.imageTraces.length === tracesPlaced,
+    JSON.stringify({ place: seen.state?.bottomPicture?.place, sent: lastSent('buildClicker')?.params.bottomArt?.place, traces: seen.imageTraces.length - tracesPlaced }));
+  ui().onBottomAdjust();
+  await clock.advance(300);
+  check('…Adjust picture keeps where it was put', same(seen.state?.bottomPicture?.place, PLACED), JSON.stringify(seen.state?.bottomPicture?.place));
+
+  // The Design view's two faces: opening Bottom turns it over, the stage's Top | Bottom switch
+  // flips it while Bottom stays open, and leaving Bottom turns it back. Never saved.
+  worker.layout = true;
+  ui().onDesignView(true);
+  await clock.advance(300);
+  ui().onCategory('bottom');
+  await clock.advance(50);
+  check('2D: opening Bottom lays out the underside', seen.state?.designSide === 'bottom' && !!seen.designInput?.underside, String(seen.state?.designSide));
+  ui().onDesignSide('top');
+  await clock.advance(50);
+  check('…the 2D switch shows the top while Bottom stays open', seen.state?.designSide === 'top' && !seen.designInput?.underside, String(seen.state?.designSide));
+  ui().onDesignSide('bottom');
+  await clock.advance(50);
+  ui().onCategory('shape');
+  await clock.advance(50);
+  check('…and leaving Bottom turns it back to the top', seen.state?.designSide === 'top' && !seen.designInput?.underside, String(seen.state?.designSide));
+  ui().onDesignView(false);
+  await clock.advance(50);
+
+  // Saved: the settings in `settings`, the pixels beside the top picture's.
+  ui().onSaveProject();
+  const saved = seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1);
+  const file = saved ? JSON.parse(String(saved.data)) : null;
+  check('Save writes settings.bottomPicture and the picture as bottomImage, beside image',
+    same(file?.settings?.bottomPicture, seen.state?.bottomPicture) && typeof file?.bottomImage === 'string' && file.bottomImage.startsWith('data:image/png'),
+    `${JSON.stringify(file?.settings?.bottomPicture)}; bottomImage ${typeof file?.bottomImage}`);
+
+  // Remove, then Undo.
+  await clock.advance(800);
+  ui().onBottomRemove();
+  await clock.advance(800);
+  check('Remove takes it off: none in the state or the build',
+    seen.state?.bottomPicture === null && !('bottomArt' in lastSent('buildClicker').params));
+  ui().onSaveProject();
+  const afterRemove = JSON.parse(String(seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1)?.data));
+  check('…and a project saved then has none', afterRemove.settings.bottomPicture === null && afterRemove.bottomImage === null);
+  ui().onUndo();
+  await clock.advance(300);
+  check('…Undo brings it back, to the state and the build',
+    same(seen.state?.bottomPicture?.pictureCrop, box) && lastSent('buildClicker')?.params.bottomArt?.regions?.[0]?.partName === 'bottom-color-0-0',
+    JSON.stringify(seen.state?.bottomPicture));
+
+  // Replace: a new picture, so nothing removed or cropped carries over.
+  ui().onBottomPicture(new File([new Uint8Array(8)], 'other.png', { type: 'image/png' }));
+  await clock.advance(300);
+  check('Replace opens the window on the new picture with nothing removed or cropped, in the engine\'s place',
+    same(seen.wizards.at(-1)?.initialEdits, []) && seen.wizards.at(-1)?.initialCrop === null && seen.wizards.at(-1)?.initialMapping === undefined
+      && seen.state?.bottomPicture?.pictureCrop === null && !!lastSent('buildClicker')?.params.bottomArt
+      && same(seen.state?.bottomPicture?.place, { x: 0, y: 0, rotation: 0, scale: 1 }),
+    JSON.stringify(seen.state?.bottomPicture));
+
+  // Opened again from the file.
+  ui().onLoadProject(new File([String(saved?.data)], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('opening the project brings the bottom picture back, in the state, its trace and the build, where it was put',
+    same(seen.state?.bottomPicture, file?.settings?.bottomPicture) && same(seen.imageTraces.at(-1)?.crop, box)
+      && lastSent('buildClicker')?.params.bottomArt?.regions?.[0]?.partName === 'bottom-color-0-0'
+      && same(file?.settings?.bottomPicture?.place, { x: 4, y: 0, rotation: 30, scale: 2 })
+      && same(lastSent('buildClicker')?.params.bottomArt?.place, { x: 4, y: 0, rotation: 30, scale: 2 }),
+    JSON.stringify(seen.state?.bottomPicture));
+
+  // A block set and a cut model have no flat underside: hidden there, kept for the way back.
+  ui().onImportMode('blocks');
+  await clock.advance(300);
+  check('Blocks: the build is sent no bottom picture, and the state keeps it',
+    !!lastSent('buildBlocks') && !('bottomArt' in lastSent('buildBlocks').params) && !!seen.state?.bottomPicture);
+  ui().onImportMode('model');
+  await clock.advance(300);
+  check('Model: no bottom picture shown, the state keeps it', !bottomPictureShown(seen.state?.importMode) && !!seen.state?.bottomPicture);
+  ui().onImportMode('text');
+  await clock.advance(300);
+  check('…and back on a flat clicker it is built again', !!lastSent('buildClicker')?.params.bottomArt?.regions?.length);
+
+  // Projects from before, or with a broken entry: none, and nothing of the last one lingers.
+  ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'image' } })], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  check('a project from before the bottom picture opens with none', seen.state?.bottomPicture === null && !('bottomArt' in lastSent('buildClicker').params));
+  const wizardsBefore = seen.wizards.length;
+  ui().onBottomAdjust();
+  await clock.advance(300);
+  check('…and the last project\'s picture is gone: Adjust picture opens nothing', seen.wizards.length === wizardsBefore);
+  const loads: [unknown, string][] = [
+    [{ version: 3, settings: { importMode: 'image', bottomPicture: file?.settings?.bottomPicture } }, 'settings without the picture'],
+    [{ version: 3, settings: { importMode: 'image', bottomPicture: 'junk' }, bottomImage: file?.bottomImage }, 'a picture without settings'],
+  ];
+  for (const [proj, what] of loads) {
+    ui().onLoadProject(new File([JSON.stringify(proj)], 'clicker-project.json'));
+    await until(() => status() === 'Loading project…');
+    await clock.advance(600);
+    check(`…and ${what} opens with none`, seen.state?.bottomPicture === null, JSON.stringify(seen.state?.bottomPicture));
+  }
+  const broken = { smoothing: 9, mappedColors: [{ rgb: [1, 2, 3], group: 4 }], mappedFilaments: 'x' };
+  ui().onLoadProject(new File([JSON.stringify({ version: 3, settings: { importMode: 'image', bottomPicture: broken }, bottomImage: file?.bottomImage })], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  const cleaned = seen.state?.bottomPicture;
+  check('…and broken settings load cleaned: smoothing held to 0..1, no colour pointing past the filaments, the engine\'s place',
+    cleaned?.smoothing === 1 && same(cleaned?.mappedColors, []) && same(cleaned?.mappedFilaments, []) && cleaned?.removeBg === true && cleaned?.pictureCrop === null
+      && same(cleaned?.place, { x: 0, y: 0, rotation: 0, scale: 1 }),
+    JSON.stringify(cleaned));
+  finish(unmount);
+}
+
+/* ======================================== the project file: complete, read back whole, held in range */
+
+{
+  /** JSON with every object's keys sorted, so key order never makes two values differ. */
+  const canon = (v: unknown): string => JSON.stringify(v, (_k, x) =>
+    x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x);
+  const same = (a: unknown, b: unknown) => canon(a) === canon(b);
+  const saved = () => JSON.parse(String(seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1)?.data ?? 'null'));
+  const load = async (proj: unknown) => {
+    ui().onLoadProject(new File([JSON.stringify(proj)], 'clicker-project.json'));
+    await until(() => status() === 'Loading project…');
+    await clock.advance(600);
+  };
+  const savedKeys = [...SAVED_SETTINGS] as string[];
+  const notSaved = Object.keys(NOT_SAVED);
+  /** The saved keys the fixture cannot set off their start value, and why: the shape editor is
+   *  not in this build, and only it draws a shape whose points are saved; and only the Standard
+   *  keycap can be cut shorter, so the fixture keeps it to carry a cut. */
+  const SAME_AS_START = ['drawnShapeRings', 'blockKeycap'];
+
+  const unmount = await fresh();
+  const startState = seen.state;
+  const unplaced = Object.keys(startState).filter((k) => !savedKeys.includes(k) && !notSaved.includes(k));
+  const doubled = notSaved.filter((k) => savedKeys.includes(k));
+  check('every field of the state is saved or listed as not saved, and none is both',
+    unplaced.length === 0 && doubled.length === 0, `unplaced ${unplaced.join(', ') || 'none'}; both ${doubled.join(', ') || 'none'}`);
+  ui().onSaveProject();
+  const start = saved();
+  const written = Object.keys(start?.settings ?? {});
+  check('Save writes exactly the settings the list names',
+    same([...written].sort(), [...savedKeys].sort()),
+    `not listed: ${written.filter((k) => !savedKeys.includes(k)).join(', ') || 'none'}; not written: ${savedKeys.filter((k) => !written.includes(k)).join(', ') || 'none'}`);
+  check('…and beside them the picture, the bottom picture and the picture window\'s memory',
+    ['app', 'version', 'settings', 'palette', 'image', 'bottomImage', 'picture', 'model'].every((k) => k in start) && start.version === 3,
+    Object.keys(start ?? {}).join(', '));
+  const full = projectFull as any;
+  const missing = savedKeys.filter((k) => !(k in full.settings));
+  const atStart = savedKeys.filter((k) => !SAME_AS_START.includes(k) && same(full.settings[k], start.settings[k]));
+  check('the full fixture holds every saved setting, each at a value the app does not start with',
+    missing.length === 0 && atStart.length === 0, `missing ${missing.join(', ') || 'none'}; at the start value ${atStart.join(', ') || 'none'}`);
+
+  // Round trip: a file holding every setting comes back out of Save as it went in.
+  await load(full);
+  ui().onSaveProject();
+  const back = saved();
+  const changed = savedKeys.filter((k) => !same(back?.settings?.[k], full.settings[k]));
+  check('round trip: every setting of a loaded project is saved again as it was',
+    changed.length === 0, changed.map((k) => `${k}: ${canon(full.settings[k])} -> ${canon(back?.settings?.[k])}`).join(' | '));
+  check('…the bottom picture\'s pixels with it', typeof back?.bottomImage === 'string' && back.bottomImage.startsWith('data:image/'));
+  check('…and a Text-mode project keeps its Model-mode buttons',
+    seen.state?.modelCut?.buttons === 2 && seen.state?.modelCut?.more?.length === 1 && seen.state?.modelCut?.cutter === 'button',
+    canon(seen.state?.modelCut));
+
+  // A key the file does not have means the default, not what the last project had.
+  await load({ version: 3, settings: { importMode: 'text', currentText: 'Bare' } });
+  const d = startState;
+  const kept = ['topThickness', 'imageDepth', 'tolerance', 'smoothing', 'removeBg', 'edgeSettings', 'blockLayout', 'blockStyle', 'legendScale', 'baseColorOverride', 'modelCut', 'bodyColorRgb']
+    .filter((k) => !same(seen.state?.[k], d[k]));
+  check('a project without a setting opens with its default, not the last project\'s value',
+    kept.length === 0, kept.map((k) => `${k} ${canon(seen.state?.[k])}`).join(' | '));
+
+  // Hand-edited numbers land in range, in the state as well as on the controls.
+  await load({
+    version: 3,
+    settings: {
+      importMode: 'text', capWidthMm: 9999, tolerance: 50, topThickness: -3, smoothing: 99, socketFitPct: 400,
+      colorCount: 99, capProud: 90, imageDepth: 100, baseShape: 'circle', textScale: 0.01, lineSpacing: 0, letterSpacing: 5, textBold: -9,
+      extrudeChamferMm: 7, keychainSlideMm: -500, stemFitMm: 3, stemOuterMm: -1, designScale: 50, artMm: 5000,
+      fixedSize: { w: 5, h: 999 }, keychain: { enabled: true, angleDeg: 450, holeDiameterMm: 50, offsetMm: 99 },
+    },
+  });
+  const s = seen.state;
+  const lim = SETTING_LIMITS;
+  const held: [string, unknown, unknown][] = [
+    ['capWidthMm', s.capWidthMm, lim.capWidthMm[1]], ['tolerance', s.tolerance, lim.tolerance[1]],
+    ['topThickness', s.topThickness, lim.topThickness[0]], ['smoothing', s.smoothing, lim.smoothing[1]],
+    ['socketFitPct', s.socketFitPct, lim.socketFitPct[1]], ['colorCount', s.colorCount, lim.colorCount[1]],
+    ['capProud', s.capProud, lim.capProud[1]], ['imageDepth', s.imageDepth, lim.imageDepth[1]],
+    ['textScale', s.textScale, lim.textScale[0]], ['lineSpacing', s.lineSpacing, lim.lineSpacing[0]],
+    ['letterSpacing', s.letterSpacing, lim.letterSpacing[1]], ['textBold', s.textBold, lim.textBold[0]],
+    ['extrudeChamferMm', s.extrudeChamferMm, lim.extrudeChamferMm[1]], ['keychainSlideMm', s.keychainSlideMm, lim.keychainSlideMm[0]],
+    ['stemFitMm', s.stemFitMm, lim.stemFitMm[1]], ['stemOuterMm', s.stemOuterMm, lim.stemOuterMm[0]],
+    ['designScale', s.designScale, lim.designScale[1]], ['artMm', s.artMm, ART_MM_MAX],
+    ['fixedSize', s.fixedSize, { w: lim.fixedSizeMm[0], h: lim.fixedSizeMm[1] }],
+    ['keychain', s.keychain, { enabled: true, style: 'loop', angleDeg: 90, holeDiameterMm: lim.keychainHoleMm[1], offsetMm: lim.keychainOffsetMm[1] }],
+  ];
+  const out = held.filter(([, got, want]) => !same(got, want));
+  check('numbers past a control\'s range load at its end, in the state', out.length === 0,
+    out.map(([k, got, want]) => `${k} ${canon(got)} (want ${canon(want)})`).join(' | '));
+  await load({ version: 3, settings: { importMode: 'text', colorCount: 'many', capWidthMm: '40', removeBg: 'yes', switches: 'x', keychain: 'yes' } });
+  check('…and a value of the wrong type loads as the default',
+    seen.state?.colorCount === d.colorCount && seen.state?.capWidthMm === d.capWidthMm && seen.state?.removeBg === d.removeBg
+      && same(seen.state?.switches, [{ x: 0, y: 0, rotation: 0 }]) && same(seen.state?.keychain, d.keychain),
+    canon({ colorCount: seen.state?.colorCount, capWidthMm: seen.state?.capWidthMm, removeBg: seen.state?.removeBg, keychain: seen.state?.keychain }));
+
+  // A file saved by the live build, before these settings existed.
+  await load(projectOld);
+  const o = seen.state;
+  check('a project from before opens with every new setting at its default',
+    o.stemOuterMm === 0 && o.artMm === null && same(o.pictureEdits, []) && o.pictureCrop === null && o.bottomPicture === null
+      && o.keychain.style === 'loop' && o.modelCut.buttons === 1 && same(o.modelCut.more, []),
+    canon({ stemOuterMm: o.stemOuterMm, artMm: o.artMm, edits: o.pictureEdits, crop: o.pictureCrop, bottom: o.bottomPicture, keychain: o.keychain, buttons: o.modelCut.buttons }));
+  const oldParams = lastSent('buildClicker')?.params;
+  check('…and builds as it did: no held picture size, no bottom picture, a loop, the post as drawn',
+    !!oldParams && !('artMm' in oldParams) && !('bottomArt' in oldParams) && oldParams.keychain?.style === 'loop'
+      && (oldParams.stemOuterMm ?? 0) === 0 && oldParams.capWidthMm === (projectOld as any).settings.capWidthMm,
+    canon({ artMm: oldParams?.artMm, keychain: oldParams?.keychain, stemOuterMm: oldParams?.stemOuterMm, w: oldParams?.capWidthMm }));
+  // The keyring and the cut gain fields (their defaults); everything else comes back as it was.
+  const oldSet = (projectOld as any).settings;
+  const oldKept = Object.keys(oldSet).filter((k) => k in seen.state && k !== 'keychain' && k !== 'modelCut' && !same(seen.state[k], oldSet[k]));
+  check('…keeping every setting it had', oldKept.length === 0, oldKept.map((k) => `${k} ${canon(seen.state[k])}`).join(' | '));
+  ui().onSaveProject();
+  const resaved = saved();
+  check('…and saved again it is a whole current file', same(Object.keys(resaved.settings).sort(), [...savedKeys].sort()) && resaved.picture === null,
+    `${Object.keys(resaved.settings).length} settings, picture ${canon(resaved.picture)}`);
+
+  // The cap's colour picked by hand, in a file with no palette.
+  await load({ version: 3, settings: { importMode: 'text', baseColorOverride: [7, 7, 7] } });
+  check('a hand-picked cap colour comes back from a file without a palette', same(seen.state?.baseColorOverride, [7, 7, 7]), canon(seen.state?.baseColorOverride));
+
+  // A shape drawn where the shape editor is, opened where it is not (this build has none).
+  await load({ version: 3, settings: { importMode: 'text', currentText: 'Hi', baseShape: 'custom', drawnShapeRings: [[[0, 0], [10, 0], [0, 10]]] } });
+  check('a drawn base shape this build cannot open: the status line says the base is a circle',
+    status().includes('cannot open a drawn base shape') && seen.state?.drawnShapeId === null, status());
+
+  // A hand-edited mapping: no picture colour points at a filament the file does not have.
+  await load({
+    version: 3,
+    settings: { importMode: 'image', colorMode: 'mapped', mappedColors: [{ rgb: [1, 2, 3], group: 0 }, { rgb: [4, 5, 6], group: 3 }, 'x'], mappedFilaments: [[9, 9, 9], 'red'] },
+    image: 'data:image/png;base64,saved',
+  });
+  check('the picture\'s colours load cleaned: none past the filaments, no broken filament',
+    same(seen.state?.mappedColors, [{ rgb: [1, 2, 3], group: 0 }]) && same(seen.state?.mappedFilaments, [[9, 9, 9]]),
+    canon({ colors: seen.state?.mappedColors, filaments: seen.state?.mappedFilaments }));
+
+  // A picture that is an address, not the picture's data, is never fetched.
+  const fetched: string[] = [];
+  const g = globalThis as Record<string, any>;
+  const PlainImage = g.Image;
+  g.Image = class extends PlainImage {
+    set src(url: string) {
+      fetched.push(url);
+      super.src = url;
+    }
+  };
+  await load({
+    version: 3,
+    settings: { importMode: 'image', bottomPicture: { smoothing: 0.1 } },
+    image: 'https://example.invalid/a.png',
+    bottomImage: 'https://example.invalid/b.png',
+  });
+  g.Image = PlainImage;
+  check('a picture given as an address is not read: nothing fetched, and no bottom picture',
+    fetched.length === 0 && seen.state?.bottomPicture === null, fetched.join(', ') || 'nothing fetched');
+
+  // A keyring saved as a Hole: built as today's Hole, the tunnel through the base.
+  const oldHole = { ...(projectOld as any), settings: { ...(projectOld as any).settings, keychain: { enabled: true, style: 'hole', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 } } };
+  await load(oldHole);
+  check('a project whose keyring is a Hole builds the Hole', lastSent('buildClicker')?.params.keychain?.style === 'hole' && seen.state?.keychain?.style === 'hole',
+    canon(lastSent('buildClicker')?.params.keychain));
+  finish(unmount);
+}
+
+{
+  // A project opened after a sample was picked, or after a picture: nothing of either stays.
+  const canon = (v: unknown) => JSON.stringify(v);
+  const saved = () => JSON.parse(String(seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1)?.data ?? 'null'));
+  const load = async (proj: unknown) => {
+    ui().onLoadProject(new File([JSON.stringify(proj)], 'clicker-project.json'));
+    await until(() => status() === 'Loading project…');
+    await clock.advance(600);
+  };
+  const unmount = await fresh();
+  const startTile = seen.state?.loadedSampleId;
+  await load({ version: 3, settings: { importMode: 'image', currentImageName: 'cat' }, image: 'data:image/png;base64,cat' });
+  check('a project opened over a sample: the sample tile is no longer marked', !!startTile && seen.state?.loadedSampleId === null,
+    `${startTile} -> ${seen.state?.loadedSampleId}`);
+  const exp = press();
+  await clock.advance(100);
+  check('…and its export is named after the project\'s picture', exp.done && seen.downloads[0]?.name === 'clicker-cat.3mf', String(seen.downloads[0]?.name));
+
+  await load({ version: 3, settings: { importMode: 'text', currentText: 'Words' } });
+  ui().onSaveProject();
+  const text = saved();
+  check('a Text project opened after a picture one: Save writes no picture and no picture window memory',
+    text?.image === null && text?.picture === null, canon({ image: typeof text?.image, picture: text?.picture }));
+  const before = seen.wizards.length;
+  ui().onAdjustImage();
+  await clock.advance(300);
+  check('…and Adjust image has no picture to open', seen.wizards.length === before && status() === 'Load an image first.', status());
+  finish(unmount);
+}
+
+{
+  // The picture window's memory: what it ran on and with, through a save and a load.
+  const canon = (v: unknown) => JSON.stringify(v);
+  const saved = () => JSON.parse(String(seen.files.filter((f) => f.name.endsWith('-project.json')).at(-1)?.data ?? 'null'));
+  const load = async (proj: unknown) => {
+    ui().onLoadProject(new File([JSON.stringify(proj)], 'clicker-project.json'));
+    await until(() => status() === 'Loading project…');
+    await clock.advance(600);
+  };
+  /* A picture decodes 4 px wide, and 5 px when its data says "source", so a check can tell the
+     picture before the sliders from the saved one. */
+  const g = globalThis as Record<string, any>;
+  const PlainImage = g.Image;
+  g.Image = class extends PlainImage {
+    set src(url: string) {
+      if (url.includes('source')) this.naturalWidth = 5;
+      super.src = url;
+    }
+  };
+  const unmount = await fresh();
+  ui().onUpload(new File([new Uint8Array(8)], 'a.png', { type: 'image/png' }));
+  await clock.advance(300);
+  const pictureA = seen.wizards.at(-1)?.baseImage;
+  ui().onSaveProject();
+  const first = saved();
+  check('Save keeps the picture window\'s sliders, and no second picture when they changed nothing',
+    first?.picture?.source === null && first?.picture?.preprocess?.keepBackground === false, canon(first?.picture));
+
+  const mapping = { colors: [{ rgb: [10, 20, 30], group: 0 }], filaments: [[200, 0, 0]] };
+  const imageProject = {
+    version: 3,
+    settings: { importMode: 'image', colorMode: 'mapped', mappedColors: mapping.colors, mappedFilaments: mapping.filaments },
+    image: 'data:image/png;base64,saved',
+  };
+  await load(imageProject);
+  ui().onAdjustImage();
+  await clock.advance(300);
+  const reopened = seen.wizards.at(-1);
+  check('a project from before the window\'s memory: Adjust image opens its own picture, not the last one, with its colours',
+    !!reopened?.baseImage && reopened.baseImage !== pictureA && reopened.baseImage.width === 4
+      && canon(reopened.initialMapping?.colors) === canon(mapping.colors) && reopened.initialPreprocess === undefined,
+    canon({ width: reopened?.baseImage?.width, mapping: reopened?.initialMapping, preprocess: reopened?.initialPreprocess }));
+
+  await load({ ...imageProject, picture: { preprocess: { contrast: 1.4, keepBackground: true, exposure: 'x' }, source: 'data:image/png;base64,source' } });
+  ui().onAdjustImage();
+  await clock.advance(300);
+  const withSource = seen.wizards.at(-1);
+  check('a project with the window\'s memory: Adjust image opens the picture before the sliders, with the sliders',
+    withSource?.baseImage?.width === 5 && withSource?.initialPreprocess?.contrast === 1.4 && withSource?.initialPreprocess?.exposure === 1
+      && canon(withSource?.initialMapping?.colors) === canon(mapping.colors),
+    canon({ width: withSource?.baseImage?.width, preprocess: withSource?.initialPreprocess }));
+  await load({ ...imageProject, picture: { preprocess: { contrast: 1.4 }, source: 'data:image/png;base64,source' } });
+  ui().onSaveProject();
+  const again = saved();
+  check('…and Save writes that picture and those sliders again',
+    typeof again?.picture?.source === 'string' && again.picture.preprocess?.contrast === 1.4, canon(again?.picture?.preprocess));
+  g.Image = PlainImage;
+  finish(unmount);
+}
+
+{
+  // The MakerWorld build saves and opens the same file, the same way: a download and the picker.
+  const canon = (v: unknown): string => JSON.stringify(v, (_k, x) =>
+    x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x);
+  const unmount = await fresh(() => (knobs.makerlab = true));
+  ui().onLoadProject(new File([JSON.stringify(projectFull)], 'clicker-project.json'));
+  await until(() => status() === 'Loading project…');
+  await clock.advance(600);
+  ui().onSaveProject();
+  const files = seen.files.filter((f) => f.name.endsWith('-project.json'));
+  const back = files.length ? JSON.parse(String(files.at(-1)!.data)) : null;
+  const changed = (SAVED_SETTINGS as readonly string[]).filter((k) => canon(back?.settings?.[k]) !== canon((projectFull as any).settings[k]));
+  check('MakerWorld build: Save downloads the project file, the one the website writes', back?.app === 'clicker-generator' && files.length === 1,
+    `${files.length} files`);
+  check('…not through the host\'s export, and with no licence nudge', seen.sdkExports.length === 0 && kit.licence.length === 0,
+    `${seen.sdkExports.length} exports, ${kit.licence.length} nudges`);
+  check('…and a project opened there is saved again as it was', changed.length === 0, changed.join(', '));
+  finish(unmount);
+}
+
 /* ---------------------------------------------------------------- */
 
-print(failures ? `\n${failures} FAILED` : '\nExport writes the build on screen, whatever happened before it was pressed');
+print(failures ?`\n${failures} FAILED` : '\nExport writes the build on screen, whatever happened before it was pressed');
 process.exit(failures ? 1 : 0);

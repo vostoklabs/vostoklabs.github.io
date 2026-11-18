@@ -3,10 +3,10 @@
 
   What is asserted, and why each one:
 
-   1. The switch envelope is measured off the display mesh, not typed — three bands, the flange
-      the widest. If the asset is re-cut this is what moves, so it is what is checked first. And
-      the keycap post rests where the real switch holds it — on the slider, 1.95 mm above where
-      the post asset was drawn (Ian's pumpkin, 2026-10-01: a Flush button printed proud).
+   1. The switch's written-down sizes (MX_BANDS, MX_SEAT) are an MX switch's: the flange the
+      widest, the housing under 7 mm tall. And the keycap post rests where the real switch holds
+      it — on the slider, 1.95 mm above where the post asset was drawn (2026-10-01: a Flush
+      button printed proud).
    2. Every reader lands the same solid: binary and ASCII STL, OBJ with quads and negative indices,
       and a 3MF whose part lives in a separate file behind a component transform, in centimetres
       (the Bambu production-extension layout). Inside-out files are turned, overlapping shells are
@@ -38,7 +38,8 @@ import Module from 'manifold-3d';
 const { readModel } = await import('@vostok/export/read');
 const { prepareModel } = await import('../src/model/prepare.ts');
 const { MODEL_SAMPLES } = await import('../src/model/samples.ts');
-const { makeSwitchKit, measureSwitchBands, measurePostSeat, seatPost, switchBody, place, scope, FALLBACK_POST_SEAT } = await import('../src/model/switchKit.ts');
+const { makeSwitchKit, MX_BANDS, seatPost, switchBody, place, scope } = await import('../src/model/switchKit.ts');
+const { MX_SEAT } = await import('../src/geometry/blockKeycaps.ts');
 const { buildModelClicker } = await import('../src/model/buildModel.ts');
 const { DEFAULT_MODEL_CUT } = await import('../src/model/types.ts');
 type ModelCutParams = import('../src/model/types.ts').ModelCutParams;
@@ -70,32 +71,17 @@ const socket = socketRaw.translate([-(sbb.min[0] + sbb.max[0]) / 2, -(sbb.min[1]
 const tcx = (tbb.min[0] + tbb.max[0]) / 2;
 const tcy = (tbb.min[1] + tbb.max[1]) / 2;
 const stem = stemRaw.translate([-tcx, -tcy, 0]);
-const sw = readModel(asset('switch/mx/mx-switch.3mf'), 'mx-switch.3mf');
-{
-  const v = sw.positions;
-  let maxE = 0;
-  for (let i = 0; i < v.length; i += 3) {
-    v[i] -= tcx;
-    v[i + 1] -= tcy;
-    maxE = Math.max(maxE, Math.abs(v[i]), Math.abs(v[i + 1]));
-  }
-  let seatZ = Infinity;
-  for (let i = 0; i < v.length; i += 3) {
-    if (Math.max(Math.abs(v[i]), Math.abs(v[i + 1])) >= maxE * 0.96 && v[i + 2] < seatZ) seatZ = v[i + 2];
-  }
-  for (let i = 0; i < v.length; i += 3) v[i + 2] -= seatZ;
-}
-const bands = measureSwitchBands(sw.positions, sw.indices);
-const seat = measurePostSeat(sw.positions, sw.indices);
-const kit = makeSwitchKit(socket, seatPost(stem, seat ?? FALLBACK_POST_SEAT), bands);
+const bands = MX_BANDS;
+const seat = MX_SEAT.slider;
+const kit = makeSwitchKit(socket, seatPost(stem, seat));
 
 // 1. The envelope
 {
   const widest = Math.max(...bands.map((b) => b.half));
   const top = Math.max(...bands.map((b) => b.z1));
   check(
-    'switch envelope measured',
-    bands.length >= 2 && widest > 7.5 && widest < 8.2 && top > 5.5 && top < 7,
+    'switch envelope as written down',
+    bands.length >= 2 && bands[0].half === widest && widest > 7.5 && widest < 8.2 && top > 5.5 && top < 7,
     bands.map((b) => `${b.z0.toFixed(1)}–${b.z1.toFixed(1)}:${(2 * b.half).toFixed(2)}`).join('  '),
   );
   // Cherry: 4.0 mm travel, a 3.7 mm cross on a slider, the stem tip ~10.2 mm over the plate. The
@@ -103,9 +89,9 @@ const kit = makeSwitchKit(socket, seatPost(stem, seat ?? FALLBACK_POST_SEAT), ba
   const drawn = stem.boundingBox().min[2];
   check(
     'post rests on the slider, not inside it',
-    seat !== null && seat > 6.0 && seat < 6.6 && Math.abs(kit.postBottom - seat) < 0.01
+    seat > 6.0 && seat < 6.6 && Math.abs(kit.postBottom - seat) < 0.01
       && Math.abs(kit.postTop - kit.postBottom - 5.64) < 0.1,
-    `slider top ${seat?.toFixed(2)} mm (the asset drew the post at ${drawn.toFixed(2)}), post ${kit.postBottom.toFixed(2)} → ${kit.postTop.toFixed(2)}, socket to ${kit.socketBottom.toFixed(2)}`,
+    `slider top ${seat.toFixed(2)} mm (the asset drew the post at ${drawn.toFixed(2)}), post ${kit.postBottom.toFixed(2)} → ${kit.postTop.toFixed(2)}, socket to ${kit.socketBottom.toFixed(2)}`,
   );
 }
 
@@ -469,6 +455,74 @@ for (const sample of MODEL_SAMPLES) {
     out.warnings.join(' | ') || `${out.parts.length} closed pieces at ${sizeMm} mm, cut ${out.meta.cutHeightMm?.toFixed(1) ?? '-'} mm, hidden ${out.meta.hideSeam}`);
   for (const q of solids) q.delete();
   prep.solid.delete();
+}
+
+// ---- 6. Several buttons ----
+// A tray-shaped block, long enough for two switches: a customer's brownie, left and right halves
+// pressing apart. Each button rides its own switch and touches nothing as it goes down, neither
+// the body nor its neighbour.
+{
+  const tray = wasm.Manifold.cube([70, 34, 26], true).translate([0, 0, 13]);
+  const pressesClear = (out: ReturnType<typeof buildModelClicker>) => {
+    const solids = out.parts.map((p) => ({ part: p, solid: solidFromPart(p) }));
+    const tops = solids.filter((s) => s.part.group === 'top');
+    const body = solids.find((s) => s.part.group === 'base')!.solid;
+    let worst = 0;
+    tops.forEach((t, i) => {
+      for (let d = 0; d <= TRAVEL_CHECK + 1e-9; d += 0.5) {
+        const down = t.solid.translate([0, 0, -d]);
+        const hit = down.intersect(body);
+        worst = Math.max(worst, hit.volume());
+        hit.delete();
+        tops.forEach((o, j) => {
+          if (j === i) return;
+          const side = down.intersect(o.solid);
+          worst = Math.max(worst, side.volume());
+          side.delete();
+        });
+        down.delete();
+      }
+    });
+    const closed = solids.every((s) => s.solid.status() === 'NoError' && !s.solid.isEmpty());
+    for (const s of solids) s.solid.delete();
+    return { worst, closed };
+  };
+  for (const cutter of ['slice', 'button'] as const) {
+    for (const hideSeam of cutter === 'slice' ? [true, false] : [false]) {
+      const out = buildModelClicker(wasm, kit, tray, {
+        ...DEFAULT_MODEL_CUT, sizeMm: 70, cutter, buttons: 2, more: [],
+        slice: { heightMm: null, hideSeam },
+      } as ModelCutParams);
+      const name = `tray, two buttons, ${cutter}${cutter === 'slice' ? (hideSeam ? ' hidden' : ' plain') : ''}`;
+      const tops = out.parts.filter((p) => p.group === 'top');
+      const { worst, closed } = pressesClear(out);
+      check(`${name}: two tops and one body, every piece closed`, tops.length === 2 && out.parts.length === 3 && closed, `${out.parts.map((p) => p.name).join(', ')}`);
+      check(`${name}: builds without a warning`, out.warnings.length === 0, out.warnings.join(' | ') || 'none');
+      check(`${name}: nothing touches anywhere in either press`, worst < 0.01, `${worst.toFixed(4)} mm³`);
+      const [a, b] = out.switchPlacements;
+      check(`${name}: a switch each, along the long side`, out.switchPlacements.length === 2 && Math.abs(a.x - b.x) > 20 && Math.abs(a.y - b.y) < 1, JSON.stringify(out.switchPlacements));
+      check(`${name}: each top is its own object on the plate`, new Set(tops.map((p) => p.objectKey)).size === 2 && tops.every((p) => p.objectKey?.startsWith('button-')), tops.map((p) => p.objectKey).join(', '));
+      check(`${name}: the model is said to have room for at least two`, out.meta.maxButtons >= 2, `${out.meta.maxButtons}`);
+    }
+  }
+  // A nudge moves that button alone.
+  const base = { ...DEFAULT_MODEL_CUT, sizeMm: 70, cutter: 'slice', buttons: 2, slice: { heightMm: null, hideSeam: false } } as ModelCutParams;
+  const before = buildModelClicker(wasm, kit, tray, { ...base, more: [] }).switchPlacements;
+  const after = buildModelClicker(wasm, kit, tray, { ...base, more: [{ x: null, y: null, nudgeX: 3, nudgeY: -2, rotation: 0 }] }).switchPlacements;
+  check('second button nudged: it moves and the first stays',
+    Math.abs(after[1].x - before[1].x - 3) < 0.01 && Math.abs(after[1].y - before[1].y + 2) < 0.01 && Math.abs(after[0].x - before[0].x) < 0.01,
+    JSON.stringify([before, after]));
+  // More than fits says so.
+  const crowded = buildModelClicker(wasm, kit, tray, { ...base, buttons: 6, more: [] });
+  check('six buttons on a tray with room for three: it says so', crowded.warnings.some((w) => /too close together/.test(w)), crowded.warnings.join(' | '));
+  const buttonCrowd = buildModelClicker(wasm, kit, tray, { ...base, cutter: 'button', buttons: 6, more: [] });
+  check('six round buttons on the same tray: only what fits is made, and it says so',
+    buttonCrowd.warnings.some((w) => /only room for/.test(w)) && buttonCrowd.parts.filter((p) => p.group === 'top').length < 6,
+    `${buttonCrowd.parts.filter((p) => p.group === 'top').length} made; ${buttonCrowd.warnings.join(' | ')}`);
+  // One is what it always was: no object key, one switch.
+  const one = buildModelClicker(wasm, kit, tray, { ...base, buttons: 1, more: [] });
+  check('one button: one top with no object of its own, one switch', one.parts.filter((p) => p.group === 'top').length === 1 && one.parts.every((p) => !p.objectKey) && one.switchPlacements.length === 1, one.parts.map((p) => p.name).join(', '));
+  tray.delete();
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');

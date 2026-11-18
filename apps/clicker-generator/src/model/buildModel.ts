@@ -21,12 +21,19 @@ export interface Piece {
   /** Rides on the switch (the button side) rather than holding it. */
   moving: boolean;
   color: RGB;
+  /** Its own object on the plate: one of several buttons, packed apart from the others. */
+  objectKey?: string;
 }
 
 /** What every cutter returns. Solids are owned by the build's scope. */
 export interface CutOutput {
   pieces: Piece[];
   pose: SwitchPose;
+  /** Every switch, for a cut with several. Absent = just `pose`. */
+  poses?: SwitchPose[];
+  buttonsAt?: { x: number; y: number }[];
+  /** How many buttons fit. Absent = one: a stand. */
+  maxButtons?: number;
   warnings: string[];
   cutHeight: number | null;
   cutRange: [number, number] | null;
@@ -110,9 +117,10 @@ export function buildModelClicker(
       }
     }
     const { x, y, z, rotation } = cut.pose;
+    const poses = cut.poses ?? [cut.pose];
     return {
       parts,
-      switchPlacements: parts.length > 1 ? [{ x, y, z, rotation }] : [],
+      switchPlacements: parts.length > 1 ? poses.map((q) => ({ x: q.x, y: q.y, z: q.z, rotation: q.rotation })) : [],
       warnings: cut.warnings,
       meta: {
         sizeMm: size,
@@ -120,6 +128,8 @@ export function buildModelClicker(
         cutRangeMm: cut.cutRange,
         switchAt: { x, y, z, rotation },
         buttonAt: cut.buttonAt,
+        buttonsAt: cut.buttonsAt ?? (cut.buttonAt ? [cut.buttonAt] : []),
+        maxButtons: cut.maxButtons ?? 1,
         movingGrams: cut.movingGrams,
         flattenMm: flat,
         canHideSeam: cut.canHideSeam,
@@ -155,5 +165,6 @@ function toPart(piece: Piece): ClickerPart {
     // A model's top is not flat, so nothing here prints face-down: every moving piece stands on
     // the flat face the post's bottom sits on (switchKit rule 1).
     ...(piece.moving ? { printUpright: true } : {}),
+    ...(piece.objectKey ? { objectKey: piece.objectKey } : {}),
   };
 }

@@ -50,7 +50,7 @@ for (const [text, lead] of [
 // Every plain face writes what it is picked for
 for (const [text, face] of [
   ['한글 안녕하세요', 'gothic-a1'], ['Ωμέγα', 'gothic-a1'], ['かな カタカナ 日本', 'm-plus-1p'], ['汉字 你好', 'noto-sans-sc'],
-  ['Привет', 'montserrat'], ['Łódź Ñandú', 'montserrat'],
+  ['Привет', 'montserrat'], ['Łódź Ñandú', 'montserrat'], ['琪 昊 晗 龘', 'source-han-sans-cn-light'],
 ] as const) {
   ok(fontSupportsText(face, text), `${face} writes ${text}`);
 }
@@ -69,10 +69,24 @@ ok(chinese[0] === 'noto-sans-sc' && chinese.every((id) => writes(id, '汉字')),
 const all = fallbackFaces('Hello', { faces, writes: () => true, first: ['app-default'] });
 ok(new Set(all).size === all.length && all.length === faces.length, `each face once: ${all.join(', ')}`);
 
+// A Han character past the common sets the cut faces hold: Chinese text still starts on Noto Sans
+// SC, a name with a character Noto lacks falls through to Source Han Sans CN, and that reserve
+// face is offered only for text no other face writes.
+const RARE = 'source-han-sans-cn-light';
+const withRare = [...faces, RARE, 'zcool-kuaile'];
+ok(alphabetOf('琪') === 'Chinese' && alphabetOf('张琪') === 'Chinese', `a rarer hanzi is Chinese for the message: ${alphabetOf('琪')} / ${alphabetOf('张琪')}`);
+ok(plainFacesFor('张琪')[0] === 'noto-sans-sc' && plainFacesFor('张琪')[1] === RARE, `plainFacesFor(张琪) tries Noto Sans SC, then the reserve: ${plainFacesFor('张琪').join(', ')}`);
+ok(fontSupportsText(RARE, '琪 龘 㐀 张') && !fontSupportsText('noto-sans-sc', '琪'), 'the reserve writes what Noto Sans SC lacks');
+const common = fallbackFaces('你好', { faces: withRare, writes, first: ['app-default'] });
+ok(common[0] === 'noto-sans-sc' && !common.includes(RARE) && common.includes('zcool-kuaile'), `common Chinese starts on Noto Sans SC and leaves the reserve out: ${common.join(', ')}`);
+const rare = fallbackFaces('张琪', { faces: withRare, writes, first: ['app-default'] });
+ok(same(rare, [RARE]), `a name with a rarer hanzi lands on the reserve, the only face that writes it: ${rare.join(', ')}`);
+ok(fallbackFaces('𠮷', { faces: withRare, writes }).length === 0, 'a character no face holds lands nowhere');
+
 // A face measured from its own characters
 // cwd, not `import.meta.url`: esbuild bundles this into node_modules/.cache.
-for (const id of ['montserrat', 'gothic-a1', 'm-plus-1p', 'noto-sans-sc', 'abril-fatface']) {
-  const b = readFileSync(join(process.cwd(), 'src', 'fonts', `${id}.ttf`));
+for (const id of ['montserrat', 'gothic-a1', 'm-plus-1p', 'noto-sans-sc', 'abril-fatface', RARE]) {
+  const b = readFileSync(join(process.cwd(), 'src', 'fonts', `${id}${id === RARE ? '.otf' : '.ttf'}`));
   const cmap: Record<number, number> = parseFont(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)).tables.cmap.glyphIndexMap;
   const measured = scriptsFromCmap((cp) => !!cmap[cp]);
   const listed = fontScripts(FONTS.find((f) => f.id === id)!);

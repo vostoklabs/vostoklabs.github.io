@@ -111,6 +111,11 @@ const KINDS: [string, () => void][] = [
   ['an SVG on a circle, top and base chamfered', clicker({ baseShape: 'circle' } as Partial<BuildParams>)],
   ['an SVG on its own outline, stem fit +0.1', clicker({ stemFitMm: 0.1 })],
   ['an SVG on a star with a keychain loop', clicker({ baseShape: 'star', shapeSides: 5, shapeArmPct: 0.56, keychain: { enabled: true, style: 'loop', angleDeg: 135, holeDiameterMm: 5.2, offsetMm: 0 } } as Partial<BuildParams>)],
+  ['an SVG on a hollow rect with a keyring hole', clicker({ baseShape: 'rect', bodySize: { w: 40, h: 40 }, hollowBase: true, keychain: { enabled: true, style: 'hole', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 } } as Partial<BuildParams>)],
+  ['an SVG on a knurled circle with the same SVG on its underside', clicker({
+    baseShape: 'circle', blockTexture: 'knurl',
+    bottomArt: { regions: regions.map((r) => ({ ...r, partName: r.partName.replace('top-', 'bottom-') })), outline: art.outline },
+  } as Partial<BuildParams>)],
   ['every colour part chamfered', clicker(INLAYS_CHAMFERED)],
   ['the fit test strip', () => void buildFitStrip(wasm, stem, { labels, colorRgb: WHITE })],
   ['stem fit +0.1 on its own', () => applyStemFit(wasm, stem, 0.1).solid.delete()],

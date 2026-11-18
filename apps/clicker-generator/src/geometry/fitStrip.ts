@@ -19,8 +19,8 @@
 // parts, so `plateLayout` seats them as they are and never flips them the way it flips a cap.
 //
 // The row is shown in the preview and goes out through the normal Export button (mount.ts,
-// `enterFitTest`), never as a download of its own: MakerLab's sandbox has no downloads, and the
-// export path is also where the provenance and the licence nudge live.
+// `enterFitTest`), never as a download of its own: the export path is where the MakerLab route,
+// the provenance and the licence nudge live.
 import { csOf, extrude, withScope, type Keep } from '@vostok/manifold';
 import type { ClickerPart, RGB, Ring } from '../types';
 import { applyStemFit, STEM_FIT_MAX_MM, STEM_FIT_MIN_MM } from './stemFit';
@@ -40,6 +40,8 @@ export interface FitStripOptions {
   labels: FitStripLabel[];
   /** Cap colour, so the pieces print in whatever the user has loaded. */
   colorRgb: RGB;
+  /** The post's extra width, mm: a test of the post the clicker will have. */
+  stemOuterMm?: number;
 }
 
 // ---------------------------------------------------------------- tunables (keycap's values)
@@ -146,7 +148,7 @@ function buildStripTracked(track: Keep, wasm: Wasm, stem: Solid, opts: FitStripO
     // The stem at this setting, sized by the very function the clicker and the blocks use, then
     // turned 180° about X — (x, y, z) -> (x, -y, -z) — so its socket opens upward, and lifted so
     // the closed end sits FIT_TEST_SINK_MM below the tab's top face for a clean union.
-    const fit = applyStemFit(wasm, stem, label.fitMm);
+    const fit = applyStemFit(wasm, stem, label.fitMm, opts.stemOuterMm ?? 0);
     track(fit.solid);
     if (!fit.applied) failed.push(text);
     const tz = FIT_TEST_TAB_THICK_MM - FIT_TEST_SINK_MM + zMaxOrig;

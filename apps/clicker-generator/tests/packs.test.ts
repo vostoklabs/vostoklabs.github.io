@@ -13,15 +13,16 @@
   and it is NOT a circle, which is exactly what distinguishes a working trace from the
   fallback.
 
+  It also holds the pack manifests to their files (on disk, light, hard-edged) and the rule
+  for which sample groups lead and start open, checked on fixed dates.
+
   Run from the repo root:
 
-    node_modules/.bin/esbuild apps/clicker-generator/tests/packs.test.ts \
-      --bundle --platform=node --format=esm --external:manifold-3d --external:@xmldom/xmldom \
-      --outfile=apps/clicker-generator/.packs-test.mjs \
-      && node apps/clicker-generator/.packs-test.mjs
+    node apps/clicker-generator/tests/suites.mjs packs
 */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 import Module from 'manifold-3d';
 import { DOMParser } from '@xmldom/xmldom';
 
@@ -32,7 +33,10 @@ const { parseSvg } = await import('@vostok/trace');
 const { readModel } = await import('@vostok/export/read');
 const { buildClicker } = await import('../src/geometry/buildClicker.ts');
 const { HALLOWEEN } = await import('../src/packs/halloween.ts');
-const { designIsVector, inSeason } = await import('../src/packs/types.ts');
+const { CHRISTMAS } = await import('../src/packs/christmas.ts');
+const { designIsVector, inSeason, orderPacks, packFold } = await import('../src/packs/types.ts');
+const { PACKS, orderedDesignPacks } = await import('../src/packs/index.ts');
+const { SAMPLES } = await import('../src/image/sample.ts');
 type BuildParams = import('../src/types.ts').BuildParams;
 type BuildRegion = import('../src/types.ts').BuildRegion;
 type Ring = import('../src/types.ts').Ring;
@@ -271,8 +275,9 @@ check(
   HALLOWEEN.designs.length > 0,
   `${HALLOWEEN.designs.length} design(s)`,
 );
-for (const design of HALLOWEEN.designs) {
-  const file = join(appDir, 'public/assets/packs', HALLOWEEN.dir, 'designs', design.file);
+for (const pack of [HALLOWEEN, CHRISTMAS]) for (const d of pack.designs) {
+  const design = { ...d, id: `${pack.id}/${d.id}` };
+  const file = join(appDir, 'public/assets/packs', pack.dir, 'designs', design.file);
   const there = existsSync(file);
   check(`${design.id}: its file is on disk`, there, there ? design.file : `missing: ${design.file}`);
   /* A filename a URL has to encode is a filename that works in Node's `join` and may not
@@ -294,6 +299,132 @@ for (const design of HALLOWEEN.designs) {
     designIsVector(design) ? 'vector — nothing renders this yet' : 'bitmap → loadUrlToImage',
   );
 }
+
+// ---------------------------------------------------------------- the Christmas pack
+
+check('PACKS holds Christmas then Halloween', PACKS.map((p) => p.id).join() === 'christmas,halloween', PACKS.map((p) => p.id).join());
+check('Christmas has fifteen designs', CHRISTMAS.designs.length === 15, `${CHRISTMAS.designs.length}`);
+check('Christmas has no base shapes', CHRISTMAS.shapes.length === 0, `${CHRISTMAS.shapes.length}`);
+check(
+  'Christmas design ids are unique inside the pack',
+  new Set(CHRISTMAS.designs.map((d) => d.id)).size === CHRISTMAS.designs.length,
+  CHRISTMAS.designs.map((d) => d.id).join(', '),
+);
+/* The picker knows the loaded sample by its NAME, across every grid, so a name shared by two
+   tiles would mark both and open the wrong group. */
+{
+  const names = [...PACKS.flatMap((p) => p.designs.map((d) => d.name)), ...SAMPLES.map((s) => s.name)];
+  const dupes = names.filter((n, i) => names.indexOf(n) !== i);
+  check('every sample name is unique across every pack and the stock samples', dupes.length === 0, dupes.join(', ') || `${names.length} names`);
+}
+
+/* Light and hard-edged: read straight from the PNG chunks, no decoder needed. A palette PNG
+   whose transparency table holds only 0 and 255 has no half-transparent pixel anywhere. */
+function pngFacts(buf: Buffer) {
+  let p = 8, width = 0, height = 0, depth = 0, colourType = 0;
+  let trns: number[] | null = null;
+  while (p < buf.length) {
+    const len = buf.readUInt32BE(p);
+    const type = buf.toString('ascii', p + 4, p + 8);
+    const d = buf.subarray(p + 8, p + 8 + len);
+    if (type === 'IHDR') { width = d.readUInt32BE(0); height = d.readUInt32BE(4); depth = d[8]; colourType = d[9]; }
+    else if (type === 'tRNS') trns = [...d];
+    else if (type === 'IEND') break;
+    p += 12 + len;
+  }
+  return { width, height, depth, colourType, trns };
+}
+/** The alpha of pixel (x, y) of an 8-bit palette PNG: its index through the transparency table. */
+function paletteAlphaAt(buf: Buffer, x: number, y: number): number {
+  const { width, trns } = pngFacts(buf);
+  const idat: Buffer[] = [];
+  for (let p = 8; p < buf.length;) {
+    const len = buf.readUInt32BE(p);
+    if (buf.toString('ascii', p + 4, p + 8) === 'IDAT') idat.push(buf.subarray(p + 8, p + 8 + len));
+    p += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  // Undo each row's filter (one byte a pixel) down to row y.
+  let prev = new Uint8Array(width), row = new Uint8Array(width);
+  for (let r = 0; r <= y; r++) {
+    const f = raw[r * (width + 1)];
+    const src = raw.subarray(r * (width + 1) + 1, (r + 1) * (width + 1));
+    row = new Uint8Array(width);
+    for (let i = 0; i < width; i++) {
+      const a = i ? row[i - 1] : 0, b = prev[i], c = i ? prev[i - 1] : 0;
+      const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c);
+      const pred = f === 1 ? a : f === 2 ? b : f === 3 ? (a + b) >> 1 : f === 4 ? (pa <= pb && pa <= pc ? a : pb <= pc ? b : c) : 0;
+      row[i] = (src[i] + pred) & 255;
+    }
+    prev = row;
+  }
+  return trns?.[row[x]] ?? 255;
+}
+{
+  let total = 0;
+  for (const d of CHRISTMAS.designs) {
+    const buf = readFileSync(join(appDir, 'public/assets/packs', CHRISTMAS.dir, 'designs', d.file));
+    total += buf.length;
+    const f = pngFacts(buf);
+    check(`christmas/${d.id}: under 20,000 bytes`, buf.length < 20_000, `${buf.length} B`);
+    check(
+      `christmas/${d.id}: square and at most 1100 px (the loader never shrinks it)`,
+      f.width === f.height && f.width > 0 && f.width <= 1100,
+      `${f.width} x ${f.height}`,
+    );
+    check(
+      `christmas/${d.id}: a palette PNG with a hard edge (alpha only 0 or 255)`,
+      f.colourType === 3 && f.depth === 8 && !!f.trns && f.trns.includes(0) && f.trns.every((a) => a === 0 || a === 255),
+      `colour type ${f.colourType}, depth ${f.depth}, tRNS ${f.trns ? f.trns.join(' ') : 'none'}`,
+    );
+    const w = f.width - 1, mid = Math.floor(f.width / 2);
+    const corners = [[0, 0], [w, 0], [0, w], [w, w]].map(([x, y]) => paletteAlphaAt(buf, x, y));
+    check(`christmas/${d.id}: its corners are transparent`, corners.every((a) => a === 0), corners.join(' '));
+    // The wreath is a ring: the hole in it is see-through, and every other drawing covers its middle.
+    const centre = paletteAlphaAt(buf, mid, mid);
+    check(`christmas/${d.id}: its centre pixel is ${d.id === 'wreath' ? 'transparent (the hole in the ring)' : 'drawn'}`,
+      centre === (d.id === 'wreath' ? 0 : 255), `alpha ${centre}`);
+  }
+  check('the Christmas designs together are under 200,000 bytes', total < 200_000, `${total} B`);
+}
+
+/* The seasons, and the rule the sample groups follow: in-season pack first and open, every
+   other pack folded in declared order. Fixed dates, local time, as `inSeason` reads them. */
+const on = (y: number, m: number, d: number) => new Date(y, m - 1, d);
+for (const [date, yes] of [
+  [on(2026, 11, 15), true], [on(2026, 11, 16), true], [on(2026, 12, 25), true], [on(2027, 1, 2), true], [on(2027, 1, 6), true],
+  [on(2026, 11, 14), false], [on(2027, 1, 7), false], [on(2027, 6, 15), false], [on(2026, 11, 3), false], [on(2026, 10, 31), false],
+] as [Date, boolean][]) {
+  check(`Christmas in season on ${date.toDateString()}: ${yes}`, inSeason(CHRISTMAS, date) === yes, String(inSeason(CHRISTMAS, date)));
+}
+check('Halloween in season on 2 November', inSeason(HALLOWEEN, on(2026, 11, 2)), '');
+check('Halloween out of season on 3 November', !inSeason(HALLOWEEN, on(2026, 11, 3)), '');
+{
+  let both = 0;
+  for (let t = on(2028, 1, 1); t.getFullYear() === 2028; t = new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1)) {
+    if (PACKS.filter((p) => inSeason(p, t)).length > 1) both++;
+  }
+  check('over every day of 2028, at most one pack is in season', both === 0, `${both} day(s) with two`);
+}
+for (const [date, order, folds] of [
+  [on(2026, 11, 16), 'christmas,halloween', 'open,closed'],
+  [on(2026, 11, 3), 'christmas,halloween', 'closed,closed'],
+  [on(2026, 12, 25), 'christmas,halloween', 'open,closed'],
+  [on(2027, 1, 2), 'christmas,halloween', 'open,closed'],
+  [on(2027, 6, 15), 'christmas,halloween', 'closed,closed'],
+  [on(2026, 10, 31), 'halloween,christmas', 'open,closed'],
+] as [Date, string, string][]) {
+  const packs = orderedDesignPacks(date);
+  const got = packs.map((p) => p.id).join();
+  const gotFolds = packs.map((p) => packFold(p, date)).join();
+  check(`${date.toDateString()}: groups in order ${order}`, got === order, got);
+  check(`${date.toDateString()}: groups start ${folds}`, gotFolds === folds, gotFolds);
+}
+check(
+  'orderPacks keeps the given order when nothing is in season',
+  orderPacks([HALLOWEEN, CHRISTMAS], on(2027, 6, 15)).map((p) => p.id).join() === 'halloween,christmas',
+  '',
+);
 
 // ---------------------------------------------------------------- the fallback
 

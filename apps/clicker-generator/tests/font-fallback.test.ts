@@ -8,7 +8,8 @@
    - Standard is first for every alphabet it has, and is judged from its own glyphs;
    - each alphabet it lacks lands on its plain face, and a mix lands on one face that writes all
      of it; after the Standard pair, Cyrillic and accented Latin still lead with theirs;
-   - a symbol in the text (a private-use character) is never counted as a missing letter.
+   - a symbol in the text (a private-use character) is never counted as a missing letter;
+   - a hanzi past the common set the Chinese faces are cut to lands on the one face that holds it.
 
   Run from the repo root:
 
@@ -52,6 +53,16 @@ check('a symbol is not a missing letter', fontWritesText('helvetiker-regular', `
 check('the alphabet is named for the message',
   alphabetOf('Привет') === 'Cyrillic' && alphabetOf('Señor') === 'accented' && alphabetOf('Hello') === null,
   `${alphabetOf('Привет')} / ${alphabetOf('Señor')} / ${alphabetOf('Hello')}`);
+
+// A name with a hanzi past the common set Noto Sans SC is cut to (琪, 昊, 晗) lands on Source Han
+// Sans CN, which holds the whole unified block; common Chinese stays on Noto Sans SC, and the
+// heavy face is not among its cards.
+check('a rarer hanzi is beyond Noto Sans SC', !fontWritesText('noto-sans-sc', '张琪'), 'judged from its measured coverage');
+check('a name with one lands on Source Han Sans CN', first('张琪') === 'source-han-sans-cn-light' && first('王昊晗') === 'source-han-sans-cn-light',
+  `${first('张琪')} / ${first('王昊晗')}`);
+check('common Chinese is not offered the heavy face', !facesThatWrite('你好').includes('source-han-sans-cn-light'),
+  `${facesThatWrite('你好').length} faces`);
+check('and the message calls it Chinese', alphabetOf('张琪') === 'Chinese', alphabetOf('张琪') ?? '(none)');
 
 console.log(failures ? `\n${failures} FAILED` : '\ntext in any alphabet lands on a face that writes it');
 process.exit(failures ? 1 : 0);

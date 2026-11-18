@@ -1275,6 +1275,25 @@
   outline: none;
   box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
 }
+/* `colorChip({ menu: true })`: a caret in the middle of the swatch says it opens a menu. Its ink
+   is dark or light, whichever reads on the colour (the chip sets `data-ink`). */
+.vl-color-chip--menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    box-shadow var(--dur-hover) var(--ease-standard),
+    transform var(--dur-hover) var(--ease-standard),
+    border-color var(--dur-hover) var(--ease-standard);
+}
+.vl-color-chip--menu > svg {
+  inline-size: var(--icon-control);
+  block-size: var(--icon-control);
+  pointer-events: none;
+}
+.vl-color-chip--menu[data-ink='dark'] { color: rgb(0 0 0 / 0.72); }
+.vl-color-chip--menu[data-ink='light'] { color: rgb(255 255 255 / 0.92); }
+.vl-color-chip--menu:hover { border-color: var(--accent); }
 
 /* ---------- One colour, one line: the compact palette row ---------- */
 /* A name and the chip holding its colour, which opens the shared picker. See `paletteRow()`

@@ -15,9 +15,10 @@
 //   bottom-centre `.vl-stage__hint` / `stagePanel()` — the panel replaces the
 //                 hint while a mode is active; don't show both at once
 import { el } from '../dom';
-import { svgEl } from '../icons';
+import { ICONS, svgEl } from '../icons';
 import type { Diagnostic } from '../diagnostics';
-import { badgePill } from './button';
+import { badgePill, iconButton } from './button';
+import { popover, type PopoverHandle } from './editor-shell';
 
 // --------------------------------------------------------------- mode bar --
 
@@ -427,11 +428,21 @@ export interface StageStatusOptions {
    * panel overlapped every time. Not on a stage whose top-left holds `stageTools()`.
    */
   position?: 'bottom' | 'top';
+  /**
+   * The message folds behind one small round button instead of lying over the model as text: an
+   * "i" for news, a "!" in the warning or error colour for a problem, and only a spinner while
+   * busy. Pressing the button opens the whole message under it, one line for each part of it
+   * (the parts a message joins with " · "), and `setDiagnostics` hands it every problem, not the
+   * worst. The text stays in the live region, so a screen reader still hears it as it arrives.
+   * Default false: the line shows its text.
+   */
+  folded?: boolean;
 }
 
 /** Bottom-left one-liner: what the generator is doing, or warning about. A live region, so a
  *  build error or a warning is read out when it appears, not only when someone goes looking. */
 export function stageStatus(initial = '', opts: StageStatusOptions = {}): StageStatus {
+  if (opts.folded) return foldedStatus(initial, opts);
   // `set()` rewrites the class on every message, so the position goes into the base it starts from.
   const base = opts.position === 'top' ? 'vl-stage-status vl-stage-status--top' : 'vl-stage-status';
   const root = el('p', {
@@ -453,6 +464,60 @@ export function stageStatus(initial = '', opts: StageStatusOptions = {}): StageS
       if (!worst) return set(ok);
       const count = problems.length > 1 ? `${problems.length} problems · ` : '';
       set(count + worst.message, worst.level === 'error' ? 'error' : 'warn');
+    },
+  };
+}
+
+/** `stageStatus(text, { folded: true })`: the message behind a button. */
+function foldedStatus(initial: string, opts: StageStatusOptions): StageStatus {
+  const base = `vl-stage-status vl-stage-status--folded${opts.position === 'top' ? ' vl-stage-status--top' : ''}`;
+  // The live region: the message itself, read out as it arrives, never painted.
+  const said = el('span', { className: 'vl-stage-status__said' });
+  const busy = el('span', { className: 'vl-stage-status__busy', attrs: { 'aria-hidden': 'true' } }, [
+    el('span', { className: 'vl-busy__spinner' }),
+  ]);
+  let text = '';
+  let shownIcon = ICONS.info;
+  let shown: PopoverHandle | null = null;
+  const lines = el('div', { className: 'vl-stage-status__lines' });
+  const fill = () => lines.replaceChildren(...text.split(' · ').map((line) => el('p', { text: line })));
+  const btn = iconButton({
+    icon: ICONS.info,
+    label: 'Show the message',
+    className: 'vl-stage-status__btn',
+    onClick: () => {
+      if (shown) return shown.close();
+      fill();
+      shown = popover({ anchor: btn, content: lines, align: 'start', onClose: () => { shown = null; } });
+    },
+  });
+  btn.setAttribute('aria-haspopup', 'dialog');
+  const root = el('div', { className: base, attrs: { role: 'status', 'aria-live': 'polite' } }, [said, busy, btn]);
+
+  const set = (next: string, kind: StatusKind = 'idle') => {
+    const changed = next !== text;
+    text = next;
+    said.textContent = next;
+    root.className = base + (kind === 'idle' ? '' : ` vl-stage-status--${kind}`);
+    busy.hidden = kind !== 'busy';
+    btn.hidden = kind === 'busy' || !next;
+    root.hidden = kind !== 'busy' && !next;
+    // Swapped only when it changes: a status set on every repaint must not rebuild the button.
+    const icon = kind === 'warn' || kind === 'error' ? ICONS.alert : ICONS.info;
+    if (icon !== shownIcon) btn.setIcon((shownIcon = icon));
+    btn.setLabel(kind === 'error' ? 'Show the error' : kind === 'warn' ? 'Show the warning' : 'Show the message');
+    // An open message follows the line: rewritten in place, closed when there is none to show.
+    if (shown && btn.hidden) shown.close();
+    else if (shown && changed) fill();
+  };
+  set(initial);
+  return {
+    root,
+    set,
+    setDiagnostics(list, ok) {
+      const problems = list.filter((d) => d.level !== 'info');
+      if (!problems.length) return set(ok);
+      set(problems.map((d) => d.message).join(' · '), problems.some((d) => d.level === 'error') ? 'error' : 'warn');
     },
   };
 }

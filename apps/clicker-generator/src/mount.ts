@@ -24,7 +24,6 @@ import '@vostok/plates/plates.css';
 import {
   topbarLinks, isDesktop, promptDialog, hostAssetUrl, rememberFile, bindExternalLinks,
   chooseFile, listRow, licenseAfterExport, applyTheme, createStore, readProjectFile, markProject,
-  type ProjectShape,
 } from '@vostok/ui-kit';
 import './style.css';
 import { createViewer, type SectionAxis } from './viewer/viewer';
@@ -34,20 +33,27 @@ import { BLANK_COVER, exportToHost, modelExport, type HostLink, type HostModelEx
 import { createUi, type UiState, type WordItem } from './ui/ui';
 import {
   createDesignView, type DesignArtRegion, type DesignEdit, type DesignInput, type DesignTarget,
-  type DesignView, type DesignWord,
+  type DesignUnderside, type DesignView, type DesignWord,
 } from './ui/designView';
 import { lowestFit, wordsColourOf } from './words';
 import { capColourOf, deriveFrameColor, isBlank } from './frame';
 import { clampLevel, RELIEF_MAX, RELIEF_MIN, reliefLevelOf, reliefMm } from './relief';
 import { readSigned } from './ui/signedReadout';
-import { loadFileToImage, parseSvg, processImage, type RgbaImage, type SvgOptions } from '@vostok/trace';
+import { holdInBox, litSwitch } from './ui/switchPad';
+import { builtKeychainStyle, holeSizeRange, keychainMoved } from './ui/keychainRows';
+import { bearingOf, loopCentre } from './ui/keyringMark';
+import { BOTTOM_DEFAULT_COLOURS, BOTTOM_TRACE_MM, bottomArtOf, bottomPictureShown, bottomTraceKey, cleanBottomPicture, cleanMapping, groupOfColour, placedBottomArt } from './bottomArt';
+import { cleanBottomPlace, DEFAULT_BOTTOM_PLACE } from './geometry/bottomPlace';
+import { cleanCropBox, cleanPictureEdits, loadFileToImage, parseSvg, processImage, type RgbaImage, type SvgOptions } from '@vostok/trace';
 import { runWizard } from './ui/wizard';
+import { splitPicture } from './ui/colourSplit';
 import { clickerThreeMF, downloadClickerThreeMF } from './export/threemfExport';
 import { shownBuild, type Shown } from './export/shownBuild';
 import { assemblyMinZ, groupBBox, plateWarnings } from './export/plateLayout';
-import { clickerObjPlates } from './export/objExport';
-import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM } from './geometry/stemFit';
+import { CLICKER_HOST_PRINT, clickerObjPlates } from './export/objExport';
+import { STEM_FIT_MAX_MM, STEM_FIT_MIN_MM, STEM_FIT_STEP_MM, STEM_OUTER_MAX_MM, STEM_OUTER_MIN_MM } from './geometry/stemFit';
 import { clampDesignScale, TEXT_SCALE_MIN } from './geometry/sizeLimits';
+import { HOLD_SCALE_MAX, holdMm, holdScale, pictureMmOf, roundShare } from './geometry/pictureHold';
 import { FIT_TEST_FONT_ID, FIT_TEST_STEP_MM, fitTestLabel, fitTestLadder } from './geometry/fitStrip';
 import { openSvgPreview } from './ui/svgPreview';
 import { allShapes, findShape, loadPackShapes } from './shapes/directory';
@@ -83,6 +89,7 @@ import {
 } from 'virtual:makerlab';
 import type {
   BlockKeycap,
+  BottomArt,
   BuildParams,
   BuildRegion,
   ClickerPart,
@@ -99,7 +106,7 @@ import type {
 import { FILAMENTS, type PreprocessParams } from './types';
 
 import type { DesktopHost } from '@vostok/ui-kit';
-import { closeAllDialogs, closeColorPopover, dialog, stepperRow, toast } from '@vostok/ui-kit';
+import { closeAllDialogs, closeColorPopover, dialog, ICONS, stageHandle, stepperRow, toast } from '@vostok/ui-kit';
 import { setAssetBase, assetBase } from './assets';
 import { TEMPLATE } from './template';
 import { createModelMode, type ModelMode } from './ui/modelMode';
@@ -107,9 +114,10 @@ import { DEFAULT_MODEL_CUT } from './model/types';
 import type { SampleId } from './model/samples';
 import { deflateSync, inflateSync } from 'fflate';
 
-/** A clicker project file: every one saved carries `version` and `settings` (see
- *  `buildProject`), so a file without them, or one another app saved, is refused on Load. */
-const PROJECT_FILE: ProjectShape = { app: 'clicker-generator', keys: ['version', 'settings'] };
+import {
+  ART_MM_MAX, coerceKeychain, coerceModelCut, coercePicture, coerceSettings, DEFAULT_KEYCHAIN, PROJECT_FILE,
+  PROJECT_VERSION, type SavedPicture, type SavedSetting,
+} from './settings';
 
 /** The host glue, as the shelf's `exportToHost` takes it (the stub's no-ops outside MakerLab). */
 const MAKERLAB_LINK: HostLink<HostModelExportOptions> = {
@@ -197,8 +205,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const raisable = (name: string) => /^top-color-\d+-\d+$/.test(name) || name.startsWith('text-');
 
   /** A mapped picture's group for one of its colours (a traced region's colour is one of them). */
-  const mappedGroupOf = (s: UiState, rgb: RGB): number | undefined =>
-    s.mappedColors.find((c) => c.rgb[0] === rgb[0] && c.rgb[1] === rgb[1] && c.rgb[2] === rgb[2])?.group;
+  const mappedGroupOf = (s: UiState, rgb: RGB): number | undefined => groupOfColour(s.mappedColors, rgb);
   /** …and that group's filament, or undefined when the picture is not mapped. */
   const mappedFilamentOf = (s: UiState, rgb: RGB): RGB | undefined => {
     if (s.colorMode !== 'mapped') return undefined;
@@ -369,6 +376,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   // ---- State (UI-facing) ----
   const store = createStore<UiState>({
     status: 'Loading switch assets…',
+    statusWarnText: '',
     building: false,
     hasParts: false,
     // Set once the default clicker (or its dynamic fallback) actually lands — see
@@ -384,6 +392,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     hollowBase: false,
     fixedSize: null,
     designScale: 1,
+    artMm: null,
+    artFitMm: null,
     designRotation: 0,
     shapeSides: 6,
     shapeCornerPct: 0.22,
@@ -392,18 +402,21 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     drawnShapeId: null,
     builtBodyMm: null,
     switchBox: null,
+    holeNoRoom: false,
     tolerance: 0.4,
     stemFitMm: 0,
+    stemOuterMm: 0,
     fitTestActive: false,
     fitTestStepMm: FIT_TEST_STEP_MM,
     socketFitPct: 0,
     switches: [{ x: 0, y: 0, rotation: 0 }],
     activeSwitchIndex: 0,
     smoothing: 0.1,
-    keychain: { enabled: false, style: 'loop', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 },
+    keychain: { ...DEFAULT_KEYCHAIN },
     removeBg: true,
     view: 'exploded',
     designView: false,
+    designSide: 'top',
     showSwitch: true,
     // Cut-open state. Viewport only: not in HISTORY_FIELDS, not in a saved project.
     sectionOn: false,
@@ -421,6 +434,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     limitedColors: [],
     mappedColors: [],
     mappedFilaments: [],
+    pictureEdits: [],
+    pictureCrop: null,
+    bottomPicture: null,
     bodyColorRgb: [240, 240, 240] as RGB,
     paletteOverrides: [],
     baseColorOverride: null,
@@ -467,6 +483,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     canRedo: false,
     canRefresh: false,
   });
+  /** The state the app starts in: what a key a project file lacks means. The store replaces its
+   *  state on every change and never edits it, so this stays as it was. */
+  const DEFAULTS: Readonly<UiState> = store.get();
 
   // ---- Heavy data kept out of the reactive store ----
   let originalImage: RgbaImage | null = null; // pristine decode (never mutated)
@@ -475,6 +494,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
      would apply the tone curve twice). */
   let wizardBase: RgbaImage | null = null;
   let wizardParams: PreprocessParams | null = null;
+  /* The bottom picture, held the same way: the confirmed (tone-adjusted) pixels the build traces,
+     and what its window last ran on and with. Kept after Remove, so Undo can bring it back; a
+     new bottom picture replaces it. Its settings are `bottomPicture` in the state. */
+  let bottomImage: RgbaImage | null = null;
+  let bottomBase: RgbaImage | null = null;
+  let bottomParams: PreprocessParams | null = null;
+  /** The last bottom trace and what it was traced from, so a rebuild that changes neither does
+   *  not trace again. */
+  let bottomTraced: { image: RgbaImage; key: string; art: BottomArt } | null = null;
   /** The paid panel, in the MakerWorld build only. Null everywhere else, and the `?.` at
    *  every call site is what makes "the paid features are simply not in this build" the
    *  default rather than a special case. */
@@ -805,6 +833,20 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     viewer.showSwitch(on && !store.get().fitTestActive);
   }
 
+  /** The rail category open now, as the rail reports it: the preview marks what it moves. */
+  let railCategory: string | null = null;
+  /** The outlines of the clicker the preview shows (null for a block set, a cut model or the fit
+   *  test's tiles): where its marks go. */
+  let shownLayout: DesignLayout | null = null;
+  /** A keyring hole just placed (Hole picked, or the keyring switched on as an unmoved Hole) waits
+   *  for a build to find where it fits (`holeFind`). Any move by hand, Loop, Undo or a project
+   *  ends the wait, so a hole put somewhere by hand is never moved for it. */
+  let holeFind = false;
+  /** Where the undo history stood when the hole was placed: the found place joins that step. */
+  let holeFindStep = -1;
+  /** The bearing the 3D grip has the hole at while it is held, and how far the press landed
+   *  from the hole's own bearing (so the hole does not jump to the pointer); null otherwise. */
+  let holeDrag: { deg: number; grabOffset: number; moved: boolean } | null = null;
   const ui: ReturnType<typeof createUi> = createUi(sidebarLeft, sidebarRight, statusEl, {
     onUpload: (file) => {
       // Kept the moment it arrives rather than when a project is saved: save is a thing
@@ -840,14 +882,55 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       if (store.get().importMode !== 'image') return;
       void openWizard(() => Promise.resolve(base), false);
     },
+    onBottomPicture: (file) => {
+      // Kept the moment it arrives, as the top picture is.
+      void rememberFile(host, 'image', file);
+      void openBottomWizard(() => loadFileToImage(file), true);
+    },
+    onBottomAdjust: () => {
+      const base = bottomBase ?? bottomImage;
+      if (!base || !store.get().bottomPicture) return;
+      void openBottomWizard(() => Promise.resolve(base), false);
+    },
+    onBottomPlace: (patch) => {
+      // The rail's Size and pad, or a 2D drag: the place held to its ranges, one rebuild.
+      const bp = store.get().bottomPicture;
+      if (!bp) return;
+      store.set({ bottomPicture: { ...bp, place: cleanBottomPlace({ ...bp.place, ...patch }) } });
+      debouncedRebuild();
+    },
+    onBottomRemove: () => {
+      // The pixels stay in memory, so Undo brings the picture back.
+      if (!store.get().bottomPicture) return;
+      store.set({ bottomPicture: null });
+      debouncedRebuild();
+    },
     onColorCount: (n) => {
       // The count the design already has is not a choice: the select reports one whenever a
       // sync moves its value (the import window confirming 3 colours where it showed 4), and
       // taking that for a pick threw the window's colours away for an automatic split.
-      if (n === store.get().colorCount) return;
-      // A count picked here overrides the window's colours: the picture is split automatically
-      // into that many again. The window is still one "Adjust image" away.
-      store.set({ colorCount: n, colorMode: 'normal', limitedColors: [] });
+      const s = store.get();
+      if (n === s.colorCount) return;
+      // A count picked here overrides the window's colours: the picture is split into that many
+      // again, by the window's own finder, and stored as the window stores it, so the two roads
+      // give the same colours (and "Adjust image" reopens on them). A picture with fewer colours
+      // gets every colour it has.
+      // What was taken out of the picture, or cropped away, is not counted.
+      const split = s.importMode === 'image' && originalImage
+        ? splitPicture(originalImage, s.removeBg, n, { edits: s.pictureEdits, crop: s.pictureCrop })
+        : null;
+      if (split && split.filaments.length) {
+        store.set({
+          colorCount: split.filaments.length,
+          colorMode: 'mapped',
+          limitedColors: [],
+          mappedColors: split.colors,
+          mappedFilaments: split.filaments,
+          paletteOverrides: [],
+        });
+      } else {
+        store.set({ colorCount: n, colorMode: 'normal', limitedColors: [] });
+      }
       debouncedReprocess();
     },
     onFilament: (i, hex) => {
@@ -914,8 +997,27 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       debouncedRebuild();
     },
     onDesignScale: (v) => {
-      store.set({ designScale: v });
+      // A picture that keeps its size is sized in millimetres: the slider sets that share of
+      // what fits now. Design size itself is left as it was, for when it follows again.
+      const s = store.get();
+      store.set(holdsSize(s) ? { artMm: heldMmFor(s, v) } : { designScale: v });
       debouncedRebuild();
+    },
+    onFollowSize: (follow) => {
+      if (follow) {
+        // The reset: the picture fits the shape again, at the Design size it had.
+        store.set({ artMm: null });
+        debouncedRebuild();
+        return;
+      }
+      // Hold the picture at the size it is on screen. The build then makes exactly the picture
+      // it already shows, so there is nothing to rebuild.
+      // A layout from another mode (Text a moment ago) or another project says nothing about this
+      // picture, so until its own lands the size is worked out from Size and Design size.
+      const s = store.get();
+      const own = layoutBuiltAt.importMode === s.importMode ? latestLayout : null;
+      const shown = own?.art.scale ?? (s.capWidthMm - 2 * 1.2) * s.designScale;
+      store.set({ artMm: Math.round(shown * 100) / 100 });
     },
     onShapePick: (id) => {
       const entry = findShape(id);
@@ -992,6 +1094,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         debouncedRebuild();
       }
     },
+    onStemOuter: (mm) => {
+      // The fit test's tiles carry the same post, so they follow it as they follow the fit.
+      store.set({ stemOuterMm: Math.round(Math.max(STEM_OUTER_MIN_MM, Math.min(STEM_OUTER_MAX_MM, mm)) * 10) / 10 });
+      if (store.get().fitTestActive) {
+        designStale = true;
+        debouncedFitStrip();
+      } else {
+        debouncedRebuild();
+      }
+    },
     onSocketFit: (pct) => {
       // Body pocket ↔ switch body: how tightly the switch itself sits in the base.
       store.set({ socketFitPct: Math.round(Math.max(-5, Math.min(5, pct)) * 10) / 10 });
@@ -1029,13 +1141,73 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       });
       debouncedRebuild();
     },
-    onKeychainToggle: (on) => {
-      store.set({ keychain: { ...store.get().keychain, enabled: on } });
+    onSwitchHome: (index) => {
+      // The d-pad's centre: this switch back to its own place and turn in the even layout for the
+      // count, in one edit (one Undo step). The others stay where they are.
+      const s = store.get();
+      const home = defaultSwitchLayout(s.switches.length, s.capWidthMm)[index];
+      if (!home || index < 0 || index >= s.switches.length) return;
+      store.set({
+        switches: s.switches.map((sw, i) => (i === index ? { ...sw, x: home.x, y: home.y, rotation: home.rotation } : sw)),
+        activeSwitchIndex: index,
+      });
+      if (s.designView) designView.select(`switch:${index}`);
       debouncedRebuild();
     },
+    onKeychainToggle: (on) => {
+      const s = store.get();
+      // Switched on as a Hole still waiting where a new one starts: it finds its place, as when
+      // Hole is picked. One already moved, or cut, stays where it was put.
+      const find = on && s.keychain.style === 'hole' && s.keychain.holeCut === false && !keychainMoved(s.keychain);
+      store.set({ keychain: { ...s.keychain, enabled: on } });
+      if (find) findHolePlace();
+      else if (!on) holeFind = false;
+      debouncedRebuild();
+    },
+    onKeychainStyle: (style) => {
+      const s = store.get();
+      // A loop's 8 mm is wider than a hole can be: kept, the row would show 6 and the status line
+      // would say the engine narrowed it, though nobody asked for more.
+      const holeDiameterMm = Math.min(s.keychain.holeDiameterMm, holeSizeRange(s.importMode, style)[1]);
+      const keychain = { ...s.keychain, style, holeDiameterMm };
+      // A hole is placed first and cut on request: choosing Hole shows the cutter, uncut, where
+      // it fits nearest Position.
+      if (style === 'hole' && s.keychain.style !== 'hole') keychain.holeCut = false;
+      store.set({ keychain });
+      if (style === 'hole' && s.keychain.style !== 'hole') findHolePlace();
+      else if (style !== 'hole') holeFind = false;
+      debouncedRebuild();
+    },
+    onKeychainCut: () => {
+      const s = store.get();
+      // Where the hole has no room the line under the button says so; cutting there would only
+      // refuse Export and take the cutter away.
+      if (s.keychain.style !== 'hole' || s.keychain.holeCut !== false || s.holeNoRoom) return;
+      store.set({ keychain: { ...s.keychain, holeCut: true } });
+      debouncedRebuild();
+    },
+    onCategory: (id) => {
+      const was = railCategory;
+      railCategory = id;
+      // Opening Bottom turns the Design view over, and leaving it turns it back; the 2D view's own
+      // Top | Bottom switch flips it in between. After the app is put together (the rail opens
+      // its first category before the store exists).
+      const side = id === 'bottom' ? 'bottom' : was === 'bottom' ? 'top' : null;
+      if (side) queueMicrotask(() => setDesignSide(side));
+      // The rail opens its first category while the app is still being put together.
+      queueMicrotask(() => {
+        markPreview();
+        // Opening Clicker picks the lit switch on the Design view too, as picking it in the list does.
+        const s = store.get();
+        if (id === 'switch' && s.designView) designView.select(`switch:${litSwitch(s)}`);
+      });
+    },
     onKeychainSize: (deltaMm) => {
-      const kc = store.get().keychain;
-      const holeDiameterMm = Math.round(Math.max(3.0, Math.min(8.0, kc.holeDiameterMm + deltaMm)) * 10) / 10;
+      const s = store.get();
+      const kc = s.keychain;
+      // The top is the style's (8 mm for a loop, 6 for a hole), as the row shows it.
+      const top = holeSizeRange(s.importMode, kc.style)[1];
+      const holeDiameterMm = Math.round(Math.max(3.0, Math.min(top, kc.holeDiameterMm + deltaMm)) * 10) / 10;
       store.set({ keychain: { ...kc, holeDiameterMm } });
       debouncedRebuild();
     },
@@ -1048,6 +1220,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     onSwitchMove: (index, patch) => {
       const s = store.get();
       store.set({ switches: s.switches.map((sw, i) => (i === index ? { ...sw, ...patch } : sw)), activeSwitchIndex: index });
+      // The Design view picks the switch being moved, as it does when one is picked in the list.
+      if (s.designView) designView.select(`switch:${index}`);
       debouncedRebuild();
     },
     onImageOffset: (x, y) => {
@@ -1059,14 +1233,17 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       debouncedRebuild();
     },
     onKeychainAngle: (deg) => {
+      holeFind = false;
       store.set({ keychain: { ...store.get().keychain, angleDeg: ((deg % 360) + 360) % 360 } });
       debouncedRebuild();
     },
     onKeychainOffsetSet: (mm) => {
+      holeFind = false;
       store.set({ keychain: { ...store.get().keychain, offsetMm: Math.max(-15, Math.min(15, mm)) } });
       debouncedRebuild();
     },
     onDesignView: (on) => showDesignView(on),
+    onDesignSide: (side) => setDesignSide(side),
     onSmoothing: (v) => {
       store.set({ smoothing: v });
       if (store.get().importMode === 'image' && hasImage()) debouncedReprocess();
@@ -1117,6 +1294,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
               obj: objs.length === 1 ? objs[0]! : objs,
               mtl,
               coverImage: png ? 'data:image/png;base64,' + bytesToBase64(png) : BLANK_COVER,
+              printConfig: CLICKER_HOST_PRINT,
               description: fitTest
                 ? 'Switch stem fit test tiles, made with the Clicker Generator.'
                 : objs.length > 1
@@ -1191,7 +1369,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       const proj = buildProject();
       if (host) { void saveToHost(proj); return; }
 
-      downloadFile(JSON.stringify(markProject(PROJECT_FILE, proj)), 'clicker-project.json', 'application/json');
+      downloadFile(JSON.stringify(markProject(PROJECT_FILE, proj)), `${designFileBase()}-project.json`, 'application/json');
       store.set({ status: 'Project saved ✓' });
     },
     onLoadProject: (file) => {
@@ -1264,7 +1442,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         pendingReframe = true;
         // A new picture is a request to see it. The SVG already loaded is not new: opening a
         // project selects its SVG again, and must not undo the project's Blank.
-        if (svgText !== currentSvgText) store.set({ blank: false });
+        // A new one is also fitted to the shape: a size held for the last picture does not carry.
+        if (svgText !== currentSvgText) store.set({ blank: false, artMm: null });
         currentSvgText = svgText;
         currentSvgName = name;
         currentSvgOptions = result.options;
@@ -1273,6 +1452,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     },
     onSelectIcon: (svgText, name) => {
       pendingReframe = true;
+      // A different icon is fitted to the shape: a size held for the last picture does not carry.
+      if (svgText !== currentIconText) store.set({ artMm: null });
       currentIconText = svgText;
       currentIconName = name;
       // An icon picked is a request to see it.
@@ -1407,6 +1588,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     },
     onKeychainSlideReset: () => {
       store.set({ keychainSlideMm: 0 });
+      debouncedRebuild();
+    },
+    onKeychainPositionReset: () => {
+      holeFind = false;
+      const kc = store.get().keychain;
+      store.set({ keychain: { ...kc, angleDeg: DEFAULT_KEYCHAIN.angleDeg, offsetMm: DEFAULT_KEYCHAIN.offsetMm } });
+      // A hole goes back where a new one goes: the place nearest the start that fits, which on a
+      // body notched at the top is not the start itself.
+      if (kc.enabled && kc.style === 'hole') findHolePlace();
       debouncedRebuild();
     },
     onFontSelect: (fontId) => {
@@ -1548,7 +1738,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     rebuildSoon: (live) => (live ? debouncedQuietRebuild() : debouncedRebuild()),
     reframeNext: () => { pendingReframe = true; },
     resetHistoryNext: () => { pendingHistoryReset = true; },
-    showColorPopoverAt: (x, y, hex, options, handlers) => ui.showColorPopoverAt(x, y, hex, options, handlers),
+    showColorPopoverAt: (x, y, hex, options, handlers) => ui.showColorPopoverAt(x, y, hex, options, { ...handlers, design: designColours() }),
   });
   container.querySelector('#modelPanel')?.append(modelMode.panel.right);
   // Model mode's three left-rail categories (ui.ts declares their mounts).
@@ -1562,10 +1752,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
      every other path see one design: a drag ends in one `store.set`, then one rebuild. */
   /** The outlines the last flat-clicker build made, and the Size and Design size it was built at. */
   let latestLayout: DesignLayout | null = null;
-  let layoutBuiltAt = { designScale: 1, capWidthMm: 35 };
+  /** `importMode` is the mode it was built in: `null` before the first one and after a project
+   *  opens, until that project's own layout lands. */
+  let layoutBuiltAt: { designScale: number; capWidthMm: number; importMode: UiState['importMode'] | null } =
+    { designScale: 1, capWidthMm: 35, importMode: null };
   /** What each design build still in flight was sent with, oldest first: the worker answers in
    *  order, so the head is what the next layout was built from. */
-  const designSent: { designScale: number; capWidthMm: number }[] = [];
+  const designSent: (typeof layoutBuiltAt)[] = [];
   const designView: DesignView = createDesignView({
     stage: container.querySelector<HTMLElement>('#viewport')!,
     onEdit: (edit) => applyDesignEdit(edit),
@@ -1577,6 +1770,22 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   const hasDesignView = (mode: UiState['importMode']) => pictureSource(mode) || mode === 'text';
   /** How big the design is on its base: Design size, or in Text mode Text size (buildParamsFor). */
   const artScaleOf = (s: UiState) => (s.importMode === 'text' ? s.textScale : s.designScale);
+  /** The picture keeps its size rather than following the shape's (geometry/pictureHold). Only a
+   *  picture, and not on an Outline base, where the picture is the shape: the switch is hidden
+   *  wherever Design size is, and a size held from before means nothing there. */
+  function holdsSize(s: UiState): s is UiState & { artMm: number } {
+    return s.artMm != null && pictureSource(s.importMode) && !(s.baseShape === 'outline' && s.importMode !== 'icon');
+  }
+  /** The held size for a Design size picked on the slider or the Design view's corner: that share
+   *  of what fits now. Before any build has said what fits, the size held stays. */
+  function heldMmFor(s: UiState & { artMm: number }, scale: number): number {
+    return holdMm(scale, s.artFitMm ?? 0) ?? s.artMm;
+  }
+  /** The size the tracer is told the picture prints at: as it always was while the picture
+   *  follows, the held size while it keeps one. */
+  function tracedMmOf(s: UiState): number {
+    return pictureMmOf({ capWidthMm: s.capWidthMm, designScale: s.designScale, artMm: holdsSize(s) ? s.artMm : null });
+  }
 
   function showDesignView(on: boolean) {
     const allowed = on && hasDesignView(store.get().importMode);
@@ -1588,6 +1797,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     // The default clicker arrives pre-built, with no outlines: build it once to have some.
     if (allowed && !latestLayout) rebuild();
     renderDesign();
+    if (allowed && railCategory === 'switch') designView.select(`switch:${litSwitch(store.get())}`);
+  }
+
+  /** Lay out the top or the underside on the Design view, refitted to the face shown. */
+  function setDesignSide(side: UiState['designSide']) {
+    if (store.get().designSide === side) return;
+    store.set({ designSide: side });
+    renderDesign();
+    designView.refit();
   }
 
   /** The picture's colours as the view draws them, rebuilt only when the trace or a colour
@@ -1601,7 +1819,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const art: DesignArtRegion[] = [];
     set.regions.forEach((r, i) => {
       const base = s.palette[i]?.filamentRgb ?? r.quantRgb;
-      r.components.forEach((c, j) => art.push({ rings: c.rings, rgb: s.partOverrides?.[`top-color-${i}-${j}`] ?? base, coverage: r.coverage }));
+      r.components.forEach((c, j) => {
+        const rgb = s.partOverrides?.[`top-color-${i}-${j}`] ?? base;
+        if (c.layers?.length) for (const l of c.layers) art.push({ rings: l.rings, rgb, coverage: r.coverage, paint: l.paint });
+        else art.push({ rings: c.rings, rgb, coverage: r.coverage });
+      });
     });
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const ring of set.outline) for (const [x, y] of ring) {
@@ -1630,10 +1852,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     }
     // Where the build will put each switch: clamped into its box, as the worker clamps it.
     const sb = L.switchBox;
-    const hold = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+    // A picture that keeps its size is drawn at it: its share of what the last build said fits,
+    // against the share that build made. Both from the layout, so a shape resized but not yet
+    // rebuilt still draws the picture at its millimetres. Its corner may run past Design size's top.
+    const held = holdsSize(s) && L.art.fit > 0
+      ? { designScale: holdScale(s.artMm, L.art.fit), builtDesignScale: L.art.scale / L.art.fit, designScaleMax: HOLD_SCALE_MAX }
+      : null;
     return {
       layout: L,
-      builtDesignScale: layoutBuiltAt.designScale,
+      builtDesignScale: held?.builtDesignScale ?? layoutBuiltAt.designScale,
       builtCapWidthMm: layoutBuiltAt.capWidthMm,
       outlineBase: s.baseShape === 'outline' && !s.fixedSize && s.importMode !== 'icon',
       // A blank prints none of the picture, so none of it is drawn.
@@ -1641,12 +1868,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       artBox: box,
       blank,
       imageOffset: s.imageOffset,
-      designScale: artScaleOf(s),
+      designScale: held?.designScale ?? artScaleOf(s),
       designScaleMin: s.importMode === 'text' ? TEXT_SCALE_MIN : undefined,
+      designScaleMax: held?.designScaleMax,
       designRotation: s.designRotation,
       capWidthMm: s.capWidthMm,
       words,
-      switches: s.switches.map((sw) => ({ ...sw, x: hold(sw.x, sb.loX, sb.hiX), y: hold(sw.y, sb.loY, sb.hiY) })),
+      switches: s.switches.map((sw) => ({ ...sw, x: holdInBox(sw.x, sb.loX, sb.hiX), y: holdInBox(sw.y, sb.loY, sb.hiY) })),
       switchColumnMm,
       keychain: { enabled: s.keychain.enabled, angleDeg: s.keychain.angleDeg },
       freeAspect: s.baseShape === 'rect' || s.baseShape === 'capsule',
@@ -1655,11 +1883,139 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // As buildParamsFor and wordRegions pass Boldness on: Text mode's letters, a picture's words.
       artBold: s.importMode === 'text' ? s.textBold : 0,
       wordBold: s.textBold,
+      ...(s.designSide === 'bottom' && bottomPictureShown(s.importMode) ? { underside: designUnderside(s) } : {}),
     };
+  }
+
+  /** The bottom picture as the Design view draws it while Bottom is open: its colours in their
+   *  filaments, normalised as traced, and its place. Empty without one. Rebuilt only when the
+   *  trace changes. */
+  let underCache: { art: BottomArt; regions: DesignArtRegion[]; box: { w: number; h: number } } | null = null;
+  function designUnderside(s: UiState): DesignUnderside {
+    const place = s.bottomPicture?.place ?? DEFAULT_BOTTOM_PLACE;
+    const art = s.bottomPicture ? bottomArtFor(s) : undefined;
+    if (!art?.regions.length) return { art: [], artBox: { w: 1, h: 1 }, place };
+    if (underCache?.art !== art) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const ring of art.outline.length ? art.outline : art.regions.flatMap((r) => r.rings)) for (const [x, y] of ring) {
+        minX = Math.min(minX, x); minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+      }
+      underCache = {
+        art,
+        regions: art.regions.map((r) => ({ rings: r.rings, rgb: r.filamentRgb, coverage: r.coverage ?? 1 })),
+        box: Number.isFinite(minX) ? { w: maxX - minX, h: maxY - minY } : { w: 1, h: 1 },
+      };
+    }
+    return { art: underCache.regions, artBox: underCache.box, place };
   }
   function renderDesign() {
     if (store.get().designView) designView.render(designInput());
   }
+
+  /** The 3D preview's marks, from the state and the clicker on screen: a placed hole's cutter
+   *  where it will cut, and while the Clicker category is open, the lit switch, at the place the
+   *  build clamps it to (drawn from the state, so a slider or the pad moves it before the build). */
+  function markPreview() {
+    const s = store.get();
+    const L = s.fitTestActive || !hasDesignView(s.importMode) ? null : shownLayout;
+    markHole(s, L);
+    // The switch Clicker is moving: the preview's own MX switch outlined where it sits. From the
+    // state, held in the last build's switch box when there is one, so a press moves it at once;
+    // without a layout yet (the clicker as it first arrives) from the state as it is.
+    const lit = litSwitch(s);
+    const sw = railCategory === 'switch' && !s.fitTestActive && hasDesignView(s.importMode) ? s.switches[lit] : undefined;
+    const sb = L?.switchBox;
+    viewer.setSwitchMark(sw
+      ? {
+          x: sb ? holdInBox(sw.x, sb.loX, sb.hiX) : sw.x,
+          y: sb ? holdInBox(sw.y, sb.loY, sb.hiY) : sw.y,
+          z: (latestSwitchPlacements[lit] ?? latestSwitchPlacements[0])?.z ?? 0,
+          rotation: sw.rotation,
+        }
+      : null);
+  }
+
+  /** The keyring hole in 3D. A placed hole's cutter, see-through, where it will cut, in the
+   *  warning colour where the build found no room; and while Keychain is open, the grip that
+   *  drags it round the edge (placed or cut). Drawn at the bearing the state (or the held grip)
+   *  says, by the build's own construction, so it moves before the build lands; with a Fine
+   *  offset, where the build put it. */
+  function markHole(s: UiState, L: DesignLayout | null) {
+    const loop = L?.loop;
+    const hole = L && loop?.style === 'hole' && loop.z !== undefined && s.keychain.enabled ? loop : undefined;
+    if (!L || !hole || hole.z === undefined) {
+      viewer.setHoleCutter(null);
+      viewer.setHoleGrip(null);
+      return;
+    }
+    const deg = holeDrag?.deg ?? (s.keychain.offsetMm === 0 ? s.keychain.angleDeg : null);
+    const [x, y] = deg === null ? [hole.x, hole.y] : loopCentre(L.body, deg, 0);
+    const mark = { x, y, z: hole.z, R: hole.outerR - hole.holeR, r: hole.holeR };
+    // The warning colour is the build's word on THIS place: elsewhere it is not known yet.
+    const built = Math.hypot(x - hole.x, y - hole.y) < 0.05;
+    viewer.setHoleCutter(hole.uncut || holeDrag ? { ...mark, warn: !!hole.noRoom && built && !holeDrag } : null);
+    viewer.setHoleGrip(railCategory === 'keychain' && !s.designView ? mark : null);
+  }
+
+  /** A keyring hole just placed: the next build places it where it fits (`holeFind`). */
+  function findHolePlace() {
+    holeFind = builtKeychainStyle(store.get().importMode, 'hole') === 'hole';
+    holeFindStep = histIndex;
+  }
+
+  /** The place the build found for a hole being placed: written to Position (Fine offset 0) as
+   *  part of the same Undo step as picking Hole, without a rebuild, since that build made it. */
+  function placeFoundHole(deg: number) {
+    holeFind = false;
+    const s = store.get();
+    if (s.keychain.angleDeg === deg && s.keychain.offsetMm === 0) return;
+    store.set({ keychain: { ...s.keychain, angleDeg: deg, offsetMm: 0 } });
+    // Picking Hole was recorded already: the found place joins that step rather than following it.
+    if (histIndex > holeFindStep && histIndex >= 0) {
+      history[histIndex] = snapshotHistory();
+      updateHistoryButtons();
+    }
+    // A build still on its way was sent before the place was known: build the place.
+    if (designSent.length) debouncedRebuild();
+  }
+
+  /** The 3D grip, and the ring itself, drag the hole round the edge: a bearing from the body's
+   *  centre, drawn live, written once on release through the same edit the 2D drag makes. */
+  const holeGrip = stageHandle({
+    label: '',
+    title: 'Drag to move the hole round the edge',
+    icon: ICONS.move,
+    onStep: (d) => applyDesignEdit({ kind: 'loop', angleDeg: (((store.get().keychain.angleDeg + 5 * d) % 360) + 360) % 360 }),
+  });
+  container.querySelector<HTMLElement>('#viewport')?.append(holeGrip);
+  viewer.setHoleHandle(holeGrip);
+  viewer.onHoleDrag((x, y, phase) => {
+    if (phase === 'end') {
+      // Released: where the last move had it, as one edit (one Undo step). A press with no move
+      // changes nothing.
+      const held = holeDrag;
+      holeDrag = null;
+      if (held?.moved) applyDesignEdit({ kind: 'loop', angleDeg: held.deg });
+      else markPreview();
+      return;
+    }
+    const L = shownLayout;
+    const loop = L?.loop;
+    if (!L || !loop) return;
+    const at = bearingOf(L.body, x, y);
+    if (phase === 'start') {
+      const s = store.get();
+      const [hx, hy] = s.keychain.offsetMm === 0 ? loopCentre(L.body, s.keychain.angleDeg, 0) : [loop.x, loop.y];
+      const own = bearingOf(L.body, hx, hy);
+      holeDrag = { deg: own, grabOffset: at - own, moved: false };
+    } else if (holeDrag) {
+      // Whole degrees, as the 2D drag writes them.
+      holeDrag = { ...holeDrag, deg: Math.round((((at - holeDrag.grabOffset) % 360) + 360) % 360) % 360, moved: true };
+    }
+    markPreview();
+  });
+  cleanups.push(() => { viewer.setHoleHandle(null); holeGrip.remove(); });
 
   /** A finished drag or nudge on the Design view, as the state it becomes, and one rebuild. */
   function applyDesignEdit(edit: DesignEdit) {
@@ -1669,6 +2025,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // Text mode sizes its letters with Text size, not Design size: the corner drives that.
         if (s.importMode === 'text') {
           store.set({ imageOffset: edit.offset, textScale: Math.max(TEXT_SCALE_MIN, Math.min(2, Math.round(edit.designScale * 100) / 100)), designRotation: edit.rotation });
+        } else if (holdsSize(s)) {
+          // A picture that keeps its size: the corner sets its millimetres. A move or a turn hands
+          // back the share it was drawn at, rounded, which must not creep the size it holds.
+          const drawn = roundShare(holdScale(s.artMm, s.artFitMm ?? 0));
+          const artMm = edit.designScale === drawn ? s.artMm : heldMmFor(s, edit.designScale);
+          store.set({ imageOffset: edit.offset, artMm, designRotation: edit.rotation });
         } else {
           store.set({ imageOffset: edit.offset, designScale: edit.designScale, designRotation: edit.rotation });
         }
@@ -1697,11 +2059,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         });
         break;
       case 'loop':
-        // A dragged loop sits where the bearing puts it: the old fine offset goes.
+        // A dragged loop sits where the bearing puts it: the old fine offset goes. Put there by
+        // hand, a hole is no longer waiting for a place to be found.
+        holeFind = false;
         store.set({ keychain: { ...s.keychain, angleDeg: edit.angleDeg, offsetMm: 0 } });
         break;
       case 'base':
         store.set({ fixedSize: { w: edit.w, h: edit.h } });
+        break;
+      case 'bottom':
+        if (s.bottomPicture) store.set({ bottomPicture: { ...s.bottomPicture, place: cleanBottomPlace(edit.place) } });
         break;
     }
     debouncedRebuild();
@@ -1717,6 +2084,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       target.kind === 'word' ? 'lettering'
         : target.kind === 'switch' ? 'switch'
         : target.kind === 'loop' ? 'keychain'
+        : target.kind === 'bottom' ? 'bottom'
         : 'shape',
     );
   }
@@ -1730,6 +2098,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     'componentHeights', 'edgeSettings', 'extrudeChamferMm', 'baseShape', 'capWidthMm', 'topThickness',
     'imageDepth', 'capProud', 'hollowBase', 'fixedSize', 'designScale', 'shapeSides', 'shapeCornerPct',
     'shapeArmPct', 'tolerance',
+    // The picture keeping its size, and that size: the switch and every resize while held undo.
+    'artMm',
+    // The bottom picture's settings: Remove undoes (its pixels are held outside the state).
+    'bottomPicture',
     /* Which custom outline, as well as THAT it is custom.
        `baseShape` alone was never enough: restoring 'custom' without also restoring the token
        (or the drawn id) left the build with no rings, and `makeCustom` answers that with a
@@ -1738,6 +2110,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
        out of the snapshot. */
     'packShapeToken', 'drawnShapeId',
     'stemFitMm',
+    'stemOuterMm',
     'socketFitPct',
     'switches', 'keychain',
     // Relief's rows, and where the picture sits on its base: moving it could not be undone.
@@ -1769,6 +2142,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
      produces, rather than on every rebuild after (which would repeat the same sentence for
      every unrelated edit made while still in icon mode). */
   let pendingIconBaseNote = false;
+  /* What a project load could not bring back (a base shape, the bottom picture), said on the
+     build that load produces: a status set during the load would be replaced by that build's. */
+  let pendingLoadNotes: string[] = [];
 
   function snapshotHistory(): string {
     const s = store.get() as any;
@@ -1797,6 +2173,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   }, 350);
   function applyHistorySnapshot(snap: string) {
     restoringHistory = true;
+    // A hole brought back by Undo stays where it was; none is waiting for a place any more.
+    holeFind = false;
     store.set(JSON.parse(snap));
     // The keycap, its height and the rim come back held to each other, as every control sets them.
     store.set(clampBlockCap(store.get()));
@@ -1867,6 +2245,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       if (idx >= 0) indices.push(idx);
     });
     viewer.highlightParts(indices);
+    markPreview();
     // The Design view follows the state the moment it changes (a rail row, an undo), drawing
     // against the last build's outlines until the next one lands.
     renderDesign();
@@ -1959,8 +2338,23 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       },
       onClose: () => store.set({ selectedParts: [] }),
       footer,
+      design: designColours(),
     });
   });
+
+  /** Every colour the design on screen prints in, once each, in part order: the click picker's
+   *  "In this design" row, so a part can take another part's colour without hunting for it. */
+  function designColours(): RGB[] {
+    const seen = new Set<string>();
+    const out: RGB[] = [];
+    for (const p of latestParts) {
+      const key = p.colorRgb.join(',');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(p.colorRgb);
+    }
+    return out;
+  }
 
   /** A shape's height: its own, if a click set one, else its colour's Relief row. */
   function partLevel(name: string): number {
@@ -2174,9 +2568,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   /* ---- Stem fit test --------------------------------------------------------------------
      A strip of test tiles shown in the preview in place of the design, and sent by the normal
      Export button, the way the keycap generator's fit test works. It used to download a 3MF
-     the moment it was pressed, which inside MakerLab did nothing: the sandbox has no
-     downloads. Going through Export also gives it the MakerLab route, the cover and the
-     licence nudge the design gets.
+     the moment it was pressed, outside the export path. Going through Export gives it the
+     MakerLab route, the cover and the licence nudge the design gets.
 
      The design is never touched. `latestParts` keeps it, the UI locks the controls that shape
      it, and going back repaints it (rebuilding first if the stem fit changed meanwhile). */
@@ -2215,13 +2608,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         fitStripParts = parts;
         viewer.setParts(parts, false);
         viewer.setView(store.get().view);
+        const tilesStatus = [
+          ...warnings,
+          `Tiles ${values.map(fitTestLabel).join(', ')} mm. Print them, press each onto a switch, and set Switch stem fit to the tile that fits.`,
+        ].join(' · ');
         store.set({
           building: false,
           hasParts: parts.length > 0,
-          status: [
-            ...warnings,
-            `Fit test tiles ${values.map(fitTestLabel).join(', ')} mm. Export and print them, press each onto a switch, then set Switch stem fit to the number on the tile that fits.`,
-          ].join(' · '),
+          status: tilesStatus,
+          statusWarnText: warnings.length ? tilesStatus : '',
         });
       },
       // While the tiles are what the preview shows, the status line is theirs, in the words a
@@ -2235,6 +2630,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       labels,
       // The same colour the real cap gets, so the tiles print in what they are looking at.
       colorRgb: st.baseColorOverride ?? deriveFrameColor(st),
+      stemOuterMm: st.stemOuterMm,
       requestId,
     });
   }
@@ -2270,6 +2666,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     viewer.setView(store.get().view);
     viewer.setSwitchPlacements(latestSwitchPlacements);
     viewer.showSwitch(store.get().showSwitch);
+    markPreview();
     if (designStale) {
       designStale = false;
       rebuild();
@@ -2344,6 +2741,15 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           viewer.setView(store.get().view);
           // Seat one preview switch per (clamped) placement the geometry was built around.
           viewer.setSwitchPlacements(latestSwitchPlacements);
+          shownLayout = msg.layout ?? null;
+          markPreview();
+        }
+        // A hole being placed: the first build of it says where it fits, or, the last one on its
+        // way having found nothing, that nothing does.
+        const builtHole = msg.layout?.loop?.style === 'hole' ? msg.layout.loop : null;
+        if (holeFind && builtHole) {
+          if (builtHole.foundDeg !== undefined) placeFoundHole(builtHole.foundDeg);
+          else if (!designSent.length) holeFind = false;
         }
 
         // Extrude heights are baked into the geometry now — do NOT translate the
@@ -2375,6 +2781,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           notes.unshift('Icons need a solid base, so the shape switched to Circle.');
           pendingIconBaseNote = false;
         }
+        if (!showingFitTest && pendingLoadNotes.length) {
+          notes.unshift(...pendingLoadNotes);
+          pendingLoadNotes = [];
+        }
         // The size the build actually produced. It feeds "Lock the base size", which seeds
         // itself from it so turning the lock on never moves the model — and it is the answer
         // to "how big is this really", which the app has never been able to give.
@@ -2386,6 +2796,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             : null,
           // The switch sliders' range: the box this build clamped the switches into.
           ...(msg.layout ? { switchBox: msg.layout.switchBox } : {}),
+          // Whether the keyring hole has room where it is: the line under Cut hole.
+          ...(msg.layout ? { holeNoRoom: msg.layout.loop?.style === 'hole' && !!msg.layout.loop.noRoom } : {}),
+          // What the picture would be at Design size 100 % on this shape: a held size's share.
+          ...(msg.layout ? { artFitMm: msg.layout.art.fit ?? null } : {}),
           hasParts: msg.parts.length > 0,
           // Surface every non-fatal build note (switches pinched, base widened for the switch,
           // no keychain room) or clear. `warnings[0]` dropped the rest on the floor, which
@@ -2409,6 +2823,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
               : pendingSampleLoadName
                 ? `Sample: ${pendingSampleLoadName}. Drop your own image to replace it.`
                 : '',
+          // The build's notes are what the stage's message button shows as a warning.
+          statusWarnText: showingFitTest ? store.get().statusWarnText : notes.join(' · '),
           // Only when THIS build is the one a sample/pack pick produced — spread in rather
           // than always naming the key, so an ordinary edit's `store.set` leaves whatever was
           // marked before untouched instead of clearing it every rebuild (audit #2).
@@ -2456,6 +2872,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // successful one.
         pendingSampleLoadName = null;
         pendingIconBaseNote = false;
+        pendingLoadNotes = [];
         break;
     }
   };
@@ -2566,7 +2983,14 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         initialMapping: reopening && s.colorMode === 'mapped' && s.mappedColors.length
           ? { colors: s.mappedColors, filaments: s.mappedFilaments }
           : undefined,
-        designMm: s.capWidthMm * (s.designScale ?? 1),
+        // The parts taken out of this picture, on the same picture again: reopened, or the one a
+        // project brought (`originalImage`, which is what the edits are places in). A new
+        // picture starts with none.
+        initialEdits: !newPicture && (reopening || baseImage === originalImage) ? s.pictureEdits : [],
+        // The crop, by the same rule: it is in the same space as the edits.
+        initialCrop: !newPicture && (reopening || baseImage === originalImage) ? s.pictureCrop : null,
+        // A new picture follows the shape again once confirmed (below), so it is previewed so.
+        designMm: tracedMmOf(newPicture ? { ...s, artMm: null } : s),
         onCancel: () => {
           // Cancelling never reaches the build that would have consumed this — clear it here
           // or the NEXT unrelated build (a slider nudge, say) would wrongly claim to be the
@@ -2574,7 +2998,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           pendingSampleLoadName = null;
           store.set({ status: originalImage ? 'Ready.' : 'Ready. Drop an image or try the sample.' });
         },
-        onComplete: ({ adjusted, preprocess, colorCount, smoothing, colorMode, mappedColors, mappedFilaments }) => {
+        onComplete: ({ adjusted, preprocess, colorCount, smoothing, colorMode, mappedColors, mappedFilaments, pictureEdits, pictureCrop }) => {
           originalImage = adjusted;
           wizardBase = baseImage;
           wizardParams = preprocess;
@@ -2593,6 +3017,10 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             limitedColors: [],
             mappedColors,
             mappedFilaments,
+            // What was taken out of the picture: the build applies the same list.
+            pictureEdits,
+            // And the crop: the build leaves out what lies outside it.
+            pictureCrop,
             // The filaments now come from the mapping, group by group.
             paletteOverrides: [],
             /* And the per-shape recolors, which nothing else clears.
@@ -2605,7 +3033,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             // a raised colour would come back on whatever fills its slot in the new picture.
             componentHeights: {},
             colourLevels: [],
-            ...(newPicture ? { blank: false } : {}),
+            // A new picture is fitted to the shape: a size held for the last one does not carry.
+            ...(newPicture ? { blank: false, artMm: null } : {}),
           });
           reprocess();
         },
@@ -2614,6 +3043,93 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       console.error('[image wizard]', err);
       store.set({ building: false, status: 'Could not open the image tools: ' + String(err) });
     }
+  }
+
+  /** The picture window, on the bottom picture: the same window with the same defaults, under its
+   *  own heading. `newPicture` false is Adjust picture, which reopens on what it confirmed. */
+  async function openBottomWizard(getter: () => Promise<RgbaImage>, newPicture: boolean) {
+    let baseImage: RgbaImage;
+    store.set({ building: true, status: 'Reading image…' });
+    try {
+      baseImage = await getter();
+    } catch (err) {
+      console.warn('[bottom image decode]', err);
+      store.set({ building: false, status: "Couldn't read that image. Try a PNG or JPG." });
+      return;
+    }
+    try {
+      store.set({ building: false, status: 'Preprocess your image…' });
+      const bp = newPicture ? null : store.get().bottomPicture;
+      const reopening = !!bp && baseImage === bottomBase;
+      runWizard({
+        title: 'Prepare bottom picture',
+        baseImage,
+        initialColorCount: bp?.mappedFilaments.length || BOTTOM_DEFAULT_COLOURS,
+        initialSmoothing: bp?.smoothing ?? 0.1,
+        initialRemoveBg: bp?.removeBg ?? true,
+        initialPreprocess: reopening && bottomParams ? bottomParams : undefined,
+        initialMapping: bp?.mappedColors.length ? { colors: bp.mappedColors, filaments: bp.mappedFilaments } : undefined,
+        // Its edits and crop are places in this picture, so they come back on it and on no other.
+        initialEdits: bp ? bp.pictureEdits : [],
+        initialCrop: bp ? bp.pictureCrop : null,
+        designMm: BOTTOM_TRACE_MM,
+        onCancel: () => store.set({ status: 'Ready.' }),
+        onComplete: ({ adjusted, preprocess, smoothing, mappedColors, mappedFilaments, pictureEdits, pictureCrop }) => {
+          bottomImage = adjusted;
+          bottomBase = baseImage;
+          bottomParams = preprocess;
+          store.set({
+            bottomPicture: {
+              smoothing,
+              removeBg: !preprocess.keepBackground,
+              mappedColors: mappedColors ?? [],
+              mappedFilaments: mappedFilaments ?? [],
+              pictureEdits: pictureEdits ?? [],
+              pictureCrop: pictureCrop ?? null,
+              // A new picture starts in the engine's place; Adjust keeps where it was put.
+              place: newPicture ? { ...DEFAULT_BOTTOM_PLACE } : (store.get().bottomPicture?.place ?? { ...DEFAULT_BOTTOM_PLACE }),
+            },
+          });
+          // A new trace, as a confirmed top picture is: the next build is the new undo baseline,
+          // so no undo step pairs these settings with pixels that are gone.
+          pendingHistoryReset = true;
+          rebuild();
+        },
+      });
+    } catch (err) {
+      console.error('[bottom image wizard]', err);
+      store.set({ building: false, status: 'Could not open the image tools: ' + String(err) });
+    }
+  }
+
+  /** The bottom picture as the build takes it, or undefined when there is none or this kind of
+   *  clicker has no flat underside. Traced again only when the picture or its settings change,
+   *  so undo, redo and a loaded project re-derive it through the same path. */
+  function bottomArtFor(s: UiState): BottomArt | undefined {
+    const bp = s.bottomPicture;
+    if (!bp || !bottomImage || !bottomPictureShown(s.importMode)) return undefined;
+    // Its place is not part of the trace: a move, turn or size sends the same trace again.
+    const key = bottomTraceKey(bp);
+    if (bottomTraced?.image === bottomImage && bottomTraced.key === key) return bottomTraced.art;
+    const mapped = bp.mappedColors.length > 0 && bp.mappedFilaments.length > 0;
+    let art: BottomArt;
+    try {
+      const set = processImage(cloneImage(bottomImage), mapped ? bp.mappedFilaments.length : BOTTOM_DEFAULT_COLOURS, {
+        removeBg: bp.removeBg,
+        smoothing: bp.smoothing,
+        designMm: BOTTOM_TRACE_MM,
+        ...(mapped ? { customColors: bp.mappedColors.map((c) => c.rgb), mergeInto: bp.mappedColors.map((c) => c.group) } : {}),
+        edits: bp.pictureEdits,
+        crop: bp.pictureCrop,
+      });
+      art = bottomArtOf(set, bp);
+    } catch (err) {
+      // The top still builds; the underside is left plain rather than failing the clicker.
+      console.warn('[bottom picture trace]', err);
+      art = { regions: [], outline: [] };
+    }
+    bottomTraced = { image: bottomImage, key, art };
+    return art;
   }
 
   /**
@@ -2730,11 +3246,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           smoothing: s.smoothing,
           // The artwork's printed size, so the tracer's minimum feature is a real millimetre
           // rather than a fraction of whatever the uploaded file's pixel dimensions happened
-          // to be. A bigger cap keeps finer detail, which is what it should do.
-          designMm: s.capWidthMm * (s.designScale ?? 1),
+          // to be. A bigger cap keeps finer detail, which is what it should do. A picture that
+          // keeps its size is traced at that size.
+          designMm: tracedMmOf(s),
           ...(mapped
             ? { customColors: s.mappedColors.map((c) => c.rgb), mergeInto: s.mappedColors.map((c) => c.group) }
             : { customColors: s.colorMode === 'limited' ? s.limitedColors : undefined }),
+          // The parts taken out in the picture window, or brought back: the same list it traced.
+          edits: s.pictureEdits,
+          // The window's crop: what lies outside it is not traced.
+          crop: s.pictureCrop,
         });
       } catch (e: any) {
         traceFailed('Error: ' + e.message);
@@ -2859,6 +3380,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     const isTextMode = s.importMode === 'text';
     const textScale = s.textScale ?? 1;
     const textOutline = effectiveBaseShape === 'outline';
+    const bottomArt = bottomArtFor(s);
     return {
       baseShape: effectiveBaseShape,
       /* Text mode sizing. `textSizeMul` grows the part when letter spacing widened the word, so
@@ -2878,6 +3400,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       // design", and the whole point of the control is that it is off until asked for.
       bodySize: s.fixedSize ?? undefined,
       designScale: isTextMode && !textOutline ? textScale : s.designScale,
+      // A picture that keeps its size, in mm; absent, it follows the shape as it always has.
+      ...(holdsSize(s) ? { artMm: s.artMm } : {}),
       // 0 is the identity, byte for byte, so every design made before the grip existed builds
       // exactly as it did.
       designRotation: s.designRotation,
@@ -2891,6 +3415,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         : undefined,
       tolerance: s.tolerance,
       stemFitMm: s.stemFitMm,
+      stemOuterMm: s.stemOuterMm,
       socketFitPct: s.socketFitPct,
       imageOffset: s.imageOffset,
       colorBleed: 0.12,
@@ -2911,11 +3436,16 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       textBold: s.importMode === 'text' ? s.textBold : 0,
       // Letters a frame cuts off are worth a word: Text size above 100% on a shape base.
       ...(isTextMode ? { artCutNote: 'Letters past the edge are cut off.' } : {}),
+      // On an outline base the letters and symbols keep their whole edge (see `outlineUncut`).
+      ...(isTextMode && textOutline ? { outlineUncut: true } : {}),
       // Only when on, so a clicker with its picture sends what it always sent.
       ...(isBlank(s) ? { blank: true } : {}),
       keychainEnd: s.keychainEnd,
       keychainSlideMm: s.keychainSlideMm,
       partOverrides: s.partOverrides,
+      // Only with a bottom picture, on a clicker with a flat underside, so every other build
+      // sends what it always sent.
+      ...(bottomArt?.regions.length ? { bottomArt: placedBottomArt(bottomArt, s.bottomPicture?.place) } : {}),
       // Paid geometry, merged last so a free field can never silently override it. `{}` in
       // the public build, where the module is an inline stub.
       ...(proPanel?.paramsPatch() ?? {}),
@@ -3024,6 +3554,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
             coverage: r.coverage, // Use the parent coverage for priority
             rings: blank ? [] : comp.rings,
             partName,
+            ...(comp.layers && !blank ? { layers: comp.layers } : {}),
           });
         });
       });
@@ -3046,8 +3577,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       send({ type: 'buildBlocks', regions, params });
     } else {
       // What this build is made at, for the Design view to draw a later edit against.
-      designSent.push({ designScale: artScaleOf(s), capWidthMm: s.capWidthMm });
-      send({ type: 'buildClicker', regions, outline: regionSet.outline, params });
+      designSent.push({ designScale: artScaleOf(s), capWidthMm: s.capWidthMm, importMode: s.importMode });
+      // A hole just placed is built where it fits; every other build sends what it always sent.
+      send({ type: 'buildClicker', regions, outline: regionSet.outline, params: holeFind ? { ...params, holeFind: true } : params });
     }
   }
 
@@ -3118,6 +3650,25 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
     });
   }
 
+  /** Two pictures with the same size and the same pixels. */
+  function samePixels(a: RgbaImage, b: RgbaImage): boolean {
+    if (a === b) return true;
+    if (a.width !== b.width || a.height !== b.height || a.data.length !== b.data.length) return false;
+    for (let i = 0; i < a.data.length; i++) if (a.data[i] !== b.data[i]) return false;
+    return true;
+  }
+
+  /** What the picture window last ran on and with, so Adjust image after a load opens on the
+   *  picture before its sliders changed it, with those sliders. The picture is written only when
+   *  it differs from `image`; null when the window has not run on the saved picture. */
+  function pictureForProject(): SavedPicture | null {
+    if (!originalImage || !wizardBase || !wizardParams) return null;
+    return {
+      preprocess: wizardParams,
+      source: samePixels(wizardBase, originalImage) ? null : imageToDataUrl(wizardBase),
+    };
+  }
+
   /**
    * The saved shape, in one function.
    *
@@ -3128,7 +3679,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
   function buildProject() {
     const s = store.get();
     return {
-      version: 3,
+      version: PROJECT_VERSION,
+      // Written against `SAVED_SETTINGS` (src/settings.ts): a key missing here, or one here the
+      // list does not name, stops the typecheck.
       settings: {
         colorCount: s.colorCount,
         baseShape: s.baseShape,
@@ -3139,6 +3692,8 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         hollowBase: s.hollowBase,
         fixedSize: s.fixedSize,
         designScale: s.designScale,
+        // The picture's held size, mm; null while it follows the shape.
+        artMm: s.artMm,
         designRotation: s.designRotation,
         shapeSides: s.shapeSides,
         shapeCornerPct: s.shapeCornerPct,
@@ -3159,6 +3714,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           : (ringsForState(s) && !s.packShapeToken ? ringsForState(s) : null),
         tolerance: s.tolerance,
         stemFitMm: s.stemFitMm,
+        stemOuterMm: s.stemOuterMm,
         socketFitPct: s.socketFitPct,
         imageOffset: s.imageOffset,
         switches: s.switches,
@@ -3179,6 +3735,12 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         limitedColors: s.limitedColors,
         mappedColors: s.mappedColors,
         mappedFilaments: s.mappedFilaments,
+        // Places in the saved picture (`image`), so they mean the same after a load.
+        pictureEdits: s.pictureEdits,
+        // So is the crop: the saved picture is the whole one, and the crop can be widened again.
+        pictureCrop: s.pictureCrop,
+        // The bottom picture's settings; its pixels are `bottomImage`, beside `image`.
+        bottomPicture: s.bottomPicture && bottomImage ? s.bottomPicture : null,
         bodyColorRgb: s.bodyColorRgb,
         paletteOverrides: s.paletteOverrides,
         baseColorOverride: s.baseColorOverride,
@@ -3214,9 +3776,13 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         keychainEnd: s.keychainEnd,
         keychainSlideMm: s.keychainSlideMm,
         modelCut: s.modelCut,
-      },
+      } satisfies Record<SavedSetting, unknown>,
       palette: s.palette, // filament mappings
       image: originalImage ? imageToDataUrl(originalImage) : null,
+      // The picture window's sliders and the picture before them, beside the picture.
+      picture: pictureForProject(),
+      // A removed bottom picture is still held for Undo, but it is not saved.
+      bottomImage: s.bottomPicture && bottomImage ? imageToDataUrl(bottomImage) : null,
       model: modelForProject(),
     };
   }
@@ -3248,7 +3814,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
 
   async function saveToHost(proj: unknown) {
     if (!host) return;
-    const suggested = currentSvgName || currentIconName || 'Clicker';
+    const suggested = designFileBase();
     const name = await promptDialog({
       title: currentProjectId ? 'Rename and save' : 'Save project',
       label: 'Project name',
@@ -3352,7 +3918,31 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
       exitFitTest();
       store.set({ building: true, status: 'Loading project…' });
       const proj = raw as Record<string, any>;
-      const set = proj.settings ?? {};
+      // Every number held to what its control offers, and a value of the wrong type dropped, so
+      // the `?? default` below applies to it as to a key the file never had.
+      const set: any = coerceSettings(proj.settings);
+      // A sample's name waiting for its build belongs to the design this project replaces.
+      pendingSampleLoadName = null;
+      pendingLoadNotes = [];
+      // A project's hole is where the project put it.
+      holeFind = false;
+      // Only a picture's own data is read: a file naming an address would have the page fetch it.
+      const isPictureData = (v: unknown): v is string => typeof v === 'string' && v.startsWith('data:image/');
+      // The picture before this project goes, with the picture window's memory of it, unless the
+      // project is a picture one that brings none (then the picture on screen is still the one
+      // it builds): a Text, Blocks or Model project has none, and its Save writes none. The image
+      // branch below sets them again.
+      if ((set.importMode ?? 'image') !== 'image' || isPictureData(proj.image)) {
+        originalImage = null;
+        wizardBase = null;
+        wizardParams = null;
+      }
+      // The bottom picture before this project goes, pixels and all: a project without one has none.
+      bottomImage = null;
+      bottomBase = null;
+      bottomParams = null;
+      // The layout on screen is the last project's: a picture held now waits for this one's.
+      layoutBuiltAt = { ...layoutBuiltAt, importMode: null };
 
       currentText = set.currentText ?? 'Custom\nText';
       // The clicker's own copies of the shared faces were saved as `bundled-<slug>`.
@@ -3371,16 +3961,20 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         ui.addUploadedSvg(currentSvgText, currentSvgName);
       }
 
-      const sizing = foldTextSize(set.importMode ?? 'image', set.baseShape ?? store.get().baseShape,
-        set.capWidthMm ?? store.get().capWidthMm, set.textScale ?? 1);
+      // A key the file does not have means the app's default, never what the last design had.
+      const sizing = foldTextSize(set.importMode ?? 'image', set.baseShape ?? DEFAULTS.baseShape,
+        set.capWidthMm ?? DEFAULTS.capWidthMm, set.textScale ?? 1);
       store.set({
+        // The design is this project's now, not a sample tile's: the mark goes, and the export
+        // is named after this project's picture.
+        loadedSampleId: null,
         importMode: set.importMode ?? 'image',
-        colorCount: set.colorCount ?? store.get().colorCount,
-        baseShape: set.baseShape ?? store.get().baseShape,
+        colorCount: set.colorCount ?? DEFAULTS.colorCount,
+        baseShape: set.baseShape ?? DEFAULTS.baseShape,
         imageOffset: set.imageOffset ?? { x: 0, y: 0 },
         capWidthMm: sizing.capWidthMm,
-        topThickness: set.topThickness ?? store.get().topThickness,
-        imageDepth: set.imageDepth ?? store.get().imageDepth,
+        topThickness: set.topThickness ?? DEFAULTS.topThickness,
+        imageDepth: set.imageDepth ?? DEFAULTS.imageDepth,
         capProud: set.capProud ?? 4.0,
         hollowBase: set.hollowBase ?? false,
         // Absent in every project saved before this control existed, and absent MEANS off —
@@ -3389,6 +3983,11 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         // Absent means 1 — every project saved before this control existed renders unchanged.
         // Held in the range, as the slider holds it.
         designScale: Number.isFinite(set.designScale) ? clampDesignScale(set.designScale) : 1,
+        // Absent before a picture could keep its size: it follows the shape, as it always did.
+        // Held no bigger than a plate, so a broken number cannot ask the build for a giant.
+        artMm: Number.isFinite(set.artMm) && set.artMm > 0 ? Math.min(ART_MM_MAX, set.artMm) : null,
+        // What fits was the last project's: this one's comes with its first build.
+        artFitMm: null,
         // Absent before the picture could be turned: as drawn.
         designRotation: typeof set.designRotation === 'number' ? set.designRotation : 0,
         /* Per-shape, not a flat 6.
@@ -3404,7 +4003,7 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         shapeCornerPct: set.shapeCornerPct ?? 0.22,
         packShapeToken: set.packShapeToken ?? null,
         drawnShapeId: null,
-        tolerance: set.tolerance ?? store.get().tolerance,
+        tolerance: set.tolerance ?? DEFAULTS.tolerance,
         // `stemFitPct` (saved until 2026-09-17) scaled the post, which widened the gripping
         // arms by pct% of their 1.194 mm — so that IS the clearance it produced, and it converts
         // exactly. Every value it could hold lands on 0 or one 0.05 mm step either side. v3's
@@ -3412,6 +4011,9 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         stemFitMm: typeof set.stemFitMm === 'number'
           ? Math.max(STEM_FIT_MIN_MM, Math.min(STEM_FIT_MAX_MM, set.stemFitMm))
           : Math.round((((set.stemFitPct ?? 0) * 0.01194) / STEM_FIT_STEP_MM)) * STEM_FIT_STEP_MM || 0,
+        stemOuterMm: typeof set.stemOuterMm === 'number'
+          ? Math.max(STEM_OUTER_MIN_MM, Math.min(STEM_OUTER_MAX_MM, set.stemOuterMm))
+          : 0,
         socketFitPct: set.socketFitPct ?? 0,
         // v3 stores `switches`; older (v2) projects carried scalar offsets — synthesize
         // a single-switch array from them for back-compat.
@@ -3419,24 +4021,29 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
           ? set.switches
           : [{ x: set.switchOffsetX ?? 0, y: set.switchOffsetY ?? 0, rotation: set.switchRotation ?? 0 }],
         activeSwitchIndex: 0,
-        // v3 stores a keychain object; older projects had a boolean (or nothing).
-        keychain: set.keychain && typeof set.keychain === 'object'
-          ? { offsetMm: 0, ...set.keychain }
-          : { enabled: set.keychain === true, style: 'loop', angleDeg: 90, holeDiameterMm: 5.2, offsetMm: 0 },
-        smoothing: set.smoothing ?? store.get().smoothing,
-        removeBg: set.removeBg ?? store.get().removeBg,
+        // v3 stores a keychain object; older projects had a boolean (or nothing). Its style is
+        // a hole only when it says so: anything else, or none, is the loop it always was.
+        keychain: coerceKeychain(set.keychain),
+        smoothing: set.smoothing ?? DEFAULTS.smoothing,
+        removeBg: set.removeBg ?? DEFAULTS.removeBg,
         currentIconName: currentIconName || 'circle',
         colorMode: set.colorMode ?? 'normal',
         limitedColors: set.limitedColors ?? [],
         // A project saved before the import window mapped colours has neither, and keeps its
         // own mode ('normal' or 'limited') exactly as it was.
-        mappedColors: Array.isArray(set.mappedColors) ? set.mappedColors : [],
-        mappedFilaments: Array.isArray(set.mappedFilaments) ? set.mappedFilaments : [],
-        bodyColorRgb: set.bodyColorRgb ?? [120, 124, 130],
+        // Cleaned as the bottom picture's are: no colour points past the filaments.
+        ...cleanMapping(set.mappedColors, set.mappedFilaments),
+        // Absent before parts could be taken out: none. Only well-formed edits are kept.
+        pictureEdits: cleanPictureEdits(set.pictureEdits),
+        // Absent before the crop: none. A broken or whole-picture box is none too.
+        pictureCrop: cleanCropBox(set.pictureCrop),
+        // Set below once its pixels are read; a project without one has none.
+        bottomPicture: null,
+        bodyColorRgb: set.bodyColorRgb ?? DEFAULTS.bodyColorRgb,
         paletteOverrides: set.paletteOverrides ?? [],
         partOverrides: set.partOverrides ?? {},
         customColors: set.customColors ?? [],
-        edgeSettings: set.edgeSettings ?? store.get().edgeSettings,
+        edgeSettings: set.edgeSettings ?? DEFAULTS.edgeSettings,
         // Saved before the bevel had a size: the toggle was a fixed 0.5 mm.
         extrudeChamferMm: typeof set.extrudeChamferMm === 'number'
           ? Math.max(0, Math.min(1.2, set.extrudeChamferMm))
@@ -3462,17 +4069,30 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         blockRimRaiseMm: 0,
         blockKeycap: 'standard',
         blockCapLowerMm: 0,
-        // Blocks: a project from before blocks were saved opens on the defaults.
+        // Blocks: a project from before blocks were saved opens on the defaults, not on the
+        // last design's blocks.
+        blockLayout: DEFAULTS.blockLayout,
+        blockGridRows: DEFAULTS.blockGridRows,
+        blockGridCols: DEFAULTS.blockGridCols,
+        blockCells: DEFAULTS.blockCells,
+        blockLines: DEFAULTS.blockLines,
+        blockSymbols: DEFAULTS.blockSymbols,
+        blockStyle: DEFAULTS.blockStyle,
+        blockTexture: DEFAULTS.blockTexture,
+        legendScale: DEFAULTS.legendScale,
+        legendBold: DEFAULTS.legendBold,
         ...loadedBlocks(set),
         // Text mode's symbols; a project from before them has none.
         textSymbols: loadedSymbols(set.textSymbols) ?? {},
+        // Model mode's cut, whatever mode the file is in, so a design that switches to Model
+        // later finds its buttons as they were saved. Part of an object keeps the rest's defaults.
+        modelCut: coerceModelCut(set.modelCut),
       });
       ui.setText(currentText);
 
-      // Model mode: the cut settings, then the model they were made on. Nothing below this
-      // (the picture, the pack shapes, the palette) belongs to a model, so it returns here.
+      // Model mode: the model the cut was made on. Nothing below this (the picture, the pack
+      // shapes, the palette) belongs to a model, so it returns here.
       if (set.importMode === 'model') {
-        store.set({ modelCut: { ...DEFAULT_MODEL_CUT, ...(set.modelCut ?? {}) } });
         const m = proj.model as { name?: string; sample?: SampleId; data?: string } | null | undefined;
         // Held until the model is on its way to the worker: reading the saved bytes comes first.
         if (m?.sample) {
@@ -3491,8 +4111,37 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
         return;
       }
 
-      if (set.importMode === 'image' && proj.image) {
+      if (set.importMode === 'image' && isPictureData(proj.image)) {
         originalImage = await dataUrlToImage(proj.image);
+        // The window last opened on another picture: Adjust image now opens this one, with the
+        // project's edits, colours and sliders on it, not that one. On the picture before the
+        // sliders changed it when the file kept it; on the saved picture with the window's
+        // defaults when it did not (or it cannot be read), so no slider is applied twice.
+        const pic = coercePicture(proj.picture);
+        wizardBase = originalImage;
+        wizardParams = null;
+        if (pic?.source) {
+          try {
+            wizardBase = await dataUrlToImage(pic.source);
+            wizardParams = pic.preprocess;
+          } catch (err) {
+            console.warn('[picture source decode]', err);
+          }
+        } else if (pic) {
+          wizardParams = pic.preprocess;
+        }
+      }
+
+      // The bottom picture: its settings and its pixels, both, or none.
+      const savedBottom = cleanBottomPicture(set.bottomPicture);
+      if (savedBottom && isPictureData(proj.bottomImage)) {
+        try {
+          bottomImage = await dataUrlToImage(proj.bottomImage);
+          store.set({ bottomPicture: savedBottom });
+        } catch (err) {
+          console.warn('[bottom image decode]', err);
+          pendingLoadNotes.push('The bottom picture in this project could not be read.');
+        }
       }
 
       /* Re-fetch a seasonal-pack silhouette. The rings are derived, not saved — a project
@@ -3526,36 +4175,46 @@ export function mount(container: HTMLElement, host?: DesktopHost): () => void {
          rings are ignored here and never written in the first place (see buildProject). The
          design falls back to its preset, the same way the pack-token branch does when a shape
          cannot be resolved. */
-      const savedRings = !__SHAPE_EDITOR__ || MAKERLAB
-        ? undefined
-        : (proj.settings as { drawnShapeRings?: Ring[] })?.drawnShapeRings;
+      const fileRings = (proj.settings as { drawnShapeRings?: Ring[] })?.drawnShapeRings;
+      const savedRings = !__SHAPE_EDITOR__ || MAKERLAB ? undefined : fileRings;
       if (Array.isArray(savedRings) && savedRings.length) {
         const clean = savedRings.filter((r) => Array.isArray(r) && r.length >= 3);
         if (clean.length) loadedDrawnId = rememberDrawing(clean);
-        else store.set({ status: 'The base shape this project uses could not be loaded.' });
+        else pendingLoadNotes.push('The base shape this project uses could not be loaded.');
       }
       store.set({ drawnShapeId: loadedDrawnId });
       const savedToken = set.packShapeToken ?? '';
+      // A shape drawn on a build with the shape editor, opened on one without: the base is a
+      // circle here, and the status line says so rather than letting it pass as the design.
+      if (!savedToken && set.baseShape === 'custom' && savedRings === undefined && Array.isArray(fileRings) && fileRings.length) {
+        pendingLoadNotes.push('This version cannot open a drawn base shape, so the base is a circle.');
+      }
       if (savedToken) {
         try {
           await loadPackShapes();
           const savedEntry = findShape(savedToken);
           if (savedEntry?.rings?.length) packShapeRings = savedEntry.rings;
-          else store.set({ status: 'The base shape this project uses could not be loaded.' });
+          else pendingLoadNotes.push('The base shape this project uses could not be loaded.');
         } catch (err) {
           console.error('[shapes] saved base shape failed to load', err);
-          store.set({ status: 'The base shape this project uses could not be loaded.' });
+          pendingLoadNotes.push('The base shape this project uses could not be loaded.');
         }
       }
 
       reprocess();
 
+      // The filaments, and the cap's colour picked by hand: the colour too when the file has no
+      // palette (the trace just cleared it), and cleared when the file has none.
+      const baseColorOverride = set.baseColorOverride ?? null;
       if (Array.isArray(proj.palette)) {
         const pal = store.get().palette.map((p, i) => ({
           ...p,
           filamentRgb: proj.palette[i]?.filamentRgb ?? p.filamentRgb,
         }));
-        store.set({ palette: pal, baseColorOverride: set.baseColorOverride ?? null });
+        store.set({ palette: pal, baseColorOverride });
+        rebuild();
+      } else if (baseColorOverride || store.get().baseColorOverride) {
+        store.set({ baseColorOverride });
         rebuild();
       }
     } finally {

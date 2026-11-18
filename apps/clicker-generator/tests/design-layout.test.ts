@@ -314,6 +314,12 @@ const FULL: Ring = rect(0, 0, 1, 1);
       !!got && near(got.minX, want.minX, tol) && near(got.maxX, want.maxX, tol) && near(got.minY, want.minY, tol) && near(got.maxY, want.maxY, tol),
       `placed ${want.minX.toFixed(2)}..${want.maxX.toFixed(2)} × ${want.minY.toFixed(2)}..${want.maxY.toFixed(2)}, `
         + `built ${got?.minX.toFixed(2)}..${got?.maxX.toFixed(2)} × ${got?.minY.toFixed(2)}..${got?.maxY.toFixed(2)}`);
+    // `fit` is the scale before Design size, so the two give back the Design size built (an
+    // outline base builds at 1 whatever is asked).
+    const a = out.layout.art;
+    const asked = over.baseShape ? over.designScale ?? 1 : 1;
+    check(`…and layout.art.fit times the Design size is its scale`,
+      a.fit > 0 && a.fit * asked === a.scale, `fit ${a.fit.toFixed(3)}, scale ${a.scale.toFixed(3)}, Design size ${asked * 100} %`);
   }
 
   // `switchBox` is the clamp: a switch asked for far away lands on its edges, one inside stays.

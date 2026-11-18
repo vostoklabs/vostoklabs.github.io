@@ -1,5 +1,6 @@
 // Downloads a curated, print-friendly set of Google Fonts into src/fonts/, cuts the large CJK
-// and variable faces down to what a model needs (see UPSTREAM), then regenerates the font
+// and variable faces down to what a model needs (see UPSTREAM), takes the few faces google/fonts
+// does not carry from their maker's own release (see RELEASES), then regenerates the font
 // registry, the @font-face CSS and fonts/CREDITS.md from the files on disk.
 //
 // Idempotent: a face already on disk, and already cut, is not fetched again. Its family's
@@ -8,10 +9,11 @@
 // checks text against. Needs Node 22.18 or later, which loads that file as TypeScript.
 import { writeFile, readFile, readdir, access, mkdir } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { coverageOf, coverageTests, latinExtBOf } from '../src/coverage.ts';
+import { coverageOf, coverageTests, hanOf, latinExtBOf } from '../src/coverage.ts';
 import { reservedFontNames, reservedNameIn } from './reserved-names.mjs';
 import { recordAssets, fileHash } from '../../../scripts/lib/assets.mjs';
 import { writeAssets } from '../../../scripts/assets.mjs';
@@ -310,6 +312,8 @@ const MAP = {
   'cherry-bomb-one': ['Cherry Bomb One', 'Comic'],
   'zcool-kuaile': ['ZCOOL KuaiLe', 'Comic'],
   'noto-sans-sc': ['Noto Sans SC', 'Clean'],
+  // From its maker's own release, whole: see RELEASES.
+  'source-han-sans-cn-light': ['Source Han Sans CN', 'Clean'],
 
   // ----- plain faces for Latin, Greek and Cyrillic alike. Fetched from google/fonts and cut to
   // those alphabets, a variable file fixed at its Regular: see UPSTREAM. -----
@@ -371,9 +375,36 @@ const UPSTREAM = {
  *  the library's glob, so no picker offers it and an app carries its file only once it imports
  *  `@vostok/fonts/weights`. Fetched, cut, checked and recorded like every other face. */
 const WEIGHTS = new Set(['roboto-bold']);
-/** Where a face's file lives, and the same path from the repo root. */
-const fileOf = (slug) => path.join(FONTS_DIR, ...(WEIGHTS.has(slug) ? ['weights'] : []), `${slug}.ttf`);
-const repoPathOf = (slug) => `packages/fonts/src/fonts/${WEIGHTS.has(slug) ? 'weights/' : ''}${slug}.ttf`;
+
+/** Faces taken whole from their maker's own release, for a face google/fonts does not carry: one
+ *  file at one commit of the maker's repository, held to its sha256 and shipped byte for byte,
+ *  never cut, so its name only says which font it is. `licence` is what the release's own licence
+ *  file says at that commit, which is read and checked on every run; `for` is what the face is
+ *  here for, as in UPSTREAM. `preview` names the face a picker draws this one's row in until its
+ *  own file has loaded, for a face too heavy to fetch just to show a row: it gets no rule in
+ *  fonts.css, and the package declares it from its file once that has loaded.
+ *
+ *  Source Han Sans CN Light, Adobe's release 1.001, under the Apache License 2.0: the whole
+ *  unified Han block and Extension A, for the characters the cut Noto Sans SC lacks. */
+const RELEASES = {
+  'source-han-sans-cn-light': {
+    repo: 'adobe-fonts/source-han-sans',
+    commit: 'cd3de5c749a4b739489317c4438cf0445adf3370',
+    file: 'SubsetOTF/CN/SourceHanSansCN-Light.otf',
+    sha256: 'a4813b5cbc110539eded2719f8bd09f5c2ecbffc6625c949e71fbff8ddb5a7fd',
+    version: '1.001',
+    licenceFile: 'LICENSE.txt',
+    licence: 'Apache-2.0',
+    for: ['chinese-simplified'],
+    preview: 'noto-sans-sc',
+  },
+};
+
+/** Where a face's file lives, and the same path from the repo root. A face from RELEASES keeps
+ *  its maker's file type (an OpenType/CFF `.otf`); every other face is a `.ttf`. */
+const extOf = (slug) => (RELEASES[slug] ? path.extname(RELEASES[slug].file) : '.ttf');
+const fileOf = (slug) => path.join(FONTS_DIR, ...(WEIGHTS.has(slug) ? ['weights'] : []), `${slug}${extOf(slug)}`);
+const repoPathOf = (slug) => `packages/fonts/src/fonts/${WEIGHTS.has(slug) ? 'weights/' : ''}${slug}${extOf(slug)}`;
 
 /** Faces whose licence reserves their name. OFL 3 lets no Modified Version use a Reserved Font
  *  Name, and the font API serves Google's own Latin cut of each family, which is a Modified
@@ -823,6 +854,54 @@ async function upstream(slug) {
   }
 }
 
+const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
+
+/** A file of a maker's repository at `commit`, downloaded once into node_modules/.cache. */
+async function fetchRelease(repo, commit, file) {
+  const cached = path.join(APP, 'node_modules', '.cache', 'releases', repo.replace(/\//g, '__'), commit, file.replace(/\//g, '__'));
+  if (existsSync(cached)) return readFileSync(cached);
+  const r = await fetch(`https://raw.githubusercontent.com/${repo}/${commit}/${file.split('/').map(encodeURIComponent).join('/')}`);
+  if (!r.ok) throw new Error(`${repo} ${file} at ${commit.slice(0, 7)}: HTTP ${r.status}`);
+  const buf = Buffer.from(await r.arrayBuffer());
+  await mkdir(path.dirname(cached), { recursive: true });
+  await writeFile(cached, buf);
+  return buf;
+}
+
+/** What a release's own licence file must say for the licence RELEASES records. */
+const RELEASE_LICENCE_TEXT = {
+  'Apache-2.0': /Apache License\s+Version 2\.0/,
+  'OFL-1.1': /SIL Open Font License,?\s+Version 1\.1/i,
+};
+
+/** A face from RELEASES: its licence file read at the pinned commit and checked to be the licence
+ *  recorded, then the face itself, fetched only when the file on disk is not the pinned one, and
+ *  written only when its bytes are the pinned sha256 and it covers what it is here for. */
+async function release(slug) {
+  const spec = RELEASES[slug];
+  const dest = fileOf(slug);
+  try {
+    const text = (await fetchRelease(spec.repo, spec.commit, spec.licenceFile)).toString('utf8');
+    if (!RELEASE_LICENCE_TEXT[spec.licence]?.test(text)) throw new Error(`${spec.licenceFile} at ${spec.commit.slice(0, 7)} is not the ${spec.licence} text`);
+    const family = {
+      licence: spec.licence,
+      reserved: spec.licence === 'OFL-1.1' ? reservedFontNames(text) : [],
+      copyright: '',
+      licenceUrl: `https://github.com/${spec.repo}/blob/${spec.commit}/${spec.licenceFile}`,
+    };
+    const before = existsSync(dest) ? readFileSync(dest) : null;
+    if (before && sha256(before) === spec.sha256) return { slug, status: 'exists', family };
+    const buf = await fetchRelease(spec.repo, spec.commit, spec.file);
+    if (sha256(buf) !== spec.sha256) throw new Error(`${spec.file} at ${spec.commit.slice(0, 7)} is not the file pinned: sha256 ${sha256(buf)}`);
+    const lacks = problemWith(buf, { for: spec.for });
+    if (lacks) throw new Error(`the release's file ${lacks}`);
+    await writeFile(dest, buf);
+    return { slug, status: 'ok', note: `${before ? 'not the pinned file' : 'not on disk'}: ${kb(buf.length)}`, family };
+  } catch (e) {
+    return { slug, status: 'FAIL', error: e.message };
+  }
+}
+
 async function pool(items, worker, concurrency = 6) {
   const results = [];
   let i = 0;
@@ -839,8 +918,9 @@ async function pool(items, worker, concurrency = 6) {
 const slugs = Object.keys(MAP);
 console.log(`Checking ${slugs.length} fonts (fetching only what is missing)...`);
 // One at a time from UPSTREAM: a cut holds a whole CJK file in memory, twice.
-const results = await pool(slugs.filter((s) => !UPSTREAM[s]), download, 6);
+const results = await pool(slugs.filter((s) => !UPSTREAM[s] && !RELEASES[s]), download, 6);
 for (const slug of slugs.filter((s) => UPSTREAM[s])) results.push(await upstream(slug));
+for (const slug of slugs.filter((s) => RELEASES[s])) results.push(await release(slug));
 
 const ok = results.filter((r) => r.status === 'ok');
 const exists = results.filter((r) => r.status === 'exists');
@@ -854,9 +934,13 @@ if (failed.length) {
 
 // Fallback is now handled manually (icon-fallback.ttf)
 
-// Regenerate registry + CSS from files actually present.
+// Regenerate registry + CSS from files actually present: every .ttf, and each face from RELEASES
+// in its maker's file type.
 const files = (await readdir(FONTS_DIR)).filter((f) => f.endsWith('.ttf') && f !== 'icon-fallback.ttf');
-const present = new Set(files.map((f) => f.replace('.ttf', '')));
+const present = new Set([
+  ...files.map((f) => f.replace('.ttf', '')),
+  ...Object.keys(RELEASES).filter((slug) => existsSync(fileOf(slug))),
+]);
 
 /** Bytes on disk, so an app can budget its own bundle instead of hardcoding a list.
  *
@@ -864,16 +948,20 @@ const present = new Set(files.map((f) => f.replace('.ttf', '')));
  *  Before this it shipped a hand-written list of eight. With the size on the record it can say
  *  "every face under 120 KB" in one line and keep up with the library on its own. */
 const bytesOf = (slug) => statSync(fileOf(slug)).size;
-/** What the file covers, from its own cmap: the coverage names in src/coverage.ts, and the
- *  Latin Extended-B letters it holds, which no coverage name stands for. */
+/** What the file covers, from its own cmap: the coverage names in src/coverage.ts, the Latin
+ *  Extended-B letters it holds, which no coverage name stands for, and its Han characters when
+ *  it holds more of them than the common sets (`hanOf`). */
 const coverageOfFace = (slug) => {
   const has = new Set(codePointsOf(parse(readFileSync(fileOf(slug)))));
-  return { subsets: coverageOf((cp) => has.has(cp)), latinExtB: latinExtBOf((cp) => has.has(cp)) };
+  const han = hanOf((cp) => has.has(cp));
+  return { subsets: coverageOf((cp) => has.has(cp)), latinExtB: latinExtBOf((cp) => has.has(cp)), ...(han ? { han } : {}) };
 };
+/** The face a picker previews a heavy face in until its own file has loaded (RELEASES). */
+const previewOf = (slug) => (RELEASES[slug]?.preview ? { preview: RELEASES[slug].preview } : {});
 
 const rows = Object.entries(MAP)
   .filter(([slug]) => present.has(slug))
-  .map(([slug, [label, category, curated]]) => ({ id: slug, label, category, curated: !!curated, ...coverageOfFace(slug), bytes: bytesOf(slug) }));
+  .map(([slug, [label, category, curated]]) => ({ id: slug, label, category, curated: !!curated, ...coverageOfFace(slug), ...previewOf(slug), bytes: bytesOf(slug) }));
 
 // Any ttf on disk not in MAP: include with a guessed label + 'Display'.
 for (const slug of present) {
@@ -889,7 +977,7 @@ const weightRows = [...WEIGHTS]
   .map((slug) => ({ id: slug, label: MAP[slug][0], category: MAP[slug][1], curated: false, ...coverageOfFace(slug), bytes: bytesOf(slug) }));
 
 const ts = `// AUTO-GENERATED by scripts/fetch-fonts.mjs — do not edit by hand.
-export interface FontChoice { id: string; label: string; category: string; curated: boolean; /** What the file covers, read from its cmap: names from coverage.ts (Google Fonts' subset names, and \`kana\`). */ subsets: string[]; /** The Latin Extended-B letters (U+0180–024F) the file holds, as runs ("ƀ-ǃǅ-ɏ"): faces cover that block too unevenly for a name, so text is checked against it letter by letter. Absent for a face injected at runtime, which answers from its own cmap. */ latinExtB?: string; /** TTF size on disk, bytes. Absent for a face injected at RUNTIME — the keychain and the pen topper both let someone drop their own font in, and that one never came from this registry. */ bytes?: number; }
+export interface FontChoice { id: string; label: string; category: string; curated: boolean; /** What the file covers, read from its cmap: names from coverage.ts (Google Fonts' subset names, and \`kana\`). */ subsets: string[]; /** The Latin Extended-B letters (U+0180–024F) the file holds, as runs ("ƀ-ǃǅ-ɏ"): faces cover that block too unevenly for a name, so text is checked against it letter by letter. Absent for a face injected at runtime, which answers from its own cmap. */ latinExtB?: string; /** The Han characters the file holds, as runs written the same way, for a face that holds more than the common sets the cut CJK faces keep: a rarer Han character is checked against them one by one. Absent, a face holds none past those sets. */ han?: string; /** The face a picker draws this one's row in until its own file has loaded, for a face too heavy to fetch just to show a row. Such a face has no rule in fonts.css: it is declared from its file once that has loaded. */ preview?: string; /** File size on disk, bytes. Absent for a face injected at RUNTIME — the keychain and the pen topper both let someone drop their own font in, and that one never came from this registry. */ bytes?: number; }
 export const FONTS: FontChoice[] = ${JSON.stringify(rows, null, 2)};
 /** Other weights of the families above, each in fonts/weights/: loaded by id once an app imports \`@vostok/fonts/weights\`, never listed in a picker. */
 export const WEIGHTS: FontChoice[] = ${JSON.stringify(weightRows, null, 2)};
@@ -899,18 +987,22 @@ await writeFile(path.join(APP, 'src', 'registry.ts'), ts);
 // icon-fallback is deliberately absent from `rows` — it must never show up as a
 // pickable font. It still needs its @font-face rule, though: the symbol pickers
 // render their glyphs with it, and without the rule every symbol is a tofu box.
+// A face with a `preview` gets no rule: a rule would fetch its whole file the first time a
+// row is drawn in it. The package declares it from the file once that has loaded.
 const css = `/* AUTO-GENERATED by scripts/fetch-fonts.mjs — do not edit by hand. */\n` +
   `@font-face { font-family: VL-icon-fallback; src: url('./fonts/icon-fallback.ttf'); font-display: block; }\n` +
-  rows.map((r) => `@font-face { font-family: VL-${r.id}; src: url('./fonts/${r.id}.ttf'); font-display: swap; }`).join('\n') + '\n';
+  rows.filter((r) => !r.preview).map((r) => `@font-face { font-family: VL-${r.id}; src: url('./fonts/${path.basename(fileOf(r.id))}'); font-display: swap; }`).join('\n') + '\n';
 await writeFile(path.join(APP, 'src', 'fonts.css'), css);
 
 // Regenerate attribution/CREDITS for the full set. Google Fonts are each licensed
 // under OFL-1.1 or Apache-2.0 (shown on the linked specimen page); both permit
 // bundling/embedding in commercial products as long as the license text is retained.
 const specimen = (label) => `https://fonts.google.com/specimen/${label.replace(/ /g, '+')}`;
+const googleRows = rows.filter((r) => !RELEASES[r.id]);
+const releaseRows = rows.filter((r) => RELEASES[r.id]);
 const credits = `# Bundled fonts
 
-All ${rows.length} fonts in this folder are from [Google Fonts](https://fonts.google.com). Each is
+All ${googleRows.length} fonts in the first table are from [Google Fonts](https://fonts.google.com). Each is
 licensed under the **SIL Open Font License 1.1** ([\`OFL.txt\`](OFL.txt)) or the
 **Apache License 2.0** (https://www.apache.org/licenses/LICENSE-2.0), as stated on its
 Google Fonts specimen page linked below. Both licenses permit embedding and bundling in
@@ -919,7 +1011,23 @@ redistributed on its own — they ship only as part of this generator.
 
 | Font | Category | Google Fonts page (license) |
 | --- | --- | --- |
-${rows.map((r) => `| ${r.label} | ${r.category} | ${specimen(UPSTREAM[r.id]?.family ?? r.label)} |`).join('\n')}
+${googleRows.map((r) => `| ${r.label} | ${r.category} | ${specimen(UPSTREAM[r.id]?.family ?? r.label)} |`).join('\n')}
+
+## From the maker's own release
+
+Each of these is its maker's own file, from the release linked below, shipped as it was released:
+not cut, not converted, so its name only says which font it is. Its licence is the one its
+release states, given beside it ([\`OFL.txt\`](OFL.txt), [\`LICENSE-APACHE-2.0.txt\`](LICENSE-APACHE-2.0.txt)).
+A trademark a file names is its owner's, and is used here only to say which font it is.
+
+| Font | Category | Release file (license) |
+| --- | --- | --- |
+${releaseRows.map((r) => {
+  const spec = RELEASES[r.id];
+  return `| ${r.label} | ${r.category} | https://github.com/${spec.repo}/blob/${spec.commit}/${spec.file} (version ${spec.version}, ${spec.licence}) |`;
+}).join('\n')}
+
+${releaseRows.map((r) => `- ${r.label}: ${nameOf(parse(readFileSync(fileOf(r.id))), 'trademark') || 'no trademark named'}`).join('\n')}
 
 ## Cut to size
 
@@ -979,6 +1087,7 @@ if (failed.length) {
   recordAssets('packages/fonts/scripts/fetch-fonts.mjs', results.map(({ slug, family }) => {
     const buf = readFileSync(fileOf(slug));
     const spec = UPSTREAM[slug];
+    const rel = RELEASES[slug];
     return {
       id: `font/${slug}`,
       kind: 'font',
@@ -987,11 +1096,13 @@ if (failed.length) {
       // A file whose name table holds no copyright takes the notice its family's OFL.txt opens with.
       copyright: (nameOf(parse(buf), 'copyright') || family.copyright).replace(/\s+/g, ' ').trim(),
       reservedNames: family.reserved,
-      shipsAs: spec && !spec.cut ? 'original' : 'cut',
-      source: spec
-        ? { url: blob(spec.file, spec.commit ?? PINNED), commit: spec.commit ?? PINNED }
-        : { url: specimen(MAP[slug][0]), commit: null },
-      licenceUrl: blob(family.file, family.commit),
+      shipsAs: rel || (spec && !spec.cut) ? 'original' : 'cut',
+      source: rel
+        ? { url: `https://github.com/${rel.repo}/blob/${rel.commit}/${rel.file}`, commit: rel.commit }
+        : spec
+          ? { url: blob(spec.file, spec.commit ?? PINNED), commit: spec.commit ?? PINNED }
+          : { url: specimen(MAP[slug][0]), commit: null },
+      licenceUrl: family.licenceUrl ?? blob(family.file, family.commit),
       notice: [`packages/fonts/src/fonts/${family.licence === 'OFL-1.1' ? 'OFL.txt' : 'LICENSE-APACHE-2.0.txt'}`],
     };
   }));

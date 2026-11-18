@@ -40,6 +40,8 @@ export const seen = {
   designView: null as any,
   /** What the Design view was last asked to draw. */
   designInput: null as any,
+  /** The switch the viewer was last told to outline, or null. */
+  switchMark: null as null | { x: number; y: number; z: number; rotation: number },
   /** Every other file the browser path saved (a project, a render): what was in it, and its name. */
   files: [] as { data: unknown; name: string }[],
   /** Every artifact set handed to the MakerLab host. */
@@ -50,7 +52,20 @@ export const seen = {
   popovers: [] as { x: number; y: number; hex: string; options: number[][]; handlers: { onSelect(hex: string): void; onClose?(): void } }[],
   /** The viewer's part-pick handler: what a click on the model calls. */
   partPick: null as null | ((index: number | null, x: number, y: number, shift: boolean) => void),
+  /** The options the picture window was opened with, every time it was opened. */
+  wizards: [] as any[],
+  /** The options the image tracer was called with, every time it traced. */
+  imageTraces: [] as any[],
+  /** Every time the colour finder was asked for a picture's colours: how, and how finely. */
+  colourFinds: [] as { removeBg: boolean; detail: number; picture?: any }[],
 };
+
+/** The colours the finder gives the picture, by detail (the last one answers every detail past
+ *  it), biggest first: four at detail 0, and one more at detail 1, as shaded art splits. */
+const PICTURE_COLOURS = [
+  [{ rgb: [20, 20, 20], coverage: 0.4 }, { rgb: [240, 240, 240], coverage: 0.3 }, { rgb: [200, 30, 40], coverage: 0.2 }, { rgb: [190, 40, 50], coverage: 0.1 }],
+  [{ rgb: [20, 20, 20], coverage: 0.38 }, { rgb: [240, 240, 240], coverage: 0.3 }, { rgb: [200, 30, 40], coverage: 0.18 }, { rgb: [190, 40, 50], coverage: 0.1 }, { rgb: [30, 120, 60], coverage: 0.04 }],
+];
 
 /** The conditions a scenario sets up. `reset()` puts them back. */
 export const knobs = {
@@ -70,6 +85,16 @@ export const knobs = {
   cantWrite: new Set<string>(),
   /** What the MakerLab host answers an export with. */
   sdkAnswer: { success: true, format: '3mf' } as Record<string, unknown>,
+  /** The colours the colour finder finds in the picture, by detail. */
+  pictureColours: PICTURE_COLOURS as { rgb: [number, number, number]; coverage: number }[][],
+  /** What the picture window confirms was taken out of the picture; null = the edits it opened
+   *  with, untouched. */
+  wizardEdits: null as unknown[] | null,
+  /** What the picture window confirms as the crop, boxed; null = the crop it opened with. */
+  wizardCrop: null as { crop: unknown } | null,
+  /** The colours the picture window confirms and the filament each prints in; null = none (the
+   *  result then carries no mapping, as the stand-in always did). */
+  wizardMapping: null as { colors: { rgb: number[]; group: number }[]; filaments: number[][] } | null,
 };
 
 /** Every trace made, so the worker can name a build after the design it came from. */
@@ -87,11 +112,19 @@ export function reset() {
   seen.state = null;
   seen.modelPanel = null;
   seen.designInput = null;
+  seen.switchMark = null;
   seen.files.length = 0;
   seen.sdkExports.length = 0;
   seen.pro = null;
   seen.popovers.length = 0;
   seen.partPick = null;
+  seen.wizards.length = 0;
+  seen.imageTraces.length = 0;
+  seen.colourFinds.length = 0;
+  knobs.pictureColours = PICTURE_COLOURS as typeof knobs.pictureColours;
+  knobs.wizardEdits = null;
+  knobs.wizardCrop = null;
+  knobs.wizardMapping = null;
   Object.assign(knobs, { makerlab: false, coverMs: 0, imageTraceThrows: null, svgTraceThrows: null, fontMs: {}, sdkAnswer: { success: true, format: '3mf' } });
   knobs.fontFails = new Set();
   knobs.fontsLoaded = new Set(['helvetiker-regular', 'helvetiker-bold']);
@@ -157,6 +190,9 @@ export function createViewer() {
       return new TextEncoder().encode(shows);
     },
     renderThumbnail: () => null,
+    setSwitchMark(m: typeof seen.switchMark) {
+      seen.switchMark = m;
+    },
     renderToPng: async () => null,
     onPartPick(fn: typeof seen.partPick) {
       seen.partPick = fn;
@@ -197,7 +233,8 @@ export function createDesignView(options: any) {
 export async function loadFileToImage() {
   return { width: 4, height: 4, data: new Uint8ClampedArray(64) };
 }
-export function processImage(_image: unknown, colorCount: number) {
+export function processImage(_image: unknown, colorCount: number, options?: unknown) {
+  seen.imageTraces.push(options);
   if (knobs.imageTraceThrows) throw new Error(knobs.imageTraceThrows);
   return traced(`image:cc=${colorCount}`);
 }
@@ -205,7 +242,21 @@ export function parseSvg(text: string) {
   if (knobs.svgTraceThrows) throw new Error(knobs.svgTraceThrows);
   return traced(`svg:${text}`);
 }
+/* The colour finder is scripted (`knobs.pictureColours`); how its colours merge is the tracer's
+   own code, so a scenario sees the groups the app would make. */
+export function findColours(_image: unknown, removeBg: boolean, picture: unknown, detail = 0) {
+  seen.colourFinds.push({ removeBg, detail, picture });
+  const lists = knobs.pictureColours;
+  return lists[Math.min(detail, lists.length - 1)].map((c) => ({ rgb: [...c.rgb], coverage: c.coverage }));
+}
+export { closestPairMapping } from '../../../packages/trace/src/pipeline';
+export { DETAIL_MAX, LIST_MAX } from '../../../packages/trace/src/colours';
+/* A saved project's edits are read by the tracer's own cleaner. */
+export { cleanCropBox, cleanPictureEdits } from '../../../packages/trace/src/edits';
+/* …and its picture window sliders over the tracer's own defaults. */
+export { DEFAULT_PREPROCESS } from '../../../packages/trace/src/types';
 export function runWizard(options: any) {
+  seen.wizards.push(options);
   options.onComplete({
     adjusted: options.baseImage,
     preprocess: { keepBackground: false },
@@ -214,6 +265,9 @@ export function runWizard(options: any) {
     colorMode: 'normal',
     limitedColors: [],
     paletteOverrides: [],
+    pictureEdits: knobs.wizardEdits ?? options.initialEdits ?? [],
+    pictureCrop: knobs.wizardCrop ? knobs.wizardCrop.crop : options.initialCrop ?? null,
+    ...(knobs.wizardMapping ? { mappedColors: knobs.wizardMapping.colors, mappedFilaments: knobs.wizardMapping.filaments } : {}),
   });
 }
 export async function openSvgPreview() {
@@ -229,6 +283,8 @@ export function clickerThreeMF(parts: ClickerPart[], opts: Record<string, unknow
 export function downloadClickerThreeMF(parts: ClickerPart[], name: string, opts: Record<string, unknown> = {}) {
   seen.downloads.push({ parts, name, opts });
 }
+/** The print settings handed to the MakerLab host with an OBJ; nothing here reads them. */
+export const CLICKER_HOST_PRINT: Record<string, string> = {};
 export function clickerObjPlates(parts: ClickerPart[], opts: Record<string, unknown> = {}) {
   seen.objs.push(parts);
   seen.objOpts.push(opts);

@@ -5,6 +5,8 @@
    - installFontFaces declares faces to the page from the files getFont reads, and its disposer
      takes them away again (a fake document.fonts and FontFace stand in for the browser's);
    - preloadFonts, then loadedFont hands a face over without waiting;
+   - a face too heavy to fetch for a row (an .otf) has no rule in fonts.css and is skipped by
+     installFontFaces, and once getFont has loaded it, it is declared from those same bytes;
    - the other weights are in no picker's list, and getFont finds them once the weights module
      is imported, not before;
    - the symbol font through its own door is the one the text engine falls back to, parsed once;
@@ -13,6 +15,8 @@
   The font files are read from disk (tests/vite-glob-files.mts answers the globs).
 */
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { FONTS, FALLBACK_FONT_ID, getFont, getFontUrl, installFontFaces, loadedFont, preloadFonts, getHorizontalContours, getVerticalContours, pathCommandsToPolygons } from '../src/index';
 import { getIconFont, iconFontUrl, ICONS } from '../src/iconFont';
 
@@ -29,7 +33,10 @@ function ok(cond: unknown, msg: string): void {
 // ---- installFontFaces, against a stand-in for the page's font set
 
 class FakeFace {
-  constructor(readonly family: string, readonly source: string, readonly descriptors: { display?: string; weight?: string }) {}
+  constructor(readonly family: string, readonly source: string | ArrayBuffer, readonly descriptors: { display?: string; weight?: string }) {}
+  load() {
+    return Promise.resolve(this);
+  }
 }
 const added = new Set<FakeFace>();
 (globalThis as any).FontFace = FakeFace;
@@ -59,6 +66,26 @@ const anton = loadedFont('anton');
 ok(anton && typeof anton.getPath === 'function', 'loadedFont hands over a preloaded face');
 ok(anton === (await getFont('anton')), 'the very face getFont gives');
 ok(loadedFont('bebas-neue') === undefined, 'and never fetches one nobody asked for');
+ok(added.size === 0, 'a face with a rule in fonts.css is not declared again when it loads');
+
+// ---- a face too heavy to fetch for a row: Source Han Sans CN, an OpenType/CFF file
+
+const HEAVY = 'source-han-sans-cn-light';
+ok(getFontUrl(HEAVY)?.endsWith(`${HEAVY}.otf`), `the .otf is in the URL map: ${getFontUrl(HEAVY)}`);
+const css = readFileSync(join(process.cwd(), 'src', 'fonts.css'), 'utf8');
+ok(!css.includes(`VL-${HEAVY}`), 'fonts.css has no rule for it, so drawing its row never fetches it');
+ok(FONTS.filter((f) => !f.preview).every((f) => css.includes(`font-family: VL-${f.id}; src: url('./fonts/${f.id}.ttf')`)), 'and a rule for every other face, each from its .ttf');
+const removeHeavy = installFontFaces([HEAVY, 'noto-sans-sc']);
+ok([...added].map((f) => f.family).join() === 'VL-noto-sans-sc', `installFontFaces skips it too: ${[...added].map((f) => f.family).join()}`);
+removeHeavy();
+const heavy = await getFont(HEAVY);
+const declared = [...added];
+ok(declared.length === 1 && declared[0]!.family === `VL-${HEAVY}` && declared[0]!.source instanceof ArrayBuffer && (declared[0]!.source as ArrayBuffer).byteLength === FONTS.find((f) => f.id === HEAVY)!.bytes,
+  'once getFont has loaded it, it is declared from those very bytes, with no second fetch');
+const qi = heavy.charToGlyph('琪');
+ok(qi.index > 0 && qi.getPath(0, 0, 100).commands.length > 20, `its CFF outlines draw (琪: ${qi.getPath(0, 0, 100).commands.length} commands)`);
+ok(heavy === (await getFont(HEAVY)) && added.size === 1, 'parsed and declared once');
+for (const f of declared) added.delete(f);
 
 // ---- the other weights
 

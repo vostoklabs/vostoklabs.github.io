@@ -485,12 +485,28 @@ export const starRing = memo((points?: number, innerFrac?: number): Ring => {
  * two circles perched on a V. Optimising three measurable things is not the same as drawing a
  * heart, and none of the three could tell me the result was not one.
  *
- * The centring problem it was trying to solve is real and is solved elsewhere now, by
- * `centreOnSwitchSpot` rather than by mangling the shape.
- *
  * Traced as one outline rather than unioned, so this is both the geometry and the thumbnail —
  * `buildClicker` builds the heart from this exact ring. The constants are `makeHeart`'s own.
+ *
+ * **Each lobe stops at the notch.** A lobe runs from the diamond's corner (-45°) over the top to
+ * the notch (135°, on the centre line), half a turn. It used to run on to 180°, 45° past the
+ * notch and into the other lobe, so the two overshoots crossed under the notch and left a small
+ * lens inside the outline. A `NonZero` fill hides that in the build; a drawn path does not, and
+ * the picker tile showed it as an arc inside the heart. The corner and the notch are each one
+ * point of the ring, never two.
+ *
+ * **The ring's origin is a constant, not `centreOnSwitchSpot`.** A heart's centroid sits in the
+ * notch, so the walk from centroid toward pole that `switchSpotOf` does is sensitive to how the
+ * area is counted, and the old ring counted the lens twice: its origin came out
+ * `HEART_SWITCH_Y` above the bottom point. The ring keeps that origin, so the tile and every
+ * ring measurement stay where they were. Where the switch prints is decided in `buildClicker`,
+ * which runs `switchSpotOf` again on the filled outline (no lens there, old ring or new) and
+ * moves the shape by what it finds; that place is the same for the old ring and this one, and
+ * `shapes.test.ts` pins both the ring's top and bottom and the built switch's place. If the lobe
+ * constants change, measure again.
  */
+const HEART_SWITCH_Y = 0.9294706282871683;
+
 export const heartRing = memo((steps = 32): Ring => {
   const h = 1 / Math.SQRT2;   // half-diagonal of a unit-side square
   const lobeR = 0.5;          // each top edge of the square is a lobe diameter
@@ -501,19 +517,18 @@ export const heartRing = memo((steps = 32): Ring => {
 
   const pts: Ring = [];
   pts.push(pt(0, 0));      // the bottom point
-  pts.push(pt(h, h));      // up the diamond's right edge
-  // Right lobe: from the diamond's corner, over the top, in to the notch.
+  // Right lobe: from the diamond's corner (its first point), over the top, to the notch.
   for (let i = 0; i <= steps; i++) {
-    const a = -Math.PI / 4 + (Math.PI * 1.25 * i) / steps;
+    const a = -Math.PI / 4 + (Math.PI * i) / steps;
     pts.push(pt(lobeX + lobeR * Math.cos(a), lobeY + lobeR * Math.sin(a)));
   }
-  // Left lobe, mirrored and walked backwards so the ring keeps one direction.
-  for (let i = 0; i <= steps; i++) {
-    const a = -Math.PI / 4 + (Math.PI * 1.25 * (steps - i)) / steps;
+  // Left lobe, mirrored and walked backwards so the ring keeps one direction. The notch is
+  // already in; the last point is the left corner of the diamond.
+  for (let i = steps - 1; i >= 0; i--) {
+    const a = -Math.PI / 4 + (Math.PI * i) / steps;
     pts.push(pt(-(lobeX + lobeR * Math.cos(a)), lobeY + lobeR * Math.sin(a)));
   }
-  pts.push(pt(-h, h));
-  return centreOnSwitchSpot(pts);
+  return pts.map(([x, y]) => [x, y - HEART_SWITCH_Y] as [number, number]);
 });
 
 /** The egg profile from `makeEgg`, which is already pure point maths. */

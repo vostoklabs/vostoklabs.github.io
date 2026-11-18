@@ -7,9 +7,10 @@
 
   ## Why this exists
 
-  manifold-3d 3.5.1's JS glue leaks WASM memory on three calls, every time, and the WASM heap
+  manifold-3d 3.5.1's JS glue leaks WASM memory on four calls, every time, and the WASM heap
   never gives memory back. `new CrossSection(rings)` and `cs.toPolygons()` each lose 16 bytes a
-  vertex; `cs.extrude(…)` loses the same again, and a centred extrude drops a whole solid. A
+  vertex; `cs.extrude(…)` and `cs.revolve(…)` lose the same again, and a centred extrude drops a
+  whole solid. A
   generator rebuilds on every slider step, so the tab grows until it is reloaded.
 
   The laser engine was fixed first (commit 3454355) — and the eight 3D generators went on making
@@ -22,9 +23,10 @@
     cs.toPolygons()                        ringsOf(cs)
     cs.extrude(h, …)                       extrude(wasm, cs, h, …)
     Manifold.extrude(cs, h, …)             extrude(wasm, cs, h, …)
+    cs.revolve(…)                          revolve(wasm, cs, …)
 
-  `cs.revolve(…)` and `triangulate(…)` leak the same way and have no twin yet, because nothing
-  calls them. Add one to @vostok/manifold on the day something needs it.
+  `triangulate(…)` leaks the same way and has no twin yet, because nothing calls it. Add one to
+  @vostok/manifold on the day something needs it.
 
   ## What it cannot see
 
@@ -63,7 +65,7 @@ const RULES = [
   { re: /CrossSection\s*\.\s*ofPolygons\s*\(/g, call: 'CrossSection.ofPolygons(rings)', use: 'csOf(wasm, rings, rule)' },
   { re: /\.\s*toPolygons\s*\(/g, call: '.toPolygons()', use: 'ringsOf(cs)' },
   { re: /\.\s*extrude\s*\(/g, call: '.extrude(…)', use: 'extrude(wasm, cs, h, …)' },
-  { re: /\.\s*revolve\s*\(/g, call: '.revolve(…)', use: 'a twin in @vostok/manifold (none yet)' },
+  { re: /\.\s*revolve\s*\(/g, call: '.revolve(…)', use: 'revolve(wasm, cs, …)' },
   { re: /\.\s*triangulate\s*\(/g, call: 'triangulate(…)', use: 'a twin in @vostok/manifold (none yet)' },
 ];
 

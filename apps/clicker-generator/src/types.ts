@@ -1,5 +1,9 @@
 // Shared types: the walking-skeleton subset of the full data model.
+import type { CropBox, PaintLayer, PictureEdit } from '@vostok/trace';
 import type { ModelCutParams, ModelInfo, ModelMeta } from './model/types';
+import type { BottomPlace } from './geometry/bottomPlace';
+
+export type { PaintLayer, BottomPlace };
 
 export type RGB = [number, number, number];
 
@@ -9,6 +13,36 @@ export { FILAMENTS } from '@vostok/ui-kit';
 
 /** A closed 2D ring (list of [x,y]); EvenOdd fill handles outer/hole nesting. */
 export type Ring = [number, number][];
+
+/** The bottom picture as the build takes it (`BuildParams.bottomArt`): traced regions and the
+ *  picture's outline, normalised (longest side = 1, centred, Y-up). Of a region only
+ *  `filamentRgb`, `coverage`, `rings` and `partName` are read; the part takes that name. */
+export interface BottomArt {
+  regions: BuildRegion[];
+  outline: Ring[];
+  /** The customer's move, turn and size on top of the engine's place (geometry/bottomPlace.ts).
+   *  Absent = the engine's own place, the build as it was before places existed. */
+  place?: BottomPlace;
+}
+
+/** The bottom picture's own settings, kept like the top picture's: how it was traced and which
+ *  filament each of its colours prints in. The image is held beside them, not in here. null in
+ *  the state = no bottom picture. */
+export interface BottomPicture {
+  smoothing: number;
+  removeBg: boolean;
+  /** Every colour found in the picture and the group it prints in. */
+  mappedColors: { rgb: RGB; group: number }[];
+  /** Each group's filament, by group. */
+  mappedFilaments: RGB[];
+  /** What was taken out of or brought back into the picture, in the picture's own space. */
+  pictureEdits: PictureEdit[];
+  /** The crop, in the picture's own space; null = the whole picture. */
+  pictureCrop: CropBox | null;
+  /** Where it sits on the underside, seen from below. Not part of the trace: moving it never
+   *  traces the picture again. */
+  place: BottomPlace;
+}
 
 /** Normalized 2D geometry: silhouette fits within a unit box (longest side = 1),
  *  centered on origin, Y-up. Worker scales by capWidthMm. */
@@ -23,7 +57,7 @@ export interface LegendLook {
 
 export interface RegionSet {
   /** One entry per palette color actually used. `legend` is set on a letter block's symbol. */
-  regions: { quantRgb: RGB; components: { rings: Ring[]; coverage: number }[]; coverage: number; legend?: LegendLook }[];
+  regions: { quantRgb: RGB; components: { rings: Ring[]; coverage: number; layers?: PaintLayer[] }[]; coverage: number; legend?: LegendLook }[];
   /** Union silhouette of all foreground pixels. */
   outline: Ring[];
   /** Aspect (width/height) of the source silhouette, for reference. */
@@ -85,7 +119,7 @@ export interface SwitchPlacement {
 /** Keychain attachment settings. */
 export interface KeychainParams {
   enabled: boolean;
-  /** 'loop' = outer tab with a ring hole; 'hole' = ring hole cut through the body. */
+  /** 'loop' = outer tab with a ring hole; 'hole' = a tunnel through the side wall under the cap. */
   style: 'loop' | 'hole';
   /** Position around the body edge, degrees. 90 = +Y (top), counter-clockwise. */
   angleDeg: number;
@@ -94,6 +128,10 @@ export interface KeychainParams {
   /** Lateral offset along the body edge tangent, mm. Positive = counter-clockwise
    *  shift from the angle-derived anchor, negative = clockwise. Default 0. */
   offsetMm: number;
+  /** A hole is placed first and cut on request: false while it is only placed (nothing is cut,
+   *  the cutter shows where it will go), true once cut. Absent = cut, which is what a hole saved
+   *  before this existed was. Read only with `style: 'hole'`. */
+  holeCut?: boolean;
 }
 
 /** Image preprocessing (crop, tone, background), as the image tracer defines it. */
@@ -122,6 +160,9 @@ export interface BuildParams {
    *  `applyStemFit` (geometry/stemFit.ts) offsets the hole's own contour, so the number on the
    *  control is the number in the part. */
   stemFitMm: number;
+  /** How much wider across the post is than drawn, mm, for a stronger post. Absent or 0 = as
+   *  drawn. Limited by the switch's opening: see `STEM_OUTER_MAX_MM`. */
+  stemOuterMm?: number;
   /** Body switch-pocket fit, as a PERCENTAGE of the imported socket footprint: + opens the
    *  pocket (switch drops in more easily), − grips harder. 0 = the asset as authored.
    *
@@ -141,6 +182,10 @@ export interface BuildParams {
    *  and enforces a minimum centre-to-centre pitch, reporting the applied array back. */
   switches: SwitchPlacement[];
   keychain: KeychainParams; // keyring attachment (loop tab or inside hole) on the body
+  /** A keyring hole only, sent once when one is placed: build it where it fits nearest Position
+   *  (`findHoleBearing`), with no Fine offset, and say the bearing in the layout's `loop.foundDeg`.
+   *  Absent, the hole goes where Position and Fine offset put it, as always. */
+  holeFind?: boolean;
   baseFilamentRgb: RGB; // cap backing + stem color
   bodyColorRgb: RGB;
   /** Component-specific height levels (partName -> level integer) */
@@ -168,6 +213,12 @@ export interface BuildParams {
    *  Ignored when the base follows the outline: there the shape and the artwork are the same
    *  thing, so shrinking one is meaningless. */
   designScale?: number;
+  /** The picture's longest side in mm, held while the shape changes size: the picture builds at
+   *  this size whatever the base is, and the frame crops it where it runs past. It replaces
+   *  `designScale` (kept between DESIGN_SCALE_MIN and HOLD_SCALE_MAX of the size that fits).
+   *  Absent = the picture follows the shape, byte for byte as before. Ignored when the base
+   *  follows the outline, as `designScale` is. */
+  artMm?: number;
   /** Turn the artwork, degrees counter-clockwise. Absent or 0 = as drawn, byte for byte.
    *
    *  On a preset base the picture turns about its own centre inside the shape, and the shape
@@ -213,6 +264,11 @@ export interface BuildParams {
    *  anything protruding below the underside BECOMES the seating plane and tips the part onto
    *  its logo. Cut after both void loops — see the buried-void hazard in buildClicker. */
   brandMark?: { rings: Ring[]; sizeMm: number };
+  /** A picture inlaid in colour into the body's underside, flush with it, mirrored so it reads
+   *  the right way round from below (geometry/bottomPicture.ts). Already traced; the engine
+   *  picks the size and the place. Absent = a plain underside, byte for byte what was built
+   *  before. Read only by the flat clicker: letter blocks and a cut model ignore it. */
+  bottomArt?: BottomArt;
   // ---- Letter-block mode ----
   /** Arrangement: a row, a column, or a grid that wraps at `blockColumns`. */
   blockOrientation?: BlockOrientation;
@@ -245,6 +301,13 @@ export interface BuildParams {
   /** Text mode: outward offset applied to every glyph outline before it is carved, mm —
    *  the "boldness" control. Absent/0 = the outline exactly as the font drew it. */
   textBold?: number;
+  /** On an outline base, the artwork keeps its whole printed edge instead of being cut to the
+   *  frame. The frame is grown round this same outline, so the cut never cropped anything: it
+   *  only took the colour bleed and the boldness off the outer edge of the design (a heart at the
+   *  end of a line came out thinner on one side than the other) and redrew that edge with the
+   *  frame's coarser outline. Text mode sends it. Absent = cut, as a picture still is; ignored on
+   *  every other base, where the frame does crop. */
+  outlineUncut?: boolean;
   /** Said with the warnings when the frame cuts the artwork off: Text mode's letters, which are
    *  read. Absent, a cropped picture says nothing, as Design size above 100% intends. */
   artCutNote?: string;
@@ -346,6 +409,9 @@ export interface BuildRegion {
   /** This region's boldness, mm (an outward offset of its outline), in place of
    *  `BuildParams.textBold`, which never applies to an `mm` region. */
   boldMm?: number;
+  /** An SVG's colour, split by when the file painted it (`PaintLayer`). Set, the carve follows
+   *  the file: what is painted on top wins, whatever its coverage. */
+  layers?: PaintLayer[];
 }
 
 /** Where the parts of a flat clicker sit seen from above, in millimetres, for a 2D view of the
@@ -361,18 +427,41 @@ export interface DesignLayout {
   well: Ring[];
   /** How a normalised artwork point (x, y) was placed: turned by `rotation` degrees
    *  counter-clockwise about the origin, multiplied by `scale`, then moved by (offX, offY).
-   *  `scale` is the final one, after the design scale. */
-  art: { scale: number; offX: number; offY: number; rotation: number };
+   *  `scale` is the final one, after the design scale. `fit` is the scale before it, the one
+   *  that fills the frame, so `scale / fit` is the Design size actually built. */
+  art: { scale: number; fit: number; offX: number; offY: number; rotation: number };
   /** The box every switch centre is clamped into. Where `lo` passes `hi` on an axis, a switch
    *  is held at the middle of the two. */
   switchBox: { loX: number; hiX: number; loY: number; hiY: number };
-  /** The keyring loop, when it is on: its hole's centre, and the loop's and hole's radii. */
-  loop?: { x: number; y: number; outerR: number; holeR: number };
+  /** The keyring loop, when it is on: its hole's centre, and the loop's and hole's radii.
+   *  With `style: 'hole'` (absent = a loop) it is the tunnel instead: (x, y) is the point on the
+   *  body's edge its ring is centred on, `outerR` the ring's outer radius (centre line + bore
+   *  radius) and `holeR` the bore radius. It is there even when the tunnel found no room, so a
+   *  2D view can still show where it was asked for. */
+  loop?: {
+    x: number; y: number; outerR: number; holeR: number; style?: 'loop' | 'hole';
+    /** A hole only: the height of the tunnel's centre line, mm in the parts' own frame. */
+    z?: number;
+    /** A hole only: placed, not cut yet. The body has no tunnel; (x, y, z) and the radii are
+     *  where the cutter would go. */
+    uncut?: boolean;
+    /** A hole only: no tunnel fits here (placed, or asked to be cut and refused). */
+    noRoom?: boolean;
+    /** A hole built with `holeFind` that found room: the bearing it was placed at, degrees. */
+    foundDeg?: number;
+  };
+  /** With a keyring hole cut, the tunnel seen from above inside the body: the ring the bore
+   *  sweeps, clipped to the body's footprint. Absent when no tunnel was cut. */
+  tunnel?: Ring[];
   /** With the loop on, the body as it is seen from above: `body` with the loop's tab and the
    *  bridge that welds it on, less the hole. What a 2D view draws; `body` stays the body proper. */
   silhouette?: Ring[];
   /** How far a texture's crests stand outside `body`, mm; 0 when the wall is smooth. */
   textureMm: number;
+  /** With a bottom picture: the flat of the underside it may print in (`safe`, seen from above),
+   *  that area's middle, and the size the engine picks there before the customer's own (mm, the
+   *  picture's longest side). Absent when there is no bottom picture or no room for one. */
+  bottom?: { cx: number; cy: number; autoMm: number; safe: Ring[] };
 }
 
 // ---- Worker messages ----
@@ -410,6 +499,7 @@ export type GeometryRequest =
       type: 'buildFitStrip';
       labels: { fitMm: number; rings: Ring[] }[];
       colorRgb: RGB;
+      stemOuterMm?: number;
       /** Echoed on the `parts` response, like a batch build's. The strip is requested while a
        *  design build may still be in flight, so arrival order cannot say which is which. */
       requestId?: string;

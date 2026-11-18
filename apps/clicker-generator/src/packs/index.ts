@@ -7,17 +7,18 @@
  *
  * Packs are free and present in both builds — see `./types.ts` for why.
  */
-import { assetUrl } from '../assets';
+import { assetUrl, shippedPicture } from '../assets';
 import { loadUrlToImage, parseSvg, type RgbaImage } from '@vostok/trace';
 import type { RegionSet, Ring } from '../types';
+import { CHRISTMAS } from './christmas';
 import { HALLOWEEN } from './halloween';
-import { inSeason, type Pack, type PackDesign, type PackShape } from './types';
+import { orderPacks, type Pack, type PackDesign, type PackShape } from './types';
 
 export * from './types';
 
 /** Every pack the app ships. Order here is the fallback order; `orderedPacks()` puts the
  *  one that is in season first. */
-export const PACKS: Pack[] = [HALLOWEEN];
+export const PACKS: Pack[] = [CHRISTMAS, HALLOWEEN];
 
 /** Packs with at least one asset wired up. A manifest whose files have not been added yet is
  *  a placeholder, and a placeholder must not put an empty group in a picker. */
@@ -27,8 +28,7 @@ export function availablePacks(): Pack[] {
 
 /** In-season first, then the declared order. Ordering only — nothing is ever hidden. */
 export function orderedPacks(now: Date = new Date()): Pack[] {
-  const packs = availablePacks();
-  return [...packs].sort((a, b) => Number(inSeason(b, now)) - Number(inSeason(a, now)));
+  return orderPacks(availablePacks(), now);
 }
 
 export function findPack(id: string | null | undefined): Pack | null {
@@ -49,7 +49,7 @@ export function resolveShape(token: string): { pack: Pack; shape: PackShape } | 
 
 /** URL of one of a pack's files. */
 export function packAssetUrl(pack: Pack, kind: 'shapes' | 'designs', file: string): string {
-  return assetUrl(`assets/packs/${pack.dir}/${kind}/${file}`);
+  return assetUrl(`assets/packs/${pack.dir}/${kind}/${kind === 'designs' ? shippedPicture(file) : file}`);
 }
 
 /*

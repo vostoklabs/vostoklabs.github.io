@@ -287,6 +287,95 @@ for (const [name, ring] of Object.entries({
   check(`${name}: renders a thumbnail path`, ok, `${ring.length} points, ${d.length} chars`);
 }
 
+// ---------------------------------------------------------------- every ring is one clean outline
+
+/* A ring that crosses itself still BUILDS right: the base is filled `NonZero`, which swallows a
+   small loop inside the outline. A drawn path does not swallow it. The heart's lobes each ran
+   45° past the notch, the two overshoots crossed, and the picker tile showed the lens between
+   them as an arc inside the heart, while every build test stayed green. So the rings are held
+   to being simple outlines on their own: no two edges cross, and no point is repeated (a
+   repeated point is a zero-length edge, which is how a lobe that overran a corner shows up).
+   The seam between the last point and the first may repeat; nothing draws an edge there. */
+type Pt = [number, number];
+const orient = (a: Pt, b: Pt, c: Pt): number =>
+  Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+/** Pairs of edges that cross, as `i×j` (edge i runs from point i to point i+1). Proper crossings
+ *  only: edges that share a point are neighbours, not a crossing. O(n²); n is at most 128. */
+function selfCrossings(ring: Ring): string[] {
+  const out: string[] = [];
+  const n = ring.length;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      const a = ring[i] as Pt, b = ring[(i + 1) % n] as Pt, c = ring[j] as Pt, d = ring[(j + 1) % n] as Pt;
+      if (orient(a, b, c) * orient(a, b, d) < 0 && orient(c, d, a) * orient(c, d, b) < 0) out.push(`${i}×${j}`);
+    }
+  }
+  return out;
+}
+/** Consecutive points closer than `eps`, the closing seam left out. */
+function repeatedPoints(ring: Ring, eps = 1e-9): number {
+  let k = 0;
+  for (let i = 0; i + 1 < ring.length; i++) {
+    if (Math.hypot(ring[i + 1][0] - ring[i][0], ring[i + 1][1] - ring[i][1]) < eps) k++;
+  }
+  return k;
+}
+function checkOutline(name: string, ring: Ring): void {
+  const crossed = selfCrossings(ring);
+  check(
+    `${name}: the outline does not cross itself`,
+    crossed.length === 0,
+    crossed.length ? `${crossed.length} crossing${crossed.length > 1 ? 's' : ''} (edges ${crossed.slice(0, 3).join(', ')})` : `${ring.length} points`,
+  );
+  const repeats = repeatedPoints(ring);
+  check(`${name}: no point is repeated`, repeats === 0, repeats ? `${repeats} repeated` : 'none');
+}
+
+// Every ring a build reads, at every value of its knob (a knob can bend an outline into itself),
+// and the rings the square and rectangle tiles draw.
+const RINGS: [string, Ring][] = [
+  ['circle', circleRing(0, 0, 1)],
+  ['square tile', paths.pctRoundedRectRing(2, 2)], ['rectangle tile', paths.pctRoundedRectRing(2.6, 1.6)],
+  ['squircle', paths.squircleRing()], ['capsule', paths.capsuleRing()],
+  ['shield', paths.shieldRing()], ['tag', paths.tagRing()], ['arch', paths.archRing()],
+  ['heart', paths.heartRing()], ['egg', paths.eggRing()],
+];
+for (let n = 3; n <= 8; n++) {
+  RINGS.push([`polygon-${n}`, paths.ngonRing(n)]);
+  for (const sharp of [0.3, 0.56, 0.8]) RINGS.push([`star-${n} at ${sharp * 100} %`, paths.starRing(n, sharp)]);
+}
+for (const arm of [0.15, 0.34, 0.45]) RINGS.push([`cross at ${arm * 100} %`, paths.crossRing(arm)]);
+for (const [name, ring] of RINGS) checkOutline(name, ring);
+
+/* The heart itself. The tile and the print are one ring, so its numbers are pinned here: the
+   lobes meet once, at the notch; the area is the area the base fills; and the top and bottom
+   hold the ring's origin where it has always been. */
+{
+  const heart = paths.heartRing();
+  let area = 0;
+  for (let i = 0, j = heart.length - 1; i < heart.length; j = i++) {
+    area += heart[j][0] * heart[i][1] - heart[i][0] * heart[j][1];
+  }
+  area /= 2;
+  check('heart: one point per step of each lobe, plus the bottom point', heart.length === 66, `${heart.length} points`);
+  check(
+    'heart: counter-clockwise, with the area of the filled heart',
+    area > 0 && Math.abs(area - 2.4489) < 0.001,
+    `signed area ${area.toFixed(4)} (filled heart 2.4489; the crossing ring counted 2.5452)`,
+  );
+  const onAxis = heart.filter(([x]) => Math.abs(x) < 1e-9);
+  const bottom = Math.min(...heart.map(([, y]) => y));
+  const notches = onAxis.filter(([, y]) => y > bottom + 1e-9);
+  check('heart: the lobes meet once, at the notch', notches.length === 1, `${notches.length} on the centre line above the bottom point`);
+  const top = Math.max(...heart.map(([, y]) => y));
+  check(
+    'heart: the ring\'s origin has not moved (its bottom and top are where they were)',
+    Math.abs(bottom + 0.9295) < 0.002 && Math.abs(top - 0.8989) < 0.002,
+    `bottom ${bottom.toFixed(4)} (was -0.9295), top ${top.toFixed(4)} (was 0.8988)`,
+  );
+}
+
 // ---------------------------------------------------------------- the directory round-trip
 
 /* The bug this guards is the expensive kind: silent, and it destroys someone's saved work.
@@ -361,6 +450,13 @@ check(
   blank.length === 0,
   blank.length ? `${blank.length} blank, e.g. ${blank[0].id}` : `${directory.length} thumbnails`,
 );
+// ...and every tile draws one clean outline. Read back from the path the tile draws, so a shape
+// added to the directory later is held to it without anyone listing it here.
+for (const e of directory) {
+  if (!e.thumb) continue;
+  const drawn = e.thumb.replace(/^M|Z$/g, '').split('L').map((p) => p.split(',').map(Number) as Pt);
+  checkOutline(`${e.id} tile`, drawn);
+}
 
 // ---------------------------------------------------------------- the switch has to fit
 
@@ -520,12 +616,36 @@ check(
     // is exactly how far the switch sits from where the eye puts the middle.
     const off = Math.hypot((a + b) / 2, (c + d) / 2) / longest;
     check(
-      `${name}: the switch sits at the shape's visual centre, not just a spot that fits`,
+      `${name}: the ring's origin is at the shape's visual centre, not just a spot that fits`,
       off <= tol,
       `origin is ${(off * 100).toFixed(2)}% of the longest side from the visual centre `
       + `(limit ${(tol * 100).toFixed(1)}%; the old heart was 10.2%)`,
     );
   }
+
+/* Where the heart's switch PRINTS. `buildClicker` measures the switch spot again on the filled
+   outline and moves the shape by it, so the printed place is not the ring's origin: it sits
+   58.8 % of the body's height above its point, the same before and after the lobes stopped
+   crossing. A change to the ring or to `switchSpotOf` that moves it fails here. */
+{
+  const out = buildClicker(wasm, socket, stem, regions, [square], { ...base, baseShape: 'heart' });
+  const body = out.parts.find((p) => p.name === 'base-body');
+  let lo = Infinity, hi = -Infinity, left = Infinity, right = -Infinity;
+  if (body) {
+    const v = body.vertProperties, n = body.numProp;
+    for (let i = 0; i < v.length; i += n) {
+      lo = Math.min(lo, v[i + 1]); hi = Math.max(hi, v[i + 1]);
+      left = Math.min(left, v[i]); right = Math.max(right, v[i]);
+    }
+  }
+  const up = -lo / (hi - lo);
+  check(
+    'heart: the switch prints where it always has, and the heart is symmetric about it',
+    !!body && Math.abs(up - 0.588) < 0.002 && Math.abs(left + right) < 0.01,
+    `${(up * 100).toFixed(2)} % of ${(hi - lo).toFixed(2)} mm above the point (was 58.80 %); `
+    + `x ${left.toFixed(3)} to ${right.toFixed(3)} mm`,
+  );
+}
 
 console.log(failures ? `\n${failures} FAILED` : '\nevery shape is the shape it claims, and the fit search cannot run away');
 process.exit(failures ? 1 : 0);

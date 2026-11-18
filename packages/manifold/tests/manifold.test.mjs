@@ -1,8 +1,9 @@
 // @vostok/manifold held to the glue it replaces, on both manifold builds: the npm one and the
 // vendored no-eval one the apps alias.
 //
-// 1. csOf / ringsOf / extrude give exactly what the glue gives — the same rings, the same mesh
-//    to the byte — for every fill rule, a lone ring, {x, y} points, every extrude argument.
+// 1. csOf / ringsOf / extrude / revolve give exactly what the glue gives — the same rings, the
+//    same mesh to the byte — for every fill rule, a lone ring, {x, y} points, every extrude
+//    argument, a whole and a part revolve.
 // 2. Nothing they make stays in the heap, while the glue's own calls do (so the probe can see
 //    a leak at all). Measured by walking the allocator (packages/laser/tests/heap-probe.mjs).
 //
@@ -107,6 +108,29 @@ for (const [name, file] of BUILDS) {
     cs.delete();
   }
 
+  // ---- revolve: the glue's own revolve, to the byte (a torus, a part turn, a ring with a hole)
+  {
+    const disc = M.csOf(wasm, [circle(8, 0, 2.5, 32)], 'Positive');
+    const ringed = M.csOf(wasm, [circle(10, 0, 3, 40), circle(10, 0, 1.5, 24, true)], 'Positive');
+    for (const [label, cs, args] of [
+      ['a torus', disc, [64]],
+      ['a torus, default segments', disc, []],
+      ['a part turn', disc, [48, 135]],
+      ['a ring with a hole', ringed, [32, 360]],
+    ]) {
+      const glue = cs.revolve(...args);
+      const ours = M.revolve(wasm, cs, ...args);
+      check(`${name}: revolve(${label}) is the glue's solid, to the byte`, bytesOf(glue) === bytesOf(ours));
+      const viaStatic = wasm.Manifold.revolve(cs, ...args);
+      check(`${name}: … and Manifold.revolve(${label})'s`, bytesOf(viaStatic) === bytesOf(ours));
+      glue.delete();
+      ours.delete();
+      viaStatic.delete();
+    }
+    disc.delete();
+    ringed.delete();
+  }
+
   // ---- chamferCutter: the cutter the generators drew inline, to the byte -----
   {
     const shapes = [
@@ -150,6 +174,8 @@ for (const [name, file] of BUILDS) {
   // ---- 2. nothing stays in the heap -----------------------------------------
   const big = [circle(0, 0, 20, 1000), circle(0, 0, 12, 600, true)];
   const src = M.csOf(wasm, big, 'Positive');
+  // Revolved about the y axis, so it has to stand clear of it: the same 1 600 vertices, moved.
+  const offAxis = M.csOf(wasm, big.map((r) => r.map(([x, y]) => [x + 30, y])), 'Positive');
   const leakOf = (run) => {
     for (let i = 0; i < 3; i++) run();
     const before = heapInUse(heap);
@@ -162,6 +188,7 @@ for (const [name, file] of BUILDS) {
     ['ringsOf', () => M.ringsOf(src), () => src.toPolygons()],
     ['extrude', () => M.extrude(wasm, src, 4).delete(), () => src.extrude(4).delete()],
     ['extrude, centred', () => M.extrude(wasm, src, 4, 0, 0, [1, 1], true).delete(), () => src.extrude(4, 0, 0, [1, 1], true).delete()],
+    ['revolve', () => M.revolve(wasm, offAxis, 16).delete(), () => offAxis.revolve(16).delete()],
   ];
   for (const [label, ours, glue] of ops) {
     const g = leakOf(glue);
@@ -178,6 +205,7 @@ for (const [name, file] of BUILDS) {
     srcOuter.delete();
   }
   src.delete();
+  offAxis.delete();
 }
 
 console.log(`\n${pass} passed, ${fails.length} failed`);

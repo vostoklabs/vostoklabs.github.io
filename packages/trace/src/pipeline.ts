@@ -1,10 +1,10 @@
 // Image -> normalized RegionSet. Orchestrates matte + composite + clean + quantize + trace.
 import type { RgbaImage } from './decode';
-import { removeBackground, compositeOverMatte, cleanMask } from './matte';
+import { prepareArtwork } from './edits';
 import { quantize } from './quantize';
-import { traceRegions } from './trace';
+import { traceRegions, frameOf, type TraceFrame } from './trace';
 import { srgbToOklab } from './colorspace';
-import type { RegionSet, RGB } from './types';
+import type { CropBox, PictureEdit, RegionSet, RGB } from './types';
 
 export interface ProcessOptions {
   /** Strip a flat background by edge flood-fill (skipped if image has alpha). */
@@ -23,6 +23,19 @@ export interface ProcessOptions {
   /** Longest side of the FINISHED part, mm. Decides the smallest feature worth tracing —
    *  see MIN_FEATURE_MM in trace.ts. Defaults to the app's default cap width. */
   designMm?: number;
+  /** The customer's edits to the picture, applied in order after the background removal. */
+  edits?: readonly PictureEdit[];
+  /** A crop, applied as a mask after the edits. */
+  crop?: CropBox | null;
+  /** Told where the artwork sits in the picture: the frame the rings are normalised by, so a
+   *  point on the traced result can be turned back into a pixel. Not called for an empty trace. */
+  onFrame?: (frame: TraceFrame) => void;
+}
+
+/** The edits and the crop a picture is traced with; see `ProcessOptions`. */
+export interface PictureChanges {
+  edits?: readonly PictureEdit[];
+  crop?: CropBox | null;
 }
 
 /** A colour the picture is made of, as found by `discoverColours`. */
@@ -53,12 +66,11 @@ const CANDIDATE_MIN_COVERAGE = 0.001;
  * `customColors`, and the quantiser maps every pixel onto that exact set.
  *
  * Same preprocessing as `processImage`, then a generous quantise, then a merge of what is
- * indistinguishable and a drop of what is debris.
+ * indistinguishable and a drop of what is debris. With `picture`, the edits and the crop first,
+ * so a colour the customer took out is not listed.
  */
-export function discoverColours(img: RgbaImage, removeBg = true): ColourCandidate[] {
-  const matte = removeBg ? removeBackground(img) : null;
-  compositeOverMatte(img);
-  cleanMask(img);
+export function discoverColours(img: RgbaImage, removeBg = true, picture: PictureChanges = {}): ColourCandidate[] {
+  const { matte } = prepareArtwork(img, { removeBg, edits: picture.edits, crop: picture.crop });
   const q = quantize(img, 12, undefined, matte);
   const found = q.palette
     .filter((p) => p.coverage >= CANDIDATE_MIN_COVERAGE)
@@ -110,10 +122,31 @@ const unalike = (a: [number, number, number], b: [number, number, number]) =>
  *
  * `candidates` in `discoverColours`' order, biggest first. Groups are numbered by what they cover,
  * biggest first, so with `budget` colours or fewer this is [0, 1, 2, …]: nothing merges.
+ *
+ * `joined` (optional, one id per candidate): candidates with the same id start as one group, a
+ * merge a person made by hand, and the closest pairs merge from there. Without it every
+ * candidate starts alone, as it always did.
  */
-export function closestPairMapping(candidates: ColourCandidate[], budget = 4): number[] {
+export function closestPairMapping(candidates: ColourCandidate[], budget = 4, joined?: readonly number[]): number[] {
   const lab = candidates.map((c) => srgbToOklab(c.rgb));
-  const groups = candidates.map((c, i) => ({ members: [i], lead: i, coverage: c.coverage }));
+  let groups = candidates.map((c, i) => ({ members: [i], lead: i, coverage: c.coverage }));
+  if (joined) {
+    const byId = new Map<number, (typeof groups)[number]>();
+    const started: typeof groups = [];
+    candidates.forEach((c, i) => {
+      const g = byId.get(joined[i] ?? -1 - i);
+      if (!g) {
+        const fresh = { members: [i], lead: i, coverage: c.coverage };
+        byId.set(joined[i] ?? -1 - i, fresh);
+        started.push(fresh);
+        return;
+      }
+      g.members.push(i);
+      g.coverage += c.coverage;
+      if (c.coverage > candidates[g.lead].coverage) g.lead = i;
+    });
+    groups = started;
+  }
   while (groups.length > Math.max(1, budget)) {
     let a = 0, b = 1, best = Infinity;
     for (let i = 0; i < groups.length; i++) {
@@ -140,12 +173,14 @@ export function processImage(
   colorCount: number,
   opts: ProcessOptions = {},
 ): RegionSet {
-  // Background removal first so the flood fill sees the original alpha; compositing
-  // afterwards uses the detected/auto matte for the remaining soft (anti-aliased)
-  // pixels, killing colored halos. cleanMask then despeckles + fills pinholes.
-  const matte = opts.removeBg !== false ? removeBackground(img) : null;
-  compositeOverMatte(img);
-  cleanMask(img);
+  // Background removal first so the flood fill sees the original alpha; then the customer's
+  // edits and crop; compositing afterwards uses the detected/auto matte for the remaining soft
+  // (anti-aliased) pixels, killing colored halos. cleanMask then despeckles + fills pinholes.
+  const { matte } = prepareArtwork(img, { removeBg: opts.removeBg !== false, edits: opts.edits, crop: opts.crop });
   const q = quantize(img, colorCount, opts.customColors, matte, opts.mergeInto);
+  if (opts.onFrame) {
+    const frame = frameOf(q);
+    if (frame) opts.onFrame(frame);
+  }
   return traceRegions(q, opts.smoothing ?? 0.5, opts.preserveDetail ?? true, opts.designMm ?? 35);
 }

@@ -19,6 +19,12 @@ import {
 } from '@vostok/ui-kit';
 import type { DesignLayout, RGB, Ring, SwitchPlacement } from '../types';
 import { DESIGN_SCALE_MAX, DESIGN_SCALE_MIN } from '../geometry/sizeLimits';
+import { roundShare } from '../geometry/pictureHold';
+import { holdInBox } from './switchPad';
+import { BOTTOM_PLACE_LIMITS, placeFromBox, undersideCentre, type BottomPlace } from '../geometry/bottomPlace';
+import { centroidOf, keyringMark, loopCentre, ringsBounds } from './keyringMark';
+import { artHull, onArt, onBody } from './designPick';
+import { circleRing } from '@vostok/shapes';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -42,6 +48,19 @@ export interface DesignArtRegion {
   rings: Ring[];
   rgb: RGB;
   coverage: number;
+  /** Its place in the file's paint order, higher on top, when the file has one (an SVG). */
+  paint?: number;
+}
+
+/** The underside, drawn instead of the top while the rail's Bottom category is open: seen from
+ *  below, so the body is the build's outline mirrored and the bottom picture reads the right way
+ *  round. Where it may go and the engine's size are the layout's `bottom`. */
+export interface DesignUnderside {
+  /** The bottom picture's colours, normalised as traced; empty when there is none. */
+  art: DesignArtRegion[];
+  /** Its normalised box (longest side 1). */
+  artBox: { w: number; h: number };
+  place: BottomPlace;
 }
 
 /** Everything the view draws, from the last build and the state as it is now. */
@@ -64,6 +83,9 @@ export interface DesignInput {
   designScale: number;
   /** The smallest `designScale` the corner reaches. Absent = Design size's own floor. */
   designScaleMin?: number;
+  /** The largest `designScale` the corner reaches. Absent = Design size's own top. A picture that
+   *  keeps its size may run further past the frame than the slider goes. */
+  designScaleMax?: number;
   designRotation: number;
   capWidthMm: number;
   words: DesignWord[];
@@ -80,6 +102,8 @@ export interface DesignInput {
    *  letters, which are the picture there, and the words on a picture. */
   artBold: number;
   wordBold: number;
+  /** Present: draw the underside instead of the top. */
+  underside?: DesignUnderside;
 }
 
 /** A finished drag or nudge, as the state it should become. */
@@ -92,7 +116,9 @@ export type DesignEdit =
   | { kind: 'word-delete'; id: string }
   | { kind: 'switch'; index: number; x: number; y: number; rotation: number }
   | { kind: 'loop'; angleDeg: number }
-  | { kind: 'base'; w: number; h: number };
+  | { kind: 'base'; w: number; h: number }
+  /** The bottom picture moved, turned or sized on the underside. */
+  | { kind: 'bottom'; place: BottomPlace };
 
 /** What was picked, so the rail can open the category that answers to it. */
 export type DesignTarget =
@@ -100,7 +126,8 @@ export type DesignTarget =
   | { kind: 'base' }
   | { kind: 'loop' }
   | { kind: 'word'; id: string }
-  | { kind: 'switch'; index: number };
+  | { kind: 'switch'; index: number }
+  | { kind: 'bottom' };
 
 export interface DesignViewOptions {
   /** The stage the view covers while it is shown. */
@@ -131,6 +158,10 @@ const WORD_MIN_MM = 2;
 const WORD_MAX_MM = 30;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+/** The picture's Design size after its corner scales it by `k`: held inside the range the input
+ *  gives (Design size's own, or further for a picture that keeps its size). */
+export const artShare = (i: Pick<DesignInput, 'designScale' | 'designScaleMin' | 'designScaleMax'>, k: number): number =>
+  clamp(i.designScale * k, i.designScaleMin ?? DESIGN_SCALE_MIN, i.designScaleMax ?? DESIGN_SCALE_MAX);
 const rgbCss = (c: RGB) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 const shade = (c: RGB, k: number): RGB => [Math.round(c[0] * k), Math.round(c[1] * k), Math.round(c[2] * k)];
 const signed = (v: number) => `${v > 0.05 ? '+' : v < -0.05 ? '−' : ''}${Math.abs(v).toFixed(1)}`;
@@ -153,72 +184,6 @@ export function ringsPath(rings: Ring[], places = 2): string {
   return d;
 }
 
-/** The rings' bounding box. */
-export function ringsBounds(rings: Ring[]): { minX: number; minY: number; maxX: number; maxY: number } {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const r of rings) for (const [x, y] of r) {
-    if (x < minX) minX = x;
-    if (y < minY) minY = y;
-    if (x > maxX) maxX = x;
-    if (y > maxY) maxY = y;
-  }
-  return { minX, minY, maxX, maxY };
-}
-
-/**
- * Where the keyring loop sits for a bearing: the ray from the body's area centroid at `angleDeg`
- * leaves the outermost boundary at `p`, and the loop's centre is one loop radius further out.
- * The same construction `edgePointAt` makes in the build, so the loop on the canvas lands where
- * the printed one will.
- */
-export function loopCentre(body: Ring[], angleDeg: number, loopR: number): [number, number] {
-  let area = 0, cx = 0, cy = 0;
-  for (const ring of body) {
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const cross = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
-      area += cross;
-      cx += (ring[j][0] + ring[i][0]) * cross;
-      cy += (ring[j][1] + ring[i][1]) * cross;
-    }
-  }
-  const b = ringsBounds(body);
-  const ox = Math.abs(area) > 1e-6 ? cx / (3 * area) : (b.minX + b.maxX) / 2;
-  const oy = Math.abs(area) > 1e-6 ? cy / (3 * area) : (b.minY + b.maxY) / 2;
-  const rad = (angleDeg * Math.PI) / 180;
-  const dx = Math.cos(rad), dy = Math.sin(rad);
-  let best = -Infinity;
-  for (const ring of body) {
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [ax, ay] = ring[j];
-      const ex = ring[i][0] - ax, ey = ring[i][1] - ay;
-      const det = -dx * ey + ex * dy;
-      if (Math.abs(det) < 1e-12) continue;
-      const rx = ax - ox, ry = ay - oy;
-      const t = (-rx * ey + ex * ry) / det;
-      const u = (dx * ry - dy * rx) / det;
-      if (t >= 0 && u >= -1e-9 && u <= 1 + 1e-9 && t > best) best = t;
-    }
-  }
-  if (!Number.isFinite(best)) best = Math.max(b.maxX - b.minX, b.maxY - b.minY) / 2;
-  return [ox + dx * (best + loopR), oy + dy * (best + loopR)];
-}
-
-/** The body's area centroid, for turning a dragged loop back into a bearing. */
-function centroidOf(body: Ring[]): [number, number] {
-  let area = 0, cx = 0, cy = 0;
-  for (const ring of body) {
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const cross = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
-      area += cross;
-      cx += (ring[j][0] + ring[i][0]) * cross;
-      cy += (ring[j][1] + ring[i][1]) * cross;
-    }
-  }
-  if (Math.abs(area) > 1e-6) return [cx / (3 * area), cy / (3 * area)];
-  const b = ringsBounds(body);
-  return [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2];
-}
-
 export function createDesignView(opts: DesignViewOptions): DesignView {
   const root = document.createElement('div');
   root.className = 'cg-design';
@@ -238,6 +203,7 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
   let picked: string | null = null;
   const markPicked = () => {
     [...switchesEl.children].forEach((g, k) => g.classList.toggle('is-picked', picked === `switch:${k}`));
+    bodyEl.classList.toggle('is-picked', picked === 'base');
   };
   const canvas = designCanvas({
     label: 'The clicker from above',
@@ -290,10 +256,16 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
   artClip.append(artEl, wordsEl);
   const baseG = svg('g');
   baseG.append(bodyEl, wellEl, capEl);
+  // A keyring hole's tunnel runs inside the body, under the cap: drawn as a hidden line, dashed,
+  // over the top and under the switches. It moves with the shape it is in.
+  const tunnelEl = svg('path', 'cg-design__tunnel');
+  // A keyring hole placed but not cut: the ring it will be cut with, on the edge, in the accent.
+  const cutterEl = svg('path', 'cg-design__cutter');
   const shapeG = svg('g');
-  shapeG.append(baseG, artClip);
+  shapeG.append(baseG, artClip, tunnelEl, cutterEl);
   const switchesEl = svg('g');
-  // The keyring loop while it is dragged: the build draws it into the body's outline after.
+  // The keyring loop while it is dragged: the build draws it into the body's outline after. A
+  // hole's is the ring it is cut with, outline only.
   const loopGhost = svg('g', 'cg-design__loop-ghost');
   const loopRing = svg('circle');
   const loopHole = svg('circle', 'cg-design__loop-ghost-hole');
@@ -301,8 +273,74 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
   loopGhost.setAttribute('display', 'none');
   canvas.content.append(defs, grid, gridMajor, shapeG, switchesEl, loopGhost);
 
+  /* The underside, seen from below: the body's outline mirrored, the flat it may print in dashed,
+     and the bottom picture clipped to that flat, as the build clips it. Shown instead of the top
+     while the rail's Bottom category is open. */
+  const underG = svg('g');
+  underG.setAttribute('display', 'none');
+  const underClip = svg('clipPath');
+  underClip.id = `${clip.id}-under`;
+  const underClipPath = svg('path');
+  underClip.append(underClipPath);
+  defs.append(underClip);
+  const underBody = svg('path', 'cg-design__body');
+  const underSafe = svg('path', 'cg-design__tunnel');
+  const underArtClip = svg('g');
+  underArtClip.setAttribute('clip-path', `url(#${underClip.id})`);
+  const underArt = svg('g');
+  underArtClip.append(underArt);
+  underG.append(underBody, underArtClip, underSafe);
+  canvas.content.append(underG);
+  /** The bottom picture's paths, rebuilt only when its trace changes. */
+  let underArtFor: DesignArtRegion[] | null = null;
+  /** Rings seen from below: the build's X turned round. */
+  const fromBelow = (rings: Ring[]): Ring[] => rings.map((r) => r.map(([x, y]) => [-x, y] as [number, number]));
+  /** The bottom picture's box on the underside view: at the engine's size times its own, moved
+   *  from the middle of the flat. Null without a picture or a flat to put it on. */
+  function underBox(i: DesignInput): DesignBox | null {
+    const u = i.underside;
+    const B = i.layout.bottom;
+    if (!u || !B || !u.art.length) return null;
+    const [cx, cy] = undersideCentre(B.cx, B.cy, u.place);
+    const s = B.autoMm * u.place.scale;
+    return { cx, cy, w: u.artBox.w * s, h: u.artBox.h * s, rotation: u.place.rotation };
+  }
+  function drawUnder(i: DesignInput) {
+    const u = i.underside;
+    shapeG.setAttribute('display', u ? 'none' : 'inline');
+    switchesEl.setAttribute('display', u ? 'none' : 'inline');
+    underG.setAttribute('display', u ? 'inline' : 'none');
+    if (!u) return;
+    const L = i.layout;
+    underBody.setAttribute('d', ringsPath(fromBelow(L.silhouette ?? L.body)));
+    underBody.setAttribute('fill', rgbCss(i.bodyRgb));
+    const safe = L.bottom ? ringsPath(fromBelow(L.bottom.safe)) : '';
+    underSafe.setAttribute('d', safe);
+    underClipPath.setAttribute('d', safe);
+    if (underArtFor !== u.art) {
+      underArtFor = u.art;
+      // Biggest colour first: the build lets the smaller ones win where two meet.
+      underArt.replaceChildren(...[...u.art].sort((a, b) => b.coverage - a.coverage).map((r) => {
+        const p = svg('path');
+        p.setAttribute('d', ringsPath(r.rings, 5));
+        p.setAttribute('fill', rgbCss(r.rgb));
+        return p;
+      }));
+    }
+    const b = underBox(i);
+    if (b) {
+      underArt.setAttribute('transform', `translate(${b.cx} ${b.cy}) scale(${b.w / Math.max(1e-9, u.artBox.w)}) rotate(${b.rotation})`);
+      underArt.removeAttribute('display');
+    } else {
+      underArt.setAttribute('display', 'none');
+    }
+  }
+
   /** The artwork's paths, rebuilt only when the picture itself changes. */
   let artFor: DesignArtRegion[] | null = null;
+  /** The hull round the artwork (designPick.ts), for what a press on it takes; made when it changes. */
+  let hullFor: DesignArtRegion[] | null = null;
+  let hull: [number, number][] = [];
 
   /* Boldness as the build makes it, a round offset of `bold` mm: fattened, a stroke of the
      shape's own colour round its edge; thinned, a mask taking a band that wide off it. `unit` is
@@ -380,6 +418,12 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
       capEl.setAttribute('d', ringsPath(L.cap));
       clipFor = '';
     }
+    // The tunnel the build cut; none when it found no room, so a dragged-away handle shows why.
+    tunnelEl.setAttribute('d', i.keychain.enabled && L.tunnel ? ringsPath(L.tunnel) : '');
+    const cut = i.keychain.enabled && L.loop?.uncut ? L.loop : null;
+    cutterEl.setAttribute('d', cut ? ringsPath([circleRing(cut.x, cut.y, cut.outerR, 72), circleRing(cut.x, cut.y, cut.outerR - 2 * cut.holeR, 72)]) : '');
+    // In the warning colour where the build found no room for it, as the 3D cutter is.
+    cutterEl.classList.toggle('is-no-room', !!cut?.noRoom);
     // Words on an Outline base grow the base round them, so only a shape base clips them.
     const clipKey = i.outlineBase ? 'cap' : 'image';
     if (clipKey !== clipFor) {
@@ -392,7 +436,7 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
 
     masks.replaceChildren();
     maskSeq = 0;
-    const sorted = [...i.art].sort((a, b) => b.coverage - a.coverage);
+    const sorted = [...i.art].sort((a, b) => (a.paint ?? -1) - (b.paint ?? -1) || b.coverage - a.coverage);
     if (artFor !== i.art) {
       artFor = i.art;
       artEl.replaceChildren(...sorted.map((r) => {
@@ -450,12 +494,18 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
       return g;
     }));
     markPicked();
+    drawUnder(i);
   }
 
   /** A drag going on, drawn before the build has run: what is dragged follows the pointer. */
   function preview(id: string, box: DesignBox) {
     const i = input;
     if (!i) return;
+    if (id === 'bottom') {
+      const w = i.underside?.artBox.w ?? 1;
+      underArt.setAttribute('transform', `translate(${box.cx} ${box.cy}) scale(${box.w / Math.max(1e-9, w)}) rotate(${box.rotation})`);
+      return;
+    }
     if (id === 'art') {
       const t = artTransform(i);
       if (i.outlineBase) {
@@ -481,7 +531,13 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
         c.setAttribute('r', String(r));
       }
       loopRing.setAttribute('fill', rgbCss(i.bodyRgb));
+      // A hole is the ring it is cut with, outline only: there is no tab to fill.
+      const hole = keyringMark(i.layout.loop).ringOnly;
+      loopGhost.classList.toggle('cg-design__loop-ghost--ring', hole);
+      if (hole) loopHole.setAttribute('display', 'none');
+      else loopHole.removeAttribute('display');
       loopGhost.removeAttribute('display');
+      cutterEl.setAttribute('d', '');
     } else if (id === 'base') {
       const b = ringsBounds(i.layout.body);
       const cx = (b.minX + b.maxX) / 2;
@@ -495,6 +551,12 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
   function objectsOf(i: DesignInput): DesignObject[] {
     const L = i.layout;
     const out: DesignObject[] = [];
+    // The underside has one thing on it to move: the bottom picture.
+    if (i.underside) {
+      const b = underBox(i);
+      if (b) out.push({ id: 'bottom', label: 'Bottom picture', box: b, resize: 'uniform', rotate: true, z: 1 });
+      return out;
+    }
     const b = ringsBounds(L.body);
     if (!i.outlineBase && Number.isFinite(b.minX)) {
       out.push({
@@ -503,18 +565,27 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
         box: { cx: (b.minX + b.maxX) / 2, cy: (b.minY + b.maxY) / 2, w: b.maxX - b.minX, h: b.maxY - b.minY, rotation: 0 },
         move: false,
         resize: i.freeAspect ? 'free' : 'uniform',
-        grab: 'border',
+        // Anywhere on the body, under the picture, the words and the switches (designPick.ts).
+        hit: onBody(L.silhouette ?? L.body),
         z: 0,
       });
     }
     const t = artTransform(i);
     if (!i.blank || i.outlineBase) {
+      if (hullFor !== i.art) {
+        hullFor = i.art;
+        hull = artHull(i.art);
+      }
+      // On an Outline base the picture is the base: the whole body takes the press.
+      const onPicture = onArt(hull, t);
+      const onShape = i.outlineBase ? onBody(L.silhouette ?? L.body) : null;
       out.push({
         id: 'art',
         label: i.outlineBase ? (i.blank ? 'Base' : 'Picture and base') : 'Picture',
         box: { cx: t.ox, cy: t.oy, w: i.artBox.w * t.s, h: i.artBox.h * t.s, rotation: t.r },
         resize: 'uniform',
         rotate: true,
+        hit: onShape ? (x, y) => onShape(x, y) || onPicture(x, y) : onPicture,
         z: 1,
       });
     }
@@ -540,7 +611,7 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
     });
     if (i.keychain.enabled && L.loop) {
       const d = L.loop.outerR * 2;
-      out.push({ id: 'loop', label: 'Keyring loop', box: { cx: L.loop.x, cy: L.loop.y, w: d, h: d, rotation: 0 }, shape: 'circle', z: 3 });
+      out.push({ id: 'loop', label: keyringMark(L.loop).label, box: { cx: L.loop.x, cy: L.loop.y, w: d, h: d, rotation: 0 }, shape: 'circle', z: 3 });
     }
     return out;
   }
@@ -565,6 +636,21 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
   function constrain(id: string, box: DesignBox): DesignBox {
     const i = input;
     if (!i) return box;
+    if (id === 'bottom' && i.underside && i.layout.bottom) {
+      // Held to the rail's ranges: the size a share of the engine's, the move from the flat's middle.
+      const B = i.layout.bottom;
+      const { w: aw, h: ah } = i.underside.artBox;
+      const w0 = aw * B.autoMm;
+      const k = clamp(w0 > 0 ? box.w / w0 : 1, BOTTOM_PLACE_LIMITS.scale[0], BOTTOM_PLACE_LIMITS.scale[1]);
+      const [x0, y0] = undersideCentre(B.cx, B.cy, { x: 0, y: 0, rotation: 0, scale: 1 });
+      return {
+        ...box,
+        cx: x0 + clamp(box.cx - x0, BOTTOM_PLACE_LIMITS.x[0], BOTTOM_PLACE_LIMITS.x[1]),
+        cy: y0 + clamp(box.cy - y0, BOTTOM_PLACE_LIMITS.y[0], BOTTOM_PLACE_LIMITS.y[1]),
+        w: w0 * k,
+        h: ah * B.autoMm * k,
+      };
+    }
     if (id === 'art') {
       const t = artTransform(i);
       const w0 = i.artBox.w * t.s;
@@ -574,7 +660,7 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
         const [loX, hiX, loY, hiY] = outlineReach(i);
         return { ...box, cx: clamp(box.cx, loX, hiX), cy: clamp(box.cy, loY, hiY), w: w0 * k, h: i.artBox.h * t.s * k };
       }
-      k = clamp(i.designScale * k, i.designScaleMin ?? DESIGN_SCALE_MIN, DESIGN_SCALE_MAX) / i.designScale;
+      k = artShare(i, k) / i.designScale;
       return {
         ...box,
         cx: clamp(box.cx, -OFFSET_LIMIT, OFFSET_LIMIT),
@@ -585,13 +671,13 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
     }
     if (id.startsWith('switch:')) {
       const sb = i.layout.switchBox;
-      const mid = (lo: number, hi: number, v: number) => (lo > hi ? (lo + hi) / 2 : clamp(v, lo, hi));
-      return { ...box, cx: mid(sb.loX, sb.hiX, box.cx), cy: mid(sb.loY, sb.hiY, box.cy) };
+      return { ...box, cx: holdInBox(box.cx, sb.loX, sb.hiX), cy: holdInBox(box.cy, sb.loY, sb.hiY) };
     }
     if (id === 'loop' && i.layout.loop) {
       const [cx, cy] = centroidOf(i.layout.body);
       const angle = (Math.atan2(box.cy - cy, box.cx - cx) * 180) / Math.PI;
-      const [x, y] = loopCentre(i.layout.body, angle, i.layout.loop.outerR);
+      // A loop's centre is one loop radius out from the edge; a hole's is on the edge itself.
+      const [x, y] = loopCentre(i.layout.body, angle, keyringMark(i.layout.loop).edgeOut);
       return { ...box, cx: x, cy: y };
     }
     if (id.startsWith('word:')) {
@@ -618,6 +704,11 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
   function commit(id: string, box: DesignBox, kind: DesignChange) {
     const i = input;
     if (!i) return;
+    if (id === 'bottom') {
+      if (i.underside && i.layout.bottom) opts.onEdit({ kind: 'bottom', place: placeFromBox(box, i.layout.bottom, i.underside.artBox.w) });
+      if (input) draw(input);
+      return;
+    }
     if (id === 'art') {
       const t = artTransform(i);
       const w0 = i.artBox.w * t.s;
@@ -638,7 +729,7 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
         opts.onEdit({
           kind: 'art',
           offset: { x: Math.round(box.cx * 10) / 10, y: Math.round(box.cy * 10) / 10 },
-          designScale: Math.round(clamp(i.designScale * k, i.designScaleMin ?? DESIGN_SCALE_MIN, DESIGN_SCALE_MAX) * 100) / 100,
+          designScale: roundShare(artShare(i, k)),
           rotation: Math.round(wrapDeg(box.rotation)),
         });
       }
@@ -674,6 +765,11 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
   function pillOf(id: string, box: DesignBox): string | null {
     const i = input;
     if (!i) return null;
+    if (id === 'bottom' && i.underside && i.layout.bottom) {
+      const p = placeFromBox(box, i.layout.bottom, i.underside.artBox.w);
+      const moved = Math.abs(p.x) >= 0.05 || Math.abs(p.y) >= 0.05 ? ` · ${signed(p.x)}, ${signed(p.y)} mm` : '';
+      return `${Math.round(p.scale * 100)} %${moved}${turned(p.rotation)}`;
+    }
     if (id === 'art') {
       const t = artTransform(i);
       const w0 = i.artBox.w * t.s;
@@ -694,7 +790,7 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
 
   function targetOf(id: string | null): DesignTarget | null {
     if (!id) return null;
-    if (id === 'art' || id === 'base' || id === 'loop') return { kind: id };
+    if (id === 'art' || id === 'base' || id === 'loop' || id === 'bottom') return { kind: id };
     if (id.startsWith('word:')) return { kind: 'word', id: id.slice(5) };
     if (id.startsWith('switch:')) return { kind: 'switch', index: Number(id.slice(7)) };
     return null;
@@ -703,7 +799,10 @@ export function createDesignView(opts: DesignViewOptions): DesignView {
   /** What there is to frame: the body, and the loop beyond it. */
   function boundsOf(i: DesignInput) {
     const { body, loop } = i.layout;
-    return ringsBounds(loop ? [...body, [[loop.x - loop.outerR, loop.y - loop.outerR], [loop.x + loop.outerR, loop.y + loop.outerR], [loop.x, loop.y]]] : body);
+    // The underside is the body seen from below: its outline turned round.
+    if (i.underside) return ringsBounds(fromBelow(i.layout.silhouette ?? body));
+    // A hole's ring is half air past the edge, which needs no framing.
+    return ringsBounds(loop && keyringMark(loop).framed ? [...body, [[loop.x - loop.outerR, loop.y - loop.outerR], [loop.x + loop.outerR, loop.y + loop.outerR], [loop.x, loop.y]]] : body);
   }
   /** Room round the clicker when it is framed: a fifth of the canvas each side, never under 90 px,
    *  so it sits in the view with the stage's own tools clear of it rather than filling it. */

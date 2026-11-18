@@ -48,6 +48,7 @@ export {
   segmentsIntersect,
   segmentDistance,
   isConvex,
+  convexHull,
   shrinkRing,
   circleSegments,
   circle,

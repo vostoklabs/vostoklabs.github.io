@@ -36,7 +36,10 @@ function fontsOnce(): Plugin {
   };
 }
 
-const isLibraryFont = (file: string) => /[\\/]packages[\\/]fonts[\\/]src[\\/]fonts[\\/][^\\/]+\.ttf$/.test(file);
+// The .ttf faces and the .otf one shipped as its maker released it. The .otf has no rule in
+// fonts.css and gets none from the prelude either (it declares .ttf files only): the package
+// declares it from its own bytes once getFont has loaded it, as it does online.
+const isLibraryFont = (file: string) => /[\\/]packages[\\/]fonts[\\/]src[\\/]fonts[\\/][^\\/]+\.(?:ttf|otf)$/.test(file);
 
 export default defineConfig((env) =>
   mergeConfig(mergeConfig(typeof base === 'function' ? base(env) : base, OFFLINE_OVERRIDES), {

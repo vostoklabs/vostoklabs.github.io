@@ -4,8 +4,9 @@
   at a window width, with the theme and density the document root says.
 
   It reads src/styles.css and the files it imports, in that order, and resolves the cascade the
-  way a browser does for the resting state: media queries by width (reduced motion and the
-  colour-scheme queries are off; the theme comes from `data-theme`), specificity, order,
+  way a browser does for the resting state: media queries by width (on a tall window: a
+  `max-height` query is off; reduced motion and the colour-scheme queries are off; the theme
+  comes from `data-theme`), specificity, order,
   `!important`, inline styles, inherited properties and custom properties with `var()`.
   Interaction states (`:hover`, `:focus-visible`...) never match, and a pseudo-element's rule
   styles no element. No layout: a value is the declared one, `calc()` and all.
@@ -345,6 +346,9 @@ function mediaMatches(query: string, width: number): boolean {
       if (m) return width <= Number(m[1]);
       m = c.match(/^min-width:\s*([\d.]+)px$/);
       if (m) return width >= Number(m[1]);
+      // By height: the window is taken to be a tall one, so what a short window changes is off.
+      if (/^max-height:\s*[\d.]+px$/.test(c)) return false;
+      if (/^min-height:\s*[\d.]+px$/.test(c)) return true;
       if (/^(prefers-reduced-motion|prefers-color-scheme|forced-colors)/.test(c)) return false;
       if (/^hover:\s*hover|^pointer:\s*fine/.test(c)) return true;
       if (/^(any-)?pointer:\s*coarse/.test(c)) return false;

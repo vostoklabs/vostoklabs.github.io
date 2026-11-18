@@ -35,6 +35,9 @@ jobs:
       # Every export names the build it came from (Metadata/vostok_labs.txt, the SVG metadata).
       # Unset, the live site stamped "dev" into every file.
       VITE_BUILD_ID: ${{ github.sha }}
+      # The site keeps one copy of each font file, here, and every app fetches that one
+      # (@vostok/fonts). "Share the fonts" below puts them there.
+      VITE_SITE_FONTS: shared/fonts/
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -147,6 +150,12 @@ jobs:
 
       - name: Copy Render Studio to Hub Dist
         run: cp -r apps/render-studio/dist apps/hub/dist/render-studio
+
+      # After every app is in place: each app's own copies of the fonts go, the ones the apps
+      # were built to fetch (VITE_SITE_FONTS) are put there, and each app's stylesheet is pointed
+      # at them. Checks first, and fails without changing anything if an app would lose a face.
+      - name: Share the fonts
+        run: node packages/fonts/scripts/site-fonts.mjs apps/hub/dist
 
       # Every generator the hub links to has to exist under the path generators.json gives it,
       # or the card is a 404 — which is exactly what shipped: the app was written, the registry

@@ -29,6 +29,20 @@ export const STEM_FIT_MIN_MM = -0.4;
 export const STEM_FIT_MAX_MM = 0.4;
 export const STEM_FIT_STEP_MM = 0.05;
 
+/** How much wider than drawn the cross hole is at a setting of 0, mm. The control reads relative
+ *  to this, so 0 is the stock fit. A stock clicker printed with the hole as drawn cracked going on
+ *  the switch; on the fit test (2026-11-18) the +0.10 tile fitted best, so that is now 0. */
+export const STEM_FIT_STOCK_MM = 0.1;
+
+/** How much wider than drawn the post may be, mm, across its whole width. Only wider, and only
+ *  this far: the post goes down into the switch's top housing on every press, and the opening is
+ *  tightest 3.22 mm from the axis (measured on mx-switch.3mf, 2026-11-09) against the post's
+ *  2.755. At +0.4 that leaves a quarter of a millimetre a side for the printer's error. Past it
+ *  the post lands on the housing, and the clicker stops clicking. */
+export const STEM_OUTER_MIN_MM = 0;
+export const STEM_OUTER_MAX_MM = 0.4;
+export const STEM_OUTER_STEP_MM = 0.1;
+
 const MITER_LIMIT = 4;
 // A hole must sit at least this far inside the post's outline to count as the socket.
 const NESTED_MARGIN_MM = 0.02;
@@ -67,13 +81,88 @@ function holesAt(stem: Solid, z: number): { poly: Poly; w: number; h: number }[]
 
 /**
  * The stem with its cross hole opened (`fitMm` > 0) or closed (`fitMm` < 0) by `fitMm` in
- * total, `fitMm / 2` per wall.
+ * total, `fitMm / 2` per wall, from the stock hole (`stockMm` wider than drawn: the clicker
+ * post's `STEM_FIT_STOCK_MM` unless the stem brings a stock fit of its own).
  *
  * `solid` is always a new object the caller owns, including when there is nothing to do.
  * `applied` is false only when a non-zero fit was asked for and the post has no hole that runs
  * straight through it; `solid` is then the stem as authored, and the caller says so.
+ *
+ * `outerMm` makes the post that much wider across (`thickenPost`). 0 leaves it exactly as it was.
  */
-export function applyStemFit(wasm: Wasm, stem: Solid, fitMm: number): { solid: Solid; applied: boolean } {
+export function applyStemFit(
+  wasm: Wasm, stem: Solid, fitMm: number, outerMm = 0, stockMm = STEM_FIT_STOCK_MM,
+): { solid: Solid; applied: boolean } {
+  const fit = fitHole(wasm, stem, fitMm + stockMm);
+  if (!(outerMm > 1e-4)) return fit;
+  const thick = thickenPost(wasm, fit.solid, outerMm);
+  if (!thick) return { solid: fit.solid, applied: false };
+  fit.solid.delete();
+  return { solid: thick, applied: fit.applied };
+}
+
+/** The post's outside at height z: the largest ring of the slice. */
+function outsideAt(stem: Solid, z: number): Poly | null {
+  const cs = stem.slice(z);
+  const polys: Poly[] = ringsOf(cs);
+  cs.delete();
+  let best: Poly | null = null;
+  let bestArea = 0;
+  for (const poly of polys) {
+    const a = Math.abs(signedArea(poly));
+    if (a > bestArea) {
+      bestArea = a;
+      best = poly;
+    }
+  }
+  return best;
+}
+
+/**
+ * A new post `outerMm` wider across, its hole and height untouched, or null if the post is not a
+ * straight column to measure one from. Read from the lower half, where it is straight; its top
+ * flares into the cap, so the ring disappears inside the flare without a seam.
+ */
+function thickenPost(wasm: Wasm, post: Solid, outerMm: number): Solid | null {
+  const bb = post.boundingBox();
+  const zMin: number = bb.min[2];
+  const zMax: number = bb.max[2];
+  if (!(zMax - zMin > 1e-3)) return null;
+  const probes = [0.1, 0.25, 0.4].map((f) => outsideAt(post, zMin + f * (zMax - zMin)));
+  if (probes.some((p) => !p)) return null;
+  const boxes = (probes as Poly[]).map((p) => ringBox([p]));
+  if (boxes.some((b) => Math.abs(b.w - boxes[0].w) > CONSTANT_EPS_MM || Math.abs(b.h - boxes[0].h) > CONSTANT_EPS_MM)) return null;
+  const poly = probes[0] as Poly;
+  const contour = signedArea(poly) < 0 ? poly.slice().reverse() : poly;
+
+  const trash: { delete(): void }[] = [];
+  const track = <T extends { delete(): void }>(o: T): T => {
+    trash.push(o);
+    return o;
+  };
+  try {
+    const outside = track(csOf(wasm, [contour], 'Positive'));
+    const grown = track(outside.offset(outerMm / 2, 'Round', 2, 48));
+    const core = track(outside.offset(-NUDGE_MM, 'Round', 2, 48));
+    const ring = track(grown.subtract(core));
+    const prism = track(track(extrude(wasm, ring, zMax - zMin)).translate([0, 0, zMin]));
+    const out: Solid = post.add(prism);
+    const parts = out.decompose();
+    const oneBody = parts.length === 1;
+    for (const p of parts) p.delete();
+    if (out.status() !== 'NoError' || out.isEmpty() || !oneBody) {
+      out.delete();
+      return null;
+    }
+    return out;
+  } finally {
+    for (const o of trash) {
+      try { o.delete(); } catch { /* already gone */ }
+    }
+  }
+}
+
+function fitHole(wasm: Wasm, stem: Solid, fitMm: number): { solid: Solid; applied: boolean } {
   const asAuthored = () => stem.translate([0, 0, 0]);
   if (!(Math.abs(fitMm) > 1e-4)) return { solid: asAuthored(), applied: true };
 

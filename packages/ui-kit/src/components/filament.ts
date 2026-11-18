@@ -13,6 +13,7 @@
  * now; the other two should too, and drop their own. Until they do, keep the values identical.
  */
 import { el } from '../dom';
+import { ICONS, svgEl } from '../icons';
 import { withAccess, type ValueRow } from './controls';
 import { colorPopover, type ColorPopoverOption } from './color-popover';
 
@@ -184,6 +185,10 @@ export interface ColorChipOptions {
    *  reader gets. */
   label: string;
   onClick: (e: MouseEvent) => void;
+  /** The chip opens a menu: a caret inside it, drawn in whichever of dark or light reads on the
+   *  colour, and `aria-haspopup`. A bare swatch beside a sample of the same colour does not
+   *  look pressable; a swatch with a caret reads as a menu. Default off, the plain swatch. */
+  menu?: boolean;
 }
 
 export interface ColorChipHandle extends HTMLButtonElement {
@@ -208,8 +213,19 @@ export function colorChip(opts: ColorChipOptions): ColorChipHandle {
     attrs: { type: 'button', 'aria-label': opts.label, style: `--swatch: ${opts.hex}` },
     on: { click: (e) => opts.onClick(e as MouseEvent) },
   }) as ColorChipHandle;
+  /** The caret's ink: dark on a light colour, light on a dark one. */
+  const ink = (hex: string) => {
+    if (opts.menu) btn.dataset.ink = contrastRatio(hex, '#000000') >= contrastRatio(hex, '#ffffff') ? 'dark' : 'light';
+  };
+  if (opts.menu) {
+    btn.classList.add('vl-color-chip--menu');
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.append(svgEl(ICONS.chevronDown));
+    ink(opts.hex);
+  }
   btn.setValue = (hex: string) => {
     btn.style.setProperty('--swatch', hex);
+    ink(hex);
   };
   return btn;
 }

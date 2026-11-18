@@ -32,3 +32,11 @@ export function assetUrl(path: string): string {
   if (/^(https?:|data:|blob:)/i.test(path)) return path;
   return base + path;
 }
+
+/** A bundled picture's file (a sample, a pack design) as this build ships it. The MakerLab build
+ *  carries each PNG as a lossless WebP of the same pixels (`picturesAsWebp` in vite.config.ts);
+ *  every other build, and the tests, the PNG itself. */
+export function shippedPicture(file: string): string {
+  const webp = typeof __PICTURES_WEBP__ !== 'undefined' && __PICTURES_WEBP__;
+  return webp ? file.replace(/\.png$/i, '.webp') : file;
+}

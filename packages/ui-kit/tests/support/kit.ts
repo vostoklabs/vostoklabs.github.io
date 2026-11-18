@@ -15,8 +15,9 @@ import { FakeElement } from './dom';
 export { buildLoop, workerClient, answerRequests, NothingBuiltError, BuildTimeoutError } from '../../src/build-loop';
 export { createStore } from '../../src/store';
 export { markProject, readProjectFile } from '../../src/components/project-file';
-// Data, not chrome: the filament shelf an app offers is the kit's own list.
+// Data, not chrome: the filament shelf an app offers is the kit's own list, and its icons.
 export { FILAMENTS } from '../../src/components/filament';
+export { ICONS } from '../../src/icons';
 
 /** What the app asked of the kit's chrome, oldest first. */
 export const kit = {
@@ -54,4 +55,4 @@ export const topbarLinks = () => new FakeElement('header');
 export const listRow = () => new FakeElement('button');
 export const stageHandle = () => Object.assign(new FakeElement('button'), { setLabel() {}, place() {} });
 export const closeColorPopover = () => {};
-export const stepperRow = () => Object.assign(new FakeElement('div'), { setValue() {}, getValue: () => 0, setDisabled() {}, setTag() {} });
+export const stepperRow = () => Object.assign(new FakeElement('div'), { setValue() {}, getValue: () => 0, setDisabled() {}, setTag() {}, setBounds() {} });

@@ -65,7 +65,7 @@ export {
 export { sidebarFooter, type SidebarFooterOptions } from './components/sidebar-footer';
 export { readProjectFile, markProject, type ProjectShape } from './components/project-file';
 export { createStore, type Store, type Listener } from './store';
-export { appShell, type AppShellOptions, type AppShell, type PanelOptions } from './components/app-shell';
+export { appShell, phoneShell, type AppShellOptions, type AppShell, type PanelOptions, type ShellPanel } from './components/app-shell';
 export { showWhatsNew, maybeShowWhatsNew, type WhatsNewItem, type WhatsNewOptions } from './components/whats-new';
 export {
   openChangelog,
@@ -240,6 +240,20 @@ export {
   type DesignChange,
   type DesignShape,
 } from './components/design-canvas';
+// A crop box over a picture: corner and edge grips, the outside dimmed, in fractions of the picture.
+export {
+  cropBox,
+  dragCrop,
+  nudgeCrop,
+  clampCrop,
+  sameCrop,
+  CROP_GRIPS,
+  FULL_CROP,
+  type CropBoxOptions,
+  type CropBoxHandle,
+  type CropRect,
+  type CropGrip,
+} from './components/crop-box';
 export { ICONS, svgEl, svgPathEl } from './icons';
 export { el, svgNode } from './dom';
 export { themeColorHex, themeColor } from './tokens';

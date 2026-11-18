@@ -26,7 +26,8 @@ import Module from 'manifold-3d';
 import { readModel } from '@vostok/export/read';
 import { buildClicker } from '../src/geometry/buildClicker.ts';
 import { buildFitStrip, fitTestLabel, fitTestLadder } from '../src/geometry/fitStrip.ts';
-import { applyStemFit } from '../src/geometry/stemFit.ts';
+import { applyStemFit, STEM_FIT_STOCK_MM } from '../src/geometry/stemFit.ts';
+import { POCKET_FIT_PCT, TOP_FIT_MM } from '../src/ui/fitChoice.ts';
 import type { BuildParams, BuildRegion, Ring } from '../src/types.ts';
 
 // Anchored on the repo root rather than on import.meta.url, because the bundle that actually
@@ -134,6 +135,30 @@ check(
   `maxX ${zero.top.maxX.toFixed(4)} / ${looser.top.maxX.toFixed(4)} / ${tighter.top.maxX.toFixed(4)}`,
 );
 
+// --- The Fit category's simple choices mean what their names say in the printed part: Looser
+//     takes material out where the part grips, Snugger puts it back, and neither moves the outside.
+{
+  const topLoose = measure({ ...base, stemFitMm: TOP_FIT_MM.looser });
+  const topSnug = measure({ ...base, stemFitMm: TOP_FIT_MM.snugger });
+  check(
+    'top part fit: Looser takes material out of the cap, Snugger adds it',
+    topLoose.top.vol < zero.top.vol - 0.01 && topSnug.top.vol > zero.top.vol + 0.01,
+    `${topLoose.top.vol.toFixed(2)} < ${zero.top.vol.toFixed(2)} < ${topSnug.top.vol.toFixed(2)} mm³`,
+  );
+  check(
+    'top part fit: the cap\'s outside is the same at Looser, Standard and Snugger',
+    [topLoose, topSnug].every((m) => Math.abs(m.top.minX - zero.top.minX) < 1e-3 && Math.abs(m.top.maxX - zero.top.maxX) < 1e-3),
+    `x ${zero.top.minX.toFixed(4)}..${zero.top.maxX.toFixed(4)}`,
+  );
+  const pocketLoose = measure({ ...base, socketFitPct: POCKET_FIT_PCT.looser });
+  const pocketSnug = measure({ ...base, socketFitPct: POCKET_FIT_PCT.snugger });
+  check(
+    'switch cut-out fit: Looser takes material out of the base, Snugger adds it',
+    pocketLoose.base.vol < zero.base.vol - 0.1 && pocketSnug.base.vol > zero.base.vol + 0.1,
+    `${pocketLoose.base.vol.toFixed(1)} < ${zero.base.vol.toFixed(1)} < ${pocketSnug.base.vol.toFixed(1)} mm³`,
+  );
+}
+
 // --- And the number on the control is the number in the part. Volume only says the hole
 //     moved; this says by how much. The old percentage scale passed every volume check above
 //     while moving each gripping wall 0.03 mm across its whole range, which is under what a
@@ -166,14 +191,14 @@ function holeSpans(solid: any, z: number) {
     const r = applyStemFit(wasm, stem, fit);
     const spans = heights.map((z) => holeSpans(r.solid, z));
     const worst = Math.max(...spans.flatMap((s, i) => [
-      Math.abs(s.armWidth - asAuthored[i].armWidth - fit),
-      Math.abs(s.armLength - asAuthored[i].armLength - fit),
+      Math.abs(s.armWidth - asAuthored[i].armWidth - fit - STEM_FIT_STOCK_MM),
+      Math.abs(s.armLength - asAuthored[i].armLength - fit - STEM_FIT_STOCK_MM),
     ]));
     const rb = r.solid.boundingBox();
     const outerSame = [0, 1, 2].every((k) =>
       Math.abs(rb.min[k] - stemBB.min[k]) < 1e-4 && Math.abs(rb.max[k] - stemBB.max[k]) < 1e-4);
     check(
-      `stem fit ${fitTestLabel(fit)} mm moves the cross hole by exactly that, top to bottom`,
+      `stem fit ${fitTestLabel(fit)} mm moves the cross hole by exactly that from stock, top to bottom`,
       r.applied && worst < 0.002 && outerSame && r.solid.genus() === 1,
       `arm ${asAuthored[1].armWidth.toFixed(3)} -> ${spans[1].armWidth.toFixed(3)} mm, `
       + `worst error ${worst.toFixed(4)} mm, outer post ${outerSame ? 'unchanged' : 'MOVED'}`,
@@ -297,8 +322,8 @@ check(
   const spansTop = holeSpans(solid.translate([-(partStats[2].minX + partStats[2].maxX) / 2, 0, 0]), wantTop - 0.3);
   const spansLow = holeSpans(solid.translate([-(partStats[2].minX + partStats[2].maxX) / 2, 0, 0]), 2.5);
   check(
-    'the socket opens at the top of the stem, as authored at 0.00',
-    Math.abs(spansTop.armWidth - 1.194) < 0.01 && Math.abs(spansLow.armWidth - 1.194) < 0.01,
+    'the socket opens at the top of the stem, at the stock fit at 0.00',
+    Math.abs(spansTop.armWidth - 1.294) < 0.01 && Math.abs(spansLow.armWidth - 1.294) < 0.01,
     `arm width ${spansTop.armWidth.toFixed(3)} mm at the top, ${spansLow.armWidth.toFixed(3)} mm near the tab`,
   );
 }

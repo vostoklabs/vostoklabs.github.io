@@ -1,7 +1,7 @@
 // Bundled sample images, shipped as static assets under public/assets/media.
 // Selecting one loads the real PNG through the same path as a user upload.
 import { loadUrlToImage, type RgbaImage } from '@vostok/trace';
-import { assetUrl } from '../assets';
+import { assetUrl, shippedPicture } from '../assets';
 
 const imgDir = () => assetUrl('assets/media/images/');
 
@@ -25,8 +25,8 @@ export interface SampleInfo {
 function imageSample(file: string, name: string): SampleInfo {
   return {
     name,
-    get src() { return imgDir() + file; },
-    load: () => loadUrlToImage(imgDir() + file),
+    get src() { return imgDir() + shippedPicture(file); },
+    load: () => loadUrlToImage(imgDir() + shippedPicture(file)),
   };
 }
 

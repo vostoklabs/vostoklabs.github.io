@@ -138,5 +138,22 @@ for (const [w, h, r, seg] of [[20, 10, 3, 10], [57.3, 41.9, 2, 8], [0.7, 0.3, 0.
   }
 }
 
+// ---- 5. the convex hull round some points
+
+{
+  const sq: [number, number][] = [[0, 0], [4, 0], [4, 4], [0, 4], [2, 2], [1, 3], [2, 0], [4, 2]];
+  const h = S.convexHull(sq);
+  ok(h.length === 4 && S.signedArea(h) === 16, `a square with points inside and on its sides: its four corners, counter-clockwise (${JSON.stringify(h)})`);
+  ok(S.convexHull([]).length === 0 && S.convexHull([[1, 1]]).length === 1 && S.convexHull([[0, 0], [1, 1], [2, 2]]).length <= 2,
+    'nothing, one point and a line give what there is');
+  // A ring of 200 points on a circle and a scatter inside it: the hull is the circle's points.
+  const ring: [number, number][] = Array.from({ length: 200 }, (_, k) => [10 * Math.cos((k * Math.PI) / 100), 10 * Math.sin((k * Math.PI) / 100)]);
+  const scatter: [number, number][] = Array.from({ length: 500 }, (_, k) => [6 * Math.cos(k * 1.7) * ((k % 7) / 7), 6 * Math.sin(k * 2.3) * ((k % 5) / 5)]);
+  const hc = S.convexHull([...scatter, ...ring]);
+  ok(hc.length === 200 && hc.every((p) => Math.abs(Math.hypot(p[0], p[1]) - 10) < 1e-9), `a circle with a scatter inside: the hull is the circle's 200 points (${hc.length})`);
+  ok(sq.every((p) => S.pointInRing(p, h) || [0, 1, 2, 3].some((i) => S.pointSegmentDistance(p, h[i]!, h[(i + 1) % 4]!) < 1e-9)),
+    'every point is inside the hull or on its edge');
+}
+
 console.log(`${checks - failed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

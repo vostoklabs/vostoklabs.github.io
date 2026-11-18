@@ -59,8 +59,9 @@ function fontLines() {
   const credits = join(ROOT, 'packages', 'fonts', 'src', 'fonts', 'CREDITS.md');
   if (!existsSync(credits)) throw new Error('packages/fonts/src/fonts/CREDITS.md is missing — run `pnpm --filter @vostok/fonts fetch-fonts`');
   const md = readFileSync(credits, 'utf8');
-  // The table rows are `| Name | Category | https://… |`.
-  const names = [...md.matchAll(/^\| ([^|]+?) \| [^|]+? \| https:\/\/fonts\.google\.com/gm)].map((m) => m[1].trim());
+  // The table rows are `| Name | Category | https://… |`: a Google Fonts page, or the file of a
+  // maker's own release.
+  const names = [...md.matchAll(/^\| ([^|]+?) \| [^|]+? \| https:\/\/(?:fonts\.google\.com|github\.com)/gm)].map((m) => m[1].trim());
   if (names.length < 100) throw new Error(`only ${names.length} fonts parsed out of CREDITS.md — the table shape changed`);
   return names;
 }
@@ -70,11 +71,12 @@ function fontLines() {
  *  licence) and the licence its METADATA.pb names: 236 OFL-1.1, 15 Apache-2.0, plus the symbol
  *  font. Every family whose OFL.txt declares a Reserved Font Name ships as its original file
  *  (packages/fonts/scripts/fetch-fonts.mjs, ORIGINALS), so no modified copy carries one. */
-const FONT_LICENCES = `  All bundled typefaces come from Google Fonts and are licensed under either the
-  SIL Open Font License 1.1 or the Apache License 2.0. Both permit embedding and
-  bundling in commercial software, and the OFL states explicitly that documents
-  created with the font are not restricted by it — so anything you export from
-  this generator is yours, with no attribution owed for the lettering.
+const FONT_LICENCES = `  All bundled typefaces come from Google Fonts, but for one taken from its
+  maker's own release, and are licensed under either the SIL Open Font License
+  1.1 or the Apache License 2.0. Both permit embedding and bundling in
+  commercial software, and the OFL states explicitly that documents created
+  with the font are not restricted by it — so anything you export from this
+  generator is yours, with no attribution owed for the lettering.
 
   What the files are. Most are Google Fonts' own Latin builds of each family, as
   its font API serves them. A family whose licence reserves its name ships as the
@@ -85,6 +87,10 @@ const FONT_LICENCES = `  All bundled typefaces come from Google Fonts and are li
   Serif, Noto Sans Mono and Libertinus Sans were cut by Vostok Labs to their
   Latin, Greek and Cyrillic characters at their Regular weight. Those changes are
   ours, and every file stays under its original licence.
+
+  Source Han Sans CN is Adobe's own file from its release 1.001 of the family,
+  unmodified, under the Apache License 2.0. "Source" is a trademark of Adobe,
+  named here only to say which font it is.
 
   SIL Open Font License 1.1   https://openfontlicense.org
   Apache License 2.0          https://www.apache.org/licenses/LICENSE-2.0
@@ -116,7 +122,7 @@ function fontCopyrights({ library = true, weights = [] } = {}) {
   // The library's faces, and the other weights (fonts/weights/) the app carries, by file name.
   const base = (f) => f.replace(/^weights\//, '');
   const files = [
-    ...(library ? readdirSync(dir).filter((x) => x.endsWith('.ttf')) : []),
+    ...(library ? readdirSync(dir).filter((x) => /\.(?:ttf|otf)$/.test(x)) : []),
     ...weights.map((id) => `weights/${id}.ttf`),
   ].sort((a, b) => (base(a) < base(b) ? -1 : base(a) > base(b) ? 1 : 0));
   for (const f of files) {
@@ -125,7 +131,7 @@ function fontCopyrights({ library = true, weights = [] } = {}) {
     // A face whose file holds no copyright notice has its family's, recorded in the asset
     // registry from the family's OFL.txt.
     if (!best.trim()) best = ROWS.find((r) => `packages/fonts/src/fonts/${f}` in r.files)?.copyright ?? '';
-    if (best.trim()) out.push(`  ${base(f).replace('.ttf', '')}: ${best.replace(/\s+/g, ' ').trim()}`);
+    if (best.trim()) out.push(`  ${base(f).replace(/\.(?:ttf|otf)$/, '')}: ${best.replace(/\s+/g, ' ').trim()}`);
   }
   return out;
 }
@@ -461,7 +467,7 @@ function carriedBy(appId, withPrivate = false) {
   return {
     rows,
     libs,
-    fonts: [...files].some((f) => /^packages\/fonts\/src\/fonts\/[^/]+\.ttf$/.test(f)),
+    fonts: [...files].some((f) => /^packages\/fonts\/src\/fonts\/[^/]+\.(?:ttf|otf)$/.test(f)),
     // The other weights, outside the library: carried only by an app that imports them.
     weights: [...files].map((f) => /^packages\/fonts\/src\/fonts\/weights\/([^/]+)\.ttf$/.exec(f)?.[1]).filter(Boolean).sort(),
     patterns: kinds.has('patterns'),

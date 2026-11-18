@@ -1,6 +1,6 @@
 # Bundled fonts
 
-All 256 fonts in this folder are from [Google Fonts](https://fonts.google.com). Each is
+All 256 fonts in the first table are from [Google Fonts](https://fonts.google.com). Each is
 licensed under the **SIL Open Font License 1.1** ([`OFL.txt`](OFL.txt)) or the
 **Apache License 2.0** (https://www.apache.org/licenses/LICENSE-2.0), as stated on its
 Google Fonts specimen page linked below. Both licenses permit embedding and bundling in
@@ -265,6 +265,19 @@ redistributed on its own — they ship only as part of this generator.
 | ZCOOL KuaiLe | Comic | https://fonts.google.com/specimen/ZCOOL+KuaiLe |
 | Zen Dots | Tech | https://fonts.google.com/specimen/Zen+Dots |
 | Zilla Slab | Slab | https://fonts.google.com/specimen/Zilla+Slab |
+
+## From the maker's own release
+
+Each of these is its maker's own file, from the release linked below, shipped as it was released:
+not cut, not converted, so its name only says which font it is. Its licence is the one its
+release states, given beside it ([`OFL.txt`](OFL.txt), [`LICENSE-APACHE-2.0.txt`](LICENSE-APACHE-2.0.txt)).
+A trademark a file names is its owner's, and is used here only to say which font it is.
+
+| Font | Category | Release file (license) |
+| --- | --- | --- |
+| Source Han Sans CN | Clean | https://github.com/adobe-fonts/source-han-sans/blob/cd3de5c749a4b739489317c4438cf0445adf3370/SubsetOTF/CN/SourceHanSansCN-Light.otf (version 1.001, Apache-2.0) |
+
+- Source Han Sans CN: Source is a trademark of Adobe Systems Incorporated in the United States and/or other countries.
 
 ## Cut to size
 

@@ -109,7 +109,7 @@ export function cutStand(
     sc.keep(sc.keep(extrude(wasm, cs, Math.max(0.01, z1 - z0))).translate([0, 0, pose.z + z0]));
 
   // ---- The cap: solid plate down to the post's bottom, pocket cut, post added ----
-  const post = postSolid(wasm, sc, kit, p.stemFitMm);
+  const post = postSolid(wasm, sc, kit, p.stemFitMm, p.stemOuterMm);
   if (!post.applied) warnings.push('Switch stem fit could not be applied. The stem prints as designed.');
   const cap = sc.keep(
     sc.keep(at(plate, kit.postBottom, plateTop).subtract(place(sc, movingPocket(wasm, sc, kit, p.travel), pose)))

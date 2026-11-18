@@ -298,6 +298,34 @@
   .vl-panel__scroll:has(> .vl-settings-rail--flush) { flex: none; overflow: visible; }
   .vl-panel:has(> .vl-panel__scroll > .vl-settings-rail--flush) { max-height: none; }
 }
+/* `settingsRail({ fitHeight: true })`: every category on screen at any height. The buttons share
+   the rail's height, each starting at its usual 56 px and giving some up (they touch, rather than
+   keep 2 px apart), and each is a size container, so the word under the icon goes once its button
+   is too short to hold it (a container query reads the content box: 20 px icon, 3 px gap, 11 px
+   word); the tooltip and the accessible name keep the word. A button never goes below its icon
+   and 3 px a side; past that, the rail scrolls as it always did. */
+.vl-settings-rail--fit > .vl-settings-rail__rail { overflow-x: hidden; gap: 0; padding-block: 4px; }
+.vl-settings-rail--fit .vl-tool-rail__btn {
+  flex: 0 1 56px;
+  min-height: 26px;
+  padding-block: 2px;
+  gap: 3px;
+  container-type: size;
+}
+@container (height < 34px) {
+  .vl-settings-rail--fit .vl-tool-rail__label { display: none; }
+}
+/* On a short window the chrome round a fitted rail gives way to it: a call to action above it (the
+   licence) gives up padding and a size of type, staying one line where the panel is wide enough;
+   on a very short one the credit strip goes (it is the one line there that is not a setting). */
+@media (max-height: 820px) {
+  .vl-panel:has(.vl-settings-rail--fit) .vl-btn--cta { padding: 8px 12px; font-size: var(--fs-medium); }
+}
+@media (max-height: 520px) {
+  .vl-panel:has(.vl-settings-rail--fit) .vl-btn--cta { padding: 6px 10px; font-size: var(--fs-caption); }
+  .vl-panel:has(.vl-settings-rail--fit) > .vl-panel-credit { display: none; }
+  .vl-settings-rail--fit .vl-tool-rail__rule { margin-block: 2px; }
+}
 
 /* -------------------------------------------------------------------- canvas -- */
 
@@ -454,4 +482,35 @@
   .vl-tool-rail__rule { width: 1px; height: auto; margin: 8px 6px; }
   .vl-studio { grid-template-columns: 1fr; grid-template-rows: auto minmax(300px, 46vh) auto; }
   .vl-panel { height: auto; max-height: 50vh; }
+}
+
+/* `settingsRail({ fitHeight: true })` between 761 and 900 px. A generator keeps its three columns
+   down to 761 px (app-shell.css), so the phone block above (a rail lying down in a row, panels at
+   half the window) cut its panels off at half height with the rail squeezed to nothing. Here the
+   panels keep the window's height, the left one is wide enough for a rail and a category, and the
+   rail stands beside the category with its icons alone (the tooltips keep the words). Not with
+   the phone layout, which is one column at this width and has the rail in its Settings drawer. */
+@media (min-width: 761px) and (max-width: 900px) {
+  .vl-app:not(.vl-app--phone):has(.vl-settings-rail--fit) > .vl-panel { height: 100%; max-height: none; }
+  .vl-app:not(.vl-app--phone):has(> .vl-panel--left .vl-settings-rail--fit) {
+    grid-template-columns: minmax(280px, 34vw) minmax(0, 1fr) minmax(260px, 30vw);
+  }
+  .vl-settings-rail.vl-settings-rail--fit { display: grid; grid-template-columns: 56px minmax(0, 1fr); flex: 1; min-height: 0; }
+  .vl-settings-rail--fit > .vl-settings-rail__rail {
+    flex-direction: column;
+    padding-inline: 4px;
+    border-bottom: 0;
+    border-right: 1px solid var(--line);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .vl-settings-rail--fit .vl-tool-rail__btn { width: 46px; }
+  .vl-settings-rail--fit .vl-tool-rail__label { display: none; }
+  .vl-settings-rail--fit .vl-tool-rail__rule { width: auto; height: 1px; margin-inline: 8px; }
+  .vl-settings-rail--fit > .vl-settings-rail__panels { flex: initial; padding: var(--space-3); }
+}
+/* Stacked, the rail lies down in a row (above): its buttons keep their usual width there. */
+@media (max-width: 760px) {
+  .vl-settings-rail--fit > .vl-settings-rail__rail { gap: 2px; padding-block: var(--space-2); }
+  .vl-settings-rail--fit .vl-tool-rail__btn { flex: none; container-type: normal; padding-block: 8px; gap: 4px; }
 }

@@ -11,8 +11,9 @@
 // other.
 import { addedFontUrls } from './cache';
 import { WEIGHTS, type FontChoice } from './registry';
+import { siteFontUrl } from './site';
 
 const files = (import.meta as any).glob('./fonts/weights/*.ttf', { eager: true, import: 'default' }) as Record<string, string>;
-for (const [path, url] of Object.entries(files)) addedFontUrls.set(path.replace('./fonts/weights/', '').replace('.ttf', ''), url);
+for (const [path, url] of Object.entries(files)) addedFontUrls.set(path.replace('./fonts/weights/', '').replace('.ttf', ''), siteFontUrl(path, url));
 
 export { WEIGHTS, type FontChoice };

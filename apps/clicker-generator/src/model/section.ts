@@ -51,6 +51,26 @@ export function deepestPoint(sc: Scope, cs: Section, iterations = 11): { x: numb
   return { x: (pb.min[0] + pb.max[0]) / 2, y: (pb.min[1] + pb.max[1]) / 2, clearance: lo };
 }
 
+/** Where `n` switches go in a section: cut into `n` equal strips along its longest side, one switch
+ *  at the deepest point of each. A strip's edge counts as an edge, so they keep clear of each other
+ *  without being told to. */
+export function spreadSpots(wasm: any, sc: Scope, region: Section, n: number): { x: number; y: number }[] {
+  const b = region.bounds();
+  const along = b.max[0] - b.min[0] >= b.max[1] - b.min[1] ? 0 : 1;
+  const across = 1 - along;
+  const start = b.min[along];
+  const step = (b.max[along] - start) / n;
+  const mid = (b.min[across] + b.max[across]) / 2;
+  const reach = b.max[across] - b.min[across] + 2;
+  return Array.from({ length: n }, (_, i) => {
+    const centre = start + (i + 0.5) * step;
+    const size: [number, number] = along === 0 ? [step, reach] : [reach, step];
+    const strip = sc.keep(sc.keep(wasm.CrossSection.square(size, true)).translate(along === 0 ? [centre, mid] : [mid, centre]));
+    const spot = deepestPoint(sc, sc.keep(region.intersect(strip)));
+    return spot ? { x: spot.x, y: spot.y } : along === 0 ? { x: centre, y: mid } : { x: mid, y: centre };
+  });
+}
+
 /** Largest connected piece of a section. */
 export function largestIsland(sc: Scope, cs: Section): Section {
   const parts: Section[] = cs.decompose();

@@ -27,11 +27,25 @@ export const COVERAGE_NAMES = [
 ] as const;
 export type CoverageName = (typeof COVERAGE_NAMES)[number];
 
-/** What a character outside every coverage set needs: no face here has it. Hangul syllables,
- *  kanji and hanzi past the common sets below (every CJK file in the package is cut to those),
- *  and Hangul typed as separate jamo, which a layout that sets one character at a time cannot
- *  compose. */
+/** What a character outside every coverage set needs: no face here has it. Hangul syllables
+ *  past the common set below (every Korean file in the package is cut to it), and Hangul typed
+ *  as separate jamo, which a layout that sets one character at a time cannot compose. */
 export const UNCOVERED = 'uncovered';
+
+/** What a Han character past the common sets needs: that very character. The cut CJK faces hold
+ *  the common sets only; a face whole enough to hold more lists the Han characters its file has
+ *  (`hanOf`, `FontChoice.han`), and text is checked against them character by character. */
+export const HAN = 'han';
+
+/** Where Han characters are: CJK Unified Ideographs Extension A, the unified block, the
+ *  compatibility ideographs, and planes 2 and 3 (Extension B onwards and their supplement). */
+const HAN_RANGES: readonly (readonly [number, number])[] = [
+  [0x3400, 0x4dbf],
+  [0x4e00, 0x9fff],
+  [0xf900, 0xfaff],
+  [0x20000, 0x3ffff],
+];
+const isHan = (cp: number): boolean => HAN_RANGES.some(([from, to]) => cp >= from && cp <= to);
 
 const range = (from: number, to: number): number[] => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 const chars = (s: string): number[] => Array.from(s, (c) => c.codePointAt(0)!);
@@ -133,17 +147,33 @@ const EXT_B_LAST = 0x24f;
 /** The Latin Extended-B letters a face holds, given a lookup into its cmap, as runs of
  *  characters: "ƀ-ǃǅ-ɏ" is ƀ to ǃ and ǅ to ɏ. A hyphen is not in the block, so it only joins. */
 export function latinExtBOf(has: (codePoint: number) => boolean): string {
+  return runsIn(has, EXT_B_FIRST, EXT_B_LAST);
+}
+
+/** The characters from `first` to `last` that `has` holds, as runs. */
+function runsIn(has: (codePoint: number) => boolean, first: number, last: number): string {
   let out = '';
-  for (let cp = EXT_B_FIRST; cp <= EXT_B_LAST; cp++) {
+  for (let cp = first; cp <= last; cp++) {
     if (!has(cp)) continue;
     let end = cp;
-    while (end < EXT_B_LAST && has(end + 1)) end++;
+    while (end < last && has(end + 1)) end++;
     out += String.fromCodePoint(cp);
     if (end === cp + 1) out += String.fromCodePoint(end);
     else if (end > cp + 1) out += `-${String.fromCodePoint(end)}`;
     cp = end;
   }
   return out;
+}
+
+/** The Han characters a face holds, as runs written the way `latinExtBOf` writes them, or ''
+ *  for a face that holds none past the common sets (every cut CJK face): its `subsets` already
+ *  say all it has, and the runs of a cut set would be thousands long. */
+export function hanOf(has: (codePoint: number) => boolean): string {
+  let past = false;
+  for (const [from, to] of HAN_RANGES) {
+    for (let cp = from; cp <= to && !past; cp++) if (has(cp) && requirementOf(cp) === HAN) past = true;
+  }
+  return past ? HAN_RANGES.map(([from, to]) => runsIn(has, from, to)).join('') : '';
 }
 
 /** Whether runs written by `latinExtBOf` hold `cp`. */
@@ -164,8 +194,8 @@ export function runsHold(runs: string, cp: number): boolean {
  *
  * The alphabets are tested by block: a face that has the alphabet is taken to have the rest of
  * its block. Latin Extended-B is the exception (`LATIN_EXT_B`), and so is CJK, tested character
- * by character because the files are cut to the common set and a rarer character is missing
- * from every one of them.
+ * by character because most files are cut to the common set: a rarer Han character needs `HAN`,
+ * which only a face listing it in its own `han` runs has, and a rarer Hangul syllable no face has.
  */
 export function requirementOf(cp: number): string | undefined {
   if (cp < 0x100) return undefined;
@@ -190,8 +220,9 @@ export function requirementOf(cp: number): string | undefined {
     if (ja && zh) return 'japanese|chinese-simplified';
     if (ja) return 'japanese';
     if (zh) return 'chinese-simplified';
-    return UNCOVERED;
+    return HAN;
   }
+  if (isHan(cp)) return HAN;
   return undefined;
 }
 

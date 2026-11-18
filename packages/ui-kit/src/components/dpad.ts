@@ -39,6 +39,12 @@ export interface DpadOptions {
    * arrows, a plain dot for chevrons.
    */
   glyphs?: 'arrows' | 'chevrons';
+  /**
+   * What the centre button says, as its tooltip and its accessible name. Default: the tooltip
+   * "Back to the middle" and the name "Reset to center". A pad whose centre sends the thing back
+   * to a place of its own, not the middle, says so here.
+   */
+  centreLabel?: string;
 }
 
 export interface DpadHandle {
@@ -138,9 +144,9 @@ export function dpad(opts: DpadOptions = {}): DpadHandle {
     padBtn(
       'vl-dpad-center vl-dpad-btn--center',
       GLYPH.centre,
-      'Reset to center',
+      opts.centreLabel ?? 'Reset to center',
       () => opts.onReset?.(),
-      'Back to the middle',
+      opts.centreLabel ?? 'Back to the middle',
     ),
     padBtn('vl-dpad-right', GLYPH.right, 'Move right', () => opts.onMove?.('right'), tip('Move right')),
     padBtn('vl-dpad-down', GLYPH.down, 'Move down', () => opts.onMove?.('down'), tip('Move down')),

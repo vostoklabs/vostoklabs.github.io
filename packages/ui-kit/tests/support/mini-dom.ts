@@ -100,6 +100,10 @@ export class MiniRaw extends MiniNode {
   }
   readonly classList = tokenList(() => '', () => {});
   setAttribute() {}
+  /** An icon swapped for another, as a button's `setIcon()` does. */
+  replaceWith(...nodes: (MiniNode | string)[]) {
+    MiniText.prototype.replaceWith.apply(this as unknown as MiniText, nodes);
+  }
 }
 
 class MiniStyle {

@@ -58,6 +58,7 @@ import {
   generatorHeader,
   colorSwatch,
   colorPopover,
+  colorChip,
   historyControls,
   keyMap,
   capMap,
@@ -92,6 +93,8 @@ import {
   previewCard,
   zoomControl,
   designCanvas,
+  cropBox,
+  type CropRect,
   lengthUnits,
   diagnosticsList,
   buildLoop,
@@ -407,6 +410,21 @@ const shelfButton = button({
     colorPopover({ x: r.left, y: r.bottom + 6, value: bodyWell.getValue(), onSelect: (hex) => bodyWell.setValue(hex), onClose: () => toast(`Body: ${bodyWell.getValue()}`) });
   },
 });
+
+/** A colour chip that opens the shared picker under itself and shows what was picked. */
+function menuChip(start: string, menu: boolean): HTMLElement {
+  let hex = start;
+  const chip = colorChip({
+    hex,
+    label: 'Filament',
+    menu,
+    onClick: () => {
+      const r = chip.getBoundingClientRect();
+      colorPopover({ x: r.left, y: r.bottom + 6, value: hex, onSelect: (h) => { hex = h; chip.setValue(h); } });
+    },
+  });
+  return chip;
+}
 
 /* Undo and redo over one counted value. The history is the page's own, a few lines of it; the
    row of buttons only shows what can be done. */
@@ -735,6 +753,18 @@ app.append(
     padReadout.root,
   ),
   entry(
+    "dpad({ rotate: false, centreLabel: 'Back to its place' })",
+    'Directional pad, moves only',
+    'No turn corners, and the centre names where it goes back to (hover it). For a pad that puts ' +
+      'a thing back in a place of its own rather than the middle.',
+    dpad({
+      rotate: false,
+      centreLabel: 'Back to its place',
+      onMove: (dir) => toast(`Moved ${dir}`),
+      onReset: () => toast('Back to its place'),
+    }).root,
+  ),
+  entry(
     'nudgePad()',
     'Nudge pad',
     'The same pad at settings-column size, with the two numbers it drives beside it — one ' +
@@ -769,6 +799,17 @@ app.append(
       paletteRow({ label: 'Fur', value: '#ff6a13', detected: '#e0812f', onChange: (h) => toast(`Fur: ${h}`) }),
       paletteRow({ label: 'Eyes', value: '#161616', detected: '#2b2320', onChange: (h) => toast(`Eyes: ${h}`) }),
       paletteRow({ label: 'Background', value: '#f7f7f5', detected: '#efe6d8', onChange: (h) => toast(`Background: ${h}`) }),
+    ]),
+  ),
+  entry(
+    'colorChip({ menu: true })',
+    'Colour chip that opens a menu',
+    'The chip with a caret inside it, drawn dark on a light colour and light on a dark one. A bare ' +
+      'swatch next to a sample of the same colour does not look pressable; a caret says it opens ' +
+      'a menu. Without menu it is the plain swatch (the last chip in the row).',
+    el('div', { className: 'vl-palette-row' }, [
+      ...['#f5c518', '#161616', '#00ae42'].map((hex) => menuChip(hex, true)),
+      menuChip('#2f6fde', false),
     ]),
   ),
   entry(
@@ -1095,6 +1136,15 @@ const samples = sampleGrid({
     toast(`Sample: ${item.label}`);
   },
 });
+const foldedSamples = sampleGrid({
+  heading: 'More samples',
+  fold: 'closed',
+  items: ['star', 'burst'].map((id) => ({ id, label: shapeOf(id).label, src: shapePicture(shapeOf(id).d) })),
+  onPick: (item) => {
+    foldedSamples.setSelected(item.id ?? null);
+    toast(`Sample: ${item.label}`);
+  },
+});
 /* A strip of photos: each tile one picture, the selected one ringed and removable, + adds a copy
    of it. The pictures are the shape tiles' own, so the demo needs no image files. */
 let stripItems = ['heart', 'star', 'hexagon'].map((id, i) => ({ id: `${id}-${i}`, label: `Photo ${i + 1} · ${shapeOf(id).label}`, src: shapePicture(shapeOf(id).d) }));
@@ -1253,10 +1303,11 @@ app.append(
   entry(
     'sampleGrid() · thumbGrid()',
     'Sample tiles',
-    'sampleGrid() is the handful of pictures to start from. thumbGrid() lays out any number of ' +
-      'thumbTile()s, each an image, a path drawn in currentColor, or a word in a face, with the ' +
-      'column count set by a number (minPx) rather than a class.',
-    panel(samples, thumbGrid({ heading: 'Base shape', tiles: shapeTiles, minPx: 52 })),
+    'sampleGrid() is the handful of pictures to start from; fold puts the grid under its heading, ' +
+      'open or closed, and it opens by itself when one of its tiles is the loaded one. thumbGrid() ' +
+      'lays out any number of thumbTile()s, each an image, a path drawn in currentColor, or a word ' +
+      'in a face, with the column count set by a number (minPx) rather than a class.',
+    panel(samples, foldedSamples, thumbGrid({ heading: 'Base shape', tiles: shapeTiles, minPx: 52 })),
   ),
   entry(
     'pictureStrip()',
@@ -1605,6 +1656,31 @@ app.append(
   ),
 );
 
+/* The status line folded behind a button: the stage keeps no paragraph over the model. */
+const foldedLine = stageStatus('Sample: Star. Drop your own image to replace it.', { folded: true });
+app.append(
+  entry(
+    "stageStatus(text, { folded: true })",
+    'Status behind a button',
+    'For a stage where a paragraph over the model is clutter: the message folds behind one round ' +
+      'button, an i for news and a ! in the warning or error colour for a problem, and a build in ' +
+      'progress is the spinner alone. Pressed, the button opens the whole message, a line for each ' +
+      'part. The text stays in the live region, so it is still read out.',
+    el('div', { className: 'kit-stage kit-stage--short' }, [foldedLine.root]),
+    buttonRow(
+      button({
+        label: 'Build',
+        onClick: () => {
+          foldedLine.set('Building…', 'busy');
+          setTimeout(() => foldedLine.set('Ready · built in 0.9 s'), 900);
+        },
+      }),
+      button({ label: 'Warnings', onClick: () => foldedLine.set('Letters are thinner than the nozzle. · Base widened so the switch fits.', 'warn') }),
+      button({ label: 'Error', onClick: () => foldedLine.set('The outline crosses itself.', 'error') }),
+    ),
+  ),
+);
+
 /* Fold-Up Box's stage: a panel holds the bottom centre for good, so the status line sits at the top;
    the fold panel's one control names itself; the flat view's switches are the compact kind. */
 const FOLD_READY = 'Ready · 212 × 148 mm blank · fits A4';
@@ -1863,6 +1939,43 @@ app.append(
       el('div', { className: 'kit-stage' }, [designView.root, designLine.root, designZoom.root]),
       buttonRow(button({ label: 'Reset', onClick: resetDesign })),
     ),
+  ),
+);
+
+/* ---------- Crop box ---------- */
+/* A crop over a stand-in picture. The line under it follows the drag; Reset crop shows only once
+   the box is smaller than the picture, as an app would show it. */
+const cropPct = (b: CropRect) => `${Math.round(b.w * 100)} × ${Math.round(b.h * 100)} % of the picture, from ${Math.round(b.x * 100)}, ${Math.round(b.y * 100)}`;
+const cropLine = el('p', { className: 'vl-hint', text: 'Drag the corners to crop.' });
+const cropIsFull = (b: CropRect) => b.w > 0.995 && b.h > 0.995;
+const cropReset = button({
+  label: 'Reset crop',
+  emphasis: 'secondary',
+  onClick: () => {
+    cropDemo.setValue(null);
+    cropReset.hidden = true;
+    cropLine.textContent = 'Drag the corners to crop.';
+  },
+});
+cropReset.hidden = true;
+const cropDemo = cropBox({
+  label: 'Crop',
+  onChange: (box, phase) => {
+    cropLine.textContent = cropPct(box);
+    if (phase === 'end') cropReset.hidden = cropIsFull(box);
+  },
+});
+app.append(
+  entry(
+    'cropBox()',
+    'Crop box',
+    'A crop over a picture: pull a corner or an edge, or drag inside to move the box; the outside ' +
+      'is dimmed. Free proportions, smallest side 8 %. The box is in fractions of the picture, ' +
+      'reported live while dragging and once on release. Tab reaches the box and each grip; ' +
+      'arrows move or pull 1 % (Shift 5 %).',
+    el('div', { className: 'kit-crop' }, [cropDemo]),
+    cropLine,
+    buttonRow(cropReset),
   ),
 );
 
@@ -2626,6 +2739,30 @@ app.append(
       'open category beside it, scrolling on its own so the rail stays put. A category whose rows ' +
       'the app has all hidden takes its button off the rail. Framed here at a panel’s size.',
     el('div', { className: 'kit-rail-frame' }, [rail]),
+  ),
+  entry(
+    'settingsRail({ fitHeight: true })',
+    'Rail on a short window',
+    'Every category stays on screen whatever the height: the buttons give up height first, then ' +
+      'the word under each icon (the tooltip keeps it), and only then does the rail scroll. Between ' +
+      '761 and 900 px wide it stays beside its category with its icons alone. Framed here at a ' +
+      'short window’s height.',
+    el('div', { className: 'kit-rail-frame kit-rail-frame--short' }, [
+      settingsRail({
+        label: 'Clicker settings',
+        fitHeight: true,
+        items: [
+          { id: 'shape', label: 'Shape', icon: ICONS.maximize, body: [outlineTabs('Outline'), mmSlider('Size', 20, 60, 35)] },
+          { id: 'text', label: 'Text', icon: ICONS.text, body: [textField({ label: 'Name', value: 'Max' })] },
+          { id: 'body', label: 'Body', icon: ICONS.pattern, body: [mmSlider('Top thickness', 1, 4, 2)] },
+          { id: 'colour', label: 'Colours', icon: ICONS.droplet, body: [paletteRow({ label: 'Body', value: '#2f6fde' })] },
+          { id: 'relief', label: 'Relief', icon: ICONS.mountain, body: [mmSlider('Raised by', 0, 2, 0.6)] },
+          { id: 'switch', label: 'Clicker', icon: ICONS.target, body: [mmSlider('Left / right', -12, 12, 0)] },
+          { id: 'hole', label: 'Keychain', icon: ICONS.link, body: [toggleSwitch({ label: 'Add keychain', checked: true })] },
+          { id: 'fit', label: 'Fit', icon: ICONS.joint, body: [mmSlider('Switch stem fit', -0.4, 0.4, 0)] },
+        ],
+      }),
+    ]),
   ),
   fullWidth(
     entry(

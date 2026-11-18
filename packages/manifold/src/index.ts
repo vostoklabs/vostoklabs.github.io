@@ -2,7 +2,7 @@
   manifold-3d's JS glue, less its leaks.
 
   manifold-3d 3.5.1 wraps its embind classes in a layer of JS (`Module.setup()` in manifold.js),
-  and three of its conveniences leave WASM memory behind on every call. The heap never shrinks,
+  and four of its conveniences leave WASM memory behind on every call. The heap never shrinks,
   so a generator that rebuilds on every slider step grows until the tab is reloaded.
 
   - `new CrossSection(rings, rule)`, and everything that builds one from rings for you
@@ -14,6 +14,7 @@
   - `cs.extrude(…)`, and `Manifold.extrude(cs, …)`, which calls it: `this._ToPolygons()` is
     handed to `_Extrude` and never freed, 16 bytes a vertex; and with `center` the uncentred
     solid is dropped without a `delete()` — the whole mesh, 864 KB for one 1 000-vertex ring.
+  - `cs.revolve(…)`, and `Manifold.revolve(cs, …)`: the same `_ToPolygons()` left unfreed.
 
   These do what the glue does, through the same embind pieces, and free what it forgets. If a
   later manifold moves those pieces they fall back to the glue: leaking, never wrong. The
@@ -22,7 +23,7 @@
   two CrossSections or Manifolds are clean already — as long as every result, the ones in the
   middle of a chain included, is deleted.
 
-  `pnpm check:manifold` fails the build when app code calls the leaky three directly.
+  `pnpm check:manifold` fails the build when app code calls the leaky four directly.
 */
 
 /** A point as the glue takes one. */
@@ -116,6 +117,23 @@ export function extrude(
     return solid.translate([0, 0, -height / 2]);
   } finally {
     solid.delete();
+  }
+}
+
+/**
+ * `cs.revolve(circularSegments, revolveDegrees)` — and so `Manifold.revolve(cs, …)` — without
+ * the leak: the glue hands `this._ToPolygons()` to `_Revolve` and never frees it, 16 bytes a
+ * vertex. The solid is new; `cs` is untouched.
+ */
+export function revolve(wasm: any, cs: any, circularSegments = 0, revolveDegrees = 360): any {
+  if (typeof cs._ToPolygons !== 'function' || typeof wasm._Revolve !== 'function') {
+    return cs.revolve(circularSegments, revolveDegrees);
+  }
+  const polys = cs._ToPolygons();
+  try {
+    return wasm._Revolve(polys, circularSegments, revolveDegrees);
+  } finally {
+    polys.delete();
   }
 }
 

@@ -27,6 +27,14 @@ export type CutterOverlay =
     rotation: number; z0: number; z1: number;
   };
 
+/** A placed keyring hole's cutter, in the parts' own frame: the ring's centre on the body's edge
+ *  at the tunnel's height, its centre-line radius and its bore radius, mm. `warn`: drawn in the
+ *  warning colour, where the build found no room for it. */
+export type HoleCutterMark = { x: number; y: number; z: number; R: number; r: number; warn?: boolean };
+/** Where a switch sits, as the preview's MX switch is seated: centre and height in the parts'
+ *  frame, mm, and its turn, degrees. */
+export type SwitchMark = { x: number; y: number; z: number; rotation: number };
+
 /** A DOM grip the viewer places on the stage (the kit's `stageHandle()`): an element in the
  *  stage, positioned from the point it hangs off, or hidden with null. */
 export type PlaneHandle = HTMLElement & { place(at: { x: number; y: number } | null): void };
@@ -70,6 +78,17 @@ export interface Viewer {
   clearHighlight(): void;
   /** Model mode: draw the cutter over the parts, or clear it with null. */
   setCutterOverlay(o: CutterOverlay | null): void;
+  /** A keyring hole placed but not cut: its cutter, see-through, where it will cut. Null clears. */
+  setHoleCutter(c: HoleCutterMark | null): void;
+  /** The keyring hole's grip: the ring it hangs off (placed or cut), or null to hide it. While it
+   *  shows, the grip and a drawn cutter's ring can be dragged round the edge (`onHoleDrag`). */
+  setHoleGrip(at: HoleCutterMark | null): void;
+  /** The grip element (the kit's `stageHandle()`), kept beside the hole's ring every frame. */
+  setHoleHandle(handle: PlaneHandle | null): void;
+  /** A hole drag: where the pointer is on the tunnel's height plane, in the parts' frame, mm. */
+  onHoleDrag(cb: (x: number, y: number, phase: 'start' | 'move' | 'end') => void): void;
+  /** The switch the Clicker category is moving: an outline round its place on the top. Null clears. */
+  setSwitchMark(m: SwitchMark | null): void;
   /** How far Exploded lifts the top, mm; null = the image clicker's own, which grows with the
    *  model's height. A fixed gap is also framed, so a tall top never leaves the view. */
   setExplodeGap(mm: number | null): void;
@@ -221,6 +240,27 @@ export function createViewer(container: HTMLElement): Viewer {
   // `setParts` re-seats it on the plate.
   const overlayGroup = new THREE.Group();
   root.add(overlayGroup);
+  /* The preview's own marks: what a category is moving, or where a placed hole will cut. In the
+     parts' frame like the cutter, and like it never in a picture: every capture hides them. The
+     switch's outline is drawn on the switch, which sits in the base, so Exploded leaves it there. */
+  const marksGroup = new THREE.Group();
+  const switchMarkGroup = new THREE.Group();
+  marksGroup.add(switchMarkGroup);
+  root.add(marksGroup);
+  let holeCutterKey = '';
+  /** The placed hole's cutter as drawn, for a press to grab. */
+  let holeCutterMesh: THREE.Mesh | null = null;
+  /** The ring the hole's grip hangs off, while it shows; its element, the drag's listener, and
+   *  whether a press is holding the hole now (so its release is not also read as a tap). */
+  let holeGripAt: HoleCutterMark | null = null;
+  let holeHandle: PlaneHandle | null = null;
+  let holeDragCb: ((x: number, y: number, phase: 'start' | 'move' | 'end') => void) | null = null;
+  let holeHeld = false;
+  let pressGrabbedHole = false;
+  const holePlane = new THREE.Plane();
+  let switchMarkKey = '';
+  /** The MX switch's outline edges, worked out once per switch mesh (it is dense). */
+  let switchEdges: THREE.EdgesGeometry | null = null;
   let overlay: CutterOverlay | null = null;
   let planeMesh: THREE.Mesh | null = null;
   let pickMode: 'part' | 'surface' = 'part';
@@ -283,6 +323,184 @@ export function createViewer(container: HTMLElement): Viewer {
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), line()));
       overlayGroup.add(mesh);
     }
+  }
+
+  function markMaterials() {
+    const col = new THREE.Color(themeColorHex('--accent', 0x3b82f6));
+    return {
+      skin: new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false, depthTest: false }),
+      line: new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.95, depthTest: false }),
+    };
+  }
+  function clearMarks(g: THREE.Group, keep?: THREE.Object3D) {
+    for (const child of [...g.children]) {
+      if (child === keep) continue;
+      g.remove(child);
+      disposeTree(child);
+    }
+  }
+
+  /* The placed hole's cutter: the whole ring it cuts with, lying flat at the tunnel's height and
+     drawn through the body, so the half of it inside the wall shows where the tunnel will run. */
+  function setHoleCutter(c: HoleCutterMark | null) {
+    const key = c ? JSON.stringify(c) : '';
+    if (key === holeCutterKey) return;
+    holeCutterKey = key;
+    clearMarks(marksGroup, switchMarkGroup);
+    holeCutterMesh = null;
+    if (!c) return;
+    const { skin, line } = markMaterials();
+    // No room here: the warning colour, the theme's own (the accent where a theme has none).
+    if (c.warn) {
+      const warn = themeColorHex('--warn', skin.color.getHex());
+      skin.color.setHex(warn);
+      line.color.setHex(warn);
+    }
+    const geo = new THREE.TorusGeometry(c.R, c.r, 24, 96);
+    const mesh = new THREE.Mesh(geo, skin);
+    mesh.position.set(c.x, c.y, c.z);
+    mesh.renderOrder = 999;
+    // Its two edges seen from above, crisp at any angle.
+    for (const rad of [c.R - c.r, c.R + c.r]) {
+      const pts: THREE.Vector3[] = [];
+      for (let k = 0; k <= 96; k++) {
+        const t = (k / 96) * Math.PI * 2;
+        pts.push(new THREE.Vector3(rad * Math.cos(t), rad * Math.sin(t), c.r));
+      }
+      const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), line.clone());
+      ring.renderOrder = 999;
+      mesh.add(ring);
+    }
+    line.dispose();
+    marksGroup.add(mesh);
+    holeCutterMesh = mesh;
+  }
+
+  /* The hole's grip and drag. The pointer's ray meets the flat plane at the tunnel's height; where
+     it lands is handed out in the parts' frame, and the owner turns it into a bearing. */
+  function holePointAt(clientX: number, clientY: number): [number, number] | null {
+    if (!holeGripAt) return null;
+    aimRay(clientX, clientY);
+    const origin = marksGroup.localToWorld(new THREE.Vector3(holeGripAt.x, holeGripAt.y, holeGripAt.z));
+    holePlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, 1), origin);
+    const hit = raycaster.ray.intersectPlane(holePlane, new THREE.Vector3());
+    if (!hit) return null;
+    const p = marksGroup.worldToLocal(hit);
+    return [p.x, p.y];
+  }
+  /** Over the drawn cutter's ring, while its grip shows (Keychain open): it can be taken hold of. */
+  function overHole(clientX: number, clientY: number): boolean {
+    if (!holeCutterMesh || !holeGripAt || !holeDragCb || !marksGroup.visible) return false;
+    aimRay(clientX, clientY);
+    return raycaster.intersectObject(holeCutterMesh, false).length > 0;
+  }
+  function beginHoleDrag(e: PointerEvent, holder: Element) {
+    const at = holePointAt(e.clientX, e.clientY);
+    if (!at) return;
+    holeHeld = true;
+    controls.enabled = false;
+    holder.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+    holeDragCb?.(at[0], at[1], 'start');
+  }
+  const onHoleRingPointerDown = (e: PointerEvent) => {
+    pressGrabbedHole = false;
+    if (e.button !== 0 || !overHole(e.clientX, e.clientY)) return;
+    pressGrabbedHole = true;
+    beginHoleDrag(e, renderer.domElement);
+  };
+  const onHoleHandlePointerDown = (e: PointerEvent) => {
+    if (e.button !== 0 || !holeGripAt || !holeDragCb) return;
+    beginHoleDrag(e, e.currentTarget as Element);
+  };
+  const onHolePointerMove = (e: PointerEvent) => {
+    if (!holeHeld) return;
+    const at = holePointAt(e.clientX, e.clientY);
+    if (at) holeDragCb?.(at[0], at[1], 'move');
+  };
+  const onHolePointerUp = (e: PointerEvent) => {
+    if (!holeHeld) return;
+    holeHeld = false;
+    controls.enabled = true;
+    (e.currentTarget as Element | null)?.releasePointerCapture?.(e.pointerId);
+    const at = holePointAt(e.clientX, e.clientY);
+    // Released where the plane cannot be met (edge on): the hole stays where the last move had it.
+    holeDragCb?.(at ? at[0] : NaN, at ? at[1] : NaN, 'end');
+  };
+  function setHoleHandle(h: PlaneHandle | null) {
+    if (holeHandle) {
+      holeHandle.removeEventListener('pointerdown', onHoleHandlePointerDown);
+      holeHandle.removeEventListener('pointermove', onHolePointerMove);
+      holeHandle.removeEventListener('pointerup', onHolePointerUp);
+      holeHandle.removeEventListener('pointercancel', onHolePointerUp);
+      holeHandle.place(null);
+    }
+    holeHandle = h;
+    if (!h) return;
+    h.addEventListener('pointerdown', onHoleHandlePointerDown);
+    h.addEventListener('pointermove', onHolePointerMove);
+    h.addEventListener('pointerup', onHolePointerUp);
+    h.addEventListener('pointercancel', onHolePointerUp);
+  }
+  /** Hang the grip off the hole's ring, at the ring's point furthest right on screen. Every frame,
+   *  because the camera, the model and the stage can each move without the others. */
+  function placeHoleHandle() {
+    if (!holeHandle) return;
+    const stage = holeHandle.parentElement;
+    const canvas = renderer.domElement.getBoundingClientRect();
+    if (!holeGripAt || !marksGroup.visible || !stage || canvas.width === 0) {
+      holeHandle.place(null);
+      return;
+    }
+    const g = holeGripAt;
+    let bestX = -Infinity;
+    let bestY = 0;
+    for (let k = 0; k < 24; k++) {
+      const t = (k / 24) * Math.PI * 2;
+      handleCorner.set(g.x + (g.R + g.r) * Math.cos(t), g.y + (g.R + g.r) * Math.sin(t), g.z);
+      marksGroup.localToWorld(handleCorner).project(camera);
+      if (Math.abs(handleCorner.z) > 1) continue; // behind the camera, or past its far plane
+      if (handleCorner.x > bestX) {
+        bestX = handleCorner.x;
+        bestY = handleCorner.y;
+      }
+    }
+    if (bestX === -Infinity) {
+      holeHandle.place(null);
+      return;
+    }
+    const box = stage.getBoundingClientRect();
+    const x = canvas.left - box.left + ((bestX + 1) / 2) * canvas.width;
+    const y = canvas.top - box.top + ((1 - bestY) / 2) * canvas.height;
+    holeHandle.place({ x: Math.min(x, box.width - holeHandle.offsetWidth - 26), y });
+  }
+
+  /* The lit switch: the preview's own MX switch, seen through the body as a faint accent shape
+     with its outline in the accent, where that switch sits and turned with it. The geometry is
+     the shared switch mesh and its edges, so only the materials are this mark's to free. */
+  function clearSwitchMark() {
+    for (const child of [...switchMarkGroup.children]) {
+      switchMarkGroup.remove(child);
+      ((child as THREE.Mesh).material as THREE.Material).dispose();
+    }
+  }
+  function setSwitchMark(m: SwitchMark | null) {
+    const key = m && switchGeometry ? JSON.stringify(m) : '';
+    if (key === switchMarkKey) return;
+    switchMarkKey = key;
+    clearSwitchMark();
+    if (!m || !switchGeometry) return;
+    const { skin, line } = markMaterials();
+    skin.opacity = 0.22;
+    switchEdges ??= new THREE.EdgesGeometry(switchGeometry, 40);
+    const at = (o: THREE.Object3D) => {
+      o.position.set(m.x, m.y, m.z);
+      o.rotation.z = (m.rotation * Math.PI) / 180;
+      o.renderOrder = 999;
+      switchMarkGroup.add(o);
+    };
+    at(new THREE.Mesh(switchGeometry, skin));
+    at(new THREE.LineSegments(switchEdges, line));
   }
 
   function aimRay(clientX: number, clientY: number) {
@@ -670,6 +888,11 @@ export function createViewer(container: HTMLElement): Viewer {
   // shading and no crease-splitting — the mesh is dense (~hundreds of k tris).
   function setSwitch(mesh: MeshData | null) {
     clearSwitchMeshes();
+    // The lit switch's mark is drawn from this mesh: take it down with it, and put it back after.
+    const mark = switchMarkKey;
+    setSwitchMark(null);
+    switchEdges?.dispose();
+    switchEdges = null;
     switchGeometry?.dispose();
     switchGeometry = null;
     switchMaterial?.dispose();
@@ -687,6 +910,7 @@ export function createViewer(container: HTMLElement): Viewer {
       side: THREE.DoubleSide,
     });
     rebuildSwitchMeshes();
+    if (mark) setSwitchMark(JSON.parse(mark));
   }
 
   function showSwitch(on: boolean) {
@@ -743,6 +967,8 @@ export function createViewer(container: HTMLElement): Viewer {
     // look like a file with a stray sheet in it.
     const overlayWasVisible = overlayGroup.visible;
     overlayGroup.visible = false;
+    const marksWereVisible = marksGroup.visible;
+    marksGroup.visible = false;
 
     // Frame whatever is actually on screen — exploded included, so a cover of an exploded
     // view shows both halves rather than clipping the one that floats above the frame.
@@ -777,6 +1003,7 @@ export function createViewer(container: HTMLElement): Viewer {
     controls.update(); // re-aims the camera at the untouched orbit target
     buildPlate.object.visible = plateWasVisible;
     overlayGroup.visible = overlayWasVisible;
+    marksGroup.visible = marksWereVisible;
     if (wasCut) setSectionEnabled(true);
     renderer.render(scene, camera); // put the user's own frame back before they can see this one
 
@@ -804,6 +1031,7 @@ export function createViewer(container: HTMLElement): Viewer {
     const wasCut = sectionOn;
     const plateWasVisible = buildPlate.object.visible;
     const overlayWasVisible = overlayGroup.visible;
+    const marksWereVisible = marksGroup.visible;
     const switchWasVisible = switchGroup.visible;
     const capZ = capGroup.position.z;
     const hovered = hoveredIndex;
@@ -812,6 +1040,7 @@ export function createViewer(container: HTMLElement): Viewer {
     if (wasCut) setSectionEnabled(false);
     buildPlate.object.visible = false;
     overlayGroup.visible = false;
+    marksGroup.visible = false;
     switchGroup.visible = false;
     // A hover glow or a selection outline is the pointer's business, not the picture's.
     hoveredIndex = null;
@@ -877,6 +1106,7 @@ export function createViewer(container: HTMLElement): Viewer {
     controls.update(); // re-aims the camera at the untouched orbit target
     buildPlate.object.visible = plateWasVisible;
     overlayGroup.visible = overlayWasVisible;
+    marksGroup.visible = marksWereVisible;
     switchGroup.visible = switchWasVisible;
     hoveredIndex = hovered;
     selectedIndices = selected;
@@ -937,6 +1167,7 @@ export function createViewer(container: HTMLElement): Viewer {
     buildPlate.setGhosted(camera.position.z <= floorZ);
     renderer.render(scene, camera);
     placePlaneHandle();
+    placeHoleHandle();
   })();
 
   // Paint hover/selection glow via emissive (keeps each part's true base color).
@@ -1017,6 +1248,11 @@ export function createViewer(container: HTMLElement): Viewer {
       renderer.domElement.style.cursor = pickIndexAt(e.clientX, e.clientY) === null ? '' : 'crosshair';
       return;
     }
+    // The keyring hole's cutter, while Keychain is open, is something to take hold of.
+    if (overHole(e.clientX, e.clientY)) {
+      renderer.domElement.style.cursor = 'grab';
+      return;
+    }
 
     const idx = pickIndexAt(e.clientX, e.clientY);
     renderer.domElement.style.cursor = idx === null ? '' : 'pointer';
@@ -1040,6 +1276,11 @@ export function createViewer(container: HTMLElement): Viewer {
     // A press that grabbed the cut plane was a drag of the plane, however short.
     if (pressGrabbedPlane) {
       pressGrabbedPlane = false;
+      return;
+    }
+    // …and one that grabbed the keyring hole's cutter, a drag of the hole.
+    if (pressGrabbedHole) {
+      pressGrabbedHole = false;
       return;
     }
     // Only a tap (not an orbit drag) counts as a part click.
@@ -1087,6 +1328,11 @@ export function createViewer(container: HTMLElement): Viewer {
   renderer.domElement.addEventListener('pointermove', onPlanePointerMove);
   renderer.domElement.addEventListener('pointerup', onPlanePointerUp);
   renderer.domElement.addEventListener('pointercancel', onPlanePointerUp);
+  // Capture phase, as the plane's: a press on the hole's cutter is claimed before an orbit starts.
+  renderer.domElement.addEventListener('pointerdown', onHoleRingPointerDown, { capture: true });
+  renderer.domElement.addEventListener('pointermove', onHolePointerMove);
+  renderer.domElement.addEventListener('pointerup', onHolePointerUp);
+  renderer.domElement.addEventListener('pointercancel', onHolePointerUp);
 
   function onPartPick(cb: (index: number | null, clientX: number, clientY: number, shiftKey: boolean) => void) {
     pickCb = cb;
@@ -1121,7 +1367,12 @@ export function createViewer(container: HTMLElement): Viewer {
     renderer.domElement.removeEventListener('pointermove', onPlanePointerMove);
     renderer.domElement.removeEventListener('pointerup', onPlanePointerUp);
     renderer.domElement.removeEventListener('pointercancel', onPlanePointerUp);
+    renderer.domElement.removeEventListener('pointerdown', onHoleRingPointerDown, { capture: true });
+    renderer.domElement.removeEventListener('pointermove', onHolePointerMove);
+    renderer.domElement.removeEventListener('pointerup', onHolePointerUp);
+    renderer.domElement.removeEventListener('pointercancel', onHolePointerUp);
     setPlaneHandle(null);
+    setHoleHandle(null);
     setCutterOverlay(null);
     clearGroup(capGroup);
     clearGroup(bodyGroup);
@@ -1129,6 +1380,8 @@ export function createViewer(container: HTMLElement): Viewer {
     capQuadGeom.dispose();
     buildPlate.dispose();
     clearSwitchMeshes();
+    clearSwitchMark();
+    switchEdges?.dispose();
     switchGeometry?.dispose();
     switchMaterial?.dispose();
     controls.dispose();
@@ -1161,6 +1414,11 @@ export function createViewer(container: HTMLElement): Viewer {
     highlightParts,
     clearHighlight,
     setCutterOverlay,
+    setHoleCutter,
+    setHoleGrip: (at) => { holeGripAt = at; },
+    setHoleHandle,
+    onHoleDrag: (cb) => { holeDragCb = cb; },
+    setSwitchMark,
     setExplodeGap: (mm) => {
       explodeGap = mm;
       explodeOffset = mm ?? bounds.z * 0.8 + 10;

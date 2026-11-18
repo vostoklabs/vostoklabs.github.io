@@ -16,7 +16,7 @@ import { ICONS } from '../src/icons';
 import { sourceCards } from '../src/components/sources';
 import { stagePanel, stageStatus, stageRow } from '../src/components/stage';
 import { segmentedControl, toggleSwitch, selectField, setFieldOptions } from '../src/components/controls';
-import { appShell } from '../src/components/app-shell';
+import { appShell, phoneShell } from '../src/components/app-shell';
 import { settingsRail } from '../src/components/settings-rail';
 import { studioView } from '../src/components/editor-shell';
 import { chip } from '../src/components/elements';
@@ -109,6 +109,40 @@ option('stageStatus position', 'vl-stage-status--top', (on) =>
   check('stageStatus default: set() writes the classes it always wrote', bottom.root.className === 'vl-stage-status vl-stage-status--busy');
 }
 
+// stageStatus folded: the message behind a button. Off (or false), the line is built as before.
+{
+  check('stageStatus folded: false builds what the default builds',
+    norm(stageStatus('Ready', { folded: false }).root) === norm(stageStatus('Ready').root));
+  const s = stageStatus('', { folded: true });
+  const root = mini(s.root);
+  const btn = root.querySelector('.vl-stage-status__btn')!;
+  const busy = root.querySelector('.vl-stage-status__busy')!;
+  const said = root.querySelector('.vl-stage-status__said')!;
+  check('stageStatus folded: nothing to say, nothing on the stage', root.hidden && has(root, 'vl-stage-status--folded'));
+  s.set('Building clicker…', 'busy');
+  check('stageStatus folded: busy is the spinner alone', !root.hidden && !busy.hidden && btn.hidden);
+  check('stageStatus folded: the text is still in the live region', root.getAttribute('aria-live') === 'polite' && said.textContent === 'Building clicker…');
+  s.set('Sample: Star.');
+  check('stageStatus folded: news is a button, and no paragraph', !btn.hidden && busy.hidden && btn.getAttribute('aria-label') === 'Show the message' && !root.querySelector('p'));
+  s.set('Too thin to print. · Base widened.', 'warn');
+  check('stageStatus folded: a warning colours the button and says so', has(root, 'vl-stage-status--warn') && btn.getAttribute('aria-label') === 'Show the warning');
+  btn.click();
+  const pop = mini(document.body).querySelector('.vl-popover');
+  const lines = pop?.querySelectorAll('.vl-stage-status__lines > p') ?? [];
+  check('stageStatus folded: pressed, the whole message opens a line a part',
+    lines.length === 2 && lines[0]!.textContent === 'Too thin to print.' && lines[1]!.textContent === 'Base widened.');
+  s.set('Off the sheet.', 'error');
+  const after = mini(document.body).querySelectorAll('.vl-popover .vl-stage-status__lines > p');
+  check('stageStatus folded: an open message follows the line', after.length === 1 && after[0]!.textContent === 'Off the sheet.' && has(root, 'vl-stage-status--error'));
+  s.set('');
+  check('stageStatus folded: cleared, the button goes', root.hidden && btn.hidden);
+  const d = stageStatus('', { folded: true });
+  d.setDiagnostics([{ level: 'warn', message: 'One.' }, { level: 'error', message: 'Two.' }, { level: 'info', message: 'Note.' }], 'ok');
+  check('stageStatus folded: diagnostics hand over every problem, not the worst',
+    mini(d.root).querySelector('.vl-stage-status__said')!.textContent === 'One. · Two.' && has(d.root, 'vl-stage-status--error'));
+  check('stageStatus folded: no inline style', styles(norm(s.root)) === 0);
+}
+
 option('segmentedControl tiles compact', 'vl-tabs--tiles-compact', (on) =>
   segmentedControl({ variant: 'tiles', options: SOURCES, value: 'tuck', ...(on === undefined ? {} : on ? { size: 'compact' } : {}) }),
 );
@@ -190,6 +224,14 @@ const RAIL = () => [
   { id: 'text', label: 'Text', icon: ICONS.text, divider: true, body: [el('p', { text: 'b' })] },
 ];
 option('settingsRail flush', 'vl-settings-rail--flush', (on) => settingsRail({ items: RAIL(), ...(on === undefined ? {} : { flush: on }) }));
+option('settingsRail fitHeight', 'vl-settings-rail--fit', (on) => settingsRail({ items: RAIL(), ...(on === undefined ? {} : { fitHeight: on }) }));
+{
+  const fit = settingsRail({ items: RAIL(), fitHeight: true });
+  const btn = mini(fit).querySelector('[data-tool="text"]')!;
+  check('settingsRail fitHeight: each button keeps its word for the tooltip and the label',
+    btn.getAttribute('title') === 'Text' && btn.querySelector('.vl-tool-rail__label')?.textContent === 'Text');
+  check('settingsRail fitHeight: with flush, both classes', has(settingsRail({ items: RAIL(), flush: true, fitHeight: true }), 'vl-settings-rail--flush'));
+}
 {
   const opened: string[] = [];
   const rail = settingsRail({ items: RAIL(), flush: true, onChange: (id) => opened.push(id) });
@@ -334,6 +376,38 @@ option('generatorHeader compact', 'vl-app-header--compact', (on) =>
   check('appShell phone: with no right footer, one is made for the bar alone', !!made && made.children.length === 1 && has(made.firstElementChild, 'vl-app__phone-bar'));
   const twoCol = appShell({ right: { scroll: [] }, phone: true });
   check('appShell phone: needs a left panel; without one it does nothing', !has(twoCol.root, 'vl-app--phone') && !mini(twoCol.root).querySelector('.vl-app__phone-bar'));
+}
+
+// phoneShell: the same layout over panels an app stamped itself (the clicker's template), and
+// what it returns stops it.
+{
+  const narrowQ = window.matchMedia('(max-width: 900px)') as unknown as { set(m: boolean): void };
+  narrowQ.set(false);
+  const leftScroll = el('div', { className: 'vl-panel__scroll' }, [el('p', { text: 'rail' })]);
+  const leftPanel = el('aside', { className: 'vl-panel vl-panel--left' }, [leftScroll]);
+  const rightScroll = el('div', { className: 'vl-panel__scroll' }, [el('p', { text: 'source' })]);
+  const projectFooter = sidebarFooter({ formats: [{ id: '3mf', label: '3MF' }], onExport() {}, onSave() {}, onLoad() {}, theme: false });
+  const pinned = el('div', { className: 'vl-panel__footer' }, [projectFooter]);
+  const rightPanel = el('aside', { className: 'vl-panel vl-panel--right' }, [rightScroll, pinned]);
+  const root = el('main', { className: 'vl-app' }, [leftPanel, el('div', { className: 'vl-stage' }), rightPanel]);
+  const before = styles(html(mini(root)));
+  const stop = phoneShell(root, { panel: leftPanel, scroll: leftScroll }, { panel: rightPanel, scroll: rightScroll, footer: pinned });
+  const r = mini(root);
+  const bar = mini(pinned).querySelector('.vl-app__phone-bar')!;
+  const exportBlock = r.querySelector('.vl-export')!;
+  check('phoneShell: the class is on the frame, Settings leads the pinned footer', has(r, 'vl-app--phone') && mini(pinned).firstElementChild === bar && bar.textContent.includes('Settings'));
+  check('phoneShell: no inline style', styles(html(r)) === before);
+  narrowQ.set(true);
+  check('phoneShell: narrow, the export goes beside Settings', bar.firstElementChild === exportBlock);
+  bar.querySelectorAll('button').find((b) => b.textContent.includes('Settings'))!.click();
+  const sheet = mini(document.body).querySelector('.vl-drawer');
+  check('phoneShell: Settings opens a drawer holding the left panel’s settings', sheet?.querySelector('.vl-app__phone-sheet')?.textContent === 'rail' && mini(leftScroll).childNodes.length === 0);
+  narrowQ.set(false);
+  check('phoneShell: going wide puts them back', !mini(document.body).querySelector('.vl-drawer') && mini(leftScroll).textContent === 'rail' && mini(projectFooter).firstElementChild === exportBlock);
+  stop();
+  narrowQ.set(true);
+  check('phoneShell: stopped, the class goes and a narrow window moves nothing', !has(r, 'vl-app--phone') && mini(projectFooter).firstElementChild === exportBlock);
+  narrowQ.set(false);
 }
 
 

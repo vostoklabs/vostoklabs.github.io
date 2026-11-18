@@ -29,14 +29,16 @@ const FONTS_SRC = resolve(APP, '..', '..', 'packages', 'fonts', 'src');
 
 // ------------------------------------------------------------------ what Vite and the page provide
 /** `import.meta.glob` as Vite answers it, with file URLs of the real files. Only the font
- *  library globs, relative to its own src/. */
-globalThis.__viteGlob = (pattern) => {
-  const rel = pattern.replace(/^\.\//, '');
-  const slash = rel.lastIndexOf('/');
-  const dir = join(FONTS_SRC, rel.slice(0, slash));
-  const match = new RegExp(`^${rel.slice(slash + 1).replace(/[.]/g, '\\.').replace(/\*/g, '[^/]*')}$`);
+ *  library globs, relative to its own src/: one pattern, or a list of them. */
+globalThis.__viteGlob = (patterns) => {
   const out = {};
-  for (const f of readdirSync(dir)) if (match.test(f)) out[`./${rel.slice(0, slash)}/${f}`] = pathToFileURL(join(dir, f)).href;
+  for (const pattern of Array.isArray(patterns) ? patterns : [patterns]) {
+    const rel = pattern.replace(/^\.\//, '');
+    const slash = rel.lastIndexOf('/');
+    const dir = join(FONTS_SRC, rel.slice(0, slash));
+    const match = new RegExp(`^${rel.slice(slash + 1).replace(/[.]/g, '\\.').replace(/\*/g, '[^/]*')}$`);
+    for (const f of readdirSync(dir)) if (match.test(f)) out[`./${rel.slice(0, slash)}/${f}`] = pathToFileURL(join(dir, f)).href;
+  }
   return out;
 };
 globalThis.fetch = async (url) => {

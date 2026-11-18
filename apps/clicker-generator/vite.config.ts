@@ -1,6 +1,58 @@
 import { defineConfig } from 'vite';
-import { readdirSync, existsSync, rmSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { readdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve, join, relative } from 'node:path';
+import { leaveOutFonts } from '@vostok/fonts/vite';
+import { FONTS } from '@vostok/fonts/registry';
+
+// The faces the MakerLab build carries, as many as its package has room for; the website keeps
+// the whole library. Every curated face; then each category in turn takes its next best-known face
+// (by Google Fonts' popularity) until the room is spent, none over 0.2 MB in the zip; the face each
+// Asian language falls back to and two or three more for each; and Source Han Sans CN for the
+// Chinese characters the others lack. A face new to the library stays out until it is named here.
+const MAKERLAB_FONTS = [
+  // Serif (17)
+  'abril-fatface', 'bree-serif', 'cinzel', 'cinzel-decorative', 'domine', 'eb-garamond',
+  'faustina', 'libre-baskerville', 'literata', 'lora', 'marcellus', 'merriweather', 'noto-serif',
+  'playfair-display', 'pt-serif', 'spectral', 'vollkorn',
+  // Slab (15)
+  'alegreya-sans-sc', 'aleo', 'alfa-slab-one', 'arvo', 'bevan', 'bitter', 'crete-round',
+  'josefin-slab', 'patua-one', 'roboto-slab', 'rokkitt', 'rye', 'sanchez', 'ultra', 'zilla-slab',
+  // Script (17)
+  'alex-brush', 'allura', 'cookie', 'courgette', 'dancing-script', 'great-vibes', 'kaushan-script',
+  'lobster', 'lobster-two', 'marck-script', 'pacifico', 'parisienne', 'pinyon-script',
+  'sacramento', 'satisfy', 'tangerine', 'yellowtail',
+  // Handwriting (17)
+  'amatic-sc', 'architects-daughter', 'caveat', 'gloria-hallelujah', 'handlee', 'homemade-apple',
+  'indie-flower', 'kalam', 'neucha', 'nothing-you-could-do', 'patrick-hand', 'permanent-marker',
+  'reenie-beanie', 'rock-salt', 'shadows-into-light', 'special-elite', 'sriracha',
+  // Clean (23)
+  'anton', 'archivo', 'bebas-neue', 'black-han-sans', 'do-hyeon', 'figtree', 'gothic-a1', 'inter',
+  'kanit', 'm-plus-1p', 'manrope', 'montserrat', 'noto-sans', 'noto-sans-sc', 'nunito', 'oswald',
+  'outfit', 'poppins', 'raleway', 'roboto', 'rubik', 'source-han-sans-cn-light', 'work-sans',
+  // Tech (18)
+  'audiowide', 'black-ops-one', 'chakra-petch', 'gruppo', 'jura', 'khand', 'michroma', 'monoton',
+  'orbitron', 'oxanium', 'quantico', 'rajdhani', 'righteous', 'rubik-mono-one', 'russo-one',
+  'saira-condensed', 'syncopate', 'unica-one',
+  // Comic (20)
+  'baloo-2', 'bangers', 'boogaloo', 'cherry-bomb-one', 'chewy', 'comfortaa', 'comic-neue',
+  'comic-relief', 'concert-one', 'fredoka', 'grandstander', 'itim', 'lilita-one', 'luckiest-guy',
+  'mali', 'quicksand', 'sansita', 'short-stack', 'sniglet', 'zcool-kuaile',
+  // Display (18)
+  'bowlby-one-sc', 'bungee', 'bungee-shade', 'changa-one', 'dela-gothic-one', 'dela-gothic-one-jp',
+  'fugaz-one', 'gravitas-one', 'passion-one', 'paytone-one', 'racing-sans-one', 'rammetto-one',
+  'rowdies', 'secular-one', 'shrikhand', 'sigmar-one', 'squada-one', 'titan-one',
+  // Spooky (16)
+  'butcherman', 'creepster', 'eater', 'ewert', 'frijole', 'griffy', 'henny-penny', 'jolly-lodger',
+  'lacquer', 'metal-mania', 'new-rocker', 'nosifer', 'pirata-one', 'rubik-glitch',
+  'rubik-moonrocks', 'rubik-spray-paint',
+  // Mono (14)
+  'cutive-mono', 'dm-mono', 'fira-mono', 'ibm-plex-mono', 'inconsolata', 'jetbrains-mono',
+  'major-mono-display', 'martian-mono', 'noto-sans-mono', 'roboto-mono', 'share-tech-mono',
+  'source-code-pro', 'space-mono', 'syne-mono',
+  // Pixel (11)
+  'handjet', 'jersey-15', 'jersey-25', 'micro-5', 'pixelify-sans', 'press-start-2p', 'silkscreen',
+  'sixtyfour', 'tiny5', 'vt323', 'workbench',
+];
 
 // Our CSP-safe manifold rebuild (see packages/manifold-noeval/README.md).
 const MANIFOLD_NOEVAL = resolve(__dirname, '../../packages/manifold-noeval');
@@ -143,19 +195,87 @@ function shapeEditorPlugin(enabled: boolean) {
   };
 }
 
+/** The bundled pictures (samples, pack designs) as lossless WebP in a build. Each one decoded from
+ *  the PNG and from its WebP must give the pixels the app reads, or the build fails; then the PNG
+ *  leaves the build. The app reads a picture through a canvas (@vostok/trace `loadUrlToImage`),
+ *  which keeps colour premultiplied by alpha, so a fully transparent pixel reads 0,0,0,0 whatever
+ *  colour the file stores there: those match on alpha alone, every other pixel on all four
+ *  channels. (libwebp drops the colour under alpha 0 even with `exact` in some PNGs.)
+ *  `shippedPicture` (src/assets.ts) asks for the .webp. public/ keeps the PNGs: the dev server
+ *  and the tests read those. */
+function samePixels(a: Buffer, b: Buffer): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 4) {
+    if (a[i + 3] !== b[i + 3]) return false;
+    if (a[i + 3] === 0) continue;
+    if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) return false;
+  }
+  return true;
+}
+const PICTURE_DIRS = /^assets[\\/](media[\\/]images|packs[\\/][^\\/]+[\\/]designs)$/;
+function picturesAsWebp(enabled: boolean) {
+  let outDir = '';
+  return {
+    name: 'pictures-as-webp',
+    apply: 'build' as const,
+    configResolved(config: { root: string; build: { outDir: string } }) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
+    async closeBundle() {
+      if (!enabled) return;
+      // Loaded only here: a native module the dev server and the website build never need.
+      const { default: sharp } = await import('sharp');
+      const pictures: string[] = [];
+      const walk = (dir: string) => {
+        for (const name of readdirSync(dir, { withFileTypes: true })) {
+          const full = join(dir, name.name);
+          if (name.isDirectory()) walk(full);
+          else if (/\.png$/i.test(name.name) && PICTURE_DIRS.test(relative(outDir, dir))) pictures.push(full);
+        }
+      };
+      walk(outDir);
+      if (!pictures.length) throw new Error('pictures-as-webp: no pictures found under ' + outDir);
+      let before = 0;
+      let after = 0;
+      for (const png of pictures) {
+        const source = readFileSync(png);
+        const webp = await sharp(source).webp({ lossless: true, exact: true, effort: 6 }).toBuffer();
+        const pixels = (buf: Buffer) => sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+        const a = await pixels(source);
+        const b = await pixels(webp);
+        if (a.info.width !== b.info.width || a.info.height !== b.info.height || !samePixels(a.data, b.data)) {
+          throw new Error(`pictures-as-webp: ${relative(outDir, png)} decodes differently as WebP`);
+        }
+        writeFileSync(png.replace(/\.png$/i, '.webp'), webp);
+        rmSync(png);
+        before += source.length;
+        after += webp.length;
+      }
+      console.log(`pictures-as-webp: ${pictures.length} pictures, ${(before / 1e6).toFixed(2)} MB of PNG → ${(after / 1e6).toFixed(2)} MB of WebP, same pixels`);
+    },
+  };
+}
+
 // Relative base so the static build works on ANY GitHub Pages URL
 // (user/org page at '/', or a project page at '/<repo>/') with no reconfig.
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode, command }) => ({
   base: './',
   plugins: [
+    picturesAsWebp(mode === 'makerworld'),
     trademarkCleanPlugin(mode === 'makerworld'),
     makerlabPlugin(mode === 'makerworld'),
     shapeEditorPlugin(hasShapeEditor(mode)),
+    // The MakerLab build ships as one package, and the whole library alone would be ~22 MB of it.
+    ...(mode === 'makerworld'
+      ? [leaveOutFonts(FONTS.map((f) => f.id).filter((id) => !MAKERLAB_FONTS.includes(id)))]
+      : []),
   ],
   define: {
     // True only in a build that contains the shape editor (see `shapeEditorPlugin` above);
     // false folds its button and its dynamic import out of the bundle.
     __SHAPE_EDITOR__: JSON.stringify(hasShapeEditor(mode)),
+    // The MakerLab build's pictures are WebP (`picturesAsWebp` above); its dev server serves public/.
+    __PICTURES_WEBP__: JSON.stringify(mode === 'makerworld' && command === 'build'),
   },
   worker: {
     format: 'es' as const,

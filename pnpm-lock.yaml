@@ -179,6 +179,9 @@ importers:
       '@xmldom/xmldom':
         specifier: ^0.9.10
         version: 0.9.10
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

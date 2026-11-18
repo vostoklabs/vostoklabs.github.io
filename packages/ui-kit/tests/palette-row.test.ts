@@ -9,9 +9,9 @@
     pnpm --filter @vostok/ui-kit test
 */
 import './support/install-mini-dom';
-import { html, miniDocument, type MiniElement } from './support/mini-dom';
+import { html, miniDocument, MiniRaw, type MiniElement } from './support/mini-dom';
 import { kitRules, cssValue } from './support/cascade';
-import { FILAMENTS, filamentRow, paletteRow } from '../src/components/filament';
+import { FILAMENTS, colorChip, filamentRow, paletteRow } from '../src/components/filament';
 import { stepperRow } from '../src/components/controls';
 
 let pass = 0;
@@ -110,6 +110,45 @@ miniDocument.body.replaceChildren();
   miniDocument.body.replaceChildren(row);
   const r = (node: MiniElement, prop: string) => cssValue(node, prop, rules, 1280);
   check('stepper swatch css: the 10 px round sample dot', r(dot!, 'inline-size') === '10px' && r(dot!, 'border-radius') === '50%', `${r(dot!, 'inline-size')} ${r(dot!, 'border-radius')}`);
+  miniDocument.body.replaceChildren();
+}
+
+// stepperRow's setBounds: a range only known later. The value comes inside, and the buttons say so.
+{
+  const row = mini(stepperRow({ label: 'Colours', min: 1, max: 12, value: 8 }));
+  row.setBounds(1, 5);
+  const [minus, plus] = [...row.querySelectorAll('button')] as unknown as HTMLButtonElement[];
+  check('stepper setBounds: the value is pulled inside the new ends', row.getValue() === 5, String(row.getValue()));
+  check('stepper setBounds: + stops at the new top', plus.disabled === true && minus.disabled === false);
+  row.setBounds(1, 12);
+  check('stepper setBounds: widening leaves the value and frees +', row.getValue() === 5 && plus.disabled === false);
+}
+
+// colorChip({ menu }): off, the plain swatch it always was; on, a caret inside it that reads on
+// the colour, and aria-haspopup, so the chip looks like what it is: a menu.
+{
+  const chipOpts = { hex: '#F5C518', label: 'Filament for yellow', onClick: () => {} };
+  const plainChip = html(mini(colorChip(chipOpts)));
+  check('colorChip: the default is the bare swatch, as before', plainChip === '<button class="vl-color-chip" type="button" aria-label="Filament for yellow" style="--swatch: #F5C518"></button>', plainChip);
+  check('colorChip menu: false builds what the default builds', html(mini(colorChip({ ...chipOpts, menu: false }))) === plainChip);
+  const on = mini(colorChip({ ...chipOpts, menu: true }));
+  // The icon is kept as markup in the stand-in document (a MiniRaw), as every kit icon is.
+  const caret = on.childNodes[0];
+  check('colorChip menu: one caret inside the chip', on.childNodes.length === 1 && caret instanceof MiniRaw && caret.markup.startsWith('<svg') && caret.markup.includes('aria-hidden="true"'));
+  check('colorChip menu: says it opens a menu, and keeps its name', on.getAttribute('aria-haspopup') === 'true' && on.getAttribute('aria-label') === 'Filament for yellow');
+  check('colorChip menu: no style attribute, the colour through the CSSOM', !on.hasAttribute('style') && on.style.cssText === '--swatch: #F5C518');
+  check('colorChip menu: dark ink on a light colour', on.getAttribute('data-ink') === 'dark');
+  (on as unknown as { setValue(h: string): void }).setValue('#161616');
+  check('colorChip menu: setValue repaints and turns the ink light on a dark colour', on.style.getPropertyValue('--swatch') === '#161616' && on.getAttribute('data-ink') === 'light');
+  const offChip = mini(colorChip(chipOpts));
+  (offChip as unknown as { setValue(h: string): void }).setValue('#161616');
+  check('colorChip: setValue on the default leaves it a bare swatch', !offChip.hasAttribute('data-ink') && offChip.childNodes.length === 0);
+
+  miniDocument.body.replaceChildren(on);
+  const cv = (node: MiniElement, prop: string) => cssValue(node, prop, rules, 1280);
+  check('colorChip menu css: the caret sits in the middle of the swatch', cv(on, 'display') === 'inline-flex' && cv(on, 'align-items') === 'center' && cv(on, 'justify-content') === 'center', `${cv(on, 'display')} ${cv(on, 'align-items')} ${cv(on, 'justify-content')}`);
+  check('colorChip menu css: light ink on a dark colour', cv(on, 'color').startsWith('rgb(255'), cv(on, 'color'));
+  check('colorChip menu css: the chip keeps its size', cv(on, 'width') === '44px' && cv(on, 'height') === '30px');
   miniDocument.body.replaceChildren();
 }
 

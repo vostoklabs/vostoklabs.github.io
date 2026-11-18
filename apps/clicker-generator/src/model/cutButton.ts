@@ -12,12 +12,12 @@
 //  - Under the model's surface the button is solid down to the post's bottom, the same as every
 //    moving piece here (switchKit rule 1), so it prints upright with the post on the bed.
 import { extrude } from '@vostok/manifold';
-import type { ModelCutParams } from './types';
+import { buttonCount, MAX_BUTTONS, type ModelCutParams } from './types';
 import {
   HEAVY_TOP_GRAMS, MIN_WALL, SOCKET_FLOOR, buryIdentityVoidsPlan, gramsOf, movingPocket, place,
   postSolid, socketCutter, socketNeedMm, switchBody, type Scope, type SwitchKit, type SwitchPose,
 } from './switchKit';
-import { deepestPoint, overhangArea, sectionAt, squareAt, topSurface } from './section';
+import { deepestPoint, overhangArea, sectionAt, spreadSpots, squareAt, topSurface } from './section';
 import type { CutOutput } from './buildModel';
 
 type Wasm = any;
@@ -82,26 +82,53 @@ export function cutButton(
     warnings.push(`A ${shape} button starts at ${minD} mm — the switch goes in through its hole.`);
   }
 
-  // Where: wherever the user clicked, else the deepest point just under the model's top.
+  // Where: wherever the user clicked, else the deepest point just under the model's top. Several
+  // share the top out along its longest side, so the first does not take the middle of it.
+  const topSection = sectionAt(sc, model, Math.max(0.5, H - 3));
+  const count = buttonCount(p);
+  const spread = count > 1 ? spreadSpots(wasm, sc, topSection, count) : [];
   let bx = p.button.x;
   let by = p.button.y;
   if (bx === null || by === null) {
-    const d = deepestPoint(sc, sectionAt(sc, model, Math.max(0.5, H - 3)));
+    const d = count > 1 ? spread[0] : deepestPoint(sc, topSection);
     bx = d?.x ?? 0;
     by = d?.y ?? 0;
   }
-  const outline = buttonOutline(wasm, sc, shape, D, bx, by, rotation);
+  const firstAt = { x: bx, y: by, rotation };
 
-  // The model's top under the button: rays from above at the centre and three rings round it.
-  const pts: [number, number][] = [[bx, by]];
-  for (const f of [0.35, 0.7, 0.96]) {
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      pts.push([bx + Math.cos(a) * f * (D / 2), by + Math.sin(a) * f * (D / 2)]);
+  // Centre to centre: two bores, and a wall between them.
+  const pitch = D + 2 * tol + 2 * MIN_WALL;
+  const centres: { x: number; y: number; rotation: number }[] = [firstAt];
+  if (count > 1) {
+    // What is left for a centre: inside the model by a button and its wall, clear of the others.
+    let room: Section = sc.keep(topSection.offset(-(D / 2 + tol + MIN_WALL), 'Round', 2, 16));
+    const keepOut = (c: { x: number; y: number }) => {
+      room = sc.keep(room.subtract(sc.keep(sc.keep(wasm.CrossSection.circle(pitch, 48)).translate([c.x, c.y]))));
+    };
+    const roomAt = (c: { x: number; y: number }) =>
+      !sc.keep(room.intersect(squareAt(wasm, sc, 0.2, c.x, c.y, 0))).isEmpty();
+    keepOut(firstAt);
+    for (let i = 1; i < count; i++) {
+      const e = p.more?.[i - 1];
+      let at: { x: number; y: number } | null = null;
+      if (e && e.x !== null && e.y !== null) at = { x: e.x, y: e.y };
+      else if (spread[i] && roomAt(spread[i])) at = spread[i];
+      else {
+        const d = room.isEmpty() ? null : deepestPoint(sc, room);
+        if (d) at = { x: d.x, y: d.y };
+      }
+      if (!at) {
+        warnings.push(`There is only room for ${centres.length} ${centres.length === 1 ? 'button' : 'buttons'} here. Make the model bigger or the buttons smaller.`);
+        break;
+      }
+      centres.push({ ...at, rotation: e?.rotation ?? 0 });
+      keepOut(at);
     }
   }
-  const tops = topSurface(model, pts, H + 5, -5);
-  const hit = tops.filter((z): z is number => z !== null);
+  const warnOnce = (text: string) => {
+    if (!warnings.includes(text)) warnings.push(text);
+  };
+
   const failed = (text: string): CutOutput => {
     warnings.push(text);
     return {
@@ -116,98 +143,153 @@ export function cutButton(
       movingGrams: 0,
     };
   };
-  if (!hit.length) return failed('The button is off the model. Click the model where it should go.');
-  if (hit.length < tops.length) warnings.push('The button hangs over the edge of the model. Move it in.');
-  const zMin = Math.min(...hit);
-
-  const raise = Math.min(Math.max(0, p.button.raiseMm), Math.max(0, p.travel));
-  const roofBottom = zMin - BUTTON_ROOF;
-  const pose: SwitchPose = { x: bx, y: by, z: roofBottom + raise - kit.postTop, rotation };
   const at = (cs: Section, z0: number, z1: number): Solid =>
     sc.keep(sc.keep(extrude(wasm, cs, Math.max(0.01, z1 - z0))).translate([0, 0, z0]));
 
-  // ---- The button: the model's own material inside the outline, from the roof's underside up ----
-  const column: Solid = sc.keep(model.intersect(at(outline, roofBottom, H + 2)));
-  // Keep the piece that starts at the roof; anything else inside the outline is model that sits
-  // ABOVE the button without touching it (a hat brim over a face) — it cannot ride on the button,
-  // and the bore takes it away.
-  const parts: Solid[] = column.decompose().map((q: Solid) => sc.keep(q));
-  let core: Solid = column;
-  let dropped = 0;
-  if (parts.length > 1) {
-    let best = -1;
-    for (const q of parts) {
-      if (q.boundingBox().min[2] > roofBottom + 0.3) continue;
-      const v = q.volume();
-      if (v > best) {
-        best = v;
-        core = q;
+  const raise = Math.min(Math.max(0, p.button.raiseMm), Math.max(0, p.travel));
+  const post = postSolid(wasm, sc, kit, p.stemFitMm, p.stemOuterMm);
+  if (!post.applied) warnings.push('Switch stem fit could not be applied. The stem prints as designed.');
+
+  const buttons: Solid[] = [];
+  const poses: SwitchPose[] = [];
+  const placed: { x: number; y: number }[] = [];
+  const cuts: Solid[] = [];
+  let voids: Solid[] = [];
+  let attempted = 0;
+
+  for (const c of centres) {
+    const first = c === firstAt;
+    const outline = buttonOutline(wasm, sc, shape, D, c.x, c.y, c.rotation);
+
+    // The model's top under the button: rays from above at the centre and three rings round it.
+    const pts: [number, number][] = [[c.x, c.y]];
+    for (const f of [0.35, 0.7, 0.96]) {
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        pts.push([c.x + Math.cos(a) * f * (D / 2), c.y + Math.sin(a) * f * (D / 2)]);
       }
     }
-    for (const q of parts) if (q !== core) dropped += q.volume();
-  }
-  if (dropped > 0.05 * core.volume() + 5) {
-    warnings.push('Part of the model above the button is cut away with it. Move the button, or make it smaller.');
-  }
-  if (core.volume() < 0.4 * outline.area() * Math.max(0.5, zMin - roofBottom)) {
-    warnings.push('The model looks hollow under the button, so the button is thin. Use Slice or Stand.');
-  }
+    const tops = topSurface(model, pts, H + 5, -5);
+    const hit = tops.filter((z): z is number => z !== null);
+    if (!hit.length) {
+      if (first) return failed('The button is off the model. Click the model where it should go.');
+      warnOnce('A button is off the model. Click the model where it should go.');
+      continue;
+    }
+    if (hit.length < tops.length) warnOnce('The button hangs over the edge of the model. Move it in.');
+    const zMin = Math.min(...hit);
 
-  const post = postSolid(wasm, sc, kit, p.stemFitMm);
-  if (!post.applied) warnings.push('Switch stem fit could not be applied. The stem prints as designed.');
-  const fill = at(outline, roofBottom - (kit.postTop - kit.postBottom), roofBottom + 0.05);
-  const button = sc.keep(
-    sc.keep(
-      sc.keep(sc.keep(core.add(fill)).translate([0, 0, raise]))
-        .subtract(place(sc, movingPocket(wasm, sc, kit, p.travel), pose)),
-    ).add(place(sc, post.solid, pose)),
-  );
+    const roofBottom = zMin - BUTTON_ROOF;
+    const pose: SwitchPose = { x: c.x, y: c.y, z: roofBottom + raise - kit.postTop, rotation: c.rotation };
 
-  // ---- The body: the model less the bore, the switch's room, the socket and the voids ----
-  const boreCs = sc.keep(outline.offset(tol, 'Round', 2, 32));
-  const bore = at(boreCs, pose.z - 0.05, H + 2);
-  const clearance = place(sc, switchBody(wasm, sc, kit), pose);
-  const socket = place(sc, socketCutter(sc, kit, p.socketFitPct), pose);
-  const marks = buryIdentityVoidsPlan(wasm, sc, model, kit, p.socketFitPct, pose);
-  const body = sc.keep(model.subtract(sc.keep(wasm.Manifold.union([bore, clearance, socket, ...marks.voids]))));
+    // ---- The button: the model's own material inside the outline, from the roof's underside up ----
+    const column: Solid = sc.keep(model.intersect(at(outline, roofBottom, H + 2)));
+    // Keep the piece that starts at the roof; anything else inside the outline is model that sits
+    // ABOVE the button without touching it (a hat brim over a face) — it cannot ride on the button,
+    // and the bore takes it away.
+    const parts: Solid[] = column.decompose().map((q: Solid) => sc.keep(q));
+    let core: Solid = column;
+    let dropped = 0;
+    if (parts.length > 1) {
+      let best = -1;
+      for (const q of parts) {
+        if (q.boundingBox().min[2] > roofBottom + 0.3) continue;
+        const v = q.volume();
+        if (v > best) {
+          best = v;
+          core = q;
+        }
+      }
+      for (const q of parts) if (q !== core) dropped += q.volume();
+    }
+    if (dropped > 0.05 * core.volume() + 5) {
+      warnOnce('Part of the model above the button is cut away with it. Move the button, or make it smaller.');
+    }
+    if (core.volume() < 0.4 * outline.area() * Math.max(0.5, zMin - roofBottom)) {
+      warnOnce('The model looks hollow under the button, so the button is thin. Use Slice or Stand.');
+    }
 
-  // ---- Checks ----
-  const wall = sc.keep(boreCs.offset(MIN_WALL, 'Round', 2, 32));
-  const wallShort = Math.max(
-    overhangArea(sc, wall, sectionAt(sc, model, pose.z + 0.05)),
-    overhangArea(sc, wall, sectionAt(sc, model, (pose.z + zMin) / 2)),
-  );
-  if (wallShort > 2) {
-    warnings.push('The model is too thin round the button — the hole would break through. Move it in or make it smaller.');
-  }
-  const below = -kit.socketBottom + SOCKET_FLOOR;
-  const socketSq = squareAt(wasm, sc, socketNeedMm(kit, p.socketFitPct), pose.x, pose.y, pose.rotation);
-  const socketShort = Math.max(
-    overhangArea(sc, socketSq, sectionAt(sc, model, pose.z - 0.05)),
-    overhangArea(sc, socketSq, sectionAt(sc, model, pose.z + kit.socketBottom / 2)),
-    overhangArea(sc, socketSq, sectionAt(sc, model, pose.z - below + 0.05)),
-  );
-  if (socketShort > 2) {
-    const need = zMin - (pose.z - below);
-    warnings.push(
-      `The model is not deep enough under the button — the switch needs about ${need.toFixed(0)} mm. `
-      + 'Make the model bigger, or use Slice or Stand.',
+    const fill = at(outline, roofBottom - (kit.postTop - kit.postBottom), roofBottom + 0.05);
+    buttons.push(sc.keep(
+      sc.keep(
+        sc.keep(sc.keep(core.add(fill)).translate([0, 0, raise]))
+          .subtract(place(sc, movingPocket(wasm, sc, kit, p.travel), pose)),
+      ).add(place(sc, post.solid, pose)),
+    ));
+
+    // ---- What the body loses for it: the bore, the switch's room, the socket ----
+    const boreCs = sc.keep(outline.offset(tol, 'Round', 2, 32));
+    cuts.push(
+      at(boreCs, pose.z - 0.05, H + 2),
+      place(sc, switchBody(wasm, sc, kit), pose),
+      place(sc, socketCutter(sc, kit, p.socketFitPct), pose),
     );
+    // One mark, round the first switch.
+    if (first) {
+      const marks = buryIdentityVoidsPlan(wasm, sc, model, kit, p.socketFitPct, pose);
+      voids = marks.voids;
+      attempted = marks.attempted;
+    }
+
+    // ---- Checks ----
+    const wall = sc.keep(boreCs.offset(MIN_WALL, 'Round', 2, 32));
+    const wallShort = Math.max(
+      overhangArea(sc, wall, sectionAt(sc, model, pose.z + 0.05)),
+      overhangArea(sc, wall, sectionAt(sc, model, (pose.z + zMin) / 2)),
+    );
+    if (wallShort > 2) {
+      warnOnce('The model is too thin round the button — the hole would break through. Move it in or make it smaller.');
+    }
+    const below = -kit.socketBottom + SOCKET_FLOOR;
+    const socketSq = squareAt(wasm, sc, socketNeedMm(kit, p.socketFitPct), pose.x, pose.y, pose.rotation);
+    const socketShort = Math.max(
+      overhangArea(sc, socketSq, sectionAt(sc, model, pose.z - 0.05)),
+      overhangArea(sc, socketSq, sectionAt(sc, model, pose.z + kit.socketBottom / 2)),
+      overhangArea(sc, socketSq, sectionAt(sc, model, pose.z - below + 0.05)),
+    );
+    if (socketShort > 2) {
+      const need = zMin - (pose.z - below);
+      warnOnce(
+        `The model is not deep enough under the button — the switch needs about ${need.toFixed(0)} mm. `
+        + 'Make the model bigger, or use Slice or Stand.',
+      );
+    }
+    poses.push(pose);
+    placed.push({ x: c.x, y: c.y });
   }
-  if (marks.attempted > 0 && marks.voids.length < marks.attempted) {
-    warnings.push(`Provenance: ${marks.voids.length} of ${marks.attempted} identity marks landed.`);
+
+  // ---- The body: the model less everything each button needs, in one boolean ----
+  const body = sc.keep(model.subtract(sc.keep(wasm.Manifold.union([...cuts, ...voids]))));
+
+  if (attempted > 0 && voids.length < attempted) {
+    warnings.push(`Provenance: ${voids.length} of ${attempted} identity marks landed.`);
   }
-  const grams = gramsOf(button);
+  if (placed.some((a, i) => placed.some((b, j) => j > i && Math.hypot(a.x - b.x, a.y - b.y) < pitch - 0.01))) {
+    warnings.push('The buttons are too close together. Move one, or make them smaller.');
+  }
+  const grams = Math.max(...buttons.map((b) => gramsOf(b)));
   if (grams > HEAVY_TOP_GRAMS) {
     warnings.push(`The button weighs about ${grams.toFixed(0)} g — a light switch may not push it back up.`);
   }
 
+  const bounds = topSection.isEmpty() ? null : topSection.bounds();
+  const span = bounds ? Math.max(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1]) : 0;
+
   return {
     pieces: [
-      { solid: button, name: 'top-button', moving: true, color: p.colors.top },
+      ...buttons.map((solid, i) => ({
+        solid,
+        name: i === 0 ? 'top-button' : `top-button-${i + 1}`,
+        moving: true,
+        color: p.colors.top,
+        ...(buttons.length > 1 ? { objectKey: `button-${i + 1}` } : {}),
+      })),
       { solid: body, name: 'base-body', moving: false, color: p.colors.body },
     ],
-    pose,
+    pose: poses[0],
+    poses,
+    buttonsAt: placed,
+    maxButtons: Math.max(1, Math.min(MAX_BUTTONS, Math.floor(span / pitch))),
     warnings,
     cutHeight: null,
     cutRange: null,

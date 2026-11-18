@@ -53,10 +53,12 @@ export interface SwitchSeat {
   tip: number;
 }
 
-/** The MX switch the blocks hold. The worker measures both off the switch mesh it shows
- *  (switchKit `measurePostSeat`, and the mesh's top) and builds with what it measured; these are
- *  the same readings, for the rail and a loaded project, which run before the mesh is read.
- *  tests/blocks-body.test.ts holds them to the mesh. */
+/** The MX switch the blocks and Model mode build on, written down rather than read off the switch
+ *  model the preview draws (noted from the detailed MX model). The slider is where a post really
+ *  rests: the post asset was drawn with the cross's tip touching the top of its hole, but the hole
+ *  (5.6 mm) is deeper than the MX cross (3.7 mm), so a printed post stops on the slider first,
+ *  1.95 mm higher than drawn (a Flush button printed proud while pushed fully home, 2026-10-01).
+ *  Model mode raises its post onto it (switchKit `seatPost`). */
 export const MX_SEAT: Readonly<SwitchSeat> = { slider: 6.3, tip: 10 };
 
 /** The switch travel mount.ts sends with every block set, mm: what the Standard cap's seat is. */

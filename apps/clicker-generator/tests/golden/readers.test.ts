@@ -46,7 +46,7 @@ const hash = (m: { positions: Float32Array; indices: Uint32Array }) =>
 const GOLDEN: Record<string, string> = {
   'MX mx-socket.3mf': '06c865c2dda6be23',
   'MX mx-stem.3mf': '70e0a0abaf9c1e11',
-  'MX mx-switch.3mf': 'd3b74a9bea483b8b',
+  'MX mx-switch.3mf': '00b8af983ff01947',
   'sample pumpkin.3mf': '59c6481b5067267f',
   'sample skull.3mf': '7808a68f70162cbc',
   'sample ghost.3mf': 'a8b7805733a388b6',
@@ -65,7 +65,7 @@ function pin(name: string, file: string, data: ArrayBuffer) {
   check(`${name}: read as the clicker always read it`, actual[name] === GOLDEN[name], `${mesh.positions.length / 3} vertices, ${mesh.indices.length / 3} triangles, ${actual[name]}`);
 }
 
-/* ------------------------------------------------------------------ the MX assets (metres) */
+/* ---------------------------- the MX assets (socket and stem in metres, the switch in millimetres) */
 
 for (const file of ['mx-socket.3mf', 'mx-stem.3mf', 'mx-switch.3mf']) pin(`MX ${file}`, file, asset(`switch/mx/${file}`));
 

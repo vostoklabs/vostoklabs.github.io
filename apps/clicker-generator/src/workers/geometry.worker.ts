@@ -6,9 +6,9 @@ import { readModel } from '@vostok/export/read';
 import { buildFitStrip } from '../geometry/fitStrip';
 import { buildClicker } from '../geometry/buildClicker';
 import { buildBlocks, type KeycapAsset, type KeycapSet } from '../geometry/buildBlocks';
-import { BLOCK_KEYCAP_IDS, MX_SEAT, type SwitchSeat } from '../geometry/blockKeycaps';
+import { BLOCK_KEYCAP_IDS, MX_SEAT } from '../geometry/blockKeycaps';
 import { prepareModel } from '../model/prepare';
-import { FALLBACK_POST_SEAT, makeSwitchKit, measurePostSeat, measureSwitchBands, seatPost, type EnvelopeBand } from '../model/switchKit';
+import { makeSwitchKit, seatPost } from '../model/switchKit';
 import { buildModelClicker } from '../model/buildModel';
 import type { GeometryRequest, GeometryResponse } from '../types';
 
@@ -17,16 +17,14 @@ type Wasm = Awaited<ReturnType<typeof Module>>;
 let modulePromise: Promise<Wasm> | null = null;
 let socket: any = null; // cached MX socket (negative), in mm
 let stem: any = null; // cached MX stem (positive), in mm
-// Letter blocks: the keycaps, by profile, and where the switch holds one, measured off the switch
-// mesh. Their bodies are generated per build (geometry/keyBody.ts).
+// Letter blocks: the keycaps, by profile. Their bodies are generated per build (geometry/keyBody.ts),
+// on the switch as written down (`MX_SEAT`).
 let keycapAssets: KeycapSet = {};
-let blockSeat: SwitchSeat = MX_SEAT;
-// Model mode: the switch's outer envelope, measured off the display mesh at init, and the
-// uploaded model as one prepared solid — cached, so a rebuild never re-sends or re-repairs it.
-let switchBands: EnvelopeBand[] = [];
+// Model mode: the uploaded model as one prepared solid — cached, so a rebuild never re-sends or
+// re-repairs it.
 let modelBase: any = null;
-// Model mode's keycap post, raised onto the slider it really rests on (switchKit
-// `measurePostSeat`). The image clicker keeps `stem` exactly as drawn.
+// Model mode's keycap post, raised onto the slider it really rests on (`MX_SEAT.slider`). The
+// image clicker keeps `stem` exactly as drawn.
 let modelStem: any = null;
 
 async function getModule(): Promise<Wasm> {
@@ -103,6 +101,8 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       stem = b.solid.translate([-tcx, -tcy, 0]);
       a.solid.delete();
       b.solid.delete();
+      modelStem?.delete?.();
+      modelStem = seatPost(stem, MX_SEAT.slider);
 
       keycapAssets = {};
       for (const id of BLOCK_KEYCAP_IDS) {
@@ -110,7 +110,8 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
         if (asset) keycapAssets[id] = asset;
       }
 
-      // The switch is DISPLAY-ONLY (a preview toggle) — no CSG. Parse it raw and place
+      // The switch is DISPLAY-ONLY (a preview toggle) — no CSG, and nothing the build uses is
+      // measured off it (its sizes are written down: MX_SEAT, MX_BANDS). Parse it raw and place
       // it in the assembly frame:
       //  • XY: shift by the SAME amount as the stem so it stays coaxial with cap/socket.
       //  • Z: AUTO-SEAT — drop the bottom of its widest section (the top-housing
@@ -140,14 +141,6 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
         if (v[i + 2] < zmin) zmin = v[i + 2];
         if (v[i + 2] > zmax) zmax = v[i + 2];
       }
-      // Measured here, before the buffers are handed to the main thread below.
-      switchBands = measureSwitchBands(v, sw.indices);
-      modelStem?.delete?.();
-      const slider = measurePostSeat(v, sw.indices) ?? FALLBACK_POST_SEAT;
-      modelStem = seatPost(stem, slider);
-      // A letter block's cap stands on the same slider, or on the cross: its tip is the top of the
-      // seated mesh.
-      blockSeat = { slider, tip: Number.isFinite(zmax) ? zmax : MX_SEAT.tip };
       const switchMesh = { vertProperties: v, triVerts: sw.indices, numProp: 3 as const };
       const switchInfo = `${(sw.indices.length / 3) | 0} tris, seated +${(-seatZ).toFixed(
         2,
@@ -197,7 +190,7 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
         keycapAssets,
         msg.regions,
         msg.params,
-        blockSeat,
+        MX_SEAT,
       );
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
@@ -215,11 +208,9 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
     }
 
     if (msg.type === 'buildModel') {
-      if (!socket || !stem) throw new Error('Assets not initialized');
+      if (!socket || !modelStem) throw new Error('Assets not initialized');
       if (!modelBase) throw new Error('No model loaded');
-      // Seated on the measured slider when the switch mesh loaded; on the measured number when not.
-      if (!modelStem) modelStem = seatPost(stem, FALLBACK_POST_SEAT);
-      const kit = makeSwitchKit(socket, modelStem, switchBands);
+      const kit = makeSwitchKit(socket, modelStem);
       const { parts, switchPlacements, warnings, meta } = buildModelClicker(wasm, kit, modelBase, msg.params);
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);
@@ -232,6 +223,7 @@ self.onmessage = async (e: MessageEvent<GeometryRequest>) => {
       const { parts, warnings } = buildFitStrip(wasm, stem, {
         labels: msg.labels,
         colorRgb: msg.colorRgb,
+        stemOuterMm: msg.stemOuterMm,
       });
       const transfer: Transferable[] = [];
       for (const p of parts) transfer.push(p.vertProperties.buffer, p.triVerts.buffer);

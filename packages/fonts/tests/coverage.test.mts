@@ -17,10 +17,10 @@
    - an imported font answers from its own cmap.
 */
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { FONTS, getRequiredSubsets, isFontSupported, fontScripts, parseFont, UNCOVERED } from '../src/index';
-import { coverageOf, coverageTests, latinExtBOf, runsHold, LATIN_EXT_B } from '../src/coverage';
+import { coverageOf, coverageTests, hanOf, latinExtBOf, runsHold, HAN, LATIN_EXT_B } from '../src/coverage';
 import { importFontBuffer, toPickerFont } from '../src/import';
 
 // cwd, not `import.meta.url`: esbuild bundles this into node_modules/.cache.
@@ -52,17 +52,23 @@ ok(tests['chinese-simplified'].length === 3755, `GB2312 level 1 hanzi: ${tests['
 ok(tests.cyrillic.length === 66 && tests.greek.length === 69, 'the Russian and monotonic Greek alphabets');
 ok(tests.armenian.length === 76 && tests.georgian.length === 33, 'the Armenian and Georgian alphabets');
 
-// The registry agrees with the files beside it
-const onDisk = readdirSync(DIR).filter((f) => f.endsWith('.ttf') && f !== 'icon-fallback.ttf').map((f) => f.replace(/\.ttf$/, ''));
+// The registry agrees with the files beside it: every .ttf, and the .otf of a face shipped as its
+// maker released it.
+const onDisk = readdirSync(DIR).filter((f) => /\.(?:ttf|otf)$/.test(f) && f !== 'icon-fallback.ttf').map((f) => f.replace(/\.(?:ttf|otf)$/, ''));
 ok(onDisk.length === FONTS.length && onDisk.every((id) => FONTS.some((f) => f.id === id)), `one registry entry per file (${onDisk.length} files, ${FONTS.length} entries)`);
+const fileOf = (id: string) => (existsSync(join(DIR, `${id}.otf`)) ? `${id}.otf` : `${id}.ttf`);
+const maps = new Map<string, Record<number, number>>();
 const wrong: string[] = [];
 for (const f of FONTS) {
-  const buf = bytes(`${f.id}.ttf`);
+  const buf = bytes(fileOf(f.id));
   const map: Record<number, number> = parseFont(buf).tables.cmap.glyphIndexMap;
+  maps.set(f.id, map);
   const measured = coverageOf((cp) => !!map[cp]);
   if (!same(measured, f.subsets)) wrong.push(`${f.id} says ${f.subsets.join(',')} but holds ${measured.join(',')}`);
   const extB = latinExtBOf((cp) => !!map[cp]);
   if (extB !== f.latinExtB) wrong.push(`${f.id} says Latin Extended-B ${f.latinExtB} but holds ${extB}`);
+  const han = hanOf((cp) => !!map[cp]) || undefined;
+  if (han !== f.han) wrong.push(`${f.id} says Han ${f.han?.length ?? 'none'} but holds ${han?.length ?? 'none past the common sets'}`);
   if (f.bytes !== buf.byteLength) wrong.push(`${f.id} says ${f.bytes} bytes but is ${buf.byteLength}`);
 }
 ok(!wrong.length, `registry.ts matches the files (run fetch-fonts): ${wrong.slice(0, 5).join('; ')}`);
@@ -88,7 +94,11 @@ needs('駅', ['japanese']);
 needs('你们', ['chinese-simplified']);
 needs('똠', [UNCOVERED]);
 needs('가', [UNCOVERED]);
-needs('國', [UNCOVERED]);
+// A Han character past the common sets needs itself: the unified block, Extension A, the
+// compatibility ideographs and plane 2 alike. Common name characters are among them (琪 昊 晗).
+needs('國', [HAN]);
+needs('张琪', ['chinese-simplified', HAN]);
+needs(`${String.fromCodePoint(0x3400)} ${String.fromCodePoint(0xf900)} ${String.fromCodePoint(0x20bb7)}`, [HAN]);
 
 // Each face's answer
 const answers = (id: string, yes: string[], no: string[]) => {
@@ -104,9 +114,24 @@ answers('m-plus-1p', ['こんにちは 日本 月 一', 'Привет Ёё', 'Γ
 answers('dela-gothic-one-jp', ['こんにちは 日本 月 一', 'Привет Ёё', 'Γειά'], ['你们']);
 answers('dela-gothic-one', ['Hello'], ['こんにちは', 'Привет']);
 answers('cherry-bomb-one', ['こんにちは コーヒー'], ['日本']);
-answers('zcool-kuaile', ['你好 中国', '日本'], ['こんにちは', '駅']);
-answers('noto-sans-sc', ['你好 中国', 'Привет'], ['こんにちは']);
+answers('zcool-kuaile', ['你好 中国', '日本'], ['こんにちは', '駅', '张琪']);
+answers('noto-sans-sc', ['你好 中国', 'Привет'], ['こんにちは', '张琪', '王昊晗', '國']);
+// Source Han Sans CN is shipped whole: it answers for a rarer Han character from its own runs,
+// and is flagged for one its file does not have (𠮷 is past its plane-2 set) and for Hangul.
+answers('source-han-sans-cn-light', ['你好 中国', '张琪', '王昊晗 婧璇', '龘 㐀 國', 'こんにちは 日本', 'Привет'], ['𠮷', '안녕', '张琪 𠮷']);
 const setting = (text: string) => FONTS.filter((f) => isFontSupported(f, text)).map((f) => f.id).join(', ');
+ok(setting('张琪') === 'source-han-sans-cn-light', `a rarer hanzi is flagged on every face but the one that has it (${setting('张琪')})`);
+ok(!isFontSupported({ id: 'hand-made', label: 'Hand-made', category: 'Custom', curated: false, subsets: ['latin', 'chinese-simplified'] }, '张琪'),
+  'a face without Han runs holds none past the common sets, as before there were any');
+// Only a face that holds more than the common sets carries runs, and they read back as measured.
+ok(FONTS.filter((f) => f.han !== undefined).map((f) => f.id).join(',') === 'source-han-sans-cn-light', `faces with Han runs: ${FONTS.filter((f) => f.han !== undefined).map((f) => f.id).join(',')}`);
+const shs = face('source-han-sans-cn-light');
+const shsMap = maps.get(shs.id)!;
+let hanRoundTrip = true;
+for (const cp of [0x3400, 0x4dbf, 0x4e00, 0x742a, 0x9fa5, 0xf900, 0x20000, 0x20bb7, 0x2a6d6, 0x2f800, 0x30000]) {
+  if (runsHold(shs.han!, cp) !== !!shsMap[cp]) hanRoundTrip = false;
+}
+ok(hanRoundTrip && shs.han!.length < 3000, `the runs say what the file holds, in ${shs.han!.length} characters`);
 ok(setting('Բարեւ') === 'handjet', `Armenian is flagged on every face but the one that has it (${setting('Բարեւ')})`);
 ok(setting('გამარჯობა') === '', `Georgian is flagged on every face (${setting('გამარჯობა')})`);
 answers('rubik-one', ['Привет Ёё'], ['Γειά']);
@@ -148,6 +173,9 @@ scripts('noto-sans-sc', ['Latin', 'Cyrillic', 'Chinese']);
 scripts('handjet', ['Latin', 'Cyrillic', 'Greek']);
 ok(FONTS.every((f) => !fontScripts(f).some((s) => s === 'Armenian' || s === 'Georgian')), 'no face is offered for Armenian or Georgian');
 ok(same(toPickerFont(face('gasoek-one')).scripts, ['Latin', 'Korean']), 'toPickerFont carries the alphabets to the kit');
+// A face too heavy to fetch for a row is drawn in its stand-in until its own family is declared.
+ok(toPickerFont(face('source-han-sans-cn-light')).family === 'VL-source-han-sans-cn-light, VL-noto-sans-sc'
+  && toPickerFont(face('anton')).family === 'VL-anton', `the row families: ${toPickerFont(face('source-han-sans-cn-light')).family} / ${toPickerFont(face('anton')).family}`);
 
 // An imported font answers from its own cmap: this cut has no Latin-1 letters, which a bundled
 // face is never asked about.

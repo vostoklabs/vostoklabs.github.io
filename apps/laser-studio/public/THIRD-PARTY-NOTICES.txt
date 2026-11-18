@@ -12,14 +12,15 @@ generator — see the application's own licence for that.
 
 
 
-1. TYPEFACES  (256 families)
+1. TYPEFACES  (257 families)
 ------------------------------------------------------------
 
-  All bundled typefaces come from Google Fonts and are licensed under either the
-  SIL Open Font License 1.1 or the Apache License 2.0. Both permit embedding and
-  bundling in commercial software, and the OFL states explicitly that documents
-  created with the font are not restricted by it — so anything you export from
-  this generator is yours, with no attribution owed for the lettering.
+  All bundled typefaces come from Google Fonts, but for one taken from its
+  maker's own release, and are licensed under either the SIL Open Font License
+  1.1 or the Apache License 2.0. Both permit embedding and bundling in
+  commercial software, and the OFL states explicitly that documents created
+  with the font are not restricted by it — so anything you export from this
+  generator is yours, with no attribution owed for the lettering.
 
   What the files are. Most are Google Fonts' own Latin builds of each family, as
   its font API serves them. A family whose licence reserves its name ships as the
@@ -31,13 +32,17 @@ generator — see the application's own licence for that.
   Latin, Greek and Cyrillic characters at their Regular weight. Those changes are
   ours, and every file stays under its original licence.
 
+  Source Han Sans CN is Adobe's own file from its release 1.001 of the family,
+  unmodified, under the Apache License 2.0. "Source" is a trademark of Adobe,
+  named here only to say which font it is.
+
   SIL Open Font License 1.1   https://openfontlicense.org
   Apache License 2.0          https://www.apache.org/licenses/LICENSE-2.0
 
   Each typeface remains the copyright of its respective authors. None is sold or
   redistributed on its own; they ship only as part of this generator.
 
-Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allura, Amatic SC, Anton, Architects Daughter, Archivo, Archivo Black, Arvo, Audiowide, Bad Script, Bagel Fat One, Bakbak One, Baloo 2, Bangers, Barlow Condensed, Bebas Neue, Berkshire Swash, Bevan, Bitter, Black Han Sans, Black Ops One, Boogaloo, Bowlby One, Bowlby One SC, Bree Serif, Bungee, Bungee Inline, Bungee Shade, Butcherman, Cabin, Caveat, Cedarville Cursive, Chakra Petch, Changa One, Cherry Bomb One, Chewy, Chicle, Chonburi, Cinzel, Cinzel Decorative, Comfortaa, Comic Neue, Comic Relief, Coming Soon, Concert One, Cookie, Courgette, Coustard, Creepster, Crete Round, Cutive Mono, Damion, Dancing Script, Days One, Dela Gothic One, Dela Gothic One JP, Delius Swash Caps, DM Mono, Do Hyeon, Domine, DotGothic16, Eater, EB Garamond, Electrolize, Ewert, Exo 2, Faster One, Faustina, Figtree, Fira Mono, Fjalla One, Flavors, Fredoka, Frijole, Fugaz One, Gaegu, Gasoek One, Gelasio, Gloria Hallelujah, Gochi Hand, Gothic A1, Grand Hotel, Grandstander, Gravitas One, Great Vibes, Griffy, Gruppo, Handjet, Handlee, Henny Penny, Homemade Apple, IBM Plex Mono, Iceland, Inconsolata, Indie Flower, Inter, Italianno, Itim, Jersey 15, Jersey 25, JetBrains Mono, Jolly Lodger, Josefin Sans, Josefin Slab, Jua, Jura, Just Another Hand, Kalam, Kanit, Kaushan Script, Khand, Kreon, Lacquer, Lexend, Libertinus Sans, Libre Baskerville, Lilita One, Literata, Lobster, Lobster Two, Lora, Luckiest Guy, M PLUS 1p, Major Mono Display, Mali, Manrope, Marcellus, Marck Script, Martian Mono, Merriweather, Metal Mania, Michroma, Micro 5, Modak, Monoton, Montserrat, Neucha, New Rocker, Niconne, Norican, Nosifer, Nothing You Could Do, Noto Sans, Noto Sans Mono, Noto Sans SC, Noto Serif, Nova Mono, Nova Square, Nunito, Orbitron, Oswald, Outfit, Oxanium, Pacifico, Pangolin, Parisienne, Passion One, Patrick Hand, Patua One, Paytone One, Permanent Marker, Petit Formal Script, Petrona, Pinyon Script, Pirata One, Pixelify Sans, Playfair Display, Podkova, Poppins, Press Start 2P, PT Serif, Quantico, Quicksand, Racing Sans One, Rajdhani, Raleway, Rammetto One, Ranchers, Reenie Beanie, Righteous, Roboto, Roboto Mono, Roboto Slab, Rochester, Rock Salt, Rokkitt, Rowdies, Rubik, Rubik Beastly, Rubik Burned, Rubik Distressed, Rubik Glitch, Rubik Mono One, Rubik Moonrocks, Rubik One, Rubik Puddles, Rubik Spray Paint, Rubik Storm, Rubik Vinyl, Rufina, Russo One, Rye, Sacramento, Saira Condensed, Sanchez, Sancreek, Sansita, Sansita Swashed, Satisfy, Schoolbell, Secular One, Shadows Into Light, Share Tech Mono, Short Stack, Shrikhand, Sigmar One, Silkscreen, Sixtyfour, Sniglet, Sora, Source Code Pro, Space Mono, Special Elite, Spectral, Squada One, Sriracha, Staatliches, Sue Ellen Francisco, Syncopate, Syne Mono, Tangerine, Teko, Tiny5, Titan One, Titillium Web, Tomorrow, Turret Road, Ultra, Unica One, Urbanist, Vollkorn, VT323, Wallpoet, Work Sans, Workbench, Xanh Mono, Yellowtail, Yeseva One, ZCOOL KuaiLe, Zen Dots, Zilla Slab.
+Abril Fatface, Aldrich, Alegreya Sans SC, Aleo, Alex Brush, Alfa Slab One, Allura, Amatic SC, Anton, Architects Daughter, Archivo, Archivo Black, Arvo, Audiowide, Bad Script, Bagel Fat One, Bakbak One, Baloo 2, Bangers, Barlow Condensed, Bebas Neue, Berkshire Swash, Bevan, Bitter, Black Han Sans, Black Ops One, Boogaloo, Bowlby One, Bowlby One SC, Bree Serif, Bungee, Bungee Inline, Bungee Shade, Butcherman, Cabin, Caveat, Cedarville Cursive, Chakra Petch, Changa One, Cherry Bomb One, Chewy, Chicle, Chonburi, Cinzel, Cinzel Decorative, Comfortaa, Comic Neue, Comic Relief, Coming Soon, Concert One, Cookie, Courgette, Coustard, Creepster, Crete Round, Cutive Mono, Damion, Dancing Script, Days One, Dela Gothic One, Dela Gothic One JP, Delius Swash Caps, DM Mono, Do Hyeon, Domine, DotGothic16, Eater, EB Garamond, Electrolize, Ewert, Exo 2, Faster One, Faustina, Figtree, Fira Mono, Fjalla One, Flavors, Fredoka, Frijole, Fugaz One, Gaegu, Gasoek One, Gelasio, Gloria Hallelujah, Gochi Hand, Gothic A1, Grand Hotel, Grandstander, Gravitas One, Great Vibes, Griffy, Gruppo, Handjet, Handlee, Henny Penny, Homemade Apple, IBM Plex Mono, Iceland, Inconsolata, Indie Flower, Inter, Italianno, Itim, Jersey 15, Jersey 25, JetBrains Mono, Jolly Lodger, Josefin Sans, Josefin Slab, Jua, Jura, Just Another Hand, Kalam, Kanit, Kaushan Script, Khand, Kreon, Lacquer, Lexend, Libertinus Sans, Libre Baskerville, Lilita One, Literata, Lobster, Lobster Two, Lora, Luckiest Guy, M PLUS 1p, Major Mono Display, Mali, Manrope, Marcellus, Marck Script, Martian Mono, Merriweather, Metal Mania, Michroma, Micro 5, Modak, Monoton, Montserrat, Neucha, New Rocker, Niconne, Norican, Nosifer, Nothing You Could Do, Noto Sans, Noto Sans Mono, Noto Sans SC, Noto Serif, Nova Mono, Nova Square, Nunito, Orbitron, Oswald, Outfit, Oxanium, Pacifico, Pangolin, Parisienne, Passion One, Patrick Hand, Patua One, Paytone One, Permanent Marker, Petit Formal Script, Petrona, Pinyon Script, Pirata One, Pixelify Sans, Playfair Display, Podkova, Poppins, Press Start 2P, PT Serif, Quantico, Quicksand, Racing Sans One, Rajdhani, Raleway, Rammetto One, Ranchers, Reenie Beanie, Righteous, Roboto, Roboto Mono, Roboto Slab, Rochester, Rock Salt, Rokkitt, Rowdies, Rubik, Rubik Beastly, Rubik Burned, Rubik Distressed, Rubik Glitch, Rubik Mono One, Rubik Moonrocks, Rubik One, Rubik Puddles, Rubik Spray Paint, Rubik Storm, Rubik Vinyl, Rufina, Russo One, Rye, Sacramento, Saira Condensed, Sanchez, Sancreek, Sansita, Sansita Swashed, Satisfy, Schoolbell, Secular One, Shadows Into Light, Share Tech Mono, Short Stack, Shrikhand, Sigmar One, Silkscreen, Sixtyfour, Sniglet, Sora, Source Code Pro, Space Mono, Special Elite, Spectral, Squada One, Sriracha, Staatliches, Sue Ellen Francisco, Syncopate, Syne Mono, Tangerine, Teko, Tiny5, Titan One, Titillium Web, Tomorrow, Turret Road, Ultra, Unica One, Urbanist, Vollkorn, VT323, Wallpoet, Work Sans, Workbench, Xanh Mono, Yellowtail, Yeseva One, ZCOOL KuaiLe, Zen Dots, Zilla Slab, Source Han Sans CN.
 
 
 2. SYMBOL / ICON FONT
@@ -482,6 +487,7 @@ APPENDIX A — COPYRIGHT NOTICES FOR EACH BUNDLED FACE
   sniglet: Copyright (c) 2008, Haley Fiege (haley@kingdomofawesome.com), Copyright (c) 2012, Brenda Gallo (gbrenda1987@gmail.com) Copyright (c) 2013, Pablo Impallari (www.impallari.com|impallari@gmail.com), with no Reserved Font Name.
   sora: Copyright 2019 The Sora Project Authors (https://github.com/sora-xor/sora-font)
   source-code-pro: Copyright 2010, 2012 Adobe Systems Incorporated (http://www.adobe.com/), with Reserved Font Name ÔSourceÕ.
+  source-han-sans-cn-light: Copyright © 2014 Adobe Systems Incorporated. All Rights Reserved.
   space-mono: Copyright 2016 The Space Mono Project Authors (https://github.com/googlefonts/spacemono)
   special-elite: Copyright (c) 2010 by Brian J. Bonislawsky DBA Astigmatic (AOETI). All rights reserved. Available under the Apache 2.0 licence. http://www.apache.org/licenses/LICENSE-2.0.html
   spectral: Copyright 2017 The Spectral Project Authors (https://github.com/productiontype/Spectral)

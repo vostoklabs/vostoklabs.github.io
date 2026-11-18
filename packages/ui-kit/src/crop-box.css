@@ -1,0 +1,70 @@
+/* ------------------------------------------------------------------ crop box */
+/* `cropBox()`: a crop box over a picture. It fills the positioned box it is put in (the app
+   places that exactly over the picture); the component writes each part's place in percent
+   through the CSSOM. Only the box and its grips take a press, so the app's pan and zoom keep
+   working on the dimmed part. The grips divide by `--vl-zoom`, which an app that zooms the
+   picture with a transform sets on an ancestor, so they stay one size on screen. */
+:root { --vl-zoom: 1; }
+.vl-crop-box {
+  --vl-crop-grip: calc(12px / var(--vl-zoom, 1));
+  --vl-crop-reach: calc(8px / var(--vl-zoom, 1));
+  --vl-crop-line: calc(1px / var(--vl-zoom, 1));
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.vl-crop-box__shade {
+  position: absolute;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+.vl-crop-box__shade--top { top: 0; left: 0; right: 0; }
+.vl-crop-box__shade--bottom { bottom: 0; left: 0; right: 0; }
+.vl-crop-box__shade--left { left: 0; }
+.vl-crop-box__shade--right { right: 0; }
+
+.vl-crop-box__frame {
+  position: absolute;
+  box-sizing: border-box;
+  border: var(--vl-crop-line) solid var(--accent);
+  cursor: move;
+  pointer-events: auto;
+  touch-action: none;
+  outline: none;
+}
+/* `passWhenFull`: the box is the whole picture and a press inside it pans, so it says so. */
+.vl-crop-box__frame--pass { cursor: inherit; }
+.vl-crop-box__frame:focus-visible { box-shadow: 0 0 0 var(--vl-crop-line) var(--panel), 0 0 0 calc(3 * var(--vl-crop-line)) var(--accent); }
+
+.vl-crop-box__grip {
+  position: absolute;
+  box-sizing: border-box;
+  inline-size: var(--vl-crop-grip);
+  block-size: var(--vl-crop-grip);
+  border: var(--vl-crop-line) solid var(--accent);
+  border-radius: var(--radius-s);
+  background: var(--panel);
+  translate: -50% -50%;
+  pointer-events: auto;
+  touch-action: none;
+  outline: none;
+  transition: background var(--dur-hover) var(--ease-standard);
+}
+/* A reach wider than the grip drawn, for a finger. */
+.vl-crop-box__grip::before {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--vl-crop-reach));
+}
+.vl-crop-box__grip:hover,
+.vl-crop-box__grip:focus-visible { background: var(--accent); }
+
+.vl-crop-box__grip[data-grip='nw'] { left: 0; top: 0; cursor: nwse-resize; }
+.vl-crop-box__grip[data-grip='n'] { left: 50%; top: 0; cursor: ns-resize; }
+.vl-crop-box__grip[data-grip='ne'] { left: 100%; top: 0; cursor: nesw-resize; }
+.vl-crop-box__grip[data-grip='e'] { left: 100%; top: 50%; cursor: ew-resize; }
+.vl-crop-box__grip[data-grip='se'] { left: 100%; top: 100%; cursor: nwse-resize; }
+.vl-crop-box__grip[data-grip='s'] { left: 50%; top: 100%; cursor: ns-resize; }
+.vl-crop-box__grip[data-grip='sw'] { left: 0; top: 100%; cursor: nesw-resize; }
+.vl-crop-box__grip[data-grip='w'] { left: 0; top: 50%; cursor: ew-resize; }

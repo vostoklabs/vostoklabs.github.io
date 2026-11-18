@@ -30,6 +30,33 @@ import type { ChangelogEntry } from '@vostok/ui-kit';
 */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-11-18',
+    changes: [
+      { kind: 'added', text: 'Remove parts or a whole color from a picture.' },
+      { kind: 'added', text: 'Crop a picture before it is traced.' },
+      { kind: 'added', text: 'Up to 12 colors in a picture.' },
+      { kind: 'added', text: 'A picture on the bottom of the clicker.' },
+      { kind: 'added', text: 'Keychain: a hole through the base, placed for you.' },
+      { kind: 'added', text: 'Arrow and turn buttons to move the switch.' },
+      { kind: 'added', text: 'Recolor with the colors already in your design.' },
+      { kind: 'added', text: 'Fit: Stem thickness for the top part.' },
+      { kind: 'added', text: '3D model: several buttons on one model.' },
+      { kind: 'added', text: 'Save and Load on MakerLab.' },
+      { kind: 'added', text: 'A Chinese font with many more characters.' },
+      { kind: 'added', text: 'Christmas samples.' },
+      { kind: 'changed', text: 'Fit: plain choices with a drawing.' },
+      { kind: 'changed', text: 'The Switch settings are now called Clicker.' },
+      { kind: 'changed', text: 'On a phone, the preview comes first.' },
+      { kind: 'changed', text: 'A saved project is named after your design.' },
+      { kind: 'fixed', text: 'The top part fits the switch without cracking.' },
+      { kind: 'fixed', text: 'Pictures open with their own colors.' },
+      { kind: 'fixed', text: 'The app works on small windows.' },
+      { kind: 'fixed', text: 'Symbols in text print the shape they show.' },
+      { kind: 'fixed', text: 'SVG shapes stay in their drawn order.' },
+      { kind: 'fixed', text: 'A saved project keeps every setting.' },
+    ],
+  },
+  {
     date: '2026-11-04',
     changes: [
       { kind: 'added', text: 'Blank: print any clicker without its picture.' },

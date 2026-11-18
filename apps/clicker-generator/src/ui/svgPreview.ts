@@ -59,15 +59,26 @@ export function ringsToPathData(rings: Ring[]): string {
  * happens otherwise (every hole fills solid).
  */
 function traceToPaths(set: RegionSet): SvgImportTrace {
+  // In the file's own paint order, the order the build carves them in, so this panel shows what
+  // will print. Biggest first for a drawing with no order to keep: small details paint on top.
+  const layered: { paint: number; d: string; fill: string }[] = [];
   const paths: SvgImportTrace['paths'] = [];
-  // Biggest first, so small details paint on top rather than under.
   const ordered = [...set.regions].sort((a, b) => (b.coverage ?? 0) - (a.coverage ?? 0));
   for (const region of ordered) {
     for (const comp of region.components) {
+      if (comp.layers?.length) {
+        for (const l of comp.layers) {
+          const d = ringsToPathData(l.rings);
+          if (d) layered.push({ paint: l.paint, d, fill: hex(region.quantRgb) });
+        }
+        continue;
+      }
       const d = ringsToPathData(comp.rings);
       if (d) paths.push({ d, fill: hex(region.quantRgb) });
     }
   }
+  layered.sort((a, b) => a.paint - b.paint);
+  for (const { d, fill } of layered) paths.push({ d, fill });
   const colors = new Set(set.regions.map((r) => hex(r.quantRgb)));
   return {
     viewBox: SVG_PREVIEW_VIEWBOX,

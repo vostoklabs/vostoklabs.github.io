@@ -351,6 +351,17 @@ for (const variant of ['pictures', 'tiles'] as const) {
   const lastTwo = two.querySelectorAll('.vl-tab')[2]!;
   check('cards in two columns: the lone last card still spans and centres', cssValue(lastTwo, 'justify-content', rules, 1280) === 'center');
   check('cards: only one column gets the class', one.classList.contains('vl-tabs--one-column') && !two.classList.contains('vl-tabs--one-column'));
+  // An option hidden and shown again: a row given its columns keeps them; one without follows
+  // the options showing, as it always has.
+  const kept = build(1);
+  kept.setOptionVisible('c', false);
+  const keptCols = kept.style.gridTemplateColumns;
+  kept.setOptionVisible('c', true);
+  const free = segmentedControl({ variant: 'cards', options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }, { value: 'c', label: 'C' }] });
+  free.setOptionVisible('c', false);
+  check('cards: hiding an option keeps the columns the row was given',
+    keptCols === 'repeat(1, minmax(0, 1fr))' && kept.style.gridTemplateColumns === 'repeat(1, minmax(0, 1fr))', `${keptCols} / ${kept.style.gridTemplateColumns}`);
+  check('…and a row without them still re-tracks to the options showing', free.style.gridTemplateColumns === 'repeat(2, minmax(0, 1fr))', free.style.gridTemplateColumns);
 }
 
 console.log(`\npro badge: ${pass} passed, ${fails.length} failed`);

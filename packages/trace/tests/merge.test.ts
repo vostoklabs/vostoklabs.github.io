@@ -479,6 +479,18 @@ const CAT_COLOURS = candidates([
   );
 }
 {
+  // A merge made by hand: green joined to black starts as one group, and the closest pairs merge
+  // from there. Without `joined`, or with every id its own, nothing changes.
+  const plain = JSON.stringify(closestPairMapping(CAT_COLOURS, 4));
+  const alone = JSON.stringify(closestPairMapping(CAT_COLOURS, 4, [0, 1, 2, 3, 4, 5]));
+  const joined = closestPairMapping(CAT_COLOURS, 4, [0, 1, 2, 3, 4, 1]);
+  const six = closestPairMapping(CAT_COLOURS, 6, [0, 1, 2, 3, 4, 1]);
+  check('joined: every colour its own id is the plain mapping', alone === plain, alone);
+  check('joined: green joined to black stays with it, and the one merge left is the closest pair, pink into orange',
+    JSON.stringify(joined) === '[0,1,2,3,0,1]', JSON.stringify(joined));
+  check('joined: with room for every group, only the hand merge is merged', JSON.stringify(six) === '[0,1,2,3,4,1]', JSON.stringify(six));
+}
+{
   const n6 = closestPairMapping(CAT_COLOURS, 6);
   const n10 = closestPairMapping(CAT_COLOURS, 10);
   const n3 = closestPairMapping(CAT_COLOURS.slice(0, 3), 4);

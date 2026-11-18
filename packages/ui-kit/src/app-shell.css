@@ -261,7 +261,11 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(280px, 46vh) auto;
     max-height: none;
+    flex: none;
   }
+  /* What holds the frame gives up the window's height too, when an app sizes it to the window
+     (the clicker's mount column): the column is longer than the window and the page scrolls. */
+  :has(> .vl-app.vl-app--phone) { height: auto; flex: none; }
   .vl-app.vl-app--phone.vl-app--no-topbar { grid-template-rows: minmax(280px, 46vh) auto; }
   .vl-app--phone > .vl-panel--left { display: none; }
   .vl-app--phone > .vl-panel--right {

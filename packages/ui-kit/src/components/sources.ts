@@ -4,6 +4,7 @@
 import { el } from '../dom';
 import { svgEl, svgPathEl } from '../icons';
 import { toast } from './toast';
+import { collapsibleSection } from './section';
 
 /** A host's file picker, run from a press: `dropZone`'s and `uploadCta`'s `pick`. */
 type Pick = (browse: () => void) => Promise<File | null>;
@@ -234,6 +235,13 @@ export interface SampleGridOptions {
   heading?: string;
   items: SampleItem[];
   onPick: (item: SampleItem, index: number) => void;
+  /**
+   * Fold the grid under its heading, starting open or closed. Absent: the heading is plain
+   * text and the grid is always shown, as before. Needs a `heading` (a fold needs a name to
+   * click); without one it is ignored. A folded grid opens by itself when `setSelected` names
+   * one of its tiles, so the loaded sample is never hidden in a closed group.
+   */
+  fold?: 'open' | 'closed';
 }
 
 export type SampleGridHandle = HTMLDivElement & {
@@ -368,7 +376,8 @@ export function thumbGrid(opts: ThumbGridOptions): HTMLElement {
 /** Square sample thumbnails. Returns a fragment holder, heading included. */
 export function sampleGrid(opts: SampleGridOptions): SampleGridHandle {
   const wrap = el('div') as SampleGridHandle;
-  if (opts.heading) wrap.append(el('span', { className: 'vl-samples__heading', text: opts.heading }));
+  const folds = !!opts.fold && !!opts.heading;
+  if (opts.heading && !folds) wrap.append(el('span', { className: 'vl-samples__heading', text: opts.heading }));
   const grid = el('div', { className: 'vl-samples' });
   // Keyed by id rather than index: items across several grids (one per pack, plus the
   // bundled-sample grid) share nothing but their ids, and `setSelected` is called once with
@@ -394,9 +403,17 @@ export function sampleGrid(opts: SampleGridOptions): SampleGridHandle {
     grid.append(btn);
     if (item.id !== undefined) byId.set(item.id, btn);
   });
-  wrap.append(grid);
+  const fold = folds
+    ? collapsibleSection({ title: opts.heading!, body: [grid], open: opts.fold === 'open' })
+    : null;
+  wrap.append(fold ?? grid);
+  // Opens the fold only when the loaded id CHANGES to one of this grid's tiles: a customer who
+  // folds the group holding their picture keeps it folded while they work.
+  let lastId: string | null = null;
   wrap.setSelected = (id) => {
     for (const [itemId, btn] of byId) btn.setAttribute('aria-pressed', String(itemId === id));
+    if (fold && id !== lastId && id !== null && byId.has(id)) fold.open = true;
+    lastId = id;
   };
   return wrap;
 }

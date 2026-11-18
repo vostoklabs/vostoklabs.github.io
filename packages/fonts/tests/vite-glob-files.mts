@@ -10,15 +10,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // cwd, not `import.meta.url`: esbuild bundles this into node_modules/.cache.
 const SRC = join(process.cwd(), 'src');
 
-(globalThis as { __viteGlob?: (pattern: string) => Record<string, string> }).__viteGlob = (pattern: string) => {
+// A pattern, or a list of them as Vite also takes: the files any of them matches.
+(globalThis as { __viteGlob?: (patterns: string | string[]) => Record<string, string> }).__viteGlob = (patterns: string | string[]) => {
   const out: Record<string, string> = {};
-  const rel = pattern.replace(/^\.\//, '');
-  const slash = rel.lastIndexOf('/');
-  const dir = join(SRC, rel.slice(0, slash));
-  const name = rel.slice(slash + 1);
-  if (!existsSync(dir)) return out;
-  const match = new RegExp(`^${name.replace(/[.]/g, '\\.').replace(/\*/g, '[^/]*')}$`);
-  for (const f of readdirSync(dir)) if (match.test(f)) out[`./${rel.slice(0, slash)}/${f}`] = pathToFileURL(join(dir, f)).href;
+  for (const pattern of Array.isArray(patterns) ? patterns : [patterns]) {
+    const rel = pattern.replace(/^\.\//, '');
+    const slash = rel.lastIndexOf('/');
+    const dir = join(SRC, rel.slice(0, slash));
+    const name = rel.slice(slash + 1);
+    if (!existsSync(dir)) continue;
+    const match = new RegExp(`^${name.replace(/[.]/g, '\\.').replace(/\*/g, '[^/]*')}$`);
+    for (const f of readdirSync(dir)) if (match.test(f)) out[`./${rel.slice(0, slash)}/${f}`] = pathToFileURL(join(dir, f)).href;
+  }
   return out;
 };
 

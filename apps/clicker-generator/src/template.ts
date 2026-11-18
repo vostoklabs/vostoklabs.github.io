@@ -11,7 +11,7 @@
  */
 export const TEMPLATE = `
     <header id="topbar"></header>
-    <main class="vl-app">
+    <main class="vl-app vl-app--no-topbar">
       <!-- The scrolling body is created inside by createUi(), so a pinned block (the
            credit strip) can sit in the bottom-left corner. Mirrors #sidebar-right. -->
       <aside id="sidebar-left" class="vl-panel vl-panel--left"></aside>

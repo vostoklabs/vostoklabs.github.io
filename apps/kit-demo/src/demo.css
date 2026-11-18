@@ -236,6 +236,18 @@ body {
 .kit-design__art { fill: var(--red); }
 .kit-design__ring { fill: var(--panel-2); stroke: var(--muted); stroke-width: 1.5px; }
 .kit-design__frame { fill: none; stroke: var(--muted); stroke-width: 1.5px; stroke-dasharray: 4 3; }
+/* The crop box demo's stand-in picture: a positioned 3:2 box the crop fills, painted with two
+   blobs so the dimmed part reads as a picture. */
+.kit-crop {
+  position: relative;
+  inline-size: min(100%, 420px);
+  aspect-ratio: 3 / 2;
+  margin: 12px;
+  background:
+    radial-gradient(circle at 35% 45%, var(--red) 0 18%, transparent 19%),
+    radial-gradient(circle at 68% 60%, var(--green) 0 22%, transparent 23%),
+    var(--panel-2);
+}
 /* The "model": a lid and a base on a plate, drawn by the page where the viewer's canvas would be.
    The base is 100 px tall and 200 px wide because the cut grip is placed on it in px. */
 .kit-model {
@@ -351,6 +363,8 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--radius-m);
 }
+/* A short window's left panel, for the rail that keeps every category on screen. */
+.kit-rail-frame--short { block-size: 280px; }
 
 /* A whole-window layout in a framed box at a fixed height. It spans the window rather than the
    page column, because the layouts size their columns in vw; the gutter keeps it clear of the

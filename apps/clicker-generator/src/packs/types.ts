@@ -104,3 +104,14 @@ export function inSeason(pack: Pack, now: Date = new Date()): boolean {
   // A season that wraps the new year (Dec 15 → Jan 06) is two ranges, not one.
   return from <= to ? md >= from && md <= to : md >= from || md <= to;
 }
+
+/** In-season first, then the order given. A stable sort, so packs out of season keep their
+ *  declared order. Ordering only: nothing is ever hidden. */
+export function orderPacks(packs: Pack[], now: Date = new Date()): Pack[] {
+  return [...packs].sort((a, b) => Number(inSeason(b, now)) - Number(inSeason(a, now)));
+}
+
+/** How a pack's sample group starts: open in its season, folded out of it. */
+export function packFold(pack: Pack, now: Date = new Date()): 'open' | 'closed' {
+  return inSeason(pack, now) ? 'open' : 'closed';
+}

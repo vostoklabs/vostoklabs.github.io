@@ -143,6 +143,8 @@ var DIR = PAGE.replace(/[^\\/]*$/, '');
 // of inlining them and empties fonts.css): every .ttf in the map gets its @font-face here, so
 // the HTML previews and getFont's fetch read the same bytes. Family = VL-<file stem>, the
 // convention @vostok/fonts writes. No .ttf in the map (every other app) — nothing happens.
+// An .otf face is left alone on purpose: it is one too heavy to load for a preview, and the
+// package declares it from its own bytes once getFont has loaded it, as it does online.
 (function(){
   var css = '';
   for (var k in A) {

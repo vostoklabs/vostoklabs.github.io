@@ -138,6 +138,31 @@ export function segmentDistance(a: Pt, b: Pt, c: Pt, d: Pt): number {
   return Math.min(pointSegmentDistance(a, c, d), pointSegmentDistance(b, c, d), pointSegmentDistance(c, a, b), pointSegmentDistance(d, a, b));
 }
 
+/**
+ * The convex hull of some points (Andrew's monotone chain): the smallest convex ring round them,
+ * counter-clockwise, with no point on a straight run kept. Fewer than three distinct points, or
+ * all on one line, give what there is (0 to 2 points). The outline round a scattered drawing.
+ */
+export function convexHull(points: Iterable<readonly [number, number]>): Pt[] {
+  const p = [...points].map(([x, y]) => [x, y] as Pt).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: Pt[] = [];
+  for (const q of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, q) <= 0) lower.pop();
+    lower.push(q);
+  }
+  const upper: Pt[] = [];
+  for (let i = p.length - 1; i >= 0; i--) {
+    const q = p[i]!;
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, q) <= 0) upper.pop();
+    upper.push(q);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
 export function isConvex(ring: Ring): boolean {
   const n = ring.length;
   if (n < 3) return false;
