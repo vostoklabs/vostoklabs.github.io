@@ -16,6 +16,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 568.55431
 /** The section a path belongs to, as its rail item's address. */
 function sectionOf(path: string): string | undefined {
   if (path.startsWith('/make/') || path.startsWith('/generators/')) return '/make/';
+  if (path.startsWith('/tools/')) return '/tools/';
   if (path.startsWith('/licences/')) return '/licences/';
   if (path.startsWith('/faq/')) return '/faq/';
   return undefined;
@@ -36,8 +37,9 @@ export function rail(current: string): HTMLElement {
   return navRail({
     leading: [logo],
     items: [
-      { href: '/make/', label: 'Generators', icon: ICONS.grid, divider: true },
-      { href: '/licences/', label: 'Licences', icon: ICONS.license },
+      { href: '/make/', label: 'Generators', icon: ICONS.grid },
+      { href: '/tools/', label: 'Tools', icon: ICONS.ruler },
+      { href: '/licences/', label: 'Licences', icon: ICONS.license, divider: true },
       { href: '/faq/', label: 'FAQ', icon: ICONS.help },
     ],
     trailing: away,
@@ -68,8 +70,7 @@ export function footer(): HTMLElement {
         footerColumn('Generators', [
           ['Web apps', '/make/#web-apps'],
           ['On MakerWorld', '/make/#makerworld'],
-          ['For sellers', '/make/#seller-tools'],
-          ['Coming soon', '/make/#coming-soon'],
+          ['Tools', '/tools/'],
         ]),
         footerColumn('Make', TOPICS.map((t) => [t.name, topicPath(t)])),
         footerColumn('Info', [

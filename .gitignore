@@ -31,6 +31,7 @@ apps/*/
 !apps/photo-frame/
 !apps/price-calculator/
 !apps/render-studio/
+!apps/stl-to-step/
 !apps/clicker-generator/
 !apps/foldbox/
 !apps/generator-template/
@@ -57,6 +58,7 @@ packages/*/
 !packages/plates/
 !packages/qr/
 !packages/render/
+!packages/mesh-to-cad/
 !packages/shapes/
 !packages/trace/
 !packages/symbols/
@@ -72,6 +74,7 @@ docs/**
 vendor/pmm-docs/
 **/renders/
 .scratch/
+**/.work/
 
 # Local only, not published
 DEV_PLAN.md

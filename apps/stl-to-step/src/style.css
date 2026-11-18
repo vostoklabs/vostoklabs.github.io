@@ -1,0 +1,87 @@
+/* App-specific styles only.
+
+   Everything structural already comes from @vostok/ui-kit/styles.css:
+     tokens.css       colours, spacing, radii, fonts   (var(--accent), …)
+     base.css         .vl-section .vl-label .vl-hint .vl-btn .vl-row
+     components.css   sliders, toggles, colour rows, dialogs, toasts, footer, topbar
+     font-picker.css  the font cards and the font library
+     patterns.css     stage overlays, status line, preview bar
+     editor-shell.css the settings rail
+     app-shell.css    the three-column layout and its panels
+   plus @vostok/plates/plates.css for the build-plate picker, and @vostok/fonts/fonts.css
+   for the font cards' previews.
+
+   If you find yourself restyling one of those, fix it in the ui-kit instead —
+   that is what keeps every generator looking like the same product. */
+
+/* The page frame — background, text colour, fonts, margin — comes from the kit's
+   root.css. A generator only adds this: it fills the viewport, so the page itself
+   never scrolls (the panels do). */
+body {
+  overflow: hidden;
+}
+
+/* The two views fill the stage behind the overlays, side by side: the STL and the STEP. */
+.sts-stage-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.sts-pane {
+  position: relative;
+  min-width: 0;
+}
+
+.sts-pane + .sts-pane {
+  border-left: 1px solid var(--line);
+}
+
+/* A viewer mounts its canvas here. */
+.sts-view {
+  position: absolute;
+  inset: 0;
+}
+
+.sts-view canvas {
+  display: block;
+}
+
+/* Which view is which, at the top of each: the foot of the stage holds the status and the hint. */
+.sts-pane__name {
+  position: absolute;
+  left: 50%;
+  top: var(--space-4);
+  transform: translateX(-50%);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* The face list: each kind of surface found and how many; a dot for its colour in the colour view. */
+.sts-kinds {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sts-kind {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--fs-body);
+}
+
+.sts-kind__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-pill);
+}
+
+.sts-kind__count {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

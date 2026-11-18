@@ -1046,6 +1046,13 @@
       "appUrl": "/render-studio/"
     },
     {
+      "id": "stl-to-step",
+      "name": "STL to STEP",
+      "status": "live",
+      "blurb": "An STL exported from a CAD program, back into a STEP file with real faces and edges.",
+      "appUrl": "/stl-to-step/"
+    },
+    {
       "id": "listing-copy",
       "name": "Listing Copy Helper",
       "status": "coming-soon",

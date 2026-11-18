@@ -62,7 +62,9 @@
     "dev:priceCalculator": "pnpm --filter price-calculator dev",
     "build:priceCalculator": "pnpm --filter price-calculator build",
     "dev:renderStudio": "pnpm --filter render-studio dev",
-    "build:renderStudio": "pnpm --filter render-studio build"
+    "build:renderStudio": "pnpm --filter render-studio build",
+    "dev:stlToStep": "pnpm --filter stl-to-step dev",
+    "build:stlToStep": "pnpm --filter stl-to-step build"
   },
   "devDependencies": {
     "esbuild": "^0.24.2",

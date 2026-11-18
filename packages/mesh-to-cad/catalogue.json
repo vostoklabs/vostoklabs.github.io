@@ -1,0 +1,28 @@
+{
+  "$comment": "Every value this package exports, claimed once: as a block (plain name + what it is for), as part of one (\"with\"), or as internal. Read by scripts/catalogue.mjs; pnpm check:catalogue fails when this file and the package disagree.",
+  "blocks": [
+    {
+      "name": "Mesh to CAD",
+      "category": "engine",
+      "use": [
+        "stlToStep"
+      ],
+      "with": [
+        "readPart",
+        "makeStep"
+      ],
+      "for": "An STL exported from a CAD package back into one solid with real faces and edges (planes, cylinders, cones, spheres, tori, revolved and extruded faces, free-form sheets), written as a STEP file with a check of what a CAD program will make of it. In one step (stlToStep), or read first (readPart) and made later (makeStep), so the STL can be shown while the STEP is made."
+    }
+  ],
+  "internal": {
+    "why": "The engine's own: a debugging view of the faces found, for the package's probe scripts; the faces as read and corrections to them, for those scripts too; and the build's name, to trace a result to its source.",
+    "names": [
+      "analyse",
+      "reviewFaces",
+      "setKind",
+      "joinFaces",
+      "describe",
+      "ENGINE"
+    ]
+  }
+}

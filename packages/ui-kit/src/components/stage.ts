@@ -19,6 +19,7 @@ import { ICONS, svgEl } from '../icons';
 import type { Diagnostic } from '../diagnostics';
 import { badgePill, iconButton } from './button';
 import { popover, type PopoverHandle } from './editor-shell';
+import { progressBar, type ProgressHandle } from './elements';
 
 // --------------------------------------------------------------- mode bar --
 
@@ -418,6 +419,11 @@ export interface StageStatus {
    * show the first of several and say nothing of the rest, which is what six generators did.
    */
   setDiagnostics(list: readonly Diagnostic[], ok: string): void;
+  /**
+   * A bar under the words, for work long enough to watch: 0–1, or `null` to take it away. While
+   * it shows, the card sits in the middle of the stage, a size up, and the views behind it blur.
+   */
+  setProgress(value: number | null): void;
 }
 
 export interface StageStatusOptions {
@@ -450,14 +456,34 @@ export function stageStatus(initial = '', opts: StageStatusOptions = {}): StageS
     text: initial,
     attrs: { role: 'status', 'aria-live': 'polite' },
   });
+  // While a bar shows, the words sit in their own span beside it, so new words leave the bar be.
+  let bar: ProgressHandle | null = null;
+  let words: HTMLElement | null = null;
   const set = (text: string, kind: StatusKind = 'idle') => {
-    root.textContent = text;
+    if (!words) root.textContent = text;
+    else if (words.textContent !== text) words.textContent = text;
     root.className =
-      base + (kind === 'idle' ? '' : ` vl-stage-status--${kind}`);
+      base + (kind === 'idle' ? '' : ` vl-stage-status--${kind}`) + (bar ? ' vl-stage-status--progress' : '');
   };
   return {
     root,
     set,
+    setProgress(value) {
+      if (value === null) {
+        if (!words) return;
+        root.textContent = words.textContent;
+        bar = words = null;
+        root.classList.remove('vl-stage-status--progress');
+        return;
+      }
+      if (!bar) {
+        bar = progressBar({ label: 'Progress' });
+        words = el('span', { text: root.textContent ?? '' });
+        root.replaceChildren(words, bar);
+        root.classList.add('vl-stage-status--progress');
+      }
+      bar.setValue(value);
+    },
     setDiagnostics(list, ok) {
       const problems = list.filter((d) => d.level !== 'info');
       const worst = problems.find((d) => d.level === 'error') ?? problems[0];
@@ -514,6 +540,8 @@ function foldedStatus(initial: string, opts: StageStatusOptions): StageStatus {
   return {
     root,
     set,
+    // A folded status shows no bar: while work runs it is the spinner alone ('busy').
+    setProgress() {},
     setDiagnostics(list, ok) {
       const problems = list.filter((d) => d.level !== 'info');
       if (!problems.length) return set(ok);

@@ -60,6 +60,7 @@ const LAYERS = [
   ['packages/laser/src/index.ts', 'connector'], // the front door hands out connector parts too; a core imports a subpath
   ['packages/laser/', 'core'], // shape maths, 2D booleans, blanks, keyring, text
   ['packages/export/', 'connector'],
+  ['packages/mesh-to-cad/', 'connector'], // an STL read into faces, written as a STEP file
   ['packages/plates/', 'connector'],
   ['packages/render/', 'connector'],
 ];

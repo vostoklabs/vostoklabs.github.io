@@ -151,6 +151,12 @@ jobs:
       - name: Copy Render Studio to Hub Dist
         run: cp -r apps/render-studio/dist apps/hub/dist/render-studio
 
+      - name: Build STL to STEP
+        run: pnpm build:stlToStep
+
+      - name: Copy STL to STEP to Hub Dist
+        run: cp -r apps/stl-to-step/dist apps/hub/dist/stl-to-step
+
       # After every app is in place: each app's own copies of the fonts go, the ones the apps
       # were built to fetch (VITE_SITE_FONTS) are put there, and each app's stylesheet is pointed
       # at them. Checks first, and fails without changing anything if an app would lose a face.

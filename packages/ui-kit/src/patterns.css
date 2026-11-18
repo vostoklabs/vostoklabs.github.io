@@ -851,6 +851,38 @@ details.vl-section--collapsible > summary:hover > .vl-section__detail { color: v
   border-color: color-mix(in srgb, var(--red) 45%, var(--line));
 }
 
+/* `setProgress()`: work long enough to watch. The card moves to the middle of the stage, a size
+   up, at a set width so new words do not resize it, and the views behind it blur: what they show
+   is not the result yet. When the bar goes, the card returns to its corner with the result.
+   Two classes, so the `--top` position and the narrow-stage `max-width` do not undo it. */
+.vl-stage-status.vl-stage-status--progress {
+  top: 50%;
+  left: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  width: 440px;
+  max-width: calc(100% - 2 * var(--space-4));
+  padding: var(--space-4) var(--space-5);
+  background: var(--panel);
+  box-shadow: var(--shadow-toast);
+  color: var(--text);
+  font-size: var(--fs-strong);
+  text-align: center;
+}
+
+.vl-stage-status--progress .vl-progress {
+  margin-top: var(--space-3);
+  height: 8px;
+}
+
+.vl-stage canvas {
+  transition: filter var(--dur-in-md) var(--ease-standard);
+}
+
+.vl-stage:has(> .vl-stage-status--progress) canvas {
+  filter: blur(6px);
+}
+
 /* `stageStatus(text, { position: 'top' })`: top-left, under the stage label. For a stage whose
    bottom centre holds a panel for good: there the bottom-left corner is in the panel's way on
    any narrow stage, and up here the line collides with nothing and sits where the eye enters

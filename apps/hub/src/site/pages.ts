@@ -48,7 +48,7 @@ function catalogue(): Page {
   return {
     path: '/make/',
     title: `Generators · ${BRAND.name}`,
-    description: 'Every Vostok Labs generator: web apps that run in your browser, MakerWorld listings, and tools for people who sell their prints.',
+    description: 'Every Vostok Labs generator: web apps that run in your browser, and MakerWorld listings.',
     render: () => blocks([
       section({
         title: 'Generators',
@@ -65,13 +65,23 @@ function catalogue(): Page {
       section({ id: 'makerworld', title: `On MakerWorld · ${mwOnly.length}`, lead: 'Customise in MakerWorld’s Parametric Model Maker and print from there.', className: 'hub-shelf' }, [
         cardGrid(mwOnly.map(productCard)),
       ]),
-      liveTools.length > 0 && section({ id: 'seller-tools', title: `For sellers · ${liveTools.length}`, lead: 'Tools for people who sell what they print. They run in your browser.', className: 'hub-shelf' }, [
+      el('p', { className: 'hub-container hub-empty', text: 'Nothing matches that search.', attrs: { 'data-empty': '', hidden: '' } }),
+    ]),
+  };
+}
+
+function tools(): Page {
+  return {
+    path: '/tools/',
+    title: `Tools · ${BRAND.name}`,
+    description: 'Free tools for people who make and sell prints: they run in your browser.',
+    render: () => blocks([
+      section({ title: 'Tools', level: 'h1', lead: 'For making and selling what you print. They run in your browser.' }, [
         cardGrid(liveTools.map(liveToolCard)),
       ]),
-      soonTools.length > 0 && section({ id: 'coming-soon', title: `Coming soon · ${soonTools.length}`, lead: 'More for sellers, on the way.', className: 'hub-shelf' }, [
+      soonTools.length > 0 && section({ id: 'coming-soon', title: `Coming soon · ${soonTools.length}`, lead: 'More tools, on the way.' }, [
         cardGrid(soonTools.map(toolCard), 'hub-grid--compact'),
       ]),
-      el('p', { className: 'hub-container hub-empty', text: 'Nothing matches that search.', attrs: { 'data-empty': '', hidden: '' } }),
     ]),
   };
 }
@@ -212,6 +222,7 @@ export function allPages(): Page[] {
   return [
     home(),
     catalogue(),
+    tools(),
     ...TOPICS.map(topicPage),
     ...live.map(productPage),
     licences(),

@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // @vostok/mesh-to-cad indexes its typed arrays everywhere and is not written for this check
+    // yet; its own tsconfig turns it off too. Drop this line once that package passes it.
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src"]
+}

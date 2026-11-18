@@ -1,0 +1,23 @@
+{
+  "name": "@vostok/mesh-to-cad",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "An STL made by a CAD package back into a solid with real faces and edges, written as STEP.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./version": "./src/version.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "convert": "node tests/run.mjs",
+    "grade": "node tests/run.mjs --grade",
+    "grade:open": "node tests/run.mjs --grade tests/open",
+    "check:stack": "node --stack-size=100 tests/stack.mjs",
+    "score": "node tests/score.mjs",
+    "score:clean": "node tests/clean.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

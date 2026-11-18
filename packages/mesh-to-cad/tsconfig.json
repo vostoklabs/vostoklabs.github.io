@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Dense numeric code indexes fixed-size tuples and typed arrays everywhere.
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src"]
+}

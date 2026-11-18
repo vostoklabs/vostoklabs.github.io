@@ -107,6 +107,19 @@ option('stageStatus position', 'vl-stage-status--top', (on) =>
   const bottom = stageStatus('x');
   bottom.set('y', 'busy');
   check('stageStatus default: set() writes the classes it always wrote', bottom.root.className === 'vl-stage-status vl-stage-status--busy');
+
+  const working = stageStatus('Reading');
+  const root = working.root as unknown as MiniElement;
+  const plain = norm(root);
+  working.setProgress(null);
+  check('stageStatus: no bar until one is asked for', norm(root) === plain && !root.querySelector('.vl-progress'));
+  working.setProgress(0.25);
+  const bar = root.querySelector('.vl-progress');
+  check('setProgress: the bar sits under the words', root.children.length === 2 && root.children[1] === bar && root.textContent === 'Reading' && bar?.getAttribute('aria-valuenow') === '0.25');
+  working.set('Fitting', 'busy');
+  check('setProgress: new words leave the bar where it is', root.querySelector('.vl-progress') === bar && root.textContent === 'Fitting' && root.className === 'vl-stage-status vl-stage-status--busy vl-stage-status--progress');
+  working.setProgress(null);
+  check('setProgress(null): the bar goes, the words and their colour stay', !root.querySelector('.vl-progress') && root.textContent === 'Fitting' && root.className === 'vl-stage-status vl-stage-status--busy');
 }
 
 // stageStatus folded: the message behind a button. Off (or false), the line is built as before.

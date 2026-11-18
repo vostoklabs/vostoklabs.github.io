@@ -85,7 +85,7 @@ export function productCard(g: Generator): HTMLElement {
   ]);
 }
 
-/** A seller tool you can open: the card's picture and its one button both open the tool. A tool
+/** A tool you can open: the card's picture and its one button both open the tool. A tool
  *  has no product page, so there is no Details. */
 export function liveToolCard(t: SellerTool): HTMLElement {
   const href = toolHref(t);
@@ -94,7 +94,7 @@ export function liveToolCard(t: SellerTool): HTMLElement {
       el('img', { className: 'hub-thumb', attrs: { src: toolThumbPath(t), alt: '', loading: 'lazy', width: '800', height: '600' } }),
     ]),
     el('div', { className: 'hub-card__body' }, [
-      el('p', { className: 'hub-card__meta', text: 'For sellers · Web app' }),
+      el('p', { className: 'hub-card__meta', text: 'Tool · Web app' }),
       el('h3', { className: 'hub-card__name' }, [el('a', { text: t.name, attrs: { href } })]),
       el('p', { className: 'hub-card__blurb', text: t.blurb, attrs: { title: t.blurb } }),
       el('div', { className: 'hub-card__actions' }, [linkButton({ label: 'Open tool', href, emphasis: 'primary' })]),
